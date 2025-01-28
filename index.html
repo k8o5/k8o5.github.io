@@ -3,168 +3,140 @@
 <head>
     <meta charset="UTF-8">
     <meta name="viewport" content="width=device-width, initial-scale=1.0">
-    <title>K8O5 Rocket Pool</title>
+    <title>k8o5</title>
     <style>
-        /* Add all previous styles here */
-        /* Add new styles for the pool display */
-        #poolDisplay {
-            background: rgba(255,255,255,0.1);
-            padding: 15px;
-            border-radius: 10px;
+        body {
+            font-family: Arial, sans-serif;
             margin: 20px;
-            text-align: center;
-            font-size: 18px;
         }
-
-        #cashOutButton {
-            background: linear-gradient(45deg, #00ff88, #4A90E2);
-            display: none;
-        }
-
-        #triesLeft {
-            margin: 10px;
+        button {
+            padding: 10px 20px;
             font-size: 16px;
-            color: #ff4081;
+            cursor: pointer;
+            margin: 5px;
+        }
+        #accountData, #swapSection {
+            margin-top: 20px;
+            padding: 20px;
+            background-color: #f0f0f0;
+            border-radius: 5px;
+        }
+        input {
+            padding: 10px;
+            font-size: 16px;
+            width: 200px;
         }
     </style>
 </head>
 <body>
-    <!-- Add previous HTML elements here -->
-    <div id="poolDisplay">
-        Total Pool: <span id="poolAmount">0</span> K8O5
+    <h1>Solana Account Dashboard</h1>
+    <button id="connectButton">Connect to Phantom Wallet</button>
+
+    <div id="accountData">
+        <p>Account data will appear here after connecting.</p>
     </div>
-    <div id="triesLeft">Tries Left Today: <span id="triesCounter">10</span></div>
-    <button id="cashOutButton" onclick="cashOut()">CASH OUT</button>
+
+    <div id="swapSection">
+        <h2>Swap SOL to Token (k8o5)</h2>
+        <input type="number" id="swapAmount" placeholder="Amount of SOL to swap" min="0" step="0.01">
+        <button id="swapButton">Swap</button>
+        <p id="swapStatus"></p>
+    </div>
+
+    <!-- Include Solana Web3.js -->
+    <script src="https://unpkg.com/@solana/web3.js@latest/lib/index.iife.js"></script>
+    <!-- Include Jupiter Aggregator SDK (for swaps) -->
+    <script src="https://cdn.jsdelivr.net/npm/@jup-ag/core/dist/index.iife.js"></script>
 
     <script>
-        // Pool and game state
-        let poolBalance = 1000000; // Initial pool
-        let userBalance = 0;
-        let currentMultiplier = 1;
-        let triesLeft = 10;
-        let isCashedOut = false;
-        const contractAddress = 'AmaLfA5qUMUDG5DfxVFR8ZmM41dR5b9H6xpsM6qApump';
-        const buyInAmount = 1; // 1 K8O5 per try
-        const maxTries = 10;
-
-        // Update pool display
-        function updatePoolDisplay() {
-            document.getElementById('poolAmount').textContent = poolBalance.toLocaleString();
-            document.getElementById('triesCounter').textContent = triesLeft;
-        }
+        let publicKey = null;
+        let connection = null;
 
         // Connect to Phantom Wallet
-        async function connectPhantom() {
+        document.getElementById('connectButton').addEventListener('click', async () => {
             try {
-                if (!window.solana?.isPhantom) {
-                    alert('Install Phantom Wallet!');
+                if (!window.solana || !window.solana.isPhantom) {
+                    alert('Phantom Wallet is not installed!');
                     return;
                 }
 
-                await window.solana.connect();
-                phantomConnected = true;
-                document.getElementById('result').innerHTML = '🟢 WALLET CONNECTED!';
-                document.getElementById('phantomConnect').style.background = 'linear-gradient(45deg, #4A90E2, #00ff88)';
-            } catch (err) {
-                console.error(err);
-                alert('Connection failed');
+                // Connect to Phantom
+                const response = await window.solana.connect();
+                publicKey = response.publicKey.toString();
+                connection = new solanaWeb3.Connection(solanaWeb3.clusterApiUrl('mainnet-beta'));
+
+                // Fetch account data
+                const balance = await connection.getBalance(new solanaWeb3.PublicKey(publicKey));
+                const tokens = await getTokenAccounts(publicKey);
+
+                // Display account data
+                document.getElementById('accountData').innerHTML = `
+                    <p><strong>Connected Account:</strong> ${publicKey}</p>
+                    <p><strong>Balance:</strong> ${balance / solanaWeb3.LAMPORTS_PER_SOL} SOL</p>
+                    <p><strong>Tokens:</strong></p>
+                    <ul>
+                        ${tokens.map(token => `<li>${token.mint}: ${token.amount}</li>`).join('')}
+                    </ul>
+                `;
+
+            } catch (error) {
+                console.error('Error connecting to Phantom Wallet:', error);
+                alert('Failed to connect to Phantom Wallet.');
             }
-        }
+        });
 
-        // Launch Rocket
-        async function launchRocket() {
-            if (!phantomConnected) return alert('CONNECT WALLET FIRST!');
-            if (isLaunching) return;
-            if (triesLeft <= 0) return alert('NO TRIES LEFT TODAY!');
-            if (poolBalance < 100) return alert('POOL TOO LOW!');
-
-            // Deduct buy-in from user (simulated)
-            const transaction = await simulateTransaction(buyInAmount);
-            if (!transaction.success) return alert('TRANSACTION FAILED!');
-
-            poolBalance += buyInAmount;
-            triesLeft--;
-            updatePoolDisplay();
-
-            isLaunching = true;
-            const rocket = document.getElementById('rocket');
-            const countdown = document.getElementById('countdown');
-            
-            // Generate random multiplier (1% chance for 1,000,000%)
-            const win = Math.random() < 0.01;
-            currentMultiplier = win ? 1000000 : Math.random() * 100;
-
-            // Launch sequence
-            rocket.style.animation = 'rocketShake 0.1s infinite';
-            let progress = 0;
-            const progressInterval = setInterval(() => {
-                document.getElementById('progressFill').style.height = ++progress + '%';
-            }, 40);
-
-            // Animate countdown
-            let counter = 3;
-            countdown.textContent = counter;
-            countdown.style.opacity = '1';
-            const countdownInterval = setInterval(() => {
-                countdown.textContent = --counter;
-                if (counter === 0) {
-                    clearInterval(countdownInterval);
-                    countdown.style.opacity = '0';
+        // Swap SOL to Token (k8o5)
+        document.getElementById('swapButton').addEventListener('click', async () => {
+            try {
+                if (!publicKey) {
+                    alert('Please connect your wallet first.');
+                    return;
                 }
-            }, 1000);
 
-            setTimeout(() => {
-                clearInterval(progressInterval);
-                if (win) {
-                    rocket.style.bottom = '-100px';
-                    document.body.style.background = '#000044';
-                    createExplosion(150, 300);
-                    showConfetti();
-                    userBalance += (buyInAmount * currentMultiplier);
-                    poolBalance -= (buyInAmount * currentMultiplier);
-                    document.getElementById('result').innerHTML = 
-                        `🚀 JACKPOT! ${(buyInAmount * currentMultiplier).toLocaleString()} K8O5 WON!`;
-                    document.getElementById('cashOutButton').style.display = 'block';
-                } else {
-                    rocket.style.animation = '';
-                    rocket.style.bottom = Math.random() * 100 + 'px';
-                    setTimeout(() => {
-                        rocket.style.bottom = '0';
-                        createExplosion(150, 500);
-                        document.getElementById('result').textContent = 
-                            `LAUNCH FAILED! ${currentMultiplier.toFixed(2)}% REACHED`;
-                    }, 2000);
+                const amount = parseFloat(document.getElementById('swapAmount').value);
+                if (isNaN(amount) || amount <= 0) {
+                    alert('Please enter a valid amount of SOL to swap.');
+                    return;
                 }
-                updatePoolDisplay();
-                isLaunching = false;
-                document.getElementById('progressFill').style.height = '0%';
-            }, 4000);
+
+                document.getElementById('swapStatus').innerText = 'Swapping...';
+
+                // Perform the swap using Jupiter Aggregator
+                const swapResult = await swapSOLToToken(publicKey, amount, 'k8o5'); // Replace 'k8o5' with the actual token address
+
+                document.getElementById('swapStatus').innerText = `Swap successful! Tx ID: ${swapResult.txId}`;
+
+            } catch (error) {
+                console.error('Error swapping tokens:', error);
+                document.getElementById('swapStatus').innerText = 'Swap failed. Please try again.';
+            }
+        });
+
+        // Function to fetch token accounts
+        async function getTokenAccounts(publicKey) {
+            const response = await connection.getParsedTokenAccountsByOwner(
+                new solanaWeb3.PublicKey(publicKey),
+                { programId: new solanaWeb3.PublicKey('TokenkegQfeZyiNwAJbNbGKPFXCWuBvf9Ss623VQ5DA') }
+            );
+            return response.value.map(account => ({
+                mint: account.account.data.parsed.info.mint,
+                amount: account.account.data.parsed.info.tokenAmount.uiAmount,
+            }));
         }
 
-        // Cash Out
-        async function cashOut() {
-            if (userBalance <= 0) return alert('NO FUNDS TO CASH OUT!');
-            
-            const transaction = await simulateTransaction(-userBalance);
-            if (!transaction.success) return alert('CASH OUT FAILED!');
-
-            alert(`SUCCESS! ${userBalance.toLocaleString()} K8O5 SENT TO YOUR WALLET!`);
-            userBalance = 0;
-            document.getElementById('cashOutButton').style.display = 'none';
-        }
-
-        // Simulate Transaction (Replace with actual Solana transaction)
-        async function simulateTransaction(amount) {
-            return new Promise(resolve => {
-                setTimeout(() => {
-                    resolve({ success: true });
-                }, 1000);
+        // Function to swap SOL to Token using Jupiter Aggregator
+        async function swapSOLToToken(publicKey, amount, tokenAddress) {
+            const jupiter = window.Jupiter;
+            const swapResult = await jupiter.swap({
+                inputMint: 'So11111111111111111111111111111111111111112', // SOL mint address
+                outputMint: tokenAddress, // Token mint address
+                amount: amount * solanaWeb3.LAMPORTS_PER_SOL, // Amount in lamports
+                slippage: 1, // 1% slippage
+                userPublicKey: publicKey,
             });
-        }
 
-        // Initialize
-        updatePoolDisplay();
+            return swapResult;
+        }
     </script>
-    <script src="https://unpkg.com/@solana/web3.js@latest/lib/index.iife.js"></script>
 </body>
 </html>
