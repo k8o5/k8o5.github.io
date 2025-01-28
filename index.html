@@ -5,7 +5,6 @@
     <meta name="viewport" content="width=device-width, initial-scale=1.0">
     <title>k8o5</title>
     <script src="https://cdn.jsdelivr.net/npm/@solana/web3.js@1.70.1/lib/index.iife.min.js"></script>
-    <script src="https://unpkg.com/@solana/spl-token@0.2.0/lib/index.iife.js"></script>
     <script src="https://cdn.jsdelivr.net/npm/axios/dist/axios.min.js"></script>
     <style>
         @import url('https://fonts.googleapis.com/css2?family=Space+Grotesk:wght@300;700&display=swap');
@@ -21,12 +20,12 @@
 <body>
     <div class="container">
         <h1>🚀 Web3 AI Revolution 🔥</h1>
-        <button onclick="connectPhantom()">Connect Phantom Wallet</button>
+        <button id="connectButton">Connect Phantom Wallet</button>
         <div id="walletInfo" style="margin: 20px 0;"></div>
         
         <h2>💡 AI Web3 Creator</h2>
         <input type="text" id="aiPrompt" placeholder="Describe your Web3 project...">
-        <button onclick="generateAIProject()">CREATE 🔥</button>
+        <button id="generateButton">CREATE 🔥</button>
         <div id="aiResult" class="ai-response"></div>
         
         <h2>🎨 AI-Generated NFTs</h2>
@@ -34,70 +33,68 @@
     </div>
 
     <script>
-        let solana = window.solana;
-        let connection = new solanaWeb3.Connection(solanaWeb3.clusterApiUrl('mainnet-beta'));
-        let publicKey = null;
-        const OPENAI_API_KEY = 'sk-your-openai-key'; // Replace with your API key
-
-        async function connectPhantom() {
-            if (!solana?.isPhantom) return alert('Install Phantom Wallet!');
+        (function() {
+            const { Connection, PublicKey, clusterApiUrl } = window.solanaWeb3;
+            const connection = new Connection(clusterApiUrl('mainnet-beta'));
+            const OPENAI_API_KEY = 'sk-your-openai-key'; // Replace with your API key
             
-            try {
-                const resp = await solana.connect();
-                publicKey = resp.publicKey.toString();
-                document.getElementById('walletInfo').innerHTML = `
-                    Connected: ${publicKey.slice(0, 6)}...${publicKey.slice(-4)}<br>
-                    Balance: ${await getBalance()} SOL
+            let publicKey = null;
+            
+            // Initialize connection
+            document.getElementById('connectButton').addEventListener('click', async () => {
+                if (!window.solana?.isPhantom) return alert('Install Phantom Wallet!');
+                
+                try {
+                    await window.solana.connect();
+                    publicKey = new PublicKey(window.solana.publicKey.toString());
+                    
+                    const balance = await connection.getBalance(publicKey);
+                    document.getElementById('walletInfo').innerHTML = `
+                        Connected: ${publicKey.toString().slice(0, 6)}...${publicKey.toString().slice(-4)}<br>
+                        Balance: ${balance / 1e9} SOL
+                    `;
+                } catch (error) {
+                    console.error('Connection error:', error);
+                }
+            });
+
+            // AI Generation
+            document.getElementById('generateButton').addEventListener('click', async () => {
+                if (!publicKey) return alert('Connect wallet first!');
+                
+                const prompt = document.getElementById('aiPrompt').value;
+                const aiResponse = document.getElementById('aiResult');
+                
+                try {
+                    const response = await axios.post('https://api.openai.com/v1/chat/completions', {
+                        model: "gpt-3.5-turbo",
+                        messages: [{
+                            role: "user", 
+                            content: `Create a complete Web3 project on Solana with: ${prompt}. Include contract details, tokenomics, and NFT integration.`
+                        }]
+                    }, {
+                        headers: { 'Authorization': `Bearer ${OPENAI_API_KEY}` }
+                    });
+
+                    aiResponse.innerHTML = response.data.choices[0].message.content;
+                    mintAchievementNFT('AI Project Created: ' + prompt.slice(0, 20));
+                } catch (error) {
+                    console.error('AI Error:', error);
+                    aiResponse.innerHTML = 'Error generating project. Try again!';
+                }
+            });
+
+            function mintAchievementNFT(achievementText) {
+                const nftGallery = document.getElementById('nftGallery');
+                nftGallery.innerHTML += `
+                    <div class="nft-item">
+                        <h3>🏆 Achievement</h3>
+                        <p>${achievementText}</p>
+                        <small>${new Date().toLocaleDateString()}</small>
+                    </div>
                 `;
-            } catch (error) {
-                console.error(error);
             }
-        }
-
-        async function getBalance() {
-            const balance = await connection.getBalance(new solanaWeb3.PublicKey(publicKey));
-            return balance / solanaWeb3.LAMPORTS_PER_SOL;
-        }
-
-        async function generateAIProject() {
-            if (!publicKey) return alert('Connect wallet first!');
-            
-            const prompt = document.getElementById('aiPrompt').value;
-            const aiResponse = document.getElementById('aiResult');
-            
-            try {
-                const response = await axios.post('https://api.openai.com/v1/chat/completions', {
-                    model: "gpt-3.5-turbo",
-                    messages: [{role: "user", content: `Create a complete Web3 project on Solana with: ${prompt}. Include contract details, tokenomics, and NFT integration.`}]
-                }, {
-                    headers: { 'Authorization': `Bearer ${OPENAI_API_KEY}` }
-                });
-
-                aiResponse.innerHTML = response.data.choices[0].message.content;
-                mintAchievementNFT('AI Project Created: ' + prompt.slice(0, 20));
-            } catch (error) {
-                console.error('AI Error:', error);
-                aiResponse.innerHTML = 'Error generating project. Try again!';
-            }
-        }
-
-        async function mintAchievementNFT(achievementText) {
-            // Simulate NFT minting (replace with actual minting logic)
-            const nftGallery = document.getElementById('nftGallery');
-            nftGallery.innerHTML += `
-                <div class="nft-item">
-                    <h3>🏆 Achievement</h3>
-                    <p>${achievementText}</p>
-                    <small>${new Date().toLocaleDateString()}</small>
-                </div>
-            `;
-        }
-
-        // Initialize
-        if (solana?.isPhantom) {
-            solana.on('connect', () => console.log('Connected!'));
-            solana.on('disconnect', () => location.reload());
-        }
+        })();
     </script>
 </body>
 </html>
