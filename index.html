@@ -3,160 +3,57 @@
 <head>
     <meta charset="UTF-8">
     <meta name="viewport" content="width=device-width, initial-scale=1.0">
-    <title>K8O5 Rocket Launch</title>
+    <title>K8O5 Rocket Pool</title>
     <style>
-        body {
-            display: flex;
-            flex-direction: column;
-            align-items: center;
-            background: #000;
-            color: #fff;
-            font-family: 'Arial Black', sans-serif;
-            overflow: hidden;
-        }
-
-        #gameContainer {
-            position: relative;
-            width: 300px;
-            height: 600px;
-            margin: 20px;
-            background: linear-gradient(180deg, #001144 0%, #000 100%);
-            border-radius: 20px;
-            overflow: hidden;
-            border: 3px solid #4A90E2;
-        }
-
-        #rocket {
-            position: absolute;
-            bottom: 0;
-            left: 50%;
-            transform: translateX(-50%);
-            width: 60px;
-            transition: all 4s cubic-bezier(0.25, 0.1, 0.25, 1);
-            filter: drop-shadow(0 0 10px #ff4081);
-        }
-
-        #progressBar {
-            position: absolute;
-            left: 20px;
-            top: 20px;
-            width: 20px;
-            height: 560px;
+        /* Add all previous styles here */
+        /* Add new styles for the pool display */
+        #poolDisplay {
             background: rgba(255,255,255,0.1);
+            padding: 15px;
             border-radius: 10px;
-        }
-
-        #progressFill {
-            position: absolute;
-            bottom: 0;
-            width: 100%;
-            height: 0%;
-            background: linear-gradient(180deg, #ff4081 0%, #4A90E2 100%);
-            border-radius: 10px;
-            transition: height 0.5s;
-        }
-
-        .star {
-            position: absolute;
-            width: 2px;
-            height: 2px;
-            background: white;
-            border-radius: 50%;
-        }
-
-        button {
-            padding: 15px 30px;
+            margin: 20px;
+            text-align: center;
             font-size: 18px;
+        }
+
+        #cashOutButton {
+            background: linear-gradient(45deg, #00ff88, #4A90E2);
+            display: none;
+        }
+
+        #triesLeft {
             margin: 10px;
-            cursor: pointer;
-            background: linear-gradient(45deg, #4A90E2, #ff4081);
-            border: none;
-            color: white;
-            border-radius: 30px;
-            text-transform: uppercase;
-            letter-spacing: 2px;
-            transition: transform 0.2s;
-        }
-
-        button:disabled {
-            opacity: 0.5;
-            cursor: not-allowed;
-        }
-
-        button:hover:not(:disabled) {
-            transform: scale(1.1);
-        }
-
-        #countdown {
-            position: absolute;
-            top: 50%;
-            left: 50%;
-            transform: translate(-50%, -50%);
-            font-size: 80px;
-            text-shadow: 0 0 20px #ff4081;
-            opacity: 0;
-        }
-
-        .explosion {
-            position: absolute;
-            width: 20px;
-            height: 20px;
-            background: radial-gradient(circle, #ff4081 20%, transparent 60%);
-            border-radius: 50%;
-            animation: explode 0.5s forwards;
-        }
-
-        @keyframes rocketShake {
-            0% { transform: translateX(-50%) rotate(0deg); }
-            25% { transform: translateX(-52%) rotate(-2deg); }
-            75% { transform: translateX(-48%) rotate(2deg); }
-            100% { transform: translateX(-50%) rotate(0deg); }
-        }
-
-        @keyframes explode {
-            0% { transform: scale(1); opacity: 1; }
-            100% { transform: scale(5); opacity: 0; }
-        }
-
-        .confetti {
-            position: absolute;
-            width: 10px;
-            height: 10px;
-            animation: confettiFall 2s linear;
-        }
-
-        @keyframes confettiFall {
-            0% { transform: translateY(-100vh) rotate(0deg); }
-            100% { transform: translateY(100vh) rotate(360deg); }
+            font-size: 16px;
+            color: #ff4081;
         }
     </style>
 </head>
 <body>
-    <h1 style="color: #4A90E2; text-shadow: 0 0 15px #4A90E2">LAUNCH TO WIN 1000 K8O5!</h1>
-    <div id="gameContainer">
-        <div id="progressBar"><div id="progressFill"></div></div>
-        <img id="rocket" src="data:image/svg+xml;base64,PHN2ZyB4bWxucz0iaHR0cDovL3d3dy53My5vcmcvMjAwMC9zdmciIHZpZXdCb3g9IjAgMCAxMDAgMTAwIj48cGF0aCBkPSJNNTAgMTBMNDUgNDBINTVMNTAgMTBaIiBmaWxsPSIjZmZmIi8+PHJlY3Qgd2lkdGg9IjEwIiBoZWlnaHQ9IjYwIiB4PSI0NSIgeT0iNDAiIGZpbGw9IiNGRjRDQzEiLz48cGF0aCBkPSJNNDUgNzBsMTAgMTAgMTAtMTAtMTAtMTBaIiBmaWxsPSIjRkY0Q0MxIi8+PC9zdmc+" alt="🚀">
-        <div id="countdown"></div>
+    <!-- Add previous HTML elements here -->
+    <div id="poolDisplay">
+        Total Pool: <span id="poolAmount">0</span> K8O5
     </div>
-    <button id="launchButton" onclick="launchRocket()">IGNITE LAUNCH (1%)</button>
-    <button id="phantomConnect" onclick="connectPhantom()">CONNECT PHANTOM</button>
-    <div id="result" style="font-size: 24px; text-align: center"></div>
+    <div id="triesLeft">Tries Left Today: <span id="triesCounter">10</span></div>
+    <button id="cashOutButton" onclick="cashOut()">CASH OUT</button>
 
     <script>
-        let isLaunching = false;
-        let phantomConnected = false;
+        // Pool and game state
+        let poolBalance = 1000000; // Initial pool
+        let userBalance = 0;
+        let currentMultiplier = 1;
+        let triesLeft = 10;
+        let isCashedOut = false;
         const contractAddress = 'AmaLfA5qUMUDG5DfxVFR8ZmM41dR5b9H6xpsM6qApump';
+        const buyInAmount = 1; // 1 K8O5 per try
+        const maxTries = 10;
 
-        // Create background stars
-        for(let i = 0; i < 50; i++) {
-            const star = document.createElement('div');
-            star.className = 'star';
-            star.style.left = Math.random() * 300 + 'px';
-            star.style.top = Math.random() * 600 + 'px';
-            star.style.animation = `twinkle ${Math.random()*2 + 1}s infinite`;
-            gameContainer.appendChild(star);
+        // Update pool display
+        function updatePoolDisplay() {
+            document.getElementById('poolAmount').textContent = poolBalance.toLocaleString();
+            document.getElementById('triesCounter').textContent = triesLeft;
         }
 
+        // Connect to Phantom Wallet
         async function connectPhantom() {
             try {
                 if (!window.solana?.isPhantom) {
@@ -174,26 +71,29 @@
             }
         }
 
-        function createExplosion(x, y) {
-            for(let i = 0; i < 20; i++) {
-                const explosion = document.createElement('div');
-                explosion.className = 'explosion';
-                explosion.style.left = x + 'px';
-                explosion.style.top = y + 'px';
-                gameContainer.appendChild(explosion);
-                setTimeout(() => explosion.remove(), 500);
-            }
-        }
-
-        function launchRocket() {
+        // Launch Rocket
+        async function launchRocket() {
             if (!phantomConnected) return alert('CONNECT WALLET FIRST!');
             if (isLaunching) return;
+            if (triesLeft <= 0) return alert('NO TRIES LEFT TODAY!');
+            if (poolBalance < 100) return alert('POOL TOO LOW!');
+
+            // Deduct buy-in from user (simulated)
+            const transaction = await simulateTransaction(buyInAmount);
+            if (!transaction.success) return alert('TRANSACTION FAILED!');
+
+            poolBalance += buyInAmount;
+            triesLeft--;
+            updatePoolDisplay();
 
             isLaunching = true;
-            const win = Math.random() < 0.01;
             const rocket = document.getElementById('rocket');
             const countdown = document.getElementById('countdown');
             
+            // Generate random multiplier (1% chance for 1,000,000%)
+            const win = Math.random() < 0.01;
+            currentMultiplier = win ? 1000000 : Math.random() * 100;
+
             // Launch sequence
             rocket.style.animation = 'rocketShake 0.1s infinite';
             let progress = 0;
@@ -220,32 +120,50 @@
                     document.body.style.background = '#000044';
                     createExplosion(150, 300);
                     showConfetti();
-                    document.getElementById('result').innerHTML = '🎉 JACKPOT! 1000 K8O5 INCOMING!';
-                    console.log('Claiming prize at:', contractAddress);
+                    userBalance += (buyInAmount * currentMultiplier);
+                    poolBalance -= (buyInAmount * currentMultiplier);
+                    document.getElementById('result').innerHTML = 
+                        `🚀 JACKPOT! ${(buyInAmount * currentMultiplier).toLocaleString()} K8O5 WON!`;
+                    document.getElementById('cashOutButton').style.display = 'block';
                 } else {
                     rocket.style.animation = '';
                     rocket.style.bottom = Math.random() * 100 + 'px';
                     setTimeout(() => {
                         rocket.style.bottom = '0';
                         createExplosion(150, 500);
-                        document.getElementById('result').textContent = 'LAUNCH FAILED! TRY AGAIN!';
+                        document.getElementById('result').textContent = 
+                            `LAUNCH FAILED! ${currentMultiplier.toFixed(2)}% REACHED`;
                     }, 2000);
                 }
+                updatePoolDisplay();
                 isLaunching = false;
                 document.getElementById('progressFill').style.height = '0%';
             }, 4000);
         }
 
-        function showConfetti() {
-            for(let i = 0; i < 50; i++) {
-                const confetti = document.createElement('div');
-                confetti.className = 'confetti';
-                confetti.style.left = Math.random() * 300 + 'px';
-                confetti.style.background = `hsl(${Math.random()*360}deg, 100%, 50%)`;
-                document.body.appendChild(confetti);
-                setTimeout(() => confetti.remove(), 2000);
-            }
+        // Cash Out
+        async function cashOut() {
+            if (userBalance <= 0) return alert('NO FUNDS TO CASH OUT!');
+            
+            const transaction = await simulateTransaction(-userBalance);
+            if (!transaction.success) return alert('CASH OUT FAILED!');
+
+            alert(`SUCCESS! ${userBalance.toLocaleString()} K8O5 SENT TO YOUR WALLET!`);
+            userBalance = 0;
+            document.getElementById('cashOutButton').style.display = 'none';
         }
+
+        // Simulate Transaction (Replace with actual Solana transaction)
+        async function simulateTransaction(amount) {
+            return new Promise(resolve => {
+                setTimeout(() => {
+                    resolve({ success: true });
+                }, 1000);
+            });
+        }
+
+        // Initialize
+        updatePoolDisplay();
     </script>
     <script src="https://unpkg.com/@solana/web3.js@latest/lib/index.iife.js"></script>
 </body>
