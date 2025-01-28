@@ -1,152 +1,195 @@
 <!DOCTYPE html>
 <html lang="en">
 <head>
-    <meta charset="UTF-8">
-    <meta name="viewport" content="width=device-width, initial-scale=1.0">
-    <title>k8o5</title>
-    <style>
-        body {
-            font-family: Arial, sans-serif;
-            margin: 20px;
-            background-color: #121212;
-            color: #ffffff;
-        }
-        button {
-            padding: 10px 20px;
-            font-size: 16px;
-            cursor: pointer;
-            margin: 5px;
-            background-color: #333;
-            color: #fff;
-            border: none;
-            border-radius: 5px;
-        }
-        #accountData, #swapSection {
-            margin-top: 20px;
-            padding: 20px;
-            background-color: #1e1e1e;
-            border-radius: 5px;
-        }
-        input {
-            padding: 10px;
-            font-size: 16px;
-            width: 200px;
-            background-color: #333;
-            color: #fff;
-            border: none;
-            border-radius: 5px;
-        }
-    </style>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <title>Texas Hold'em Poker with Solana</title>
+  <style>
+    body {
+      font-family: Arial, sans-serif;
+      background-color: green;
+      color: white;
+      text-align: center;
+    }
+    .card {
+      display: inline-block;
+      width: 60px;
+      height: 90px;
+      border: 1px solid black;
+      border-radius: 5px;
+      background-color: white;
+      color: black;
+      margin: 5px;
+      line-height: 90px;
+      font-size: 20px;
+    }
+    .board {
+      margin: 20px auto;
+      padding: 20px;
+      background-color: darkgreen;
+      border-radius: 10px;
+      width: 80%;
+    }
+    button {
+      padding: 10px 20px;
+      margin: 10px;
+      font-size: 16px;
+      cursor: pointer;
+    }
+    .wallet-info {
+      margin: 20px;
+      font-size: 18px;
+    }
+  </style>
 </head>
 <body>
-    <h1>Solana Account Dashboard</h1>
-    <button id="connectButton">Connect to Phantom Wallet</button>
+  <h1>Texas Hold'em Poker with Solana</h1>
+  <div class="wallet-info">
+    <span id="wallet-status">Wallet not connected</span>
+    <span id="wallet-balance"></span>
+  </div>
+  <div class="board">
+    <h2>Community Cards</h2>
+    <div id="community-cards"></div>
+    <h2>Your Hand</h2>
+    <div id="player-hand"></div>
+    <button id="sit-down-button">Sit Down</button>
+    <button id="deal-button" disabled>Deal Cards</button>
+    <button id="withdraw-button" disabled>Withdraw Tokens</button>
+    <button id="deposit-button" disabled>Deposit Tokens</button>
+  </div>
 
-    <div id="accountData">
-        <p>Account data will appear here after connecting.</p>
-    </div>
+  <script src="https://cdn.jsdelivr.net/npm/@solana/web3.js@1.35.0/lib/index.iife.min.js"></script>
+  <script>
+    const connection = new solanaWeb3.Connection(solanaWeb3.clusterApiUrl('devnet'));
+    let wallet;
+    let walletBalance = 0;
 
-    <div id="swapSection">
-        <h2>Swap SOL to Token (k8o5)</h2>
-        <input type="number" id="swapAmount" placeholder="Amount of SOL to swap" min="0" step="0.01">
-        <button id="swapButton">Swap</button>
-        <p id="swapStatus"></p>
-    </div>
+    // Initialize Solana wallet (e.g., Phantom)
+    async function connectWallet() {
+      if (window.solana && window.solana.isPhantom) {
+        wallet = window.solana;
+        await wallet.connect();
+        console.log("Connected to wallet:", wallet.publicKey.toString());
+        document.getElementById("wallet-status").textContent = `Connected: ${wallet.publicKey.toString().slice(0, 6)}...`;
+        await updateWalletBalance();
+        enableButtons();
+      } else {
+        alert("Please install Phantom Wallet!");
+      }
+    }
 
-    <!-- Include Solana Web3.js -->
-    <script src="https://unpkg.com/@solana/web3.js@latest/lib/index.iife.js"></script>
-    <!-- Include Jupiter Aggregator SDK (for swaps) -->
-    <script src="https://cdn.jsdelivr.net/npm/@jup-ag/core/dist/index.iife.js"></script>
+    // Fetch and display wallet balance
+    async function updateWalletBalance() {
+      if (!wallet) return;
+      const balance = await connection.getBalance(wallet.publicKey);
+      walletBalance = balance / solanaWeb3.LAMPORTS_PER_SOL; // Convert lamports to SOL
+      document.getElementById("wallet-balance").textContent = `Balance: ${walletBalance} SOL`;
+    }
 
-    <script>
-        let publicKey = null;
-        let connection = null;
+    // Deposit tokens into the game
+    async function depositTokens(amount) {
+      if (!wallet) {
+        alert("Connect your wallet first!");
+        return;
+      }
+      const transaction = new solanaWeb3.Transaction().add(
+        solanaWeb3.SystemProgram.transfer({
+          fromPubkey: wallet.publicKey,
+          toPubkey: new solanaWeb3.PublicKey("GAME_WALLET_ADDRESS"), // Replace with your game wallet address
+          lamports: amount * solanaWeb3.LAMPORTS_PER_SOL, // Convert SOL to lamports
+        })
+      );
+      const signature = await wallet.sendAndConfirmTransaction(transaction);
+      console.log("Deposit successful:", signature);
+      await updateWalletBalance();
+    }
 
-        // Connect to Phantom Wallet
-        document.getElementById('connectButton').addEventListener('click', async () => {
-            try {
-                if (!window.solana || !window.solana.isPhantom) {
-                    alert('Phantom Wallet is not installed!');
-                    return;
-                }
+    // Withdraw tokens from the game
+    async function withdrawTokens(amount) {
+      if (!wallet) {
+        alert("Connect your wallet first!");
+        return;
+      }
+      const transaction = new solanaWeb3.Transaction().add(
+        solanaWeb3.SystemProgram.transfer({
+          fromPubkey: new solanaWeb3.PublicKey("GAME_WALLET_ADDRESS"), // Replace with your game wallet address
+          toPubkey: wallet.publicKey,
+          lamports: amount * solanaWeb3.LAMPORTS_PER_SOL, // Convert SOL to lamports
+        })
+      );
+      const signature = await wallet.sendAndConfirmTransaction(transaction);
+      console.log("Withdrawal successful:", signature);
+      await updateWalletBalance();
+    }
 
-                // Connect to Phantom
-                const response = await window.solana.connect();
-                publicKey = response.publicKey.toString();
-                connection = new solanaWeb3.Connection(solanaWeb3.clusterApiUrl('mainnet-beta'));
+    // Poker game logic
+    const suits = ["♠", "♣", "♥", "♦"];
+    const ranks = ["2", "3", "4", "5", "6", "7", "8", "9", "10", "J", "Q", "K", "A"];
+    let deck = [];
+    let communityCards = [];
+    let playerHand = [];
 
-                // Fetch account data
-                const balance = await connection.getBalance(new solanaWeb3.PublicKey(publicKey));
-                const tokens = await getTokenAccounts(publicKey);
-
-                // Display account data
-                document.getElementById('accountData').innerHTML = `
-                    <p><strong>Connected Account:</strong> ${publicKey}</p>
-                    <p><strong>Balance:</strong> ${balance / solanaWeb3.LAMPORTS_PER_SOL} SOL</p>
-                    <p><strong>Tokens:</strong></p>
-                    <ul>
-                        ${tokens.map(token => `<li>${token.mint}: ${token.amount}</li>`).join('')}
-                    </ul>
-                `;
-
-            } catch (error) {
-                console.error('Error connecting to Phantom Wallet:', error);
-                alert('Failed to connect to Phantom Wallet.');
-            }
-        });
-
-        // Swap SOL to Token (k8o5)
-        document.getElementById('swapButton').addEventListener('click', async () => {
-            try {
-                if (!publicKey) {
-                    alert('Please connect your wallet first.');
-                    return;
-                }
-
-                const amount = parseFloat(document.getElementById('swapAmount').value);
-                if (isNaN(amount) || amount <= 0) {
-                    alert('Please enter a valid amount of SOL to swap.');
-                    return;
-                }
-
-                document.getElementById('swapStatus').innerText = 'Swapping...';
-
-                // Perform the swap using Jupiter Aggregator
-                const swapResult = await swapSOLToToken(publicKey, amount, 'k8o5'); // Replace 'k8o5' with the actual token address
-
-                document.getElementById('swapStatus').innerText = `Swap successful! Tx ID: ${swapResult.txId}`;
-
-            } catch (error) {
-                console.error('Error swapping tokens:', error);
-                document.getElementById('swapStatus').innerText = 'Swap failed. Please try again.';
-            }
-        });
-
-        // Function to fetch token accounts
-        async function getTokenAccounts(publicKey) {
-            const response = await connection.getParsedTokenAccountsByOwner(
-                new solanaWeb3.PublicKey(publicKey),
-                { programId: new solanaWeb3.PublicKey('TokenkegQfeZyiNwAJbNbGKPFXCWuBvf9Ss623VQ5DA') }
-            );
-            return response.value.map(account => ({
-                mint: account.account.data.parsed.info.mint,
-                amount: account.account.data.parsed.info.tokenAmount.uiAmount,
-            }));
+    function createDeck() {
+      deck = [];
+      for (let suit of suits) {
+        for (let rank of ranks) {
+          deck.push({ suit, rank });
         }
+      }
+    }
 
-        // Function to swap SOL to Token using Jupiter Aggregator
-        async function swapSOLToToken(publicKey, amount, tokenAddress) {
-            const jupiter = window.Jupiter;
-            const swapResult = await jupiter.swap({
-                inputMint: 'So11111111111111111111111111111111111111112', // SOL mint address
-                outputMint: tokenAddress, // Token mint address
-                amount: amount * solanaWeb3.LAMPORTS_PER_SOL, // Amount in lamports
-                slippage: 1, // 1% slippage
-                userPublicKey: publicKey,
-            });
+    function shuffleDeck() {
+      for (let i = deck.length - 1; i > 0; i--) {
+        const j = Math.floor(Math.random() * (i + 1));
+        [deck[i], deck[j]] = [deck[j], deck[i]];
+      }
+    }
 
-            return swapResult;
-        }
-    </script>
+    function dealCards() {
+      playerHand = [deck.pop(), deck.pop()];
+      communityCards = [deck.pop(), deck.pop(), deck.pop()];
+      renderCards();
+    }
+
+    function renderCards() {
+      const communityCardsDiv = document.getElementById("community-cards");
+      const playerHandDiv = document.getElementById("player-hand");
+      communityCardsDiv.innerHTML = communityCards.map(card => `<div class="card">${card.rank}${card.suit}</div>`).join("");
+      playerHandDiv.innerHTML = playerHand.map(card => `<div class="card">${card.rank}${card.suit}</div>`).join("");
+    }
+
+    // Enable buttons after wallet connection
+    function enableButtons() {
+      document.getElementById("deal-button").disabled = false;
+      document.getElementById("withdraw-button").disabled = false;
+      document.getElementById("deposit-button").disabled = false;
+    }
+
+    // Event listeners
+    document.getElementById("sit-down-button").addEventListener("click", () => {
+      alert("You have sat down at the table. Good luck!");
+      document.getElementById("deal-button").disabled = false;
+    });
+
+    document.getElementById("deal-button").addEventListener("click", () => {
+      createDeck();
+      shuffleDeck();
+      dealCards();
+    });
+
+    document.getElementById("deposit-button").addEventListener("click", () => {
+      const amount = parseFloat(prompt("Enter the amount of SOL to deposit:"));
+      if (!isNaN(amount)) depositTokens(amount);
+    });
+
+    document.getElementById("withdraw-button").addEventListener("click", () => {
+      const amount = parseFloat(prompt("Enter the amount of SOL to withdraw:"));
+      if (!isNaN(amount)) withdrawTokens(amount);
+    });
+
+    // Connect wallet on page load
+    window.addEventListener("load", connectWallet);
+  </script>
 </body>
 </html>
