@@ -1,125 +1,88 @@
 <!DOCTYPE html>
-<html lang="de">
+<html>
 <head>
-    <meta charset="UTF-8">
-    <title>k8o5</title>
-    <style>body { margin: 0; }</style>
+    <title>Phantom Login & Token Swap</title>
+    <script src="https://cdn.jsdelivr.net/npm/@solana/web3.js@1.70.1/lib/index.iife.min.js"></script>
 </head>
 <body>
-    <script src="https://cdnjs.cloudflare.com/ajax/libs/three.js/r128/three.min.js"></script>
-    <script src="https://cdn.jsdelivr.net/npm/three/examples/js/loaders/GLTFLoader.js"></script>
+    <button id="connectButton">Connect Phantom Wallet</button>
+    <div id="status"></div>
+    <hr>
+    <h3>Swap Token to SOL</h3>
+    <input type="number" id="amountInput" placeholder="Enter amount" step="0.1">
+    <button id="swapButton">Swap to SOL</button>
+
     <script>
-        let scene, camera, renderer;
-        const characters = [];
-        const FLOOR_SIZE = 30;
+        let provider;
+        let publicKey;
 
-        class Character {
-            constructor(modelPath) {
-                this.model = null;
-                this.mixer = null;
-                this.speed = 0.08 + Math.random() * 0.04;
-                this.direction = new THREE.Vector3(
-                    Math.random() - 0.5,
-                    0,
-                    Math.random() - 0.5
-                ).normalize();
+        // Replace with your token mint address (replace "k8o5" with actual mint)
+        const inputMint = 'k8o5'; 
+        const outputMint = 'So11111111111111111111111111111111111111112'; // Wrapped SOL
 
-                // Eigenes GLB-Modell laden
-                new THREE.GLTFLoader().load(
-                    modelPath,
-                    (gltf) => {
-                        this.model = gltf.scene;
-                        this.model.scale.set(0.5, 0.5, 0.5);
-                        this.model.position.y = 0.5;
-                        scene.add(this.model);
-
-                        // Animationen aktivieren
-                        if(gltf.animations?.length > 0) {
-                            this.mixer = new THREE.AnimationMixer(this.model);
-                            this.mixer.clipAction(gltf.animations[0]).play();
-                        }
-                    }
-                );
+        document.getElementById('connectButton').addEventListener('click', async () => {
+            if (!window.solana?.isPhantom) {
+                alert('Phantom wallet not installed!');
+                return;
             }
 
-            update(delta) {
-                if(!this.model) return;
-
-                // Bewegung
-                this.model.position.add(
-                    this.direction.clone().multiplyScalar(this.speed)
-                );
-
-                // Randkollision
-                const halfSize = FLOOR_SIZE/2 - 2;
-                if(Math.abs(this.model.position.x) > halfSize || 
-                   Math.abs(this.model.position.z) > halfSize) {
-                    this.direction.set(
-                        Math.random() - 0.5,
-                        0,
-                        Math.random() - 0.5
-                    ).normalize();
-                }
-
-                // Rotation
-                this.model.rotation.y = Math.atan2(
-                    this.direction.x,
-                    this.direction.z
-                );
-
-                // Animation
-                if(this.mixer) this.mixer.update(delta);
+            provider = window.solana;
+            try {
+                await provider.connect();
+                publicKey = provider.publicKey.toString();
+                document.getElementById('status').innerHTML = `Connected: ${publicKey}`;
+            } catch (error) {
+                console.error(error);
             }
-        }
+        });
 
-        function init() {
-            // Scene Setup
-            scene = new THREE.Scene();
-            camera = new THREE.PerspectiveCamera(75, window.innerWidth/window.innerHeight, 0.1, 1000);
-            camera.position.set(0, 15, 25);
-            camera.lookAt(0, 0, 0);
+        document.getElementById('swapButton').addEventListener('click', async () => {
+            if (!provider) {
+                alert('Please connect wallet first!');
+                return;
+            }
 
-            renderer = new THREE.WebGLRenderer({ antialias: true });
-            renderer.setSize(window.innerWidth, window.innerHeight);
-            document.body.appendChild(renderer.domElement);
+            const amount = document.getElementById('amountInput').value;
+            if (!amount) {
+                alert('Please enter amount!');
+                return;
+            }
 
-            // Beleuchtung
-            const light = new THREE.DirectionalLight(0xffffff, 1);
-            light.position.set(0, 10, 5);
-            scene.add(light);
-            scene.add(new THREE.AmbientLight(0x404040));
+            try {
+                // Get swap quote
+                const quote = await fetch(
+                    `https://quote-api.jup.ag/v4/quote?inputMint=${inputMint}&outputMint=${outputMint}&amount=${amount*1000000}&slippageBps=50`
+                ).then(res => res.json());
 
-            // Boden
-            const floor = new THREE.Mesh(
-                new THREE.PlaneGeometry(FLOOR_SIZE, FLOOR_SIZE),
-                new THREE.MeshPhongMaterial({ color: 0x228b22 })
-            );
-            floor.rotation.x = -Math.PI/2;
-            scene.add(floor);
+                // Get swap transaction
+                const swapResult = await fetch('https://quote-api.jup.ag/v4/swap', {
+                    method: 'POST',
+                    headers: { 'Content-Type': 'application/json' },
+                    body: JSON.stringify({
+                        quoteResponse: quote,
+                        userPublicKey: publicKey,
+                        wrapAndUnwrapSol: true
+                    })
+                }).then(res => res.json());
 
-            // Charaktere erstellen
-            characters.push(
-                new Character('tmp101zm6ml.glb'),
-                new Character('tmprrijf0bs.glb'),
-            );
+                // Deserialize transaction
+                const swapTransactionBuf = Buffer.from(swapResult.swapTransaction, 'base64');
+                const transaction = web3.Transaction.from(swapTransactionBuf);
 
-            // Resize Handler
-            window.addEventListener('resize', () => {
-                camera.aspect = window.innerWidth/window.innerHeight;
-                camera.updateProjectionMatrix();
-                renderer.setSize(window.innerWidth, window.innerHeight);
-            });
-        }
+                // Sign and send transaction
+                const signedTx = await provider.signTransaction(transaction);
+                const rawTransaction = signedTx.serialize();
+                const txid = await web3.sendRawTransaction(
+                    new web3.Connection(web3.clusterApiUrl('mainnet-beta')),
+                    rawTransaction
+                );
 
-        function animate() {
-            requestAnimationFrame(animate);
-            const delta = 0.016;
-            characters.forEach(c => c.update(delta));
-            renderer.render(scene, camera);
-        }
-
-        init();
-        animate();
+                alert(`Swap successful! Txid: ${txid}`);
+            } catch (error) {
+                console.error('Swap error:', error);
+                alert(`Swap failed: ${error.message}`);
+            }
+        });
     </script>
 </body>
 </html>
