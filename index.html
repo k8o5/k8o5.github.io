@@ -1,100 +1,107 @@
 <!DOCTYPE html>
-<html lang="en">
+<html lang="de">
 <head>
     <meta charset="UTF-8">
     <meta name="viewport" content="width=device-width, initial-scale=1.0">
     <title>k8o5</title>
-    <script src="https://cdn.jsdelivr.net/npm/@solana/web3.js@1.70.1/lib/index.iife.min.js"></script>
-    <script src="https://cdn.jsdelivr.net/npm/axios/dist/axios.min.js"></script>
     <style>
-        @import url('https://fonts.googleapis.com/css2?family=Space+Grotesk:wght@300;700&display=swap');
-        body { font-family: 'Space Grotesk', sans-serif; background: #000; color: #0f0; margin: 0; padding: 20px; }
-        .container { max-width: 800px; margin: auto; border: 3px solid #0f0; padding: 20px; }
-        button { background: #0f0; color: #000; border: none; padding: 10px 20px; cursor: pointer; font-weight: bold; }
-        input { width: 100%; padding: 10px; margin: 10px 0; background: #222; border: 2px solid #0f0; color: #0f0; }
-        .ai-response { border: 1px solid #0f0; padding: 15px; margin: 20px 0; white-space: pre-wrap; }
-        .nft-display { display: grid; grid-template-columns: repeat(auto-fit, minmax(150px, 1fr)); gap: 10px; }
-        .nft-item { border: 1px solid #0f0; padding: 10px; text-align: center; }
+        body, html {
+            margin: 0;
+            padding: 0;
+            width: 100%;
+            height: 100%;
+            overflow: hidden;
+            background-color: #000;
+        }
+        #canvas {
+            width: 100%;
+            height: 100%;
+        }
     </style>
 </head>
 <body>
-    <div class="container">
-        <h1>🚀 Web3 AI Revolution 🔥</h1>
-        <button id="connectButton">Connect Phantom Wallet</button>
-        <div id="walletInfo" style="margin: 20px 0;"></div>
-        
-        <h2>💡 AI Web3 Creator</h2>
-        <input type="text" id="aiPrompt" placeholder="Describe your Web3 project...">
-        <button id="generateButton">CREATE 🔥</button>
-        <div id="aiResult" class="ai-response"></div>
-        
-        <h2>🎨 AI-Generated NFTs</h2>
-        <div class="nft-display" id="nftGallery"></div>
-    </div>
+    <div id="canvas"></div>
 
+    <script src="https://cdnjs.cloudflare.com/ajax/libs/three.js/r128/three.min.js"></script>
+    <script src="https://cdn.jsdelivr.net/npm/three/examples/js/loaders/GLTFLoader.js"></script>
     <script>
-        (function() {
-            const { Connection, PublicKey, clusterApiUrl } = window.solanaWeb3;
-            const connection = new Connection(clusterApiUrl('mainnet-beta'));
-            const OPENAI_API_KEY = 'sk-your-openai-key'; // Replace with your API key
-            
-            let publicKey = null;
-            
-            // Initialize connection
-            document.getElementById('connectButton').addEventListener('click', async () => {
-                if (!window.solana?.isPhantom) return alert('Install Phantom Wallet!');
-                
-                try {
-                    await window.solana.connect();
-                    publicKey = new PublicKey(window.solana.publicKey.toString());
-                    
-                    const balance = await connection.getBalance(publicKey);
-                    document.getElementById('walletInfo').innerHTML = `
-                        Connected: ${publicKey.toString().slice(0, 6)}...${publicKey.toString().slice(-4)}<br>
-                        Balance: ${balance / 1e9} SOL
-                    `;
-                } catch (error) {
-                    console.error('Connection error:', error);
-                }
-            });
+        // Scene, Camera, Renderer
+        const scene = new THREE.Scene();
+        const camera = new THREE.PerspectiveCamera(75, window.innerWidth / window.innerHeight, 0.1, 1000);
+        const renderer = new THREE.WebGLRenderer({ antialias: true });
+        renderer.setSize(window.innerWidth, window.innerHeight);
+        document.getElementById('canvas').appendChild(renderer.domElement);
 
-            // AI Generation
-            document.getElementById('generateButton').addEventListener('click', async () => {
-                if (!publicKey) return alert('Connect wallet first!');
-                
-                const prompt = document.getElementById('aiPrompt').value;
-                const aiResponse = document.getElementById('aiResult');
-                
-                try {
-                    const response = await axios.post('https://api.openai.com/v1/chat/completions', {
-                        model: "gpt-3.5-turbo",
-                        messages: [{
-                            role: "user", 
-                            content: `Create a complete Web3 project on Solana with: ${prompt}. Include contract details, tokenomics, and NFT integration.`
-                        }]
-                    }, {
-                        headers: { 'Authorization': `Bearer ${OPENAI_API_KEY}` }
-                    });
+        // Licht hinzufügen
+        const light = new THREE.DirectionalLight(0xffffff, 1);
+        light.position.set(5, 5, 5).normalize();
+        scene.add(light);
 
-                    aiResponse.innerHTML = response.data.choices[0].message.content;
-                    mintAchievementNFT('AI Project Created: ' + prompt.slice(0, 20));
-                } catch (error) {
-                    console.error('AI Error:', error);
-                    aiResponse.innerHTML = 'Error generating project. Try again!';
-                }
-            });
+        // GLTFLoader für das Laden der .glb-Datei
+        const loader = new THREE.GLTFLoader();
+        let model;
 
-            function mintAchievementNFT(achievementText) {
-                const nftGallery = document.getElementById('nftGallery');
-                nftGallery.innerHTML += `
-                    <div class="nft-item">
-                        <h3>🏆 Achievement</h3>
-                        <p>${achievementText}</p>
-                        <small>${new Date().toLocaleDateString()}</small>
-                    </div>
-                `;
+        // Lade das 3D-Modell
+        loader.load(
+            'tmp101zm6ml.glb', // Ersetze dies durch den Pfad zu deiner .glb-Datei
+            function (gltf) {
+                model = gltf.scene;
+                scene.add(model);
+
+                // Zentriere das Modell
+                const box = new THREE.Box3().setFromObject(model);
+                const center = new THREE.Vector3();
+                box.getCenter(center);
+                model.position.sub(center);
+
+                // Event-Listener für Klicks auf das Modell hinzufügen
+                const raycaster = new THREE.Raycaster();
+                const mouse = new THREE.Vector2();
+
+                window.addEventListener('click', (event) => {
+                    // Mausposition normalisieren
+                    mouse.x = (event.clientX / window.innerWidth) * 2 - 1;
+                    mouse.y = -(event.clientY / window.innerHeight) * 2 + 1;
+
+                    // Raycaster verwenden, um zu prüfen, ob das Modell angeklickt wurde
+                    raycaster.setFromCamera(mouse, camera);
+                    const intersects = raycaster.intersectObject(model, true);
+
+                    if (intersects.length > 0) {
+                        // Weiterleitung zu twitch.tv/k8o5
+                        window.location.href = 'https://www.twitch.tv/k8o5';
+                    }
+                });
+            },
+            undefined,
+            function (error) {
+                console.error('Fehler beim Laden des Modells:', error);
             }
-        })();
+        );
+
+        // Kamera positionieren
+        camera.position.z = 5;
+
+        // Animation
+        function animate() {
+            requestAnimationFrame(animate);
+
+            // Modell langsam drehen
+            if (model) {
+                model.rotation.y += 0.005; // Geschwindigkeit der Drehung anpassen
+            }
+
+            renderer.render(scene, camera);
+        }
+
+        animate();
+
+        // Fenstergröße anpassen
+        window.addEventListener('resize', () => {
+            camera.aspect = window.innerWidth / window.innerHeight;
+            camera.updateProjectionMatrix();
+            renderer.setSize(window.innerWidth, window.innerHeight);
+        });
     </script>
 </body>
 </html>
