@@ -1,107 +1,67 @@
-<!DOCTYPE html>
-<html lang="de">
+<html>
 <head>
-    <meta charset="UTF-8">
-    <meta name="viewport" content="width=device-width, initial-scale=1.0">
-    <title>k8o5</title>
-    <style>
-        body, html {
-            margin: 0;
-            padding: 0;
-            width: 100%;
-            height: 100%;
-            overflow: hidden;
-            background-color: #000;
-        }
-        #canvas {
-            width: 100%;
-            height: 100%;
-        }
-    </style>
+    <script src="https://cdn.jsdelivr.net/npm/gun/gun.js"></script>
+    <script src="https://cdn.jsdelivr.net/npm/gun/lib/webrtc.js"></script>
 </head>
 <body>
-    <div id="canvas"></div>
+    <h2>Blockchain P2P Chat - k8o5.com</h2>
+    <div id="chat"></div>
+    <input id="msg" type="text" placeholder="Nachricht eingeben...">
+    <button onclick="sendMsg()">Senden</button>
 
-    <script src="https://cdnjs.cloudflare.com/ajax/libs/three.js/r128/three.min.js"></script>
-    <script src="https://cdn.jsdelivr.net/npm/three/examples/js/loaders/GLTFLoader.js"></script>
     <script>
-        // Scene, Camera, Renderer
-        const scene = new THREE.Scene();
-        const camera = new THREE.PerspectiveCamera(75, window.innerWidth / window.innerHeight, 0.1, 1000);
-        const renderer = new THREE.WebGLRenderer({ antialias: true });
-        renderer.setSize(window.innerWidth, window.innerHeight);
-        document.getElementById('canvas').appendChild(renderer.domElement);
-
-        // Licht hinzufügen
-        const light = new THREE.DirectionalLight(0xffffff, 1);
-        light.position.set(5, 5, 5).normalize();
-        scene.add(light);
-
-        // GLTFLoader für das Laden der .glb-Datei
-        const loader = new THREE.GLTFLoader();
-        let model;
-
-        // Lade das 3D-Modell
-        loader.load(
-            'textured_mesh.glb', // Ersetze dies durch den Pfad zu deiner .glb-Datei
-            function (gltf) {
-                model = gltf.scene;
-                scene.add(model);
-
-                // Zentriere das Modell
-                const box = new THREE.Box3().setFromObject(model);
-                const center = new THREE.Vector3();
-                box.getCenter(center);
-                model.position.sub(center);
-
-                // Event-Listener für Klicks auf das Modell hinzufügen
-                const raycaster = new THREE.Raycaster();
-                const mouse = new THREE.Vector2();
-
-                window.addEventListener('click', (event) => {
-                    // Mausposition normalisieren
-                    mouse.x = (event.clientX / window.innerWidth) * 2 - 1;
-                    mouse.y = -(event.clientY / window.innerHeight) * 2 + 1;
-
-                    // Raycaster verwenden, um zu prüfen, ob das Modell angeklickt wurde
-                    raycaster.setFromCamera(mouse, camera);
-                    const intersects = raycaster.intersectObject(model, true);
-
-                    if (intersects.length > 0) {
-                        // Weiterleitung zu twitch.tv/k8o5
-                        window.location.href = 'https://www.twitch.tv/k8o5';
-                    }
-                });
-            },
-            undefined,
-            function (error) {
-                console.error('Fehler beim Laden des Modells:', error);
-            }
-        );
-
-        // Kamera positionieren
-        camera.position.z = 5;
-
-        // Animation
-        function animate() {
-            requestAnimationFrame(animate);
-
-            // Modell langsam drehen
-            if (model) {
-                model.rotation.y += 0.005; // Geschwindigkeit der Drehung anpassen
-            }
-
-            renderer.render(scene, camera);
+        function hash(str) {
+            return str.split("").reduce((a, b) => ((a << 5) - a) + b.charCodeAt(0), 0);
         }
 
-        animate();
+        var gun = Gun({ peers: ['https://k8o5.com/gun'], localStorage: true, radisk: false }); // WebRTC + localStorage
+        var chat = gun.get('k8o5_p2p_blockchain_chat');
+        var chatDiv = document.getElementById("chat");
 
-        // Fenstergröße anpassen
-        window.addEventListener('resize', () => {
-            camera.aspect = window.innerWidth / window.innerHeight;
-            camera.updateProjectionMatrix();
-            renderer.setSize(window.innerWidth, window.innerHeight);
+        let blockchain = JSON.parse(localStorage.getItem("blockchain")) || 
+                         [{ index: 0, prevHash: "0", message: "Genesis Block", timestamp: Date.now(), hash: hash("Genesis Block") }];
+
+        blockchain.forEach(block => {
+            let p = document.createElement("p");
+            p.textContent = `[${block.index}] ${block.message} (Hash: ${block.hash})`;
+            chatDiv.appendChild(p);
         });
+
+        chat.map().on(function(data) {
+            if (data && data.message && data.prevHash) {
+                let lastBlock = blockchain[blockchain.length - 1];
+                if (lastBlock.hash == data.prevHash) {
+                    blockchain.push(data);
+                    localStorage.setItem("blockchain", JSON.stringify(blockchain));
+
+                    let p = document.createElement("p");
+                    p.textContent = `[${data.index}] ${data.message} (Hash: ${data.hash})`;
+                    chatDiv.appendChild(p);
+                }
+            }
+        });
+
+        function sendMsg() {
+            var text = document.getElementById("msg").value;
+            if (text.trim()) {
+                let lastBlock = blockchain[blockchain.length - 1];
+                let newBlock = {
+                    index: lastBlock.index + 1,
+                    prevHash: lastBlock.hash,
+                    message: text,
+                    timestamp: Date.now(),
+                    hash: hash(text + lastBlock.hash)
+                };
+                blockchain.push(newBlock);
+                localStorage.setItem("blockchain", JSON.stringify(blockchain));
+                chat.set(newBlock);
+
+                let p = document.createElement("p");
+                p.textContent = `[${newBlock.index}] ${newBlock.message} (Hash: ${newBlock.hash})`;
+                chatDiv.appendChild(p);
+                document.getElementById("msg").value = "";
+            }
+        }
     </script>
 </body>
 </html>
