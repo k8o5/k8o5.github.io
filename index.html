@@ -1,67 +1,196 @@
-<html>
+<!DOCTYPE html>
+<html lang="en">
 <head>
-    <script src="https://cdn.jsdelivr.net/npm/gun/gun.js"></script>
-    <script src="https://cdn.jsdelivr.net/npm/gun/lib/webrtc.js"></script>
+  <meta charset="UTF-8" />
+  <title>k8o5</title>
+  <style>
+    html, body {
+      margin: 0;
+      padding: 0;
+      overflow: hidden;
+      background: #000;
+    }
+    canvas {
+      display: block;
+      background: #111;
+    }
+  </style>
 </head>
 <body>
-    <h2>Blockchain P2P Chat - k8o5.com</h2>
-    <div id="chat"></div>
-    <input id="msg" type="text" placeholder="Nachricht eingeben...">
-    <button onclick="sendMsg()">Senden</button>
+  <canvas id="gameCanvas"></canvas>
+  <script>
+    // Set up canvas
+    const canvas = document.getElementById("gameCanvas");
+    const ctx = canvas.getContext("2d");
+    canvas.width = window.innerWidth;
+    canvas.height = window.innerHeight;
+    window.addEventListener("resize", () => {
+      canvas.width = window.innerWidth;
+      canvas.height = window.innerHeight;
+    });
 
-    <script>
-        function hash(str) {
-            return str.split("").reduce((a, b) => ((a << 5) - a) + b.charCodeAt(0), 0);
+    // Global variables
+    const foods = [];
+    const snakes = [];
+    const foodCount = 100;
+    let mouseX = canvas.width / 2;
+    let mouseY = canvas.height / 2;
+
+    // Listen for mouse movements to control the player snake.
+    window.addEventListener("mousemove", (e) => {
+      const rect = canvas.getBoundingClientRect();
+      mouseX = e.clientX - rect.left;
+      mouseY = e.clientY - rect.top;
+    });
+
+    // Utility: Generate a random color
+    function randomColor() {
+      let letters = "0123456789ABCDEF";
+      let color = "#";
+      for (let i = 0; i < 6; i++) {
+        color += letters[Math.floor(Math.random() * 16)];
+      }
+      return color;
+    }
+
+    // Utility: Generate a fun random name
+    function generateName() {
+      const adjectives = ["Swift", "Fierce", "Cunning", "Mighty", "Sneaky", "Luminous", "Shadow", "Brave", "Silent", "Wild"];
+      const nouns = ["Python", "Viper", "Cobra", "Dragon", "Tiger", "Eagle", "Lion", "Shark", "Panther", "Wolf"];
+      const adj = adjectives[Math.floor(Math.random() * adjectives.length)];
+      const noun = nouns[Math.floor(Math.random() * nouns.length)];
+      return adj + " " + noun;
+    }
+
+    // Food functions
+    function spawnFood() {
+      foods.push({
+        x: Math.random() * canvas.width,
+        y: Math.random() * canvas.height,
+        r: 3 + Math.random() * 2  // radius between 3 and 5
+      });
+    }
+    // Create initial foods
+    for (let i = 0; i < foodCount; i++) {
+      spawnFood();
+    }
+
+    // Snake constructor
+    function Snake(x, y, isPlayer) {
+      this.x = x;
+      this.y = y;
+      this.segments = [{ x: x, y: y }];
+      this.length = 20; // starting length
+      // Player snake is a bit faster
+      this.speed = isPlayer ? 2.5 : (1.5 + Math.random());
+      this.angle = 0;
+      this.isPlayer = isPlayer;
+      this.color = isPlayer ? "#0f0" : randomColor();
+      this.name = isPlayer ? "You" : generateName();
+      // For AI snakes, pick an initial target location
+      if (!isPlayer) {
+        this.targetX = Math.random() * canvas.width;
+        this.targetY = Math.random() * canvas.height;
+      }
+    }
+
+    // Create the player snake at the center
+    snakes.push(new Snake(canvas.width / 2, canvas.height / 2, true));
+    // Create several AI snakes
+    const aiCount = 5;
+    for (let i = 0; i < aiCount; i++) {
+      let x = Math.random() * canvas.width;
+      let y = Math.random() * canvas.height;
+      snakes.push(new Snake(x, y, false));
+    }
+
+    // Update all snakes
+    function update() {
+      snakes.forEach(snake => {
+        // Determine the current target/direction
+        if (snake.isPlayer) {
+          let dx = mouseX - snake.x;
+          let dy = mouseY - snake.y;
+          snake.angle = Math.atan2(dy, dx);
+        } else {
+          // AI: If near its target, pick a new random target.
+          if (Math.hypot(snake.x - snake.targetX, snake.y - snake.targetY) < 50) {
+            snake.targetX = Math.random() * canvas.width;
+            snake.targetY = Math.random() * canvas.height;
+          }
+          let dx = snake.targetX - snake.x;
+          let dy = snake.targetY - snake.y;
+          snake.angle = Math.atan2(dy, dx);
         }
 
-        var gun = Gun({ peers: ['https://k8o5.com/gun'], localStorage: true, radisk: false }); // WebRTC + localStorage
-        var chat = gun.get('k8o5_p2p_blockchain_chat');
-        var chatDiv = document.getElementById("chat");
-
-        let blockchain = JSON.parse(localStorage.getItem("blockchain")) || 
-                         [{ index: 0, prevHash: "0", message: "Genesis Block", timestamp: Date.now(), hash: hash("Genesis Block") }];
-
-        blockchain.forEach(block => {
-            let p = document.createElement("p");
-            p.textContent = `[${block.index}] ${block.message} (Hash: ${block.hash})`;
-            chatDiv.appendChild(p);
-        });
-
-        chat.map().on(function(data) {
-            if (data && data.message && data.prevHash) {
-                let lastBlock = blockchain[blockchain.length - 1];
-                if (lastBlock.hash == data.prevHash) {
-                    blockchain.push(data);
-                    localStorage.setItem("blockchain", JSON.stringify(blockchain));
-
-                    let p = document.createElement("p");
-                    p.textContent = `[${data.index}] ${data.message} (Hash: ${data.hash})`;
-                    chatDiv.appendChild(p);
-                }
-            }
-        });
-
-        function sendMsg() {
-            var text = document.getElementById("msg").value;
-            if (text.trim()) {
-                let lastBlock = blockchain[blockchain.length - 1];
-                let newBlock = {
-                    index: lastBlock.index + 1,
-                    prevHash: lastBlock.hash,
-                    message: text,
-                    timestamp: Date.now(),
-                    hash: hash(text + lastBlock.hash)
-                };
-                blockchain.push(newBlock);
-                localStorage.setItem("blockchain", JSON.stringify(blockchain));
-                chat.set(newBlock);
-
-                let p = document.createElement("p");
-                p.textContent = `[${newBlock.index}] ${newBlock.message} (Hash: ${newBlock.hash})`;
-                chatDiv.appendChild(p);
-                document.getElementById("msg").value = "";
-            }
+        // Move the snake
+        snake.x += snake.speed * Math.cos(snake.angle);
+        snake.y += snake.speed * Math.sin(snake.angle);
+        // Wrap-around the edges
+        if (snake.x < 0) snake.x += canvas.width;
+        if (snake.x > canvas.width) snake.x -= canvas.width;
+        if (snake.y < 0) snake.y += canvas.height;
+        if (snake.y > canvas.height) snake.y -= canvas.height;
+        // Add the new head position to the segments array
+        snake.segments.unshift({ x: snake.x, y: snake.y });
+        if (snake.segments.length > snake.length) {
+          snake.segments.pop();
         }
-    </script>
+
+        // Check for food collisions
+        for (let i = foods.length - 1; i >= 0; i--) {
+          const food = foods[i];
+          const dist = Math.hypot(snake.x - food.x, snake.y - food.y);
+          if (dist < 10) {
+            snake.length += 5;  // Grow the snake
+            foods.splice(i, 1);
+            spawnFood();  // Keep the food count constant
+          }
+        }
+      });
+    }
+
+    // Draw the game objects
+    function draw() {
+      ctx.clearRect(0, 0, canvas.width, canvas.height);
+
+      // Draw food (yellow dots)
+      foods.forEach(food => {
+        ctx.beginPath();
+        ctx.arc(food.x, food.y, food.r, 0, Math.PI * 2);
+        ctx.fillStyle = "#ff0";
+        ctx.fill();
+      });
+
+      // Draw each snake
+      snakes.forEach(snake => {
+        ctx.lineWidth = 10;
+        ctx.lineCap = "round";
+        ctx.lineJoin = "round";
+        ctx.strokeStyle = snake.color;
+        ctx.beginPath();
+        if (snake.segments.length > 0) {
+          ctx.moveTo(snake.segments[0].x, snake.segments[0].y);
+          for (let j = 1; j < snake.segments.length; j++) {
+            ctx.lineTo(snake.segments[j].x, snake.segments[j].y);
+          }
+          ctx.stroke();
+        }
+        // Draw the snake's name above its head
+        ctx.fillStyle = "#fff";
+        ctx.font = "16px sans-serif";
+        ctx.textAlign = "center";
+        ctx.fillText(snake.name, snake.x, snake.y - 15);
+      });
+    }
+
+    // The main game loop
+    function gameLoop() {
+      update();
+      draw();
+      requestAnimationFrame(gameLoop);
+    }
+    gameLoop();
+  </script>
 </body>
 </html>
