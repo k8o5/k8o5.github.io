@@ -1,196 +1,77 @@
 <!DOCTYPE html>
-<html lang="en">
+<html>
 <head>
-  <meta charset="UTF-8" />
-  <title>k8o5</title>
-  <style>
-    html, body {
-      margin: 0;
-      padding: 0;
-      overflow: hidden;
-      background: #000;
-    }
-    canvas {
-      display: block;
-      background: #111;
-    }
-  </style>
+    <style>
+        body {
+            margin: 0;
+            padding: 0;
+            height: 100vh;
+            width: 100vw;
+            display: flex;
+            justify-content: center;
+            align-items: center;
+            background-color: #000000; /* Wird durch JS ersetzt */
+            overflow: hidden;
+        }
+        pre {
+            font-family: monospace;
+            white-space: pre;
+            color: white;
+            font-size: 1vmin;
+            line-height: 1;
+        }
+    </style>
 </head>
 <body>
-  <canvas id="gameCanvas"></canvas>
-  <script>
-    // Set up canvas
-    const canvas = document.getElementById("gameCanvas");
-    const ctx = canvas.getContext("2d");
-    canvas.width = window.innerWidth;
-    canvas.height = window.innerHeight;
-    window.addEventListener("resize", () => {
-      canvas.width = window.innerWidth;
-      canvas.height = window.innerHeight;
-    });
+    <pre id="ascii"></pre>
+    <script>
+        // Zufällige Hintergrundfarbe generieren
+        const randomColor = '#' + Math.floor(Math.random()*16777215).toString(16);
+        document.body.style.backgroundColor = randomColor;
 
-    // Global variables
-    const foods = [];
-    const snakes = [];
-    const foodCount = 100;
-    let mouseX = canvas.width / 2;
-    let mouseY = canvas.height / 2;
+        // Funktion zur ASCII-Konvertierung
+        function imageToAscii(img, width, height, callback) {
+            const canvas = document.createElement('canvas');
+            canvas.width = width;
+            canvas.height = height;
+            const ctx = canvas.getContext('2d');
+            ctx.drawImage(img, 0, 0, width, height);
+            const imageData = ctx.getImageData(0, 0, width, height);
+            const data = imageData.data;
 
-    // Listen for mouse movements to control the player snake.
-    window.addEventListener("mousemove", (e) => {
-      const rect = canvas.getBoundingClientRect();
-      mouseX = e.clientX - rect.left;
-      mouseY = e.clientY - rect.top;
-    });
+            const chars = '@%#*+=-:. '; // ASCII-Zeichen für Helligkeit
+            let ascii = '';
 
-    // Utility: Generate a random color
-    function randomColor() {
-      let letters = "0123456789ABCDEF";
-      let color = "#";
-      for (let i = 0; i < 6; i++) {
-        color += letters[Math.floor(Math.random() * 16)];
-      }
-      return color;
-    }
-
-    // Utility: Generate a fun random name
-    function generateName() {
-      const adjectives = ["Swift", "Fierce", "Cunning", "Mighty", "Sneaky", "Luminous", "Shadow", "Brave", "Silent", "Wild"];
-      const nouns = ["Python", "Viper", "Cobra", "Dragon", "Tiger", "Eagle", "Lion", "Shark", "Panther", "Wolf"];
-      const adj = adjectives[Math.floor(Math.random() * adjectives.length)];
-      const noun = nouns[Math.floor(Math.random() * nouns.length)];
-      return adj + " " + noun;
-    }
-
-    // Food functions
-    function spawnFood() {
-      foods.push({
-        x: Math.random() * canvas.width,
-        y: Math.random() * canvas.height,
-        r: 3 + Math.random() * 2  // radius between 3 and 5
-      });
-    }
-    // Create initial foods
-    for (let i = 0; i < foodCount; i++) {
-      spawnFood();
-    }
-
-    // Snake constructor
-    function Snake(x, y, isPlayer) {
-      this.x = x;
-      this.y = y;
-      this.segments = [{ x: x, y: y }];
-      this.length = 20; // starting length
-      // Player snake is a bit faster
-      this.speed = isPlayer ? 2.5 : (1.5 + Math.random());
-      this.angle = 0;
-      this.isPlayer = isPlayer;
-      this.color = isPlayer ? "#0f0" : randomColor();
-      this.name = isPlayer ? "You" : generateName();
-      // For AI snakes, pick an initial target location
-      if (!isPlayer) {
-        this.targetX = Math.random() * canvas.width;
-        this.targetY = Math.random() * canvas.height;
-      }
-    }
-
-    // Create the player snake at the center
-    snakes.push(new Snake(canvas.width / 2, canvas.height / 2, true));
-    // Create several AI snakes
-    const aiCount = 5;
-    for (let i = 0; i < aiCount; i++) {
-      let x = Math.random() * canvas.width;
-      let y = Math.random() * canvas.height;
-      snakes.push(new Snake(x, y, false));
-    }
-
-    // Update all snakes
-    function update() {
-      snakes.forEach(snake => {
-        // Determine the current target/direction
-        if (snake.isPlayer) {
-          let dx = mouseX - snake.x;
-          let dy = mouseY - snake.y;
-          snake.angle = Math.atan2(dy, dx);
-        } else {
-          // AI: If near its target, pick a new random target.
-          if (Math.hypot(snake.x - snake.targetX, snake.y - snake.targetY) < 50) {
-            snake.targetX = Math.random() * canvas.width;
-            snake.targetY = Math.random() * canvas.height;
-          }
-          let dx = snake.targetX - snake.x;
-          let dy = snake.targetY - snake.y;
-          snake.angle = Math.atan2(dy, dx);
+            for (let y = 0; y < height; y++) {
+                for (let x = 0; x < width; x++) {
+                    const offset = (y * width + x) * 4;
+                    const r = data[offset];
+                    const g = data[offset + 1];
+                    const b = data[offset + 2];
+                    // Helligkeit berechnen (0-255)
+                    const brightness = (0.299 * r + 0.587 * g + 0.114 * b) / 255;
+                    // Zeichen basierend auf Helligkeit auswählen
+                    const charIndex = Math.floor(brightness * (chars.length - 1));
+                    ascii += chars[charIndex];
+                }
+                ascii += '\n';
+            }
+            callback(ascii);
         }
 
-        // Move the snake
-        snake.x += snake.speed * Math.cos(snake.angle);
-        snake.y += snake.speed * Math.sin(snake.angle);
-        // Wrap-around the edges
-        if (snake.x < 0) snake.x += canvas.width;
-        if (snake.x > canvas.width) snake.x -= canvas.width;
-        if (snake.y < 0) snake.y += canvas.height;
-        if (snake.y > canvas.height) snake.y -= canvas.height;
-        // Add the new head position to the segments array
-        snake.segments.unshift({ x: snake.x, y: snake.y });
-        if (snake.segments.length > snake.length) {
-          snake.segments.pop();
-        }
-
-        // Check for food collisions
-        for (let i = foods.length - 1; i >= 0; i--) {
-          const food = foods[i];
-          const dist = Math.hypot(snake.x - food.x, snake.y - food.y);
-          if (dist < 10) {
-            snake.length += 5;  // Grow the snake
-            foods.splice(i, 1);
-            spawnFood();  // Keep the food count constant
-          }
-        }
-      });
-    }
-
-    // Draw the game objects
-    function draw() {
-      ctx.clearRect(0, 0, canvas.width, canvas.height);
-
-      // Draw food (yellow dots)
-      foods.forEach(food => {
-        ctx.beginPath();
-        ctx.arc(food.x, food.y, food.r, 0, Math.PI * 2);
-        ctx.fillStyle = "#ff0";
-        ctx.fill();
-      });
-
-      // Draw each snake
-      snakes.forEach(snake => {
-        ctx.lineWidth = 10;
-        ctx.lineCap = "round";
-        ctx.lineJoin = "round";
-        ctx.strokeStyle = snake.color;
-        ctx.beginPath();
-        if (snake.segments.length > 0) {
-          ctx.moveTo(snake.segments[0].x, snake.segments[0].y);
-          for (let j = 1; j < snake.segments.length; j++) {
-            ctx.lineTo(snake.segments[j].x, snake.segments[j].y);
-          }
-          ctx.stroke();
-        }
-        // Draw the snake's name above its head
-        ctx.fillStyle = "#fff";
-        ctx.font = "16px sans-serif";
-        ctx.textAlign = "center";
-        ctx.fillText(snake.name, snake.x, snake.y - 15);
-      });
-    }
-
-    // The main game loop
-    function gameLoop() {
-      update();
-      draw();
-      requestAnimationFrame(gameLoop);
-    }
-    gameLoop();
-  </script>
+        // Satellitenbild laden
+        const img = new Image();
+        img.crossOrigin = 'Anonymous'; // CORS-Zugriff ermöglichen
+        img.src = 'https://cdn.star.nesdis.noaa.gov/GOES16/ABI/FD/GEOCOLOR/latest.jpg';
+        img.onload = () => {
+            // ASCII-Art generieren (Breite und Höhe anpassen für Details)
+            imageToAscii(img, 300, 150, (ascii) => {
+                document.getElementById('ascii').innerText = ascii;
+            });
+        };
+        img.onerror = () => {
+            document.getElementById('ascii').innerText = 'Fehler beim Laden des Bildes.';
+        };
+    </script>
 </body>
 </html>
