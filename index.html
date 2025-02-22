@@ -1,6 +1,9 @@
 <!DOCTYPE html>
-<html>
+<html lang="en">
 <head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Solana Traffic Screener with ASCII Earth</title>
     <style>
         body {
             margin: 0;
@@ -10,26 +13,70 @@
             display: flex;
             justify-content: center;
             align-items: center;
-            background-color: #000000; /* Wird durch JS ersetzt */
+            background-color: #000000; /* Overridden by JS */
             overflow: hidden;
+        }
+        #main {
+            display: flex;
+            flex-direction: column;
+            align-items: center;
+            color: white; /* Overridden by JS for contrast */
+        }
+        #ascii-container {
+            position: relative;
         }
         pre {
             font-family: monospace;
             white-space: pre;
-            color: white;
             font-size: 1vmin;
             line-height: 1;
+        }
+        #overlay {
+            position: absolute;
+            top: 50%;
+            left: 50%;
+            transform: translate(-50%, -50%);
+            font-size: 2em;
+            text-shadow: 2px 2px 4px black, -2px -2px 4px white;
+            animation: glitch 0.5s infinite, color-cycle 5s infinite;
+        }
+        @keyframes glitch {
+            0% { transform: translate(0); }
+            20% { transform: translate(-2px, 2px); }
+            40% { transform: translate(2px, -2px); }
+            60% { transform: translate(-2px, 2px); }
+            80% { transform: translate(2px, -2px); }
+            100% { transform: translate(0); }
+        }
+        @keyframes color-cycle {
+            0% { color: red; }
+            25% { color: yellow; }
+            50% { color: green; }
+            75% { color: blue; }
+            100% { color: red; }
+        }
+        #solana-data {
+            margin-top: 20px;
+        }
+        #tweet-button {
+            margin-top: 10px;
+            padding: 10px 20px;
+            font-size: 16px;
+            cursor: pointer;
         }
     </style>
 </head>
 <body>
-    <pre id="ascii"></pre>
+    <div id="main">
+        <div id="ascii-container">
+            <pre id="ascii"></pre>
+            <div id="overlay">k8o5</div>
+        </div>
+        <div id="solana-data">Loading Solana data...</div>
+        <button id="tweet-button" disabled>Tweet about it</button>
+    </div>
     <script>
-        // Zufällige Hintergrundfarbe generieren
-        const randomColor = '#' + Math.floor(Math.random()*16777215).toString(16);
-        document.body.style.backgroundColor = randomColor;
-
-        // Funktion zur ASCII-Konvertierung
+        // Convert image to ASCII art
         function imageToAscii(img, width, height, callback) {
             const canvas = document.createElement('canvas');
             canvas.width = width;
@@ -38,19 +85,15 @@
             ctx.drawImage(img, 0, 0, width, height);
             const imageData = ctx.getImageData(0, 0, width, height);
             const data = imageData.data;
-
-            const chars = '@%#*+=-:. '; // ASCII-Zeichen für Helligkeit
+            const chars = '@%#*+=-:. ';
             let ascii = '';
-
             for (let y = 0; y < height; y++) {
                 for (let x = 0; x < width; x++) {
                     const offset = (y * width + x) * 4;
                     const r = data[offset];
                     const g = data[offset + 1];
                     const b = data[offset + 2];
-                    // Helligkeit berechnen (0-255)
                     const brightness = (0.299 * r + 0.587 * g + 0.114 * b) / 255;
-                    // Zeichen basierend auf Helligkeit auswählen
                     const charIndex = Math.floor(brightness * (chars.length - 1));
                     ascii += chars[charIndex];
                 }
@@ -59,19 +102,62 @@
             callback(ascii);
         }
 
-        // Satellitenbild laden
+        // Load Earth image and generate ASCII
         const img = new Image();
-        img.crossOrigin = 'Anonymous'; // CORS-Zugriff ermöglichen
+        img.crossOrigin = 'Anonymous';
         img.src = 'https://cdn.star.nesdis.noaa.gov/GOES16/ABI/FD/GEOCOLOR/latest.jpg';
         img.onload = () => {
-            // ASCII-Art generieren (Breite und Höhe anpassen für Details)
             imageToAscii(img, 300, 150, (ascii) => {
                 document.getElementById('ascii').innerText = ascii;
+                loadSolanaData();
             });
         };
         img.onerror = () => {
-            document.getElementById('ascii').innerText = 'Fehler beim Laden des Bildes.';
+            document.getElementById('ascii').innerText = 'Error loading image.';
         };
+
+        // Fetch Solana block height
+        function loadSolanaData() {
+            fetch('https://api.mainnet-beta.solana.com', {
+                method: 'POST',
+                headers: { 'Content-Type': 'application/json' },
+                body: JSON.stringify({
+                    jsonrpc: '2.0',
+                    id: 1,
+                    method: 'getBlockHeight'
+                })
+            })
+            .then(response => response.json())
+            .then(data => {
+                const blockHeight = data.result;
+                document.getElementById('solana-data').innerText = `Latest Solana block height: ${blockHeight}`;
+                document.getElementById('tweet-button').disabled = false;
+                window.blockHeight = blockHeight;
+            })
+            .catch(error => {
+                document.getElementById('solana-data').innerText = 'Error loading Solana data.';
+                console.error(error);
+            });
+        }
+
+        // Set random background and contrasting text color
+        const randomColor = '#' + Math.floor(Math.random() * 16777215).toString(16);
+        document.body.style.backgroundColor = randomColor;
+        const r = parseInt(randomColor.substr(1, 2), 16);
+        const g = parseInt(randomColor.substr(3, 2), 16);
+        const b = parseInt(randomColor.substr(5, 2), 16);
+        const brightness = (0.299 * r + 0.587 * g + 0.114 * b) / 255;
+        const textColor = brightness > 0.5 ? 'black' : 'white';
+        document.getElementById('main').style.color = textColor;
+
+        // Tweet functionality
+        document.getElementById('tweet-button').addEventListener('click', () => {
+            if (window.blockHeight) {
+                const tweetText = `Check out the latest Solana block height: ${window.blockHeight} via k8o5.com`;
+                const encodedText = encodeURIComponent(tweetText);
+                window.open(`https://twitter.com/intent/tweet?text=${encodedText}`, '_blank');
+            }
+        });
     </script>
 </body>
 </html>
