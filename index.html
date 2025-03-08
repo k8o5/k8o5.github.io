@@ -13,7 +13,7 @@
             font-family: "JetBrains Mono", "Fira Code", "Cascadia Code", Consolas, monospace;
             overflow: hidden;
             text-rendering: optimizeLegibility;
-            line-height: 1.5;
+            line-height: 1.2; /* Reduzierter Zeilenabstand */
         }
 
         #console {
@@ -67,14 +67,14 @@
 
         .peer-message {
             display: block;
-            padding: 4px 0;
+            padding: 2px 0; /* Reduzierter Padding */
             animation: fadeIn 0.3s ease-in;
         }
 
         .connected-message {
             color: #ffcc00;
             font-weight: bold;
-            padding: 4px 0;
+            padding: 2px 0;
             display: block;
             border-bottom: 1px dashed #555;
             margin-bottom: 5px;
@@ -132,7 +132,8 @@
     <script>
         let peer, myPeerId = '', connections = [], knownPeers = new Set(), connectedPeers = new Set(),
             isConnected = false, chatHistory = [], myName = 'noname', commandHistory = [], historyIndex = -1,
-            connectedPeersList = [];
+            connectedPeersList = [], fileSystem = { '/': {} }, currentPath = '/', isEditing = false, editContent = '',
+            editFilename = '';
 
         function getPeerColor(peerId) {
             let hash = 0; for (let i = 0; i < peerId.length; i++) hash = peerId.charCodeAt(i) + ((hash << 5) - hash);
@@ -164,13 +165,22 @@
                 .forEach(peerId => connectToPeer(peerId));
         }
 
+        function getCurrentDir() {
+            let dir = fileSystem;
+            const pathParts = currentPath.split('/').filter(part => part);
+            for (const part of pathParts) {
+                dir = dir['/' + part];
+            }
+            return dir;
+        }
+
         function initPeer() {
             peer = new Peer({ debug: 3 });
             peer.on('open', id => {
                 myPeerId = id; 
                 knownPeers.add(myPeerId);
-                typeWriter('k8o5\n', 0, 36, () => { // 40ms -> 36ms (10% schneller)
-                    typeWriter(`Deine Peer-ID: ${myPeerId}\n`, 0, 18, () => { // 20ms -> 18ms (10% schneller)
+                typeWriter('k8o5\n', 0, 28.8, () => { // 36ms -> 28.8ms (20% schneller)
+                    typeWriter(`Deine Peer-ID: ${myPeerId}\n`, 0, 14.4, () => { // 18ms -> 14.4ms (20% schneller)
                         document.getElementById('inputArea').style.display = 'flex';
                         document.getElementById('input').focus();
                     });
@@ -202,26 +212,44 @@
         function handleInput() {
             const input = document.getElementById('input').value.trim();
             if (!input) return;
-            if (!isConnected) {
-                document.getElementById('output').innerHTML += renderText(`<span class="command">> ${input}</span>\n`);
+            if (!isConnected && !isEditing) {
+                document.getElementById('output').innerHTML += renderText(`<span class="command">${currentPath}> ${input}</span><br>`);
                 if (input.startsWith('peer ')) {
                     const targetPeerId = input.split(' ')[1];
                     if (targetPeerId) connectToPeer(targetPeerId);
-                    else document.getElementById('output').innerHTML += renderText('<span class="error-message">Fehler: Gib eine Peer-ID ein!</span>\n');
+                    else document.getElementById('output').innerHTML += renderText('<span class="error-message">Fehler: Gib eine Peer-ID ein!</span><br>');
                 } else if (input.startsWith('help')) showHelp();
                 else if (input.startsWith('name ')) {
                     const name = input.split(' ')[1];
                     myName = name || myName;
-                    document.getElementById('output').innerHTML += renderText(`<span class="success-message">Name geändert zu: ${myName}</span>\n`);
+                    document.getElementById('output').innerHTML += renderText(`<span class="success-message">Name geändert zu: ${myName}</span><br>');
                 } else if (input === 'copy') {
                     navigator.clipboard.writeText(myPeerId).then(() => {
-                        document.getElementById('output').innerHTML += renderText(`<span class="success-message">Peer-ID ${myPeerId} in die Zwischenablage kopiert!</span>\n`);
+                        document.getElementById('output').innerHTML += renderText(`<span class="success-message">Peer-ID ${myPeerId} in die Zwischenablage kopiert!</span><br>`);
                     }).catch(err => {
-                        document.getElementById('output').innerHTML += renderText(`<span class="error-message">Fehler beim Kopieren: ${err}</span>\n`);
+                        document.getElementById('output').innerHTML += renderText(`<span class="error-message">Fehler beim Kopieren: ${err}</span><br>`);
                     });
                 } else if (input === 'clear') {
                     document.getElementById('output').innerHTML = '';
-                } else document.getElementById('output').innerHTML += renderText('<span class="error-message">Unbekannter Befehl. Nutze: help</span>\n');
+                } else document.getElementById('output').innerHTML += renderText('<span class="error-message">Unbekannter Befehl. Nutze: help</span><br>');
+            } else if (isEditing) {
+                if (input === 'Ctrl+S') {
+                    getCurrentDir()[editFilename] = editContent;
+                    document.getElementById('output').innerHTML += renderText(`<span class="success-message">Datei ${editFilename} gespeichert.</span><br>`);
+                    isEditing = false;
+                    document.getElementById('inputArea').style.display = 'flex';
+                    document.getElementById('prompt').innerHTML = `${currentPath}> `;
+                    document.getElementById('input').focus();
+                } else if (input === 'Ctrl+X') {
+                    document.getElementById('output').innerHTML += renderText(`<span class="success-message">Bearbeitung abgebrochen.</span><br>`);
+                    isEditing = false;
+                    document.getElementById('inputArea').style.display = 'flex';
+                    document.getElementById('prompt').innerHTML = `${currentPath}> `;
+                    document.getElementById('input').focus();
+                } else {
+                    editContent += input + '\n';
+                    document.getElementById('output').innerHTML += renderText(`${input}<br>`);
+                }
             } else {
                 if (input === '/exit') {
                     connections.forEach(conn => conn.close());
@@ -229,16 +257,89 @@
                     connectedPeers.clear();
                     connectedPeersList = [];
                     isConnected = false;
-                    document.getElementById('prompt').innerHTML = '> ';
-                    document.getElementById('output').innerHTML += renderText(`<span class="success-message">Chat verlassen.</span>\n`);
+                    document.getElementById('prompt').innerHTML = `${currentPath}> `;
+                    document.getElementById('output').innerHTML += renderText(`<span class="success-message">Chat verlassen.</span><br>`);
                 } else if (input === '/peers') {
                     if (connectedPeersList.length > 0) {
                         document.getElementById('output').innerHTML += connectedPeersList.join('<br>') + '<br>';
                     } else {
-                        document.getElementById('output').innerHTML += renderText(`<span class="error-message">Keine Peers verbunden.</span>\n`);
+                        document.getElementById('output').innerHTML += renderText(`<span class="error-message">Keine Peers verbunden.</span><br>`);
                     }
                 } else if (input === 'clear') {
                     document.getElementById('output').innerHTML = '';
+                } else if (input.startsWith('/mkdir ')) {
+                    const folder = input.split(' ')[1];
+                    if (folder) {
+                        if (!getCurrentDir()['/' + folder]) {
+                            getCurrentDir()['/' + folder] = {};
+                            document.getElementById('output').innerHTML += renderText(`<span class="success-message">Ordner ${folder} erstellt.</span><br>`);
+                        } else {
+                            document.getElementById('output').innerHTML += renderText(`<span class="error-message">Ordner ${folder} existiert bereits.</span><br>`);
+                        }
+                    } else {
+                        document.getElementById('output').innerHTML += renderText(`<span class="error-message">Bitte einen Ordnernamen angeben.</span><br>`);
+                    }
+                } else if (input.startsWith('/cd ')) {
+                    const folder = input.split(' ')[1];
+                    if (folder === '..') {
+                        const parts = currentPath.split('/').filter(part => part);
+                        if (parts.length > 0) parts.pop();
+                        currentPath = '/' + parts.join('/');
+                    } else if (folder) {
+                        const newPath = currentPath === '/' ? `/${folder}` : `${currentPath}/${folder}`;
+                        const dir = getCurrentDir()['/' + folder];
+                        if (dir && typeof dir === 'object') {
+                            currentPath = newPath;
+                        } else {
+                            document.getElementById('output').innerHTML += renderText(`<span class="error-message">Ordner ${folder} nicht gefunden.</span><br>`);
+                            return;
+                        }
+                    }
+                    document.getElementById('prompt').innerHTML = `${currentPath}> `;
+                } else if (input.startsWith('/edit ')) {
+                    editFilename = input.split(' ')[1];
+                    if (editFilename) {
+                        isEditing = true;
+                        editContent = getCurrentDir()[editFilename] || '';
+                        document.getElementById('inputArea').style.display = 'none';
+                        document.getElementById('output').innerHTML += renderText(`<span class="success-message">Bearbeite ${editFilename}. Nutze Ctrl+S zum Speichern, Ctrl+X zum Abbrechen.</span><br>`);
+                        document.getElementById('input').focus();
+                    } else {
+                        document.getElementById('output').innerHTML += renderText(`<span class="error-message">Bitte einen Dateinamen angeben.</span><br>`);
+                    }
+                } else if (input.startsWith('/cat ')) {
+                    const filename = input.split(' ')[1];
+                    if (filename) {
+                        const content = getCurrentDir()[filename];
+                        if (content && typeof content === 'string') {
+                            document.getElementById('output').innerHTML += renderText(`${content}<br>`);
+                        } else {
+                            document.getElementById('output').innerHTML += renderText(`<span class="error-message">Datei ${filename} nicht gefunden oder leer.</span><br>`);
+                        }
+                    } else {
+                        document.getElementById('output').innerHTML += renderText(`<span class="error-message">Bitte einen Dateinamen angeben.</span><br>`);
+                    }
+                } else if (input.startsWith('/dir')) {
+                    const dir = getCurrentDir();
+                    let output = '<span class="success-message">Inhalt von ' + currentPath + ':</span><br>';
+                    for (const key in dir) {
+                        if (typeof dir[key] === 'object') {
+                            output += `<span class="parameter">[Ordner] ${key.replace('/', '')}</span><br>`;
+                        } else {
+                            output += `<span class="parameter">[Datei] ${key.replace('/', '')}</span><br>`;
+                        }
+                    }
+                    if (Object.keys(dir).length === 0) {
+                        output += '<span class="error-message">Leer.</span><br>';
+                    }
+                    document.getElementById('output').innerHTML += renderText(output);
+                } else if (input.startsWith('/echo ')) {
+                    const text = input.split(' ').slice(1).join(' ');
+                    if (text) {
+                        document.getElementById('output').innerHTML += renderText(`${myName}: ${text}<br>`);
+                    } else {
+                        document.getElementById('output').innerHTML += renderText(`<span class="error-message">Bitte Text angeben.</span><br>`);
+                    }
                 } else {
                     const messageEntry = { peerId: myPeerId, message: input, name: myName };
                     chatHistory.push(messageEntry);
@@ -304,25 +405,44 @@
 
         function switchToChatMode(peerId) {
             isConnected = true;
-            document.getElementById('prompt').innerHTML = 'chat> ';
+            document.getElementById('prompt').innerHTML = `${currentPath}> `;
         }
 
         function showHelp() {
             const helpText = `
-<span class="success-message">Verfügbare Befehle:</span>
-- <span class="command">peer</span> <span class="parameter">[peer_id]</span>: Verbinde dich mit einem anderen Peer
-- <span class="command">name</span> <span class="parameter">[string]</span>: Definiere deinen Namen (z. B. name Max)
-- <span class="command">copy</span>: Kopiere deine Peer-ID in die Zwischenablage
-- <span class="command">clear</span>: Lösche den Bildschirm
-- <span class="command">/exit</span>: Verlasse den Chat-Modus (nur im Chat)
-- <span class="command">/peers</span>: Zeige verbundene Peers (nur im Chat)
+<span class="success-message">Verfügbare Befehle:</span><br>
+- <span class="command">peer</span> <span class="parameter">[peer_id]</span>: Verbinde dich mit einem anderen Peer<br>
+- <span class="command">name</span> <span class="parameter">[string]</span>: Definiere deinen Namen (z. B. name Max)<br>
+- <span class="command">copy</span>: Kopiere deine Peer-ID in die Zwischenablage<br>
+- <span class="command">clear</span>: Lösche den Bildschirm<br>
+- <span class="command">/exit</span>: Verlasse den Chat-Modus (nur im Chat)<br>
+- <span class="command">/peers</span>: Zeige verbundene Peers (nur im Chat)<br>
+- <span class="command">/mkdir</span> <span class="parameter">[ordner]</span>: Erstelle einen Ordner<br>
+- <span class="command">/cd</span> <span class="parameter">[ordner]</span>: Wechsle in einen Ordner (oder .. für zurück)<br>
+- <span class="command">/edit</span> <span class="parameter">[filename]</span>: Bearbeite eine Datei (Ctrl+S speichern, Ctrl+X abbrechen)<br>
+- <span class="command">/cat</span> <span class="parameter">[filename]</span>: Zeige den Inhalt einer Datei<br>
+- <span class="command">/dir</span>: Zeige den Inhalt des aktuellen Ordners<br>
+- <span class="command">/echo</span> <span class="parameter">[text]</span>: Wiederhole den eingegebenen Text<br>
 - <span class="command">help</span>: Zeige diese Hilfe
 `;
             document.getElementById('output').innerHTML += renderText(helpText);
         }
 
         document.getElementById('input').addEventListener('keydown', (e) => {
-            if (e.key === 'ArrowUp') {
+            if (isEditing) {
+                if (e.ctrlKey && e.key === 's') {
+                    e.preventDefault();
+                    document.getElementById('input').value = 'Ctrl+S';
+                    handleInput();
+                } else if (e.ctrlKey && e.key === 'x') {
+                    e.preventDefault();
+                    document.getElementById('input').value = 'Ctrl+X';
+                    handleInput();
+                } else {
+                    document.getElementById('input').value = e.key;
+                    handleInput();
+                }
+            } else if (e.key === 'ArrowUp') {
                 if (commandHistory.length > 0 && historyIndex < commandHistory.length - 1) {
                     historyIndex++;
                     document.getElementById('input').value = commandHistory[commandHistory.length - 1 - historyIndex];
@@ -337,23 +457,19 @@
                     document.getElementById('input').value = '';
                 }
                 e.preventDefault();
-            }
-        });
-
-        document.getElementById('console').addEventListener('click', (e) => {
-            if (!e.target.matches('#input')) {
-                document.getElementById('input').focus();
-            }
-        });
-
-        document.getElementById('input').addEventListener('keypress', (e) => {
-            if (e.key === 'Enter') {
+            } else if (e.key === 'Enter') {
                 const inputValue = document.getElementById('input').value.trim();
                 if (inputValue) {
                     commandHistory.push(inputValue);
                     historyIndex = -1;
                 }
                 handleInput();
+            }
+        });
+
+        document.getElementById('console').addEventListener('click', (e) => {
+            if (!e.target.matches('#input')) {
+                document.getElementById('input').focus();
             }
         });
 
