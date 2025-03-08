@@ -67,7 +67,7 @@
 
         .peer-message {
             display: block;
-            padding: 4px 0;
+            padding: 2px 0; /* Abstand verringert */
             animation: fadeIn 0.3s ease-in;
         }
 
@@ -129,6 +129,7 @@
     </div>
 
     <script src="https://unpkg.com/peerjs@1.4.7/dist/peerjs.min.js"></script>
+    <script src="https://unpkg.com/qrcodejs@1.0.0/qrcode.min.js"></script>
     <script>
         let peer, myPeerId = '', connections = [], knownPeers = new Set(), connectedPeers = new Set(),
             isConnected = false, chatHistory = [], myName = 'noname', commandHistory = [], historyIndex = -1,
@@ -169,8 +170,8 @@
             peer.on('open', id => {
                 myPeerId = id; 
                 knownPeers.add(myPeerId);
-                typeWriter('k8o5\n', 0, 36, () => { // 40ms -> 36ms (10% schneller)
-                    typeWriter(`Deine Peer-ID: ${myPeerId}\n`, 0, 18, () => { // 20ms -> 18ms (10% schneller)
+                typeWriter('k8o5\n', 0, 36, () => {
+                    typeWriter(`Deine Peer-ID: ${myPeerId}\n`, 0, 18, () => {
                         document.getElementById('inputArea').style.display = 'flex';
                         document.getElementById('input').focus();
                     });
@@ -221,6 +222,9 @@
                     });
                 } else if (input === 'clear') {
                     document.getElementById('output').innerHTML = '';
+                } else if (input === 'qr') {
+                    document.getElementById('output').innerHTML += renderText(`<span class="success-message">QR-Code für Peer-ID ${myPeerId} generiert.</span>\n`);
+                    generateQRCode();
                 } else document.getElementById('output').innerHTML += renderText('<span class="error-message">Unbekannter Befehl. Nutze: help</span>\n');
             } else {
                 if (input === '/exit') {
@@ -248,6 +252,26 @@
             }
             document.getElementById('input').value = '';
             document.getElementById('console').scrollTop = document.getElementById('console').scrollHeight;
+        }
+
+        function generateQRCode() {
+            const qrDiv = document.createElement('div');
+            qrDiv.id = 'qrcode';
+            document.getElementById('output').appendChild(qrDiv);
+            new QRCode(qrDiv, {
+                text: myPeerId,
+                width: 128,
+                height: 128,
+                colorDark: "#00ff00",
+                colorLight: "#000000",
+                correctLevel: QRCode.CorrectLevel.H
+            });
+            navigator.clipboard.writeText(myPeerId).then(() => {
+                document.getElementById('output').innerHTML += renderText(`<span class="success-message">Peer-ID ${myPeerId} in die Zwischenablage kopiert!</span>\n`);
+            }).catch(err => {
+                document.getElementById('output').innerHTML += renderText(`<span class="error-message">Fehler beim Kopieren: ${err}</span>\n`);
+            });
+            document.getElementById('output').innerHTML += '<br>';
         }
 
         function connectToPeer(peerId) {
@@ -313,6 +337,7 @@
 - <span class="command">peer</span> <span class="parameter">[peer_id]</span>: Verbinde dich mit einem anderen Peer
 - <span class="command">name</span> <span class="parameter">[string]</span>: Definiere deinen Namen (z. B. name Max)
 - <span class="command">copy</span>: Kopiere deine Peer-ID in die Zwischenablage
+- <span class="command">qr</span>: Generiere einen QR-Code deiner Peer-ID (wird automatisch kopiert)
 - <span class="command">clear</span>: Lösche den Bildschirm
 - <span class="command">/exit</span>: Verlasse den Chat-Modus (nur im Chat)
 - <span class="command">/peers</span>: Zeige verbundene Peers (nur im Chat)
