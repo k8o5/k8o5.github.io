@@ -56,7 +56,7 @@
             display: flex;
             margin-top: 10px;
         }
-        input {
+        input, textarea {
             flex-grow: 1;
             background: #000;
             border: 2px solid #0f0;
@@ -72,14 +72,14 @@
     </style>
 </head>
 <body>
-    <div id="setup">
+    <div id="setup" style="display: none;">
         <button onclick="createLobby()">Lobby erstellen</button>
     </div>
     <div id="chat">
         <div id="console"></div>
         <div id="inputArea">
-            <input type="text" id="messageInput" placeholder="Name eingeben oder Nachricht..." onkeypress="if(event.key === 'Enter') handleInput()">
-            <button id="sendButton" onclick="handleInput()">Senden</button>
+            <input type="text" id="messageInput" placeholder="Nachricht..." onkeypress="if(event.key === 'Enter') sendMessage()">
+            <button id="sendButton" onclick="sendMessage()">Senden</button>
         </div>
     </div>
 
@@ -87,30 +87,26 @@
     <script>
         let peer;
         let roomId = new URLSearchParams(window.location.search).get('room') || '';
-        let isHost = false;
+        let isHost = !roomId; // Host, wenn keine Raum-ID in URL
         let connections = [];
-        let username = '';
-        let asciiArt = '';
 
-        // Einzigartige ASCII-Art generieren
-        function generateAsciiArt() {
-            const patterns = [
-                `  .-""""""""-.\n .'          '.\n|  **    **  |\n: ,          :\n '._         _.'\n    '-....-'`,
-                `  .-""""""""-.\n .'          '.\n|  @@    @@  |\n: ,          :\n '._         _.'\n    '-....-'`,
-                `  .-""""""""-.\n .'          '.\n|  $$    $$  |\n: ,          :\n '._         _.'\n    '-....-'`
-            ];
-            return patterns[Math.floor(Math.random() * patterns.length)];
+        // Setup oder Chat anzeigen
+        if (isHost) {
+            document.getElementById('setup').style.display = 'block';
+        } else {
+            switchToChat();
+            initPeer();
+            document.getElementById('console').innerHTML = `Beitreten zur Lobby ${roomId}\nWarte auf das Angebot des Hosts und füge es hier ein:\n<textarea id="offer" onpaste="setTimeout(() => joinWithOffer(document.getElementById('offer').value), 0)"></textarea>`;
         }
 
         // Lobby erstellen
         function createLobby() {
-            roomId = roomId || Math.random().toString(36).substr(2, 5);
+            roomId = Math.random().toString(36).substr(2, 5);
             window.history.pushState({}, document.title, `?room=${roomId}`);
             isHost = true;
             initPeer();
-            document.getElementById('setup').style.display = 'none';
-            document.getElementById('chat').style.display = 'block';
-            document.getElementById('console').innerHTML = `Lobby erstellt! Raum-ID: ${roomId}\nTeile diesen Link: k8o5.com?room=${roomId}\n\nHost-Angebot: Kopiere den Text unten und teile ihn mit anderen:\n<textarea>${JSON.stringify({ type: 'offer', roomId })}</textarea>\n\nAntwort hier einfügen (von anderen erhalten):\n<textarea id="answer" onpaste="setTimeout(() => joinChat(document.getElementById('answer').value), 0)"></textarea>`;
+            switchToChat();
+            document.getElementById('console').innerHTML = `Lobby erstellt! Raum-ID: ${roomId}\nTeile diesen Link: k8o5.com?room=${roomId}\n\nHost-Angebot: Kopiere diesen Text und teile ihn:\n<textarea id="offer">${JSON.stringify({ type: 'offer', roomId })}</textarea>\n\nAntwort hier einfügen:\n<textarea id="answer" onpaste="setTimeout(() => joinChat(document.getElementById('answer').value), 0)"></textarea>`;
         }
 
         // PeerJS initialisieren
@@ -126,48 +122,58 @@
                     console.log('Verbunden mit: ' + conn.peer);
                 });
                 conn.on('data', data => {
-                    const [senderArt, sender, msg] = data.split('|');
-                    document.getElementById('console').innerHTML += `\n${senderArt}\n${sender}: ${msg}`;
+                    document.getElementById('console').innerHTML += `\n${data}`;
                     document.getElementById('console').scrollTop = document.getElementById('console').scrollHeight;
                 });
             });
         }
 
-        // Chat beitreten
+        // Mit Angebot beitreten
+        function joinWithOffer(offerText) {
+            const offer = JSON.parse(offerText);
+            if (offer.type !== 'offer' || offer.roomId !== roomId) return alert('Ungültiges Angebot');
+            const conn = peer.connect(offer.peerId);
+            connections.push(conn);
+            conn.on('open', () => {
+                const answer = JSON.stringify({ type: 'answer', peerId: peer.id, roomId });
+                document.getElementById('console').innerHTML += `\nAntwort generiert:\n<textarea>${answer}</textarea>\nSende sie an den Host und warte...`;
+            });
+            conn.on('data', data => {
+                document.getElementById('console').innerHTML += `\n${data}`;
+                document.getElementById('console').scrollTop = document.getElementById('console').scrollHeight;
+            });
+        }
+
+        // Chat beitreten mit Antwort
         function joinChat(answerText) {
             const answer = JSON.parse(answerText);
             if (answer.type !== 'answer' || answer.roomId !== roomId) return alert('Ungültige Antwort');
             const conn = peer.connect(answer.peerId);
             connections.push(conn);
             conn.on('open', () => {
-                document.getElementById('console').innerHTML = 'Verbunden! Gib deinen Namen ein...';
+                document.getElementById('console').innerHTML = 'Verbunden! Chat beginnt...';
             });
             conn.on('data', data => {
-                const [senderArt, sender, msg] = data.split('|');
-                document.getElementById('console').innerHTML += `\n${senderArt}\n${sender}: ${msg}`;
+                document.getElementById('console').innerHTML += `\n${data}`;
                 document.getElementById('console').scrollTop = document.getElementById('console').scrollHeight;
             });
         }
 
-        // Eingabe verarbeiten
-        function handleInput() {
-            const input = document.getElementById('messageInput').value.trim();
-            if (!input) return;
-
-            if (!username) {
-                username = input;
-                asciiArt = generateAsciiArt();
-                document.getElementById('console').innerHTML += `\n${asciiArt}\n${username} hat den Chat betreten!`;
-                if (!isHost) {
-                    document.getElementById('console').innerHTML = `Teile diese Antwort mit dem Host:\n<textarea>${JSON.stringify({ type: 'answer', peerId: peer.id, roomId })}</textarea>\n\nChat beginnt, sobald der Host verbunden ist...`;
-                }
-            } else {
-                const message = `${asciiArt}|${username}|${input}`;
+        // Nachricht senden
+        function sendMessage() {
+            const message = document.getElementById('messageInput').value.trim();
+            if (message && connections.length > 0) {
                 connections.forEach(conn => conn.send(message));
-                document.getElementById('console').innerHTML += `\n${asciiArt}\n${username}: ${input}`;
+                document.getElementById('console').innerHTML += `\n${message}`;
+                document.getElementById('messageInput').value = '';
+                document.getElementById('console').scrollTop = document.getElementById('console').scrollHeight;
             }
-            document.getElementById('messageInput').value = '';
-            document.getElementById('console').scrollTop = document.getElementById('console').scrollHeight;
+        }
+
+        // Zum Chat wechseln
+        function switchToChat() {
+            document.getElementById('setup').style.display = 'none';
+            document.getElementById('chat').style.display = 'block';
         }
     </script>
 </body>
