@@ -3,7 +3,7 @@
 <head>
     <meta charset="UTF-8">
     <meta name="viewport" content="width=device-width, initial-scale=1.0">
-    <title>k8o5 Chat</title>
+    <title>k8o5</title>
     <style>
         body {
             margin: 0;
@@ -12,52 +12,42 @@
             background: #000;
             font-family: 'Courier New', monospace;
             overflow: hidden;
+            color: #00ff00;
         }
         #console {
             width: 100%;
             height: 100%;
-            background: #000;
-            color: #0f0;
-            padding: 20px;
+            padding: 10px;
             box-sizing: border-box;
-            position: relative;
             overflow-y: auto;
+            line-height: 1.4;
+            text-shadow: 0 0 2px #00ff00;
+            background: #000;
         }
         #output {
-            min-height: 80%;
-            font-size: 16px;
+            font-size: 14px;
             white-space: pre-wrap;
             text-align: left;
         }
         #inputArea {
-            position: absolute;
-            bottom: 20px;
-            left: 20px;
-            right: 20px;
+            position: sticky;
+            bottom: 10px;
             display: flex;
             align-items: center;
         }
         #prompt {
-            color: #0f0;
-            font-size: 16px;
-            margin-right: 10px;
+            font-size: 14px;
+            margin-right: 5px;
         }
         #input {
             flex-grow: 1;
             background: transparent;
             border: none;
-            color: #0f0;
-            font-size: 16px;
+            color: #00ff00;
+            font-size: 14px;
             font-family: 'Courier New', monospace;
             outline: none;
-        }
-        @keyframes boot {
-            0% { opacity: 0; }
-            50% { opacity: 0.5; }
-            100% { opacity: 1; }
-        }
-        #console.boot {
-            animation: boot 1s ease-in-out;
+            text-shadow: 0 0 2px #00ff00;
         }
         .peer-message {
             display: inline;
@@ -65,7 +55,7 @@
     </style>
 </head>
 <body>
-    <div id="console" class="boot">
+    <div id="console">
         <div id="output"></div>
         <div id="inputArea">
             <span id="prompt">> </span>
@@ -113,7 +103,10 @@
                 conn.on('open', () => {
                     console.log('Verbunden mit: ' + conn.peer);
                     switchToChatMode(conn.peer);
-                    chatHistory.forEach(entry => conn.send(entry.message));
+                    // Historie an neuen Peer senden
+                    chatHistory.forEach(entry => {
+                        conn.send(JSON.stringify({ peerId: entry.peerId, message: entry.message }));
+                    });
                 });
                 conn.on('data', handleData);
             });
@@ -139,7 +132,9 @@
             } else {
                 const messageEntry = { peerId: myPeerId, message: input };
                 chatHistory.push(messageEntry);
-                connections.forEach(conn => conn.send(input));
+                connections.forEach(conn => {
+                    conn.send(JSON.stringify({ peerId: myPeerId, message: input }));
+                });
                 document.getElementById('output').innerHTML += renderText(`${input}`, myPeerId);
             }
             document.getElementById('input').value = '';
@@ -159,9 +154,15 @@
 
         // Daten empfangen
         function handleData(data) {
-            const messageEntry = { peerId: this.peer, message: data };
-            chatHistory.push(messageEntry);
-            document.getElementById('output').innerHTML += renderText(`${data}`, this.peer);
+            let messageData;
+            try {
+                messageData = JSON.parse(data);
+            } catch (e) {
+                messageData = { peerId: this.peer, message: data }; // Fallback für alte Nachrichten
+            }
+            const { peerId, message } = messageData;
+            chatHistory.push({ peerId, message });
+            document.getElementById('output').innerHTML += renderText(`${message}`, peerId);
             document.getElementById('console').scrollTop = document.getElementById('console').scrollHeight;
         }
 
