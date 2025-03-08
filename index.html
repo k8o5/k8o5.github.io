@@ -28,6 +28,28 @@
             box-shadow: inset 0 0 10px rgba(0, 0, 0, 0.5);
         }
 
+        #peerIdDisplay {
+            color: #00ff00;
+            font-size: 15px;
+            margin-bottom: 10px;
+            display: flex;
+            align-items: center;
+        }
+
+        #copyButton {
+            background: #0a4e14;
+            color: #00ff00;
+            border: none;
+            padding: 5px 10px;
+            margin-left: 10px;
+            cursor: pointer;
+            font-size: 12px;
+        }
+
+        #copyButton:hover {
+            background: #0c6a1c;
+        }
+
         #output {
             font-size: 15px;
             white-space: pre-wrap;
@@ -151,11 +173,24 @@
             #prompt {
                 font-size: 14px;
             }
+
+            #peerIdDisplay {
+                font-size: 14px;
+            }
+
+            #copyButton {
+                padding: 3px 8px;
+                font-size: 10px;
+            }
         }
     </style>
 </head>
 <body>
     <div id="console" tabindex="0">
+        <div id="peerIdDisplay">
+            Your Peer-ID: <span id="peerIdText"></span>
+            <button id="copyButton">Copy</button>
+        </div>
         <div id="output"></div>
         <div id="inputArea">
             <span id="prompt">> </span>
@@ -175,12 +210,6 @@
         let myName = 'k8o5_0';
         let commandHistory = [];
         let historyIndex = -1;
-
-        // Extract peer ID from URL path
-        function getPeerIdFromUrl() {
-            const path = window.location.pathname.slice(1); // Remove leading slash
-            return path.match(/^[0-9a-fA-F-]+/) ? path : null; // Match UUID-like string
-        }
 
         // Generate unique color based on Peer ID
         function getPeerColor(peerId) {
@@ -238,24 +267,14 @@
             peer.on('open', id => {
                 myPeerId = id;
                 knownPeers.add(myPeerId);
+                document.getElementById('peerIdText').textContent = myPeerId;
+
                 const welcomeMsg = `k8o5\n`;
-                const peerIdMsg = `Your Peer-ID: ${myPeerId}\n`;
-                
                 document.getElementById('output').innerHTML = "";
                 
                 typeWriter(welcomeMsg, 0, 40, () => {
-                    typeWriter(peerIdMsg, 0, 20, () => {
-                        // Connect to peer from URL if present
-                        const targetPeerId = getPeerIdFromUrl();
-                        if (targetPeerId && targetPeerId !== myPeerId) {
-                            connectToPeer(targetPeerId);
-                        }
-                    });
+                    // No URL-based connection, just display Peer ID
                 });
-
-                // Update URL with peer ID
-                const newUrl = `${window.location.origin}/${myPeerId}`;
-                history.pushState(null, '', newUrl);
             });
 
             peer.on('connection', conn => {
@@ -460,6 +479,20 @@
         // Ensure input focus on touch for mobile
         document.getElementById('input').addEventListener('touchstart', function() {
             this.focus();
+        });
+
+        // Copy Peer ID to clipboard
+        document.getElementById('copyButton').addEventListener('click', () => {
+            const peerIdText = document.getElementById('peerIdText').textContent;
+            navigator.clipboard.writeText(peerIdText).then(() => {
+                const button = document.getElementById('copyButton');
+                button.textContent = 'Copied!';
+                setTimeout(() => {
+                    button.textContent = 'Copy';
+                }, 2000);
+            }).catch(err => {
+                console.error('Failed to copy: ', err);
+            });
         });
 
         // Initialize the application
