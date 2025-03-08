@@ -3,155 +3,201 @@
 <head>
     <meta charset="UTF-8">
     <meta name="viewport" content="width=device-width, initial-scale=1.0">
-    <title>k8o5-Chat</title>
+    <title>k8o5 - P2P Chat</title>
     <style>
         body {
             font-family: Arial, sans-serif;
-            text-align: center;
             margin: 20px;
+            text-align: center;
+            background-color: #f0f2f5;
+        }
+        h1 {
+            color: #1877f2;
+        }
+        #setup, #chat {
+            margin: 20px auto;
+            width: 80%;
+            max-width: 600px;
+            background: white;
+            padding: 20px;
+            border-radius: 10px;
+            box-shadow: 0 2px 4px rgba(0, 0, 0, 0.1);
         }
         textarea {
-            width: 80%;
-            height: 80px;
+            width: 100%;
+            height: 100px;
             margin: 10px 0;
+            border: 1px solid #dddfe2;
+            border-radius: 5px;
+            padding: 10px;
+            resize: none;
         }
         #messages {
-            border: 1px solid #ccc;
-            height: 200px;
+            border: 1px solid #dddfe2;
+            height: 300px;
             overflow-y: scroll;
             padding: 10px;
             text-align: left;
+            background: #fff;
+            border-radius: 5px;
         }
         #messageInput {
-            width: 60%;
-            padding: 5px;
+            width: 70%;
+            padding: 10px;
+            border: 1px solid #dddfe2;
+            border-radius: 5px;
         }
         button {
-            padding: 5px 10px;
+            padding: 10px 20px;
             margin: 5px;
+            background-color: #1877f2;
+            color: white;
+            border: none;
+            border-radius: 5px;
+            cursor: pointer;
+        }
+        button:hover {
+            background-color: #166fe5;
         }
         #chat {
             display: none;
         }
+        p {
+            margin: 5px 0;
+            padding: 8px;
+            border-radius: 10px;
+            background: #e4e6eb;
+        }
+        p.me {
+            background: #1877f2;
+            color: white;
+            text-align: right;
+        }
     </style>
 </head>
 <body>
-    <h1>k8o5-Chat</h1>
-    <p><strong>Anleitung:</strong><br>
-        1. Nutzer A klickt "Verbindung erstellen" und kopiert das Angebot.<br>
-        2. Nutzer B klickt "Verbindung beitreten", fügt das Angebot ein und klickt "Angebot setzen". Dann kopiert er die Antwort.<br>
-        3. Nutzer A fügt die Antwort ein und klickt "Antwort setzen".<br>
-        4. Chat beginnt, wenn die Verbindung steht.
-    </p>
-
+    <h1>k8o5 - P2P Chat</h1>
     <div id="setup">
-        <button onclick="createConnection()">Verbindung erstellen</button>
+        <button onclick="createConnection()">Neue Verbindung erstellen</button>
         <button onclick="joinConnection()">Verbindung beitreten</button>
         <br>
-        <textarea id="offer" placeholder="Angebot hier einfügen"></textarea>
+        <textarea id="offer" placeholder="Angebot hier einfügen (zum Beitreten)"></textarea>
         <br>
-        <button onclick="setRemoteOffer()">Angebot setzen</button>
+        <button onclick="setRemoteOffer()">Angebot übernehmen</button>
         <br>
-        <textarea id="answer" placeholder="Antwort hier einfügen"></textarea>
+        <textarea id="answer" placeholder="Antwort hier einfügen (nach Erstellung)"></textarea>
         <br>
-        <button onclick="setRemoteAnswer()">Antwort setzen</button>
+        <button onclick="setRemoteAnswer()">Antwort übernehmen</button>
     </div>
-
     <div id="chat">
         <div id="messages"></div>
-        <input type="text" id="messageInput" placeholder="Nachricht eingeben">
+        <input type="text" id="messageInput" placeholder="Nachricht eingeben" onkeypress="if(event.key === 'Enter') sendMessage()">
         <button onclick="sendMessage()">Senden</button>
     </div>
 
     <script>
-        let pc; // PeerConnection
-        let dc; // Datenkanal
+        let peerConnection;
+        let dataChannel;
         const config = { iceServers: [{ urls: 'stun:stun.l.google.com:19302' }] };
 
-        // Verbindung erstellen (Nutzer A)
-        function createConnection() {
-            pc = new RTCPeerConnection(config);
-            dc = pc.createDataChannel('chat');
-            dc.onopen = startChat;
-            dc.onmessage = handleMessage;
-            pc.createOffer()
-                .then(offer => {
-                    pc.setLocalDescription(offer);
-                    document.getElementById('offer').value = JSON.stringify(offer);
-                });
+        // Chatverlauf aus Local Storage laden
+        function loadMessages() {
+            const messages = JSON.parse(localStorage.getItem('k8o5ChatMessages')) || [];
+            const messagesDiv = document.getElementById('messages');
+            messagesDiv.innerHTML = '';
+            messages.forEach(msg => {
+                const className = msg.sender === 'Du' ? 'me' : '';
+                messagesDiv.innerHTML += `<p class="${className}">${msg.sender}: ${msg.message}</p>`;
+            });
+            messagesDiv.scrollTop = messagesDiv.scrollHeight; // Zum Ende scrollen
         }
 
-        // Verbindung beitreten (Nutzer B)
+        // Nachricht im Local Storage speichern
+        function saveMessage(sender, message) {
+            const messages = JSON.parse(localStorage.getItem('k8o5ChatMessages')) || [];
+            messages.push({ sender, message, timestamp: new Date().toISOString() });
+            localStorage.setItem('k8o5ChatMessages', JSON.stringify(messages));
+        }
+
+        // Neue Verbindung erstellen (Initiator)
+        function createConnection() {
+            peerConnection = new RTCPeerConnection(config);
+            dataChannel = peerConnection.createDataChannel('chat');
+            setupDataChannel();
+            peerConnection.createOffer()
+                .then(offer => {
+                    peerConnection.setLocalDescription(offer);
+                    document.getElementById('offer').value = JSON.stringify(offer);
+                })
+                .catch(err => console.error('Fehler beim Erstellen des Angebots:', err));
+        }
+
+        // Verbindung beitreten (Empfänger)
         function joinConnection() {
-            pc = new RTCPeerConnection(config);
-            pc.ondatachannel = (event) => {
-                dc = event.channel;
-                dc.onopen = startChat;
-                dc.onmessage = handleMessage;
+            peerConnection = new RTCPeerConnection(config);
+            peerConnection.ondatachannel = (event) => {
+                dataChannel = event.channel;
+                setupDataChannel();
             };
         }
 
-        // Angebot setzen und Antwort erstellen (Nutzer B)
+        // Datenkanal konfigurieren
+        function setupDataChannel() {
+            dataChannel.onopen = () => {
+                document.getElementById('setup').style.display = 'none';
+                document.getElementById('chat').style.display = 'block';
+                loadMessages(); // Chatverlauf laden
+            };
+            dataChannel.onmessage = (event) => {
+                const message = event.data;
+                document.getElementById('messages').innerHTML += `<p>Peer: ${message}</p>`;
+                saveMessage('Peer', message); // Empfangene Nachricht speichern
+                document.getElementById('messages').scrollTop = document.getElementById('messages').scrollHeight;
+            };
+        }
+
+        // Angebot des anderen Peers übernehmen
         function setRemoteOffer() {
             const offer = JSON.parse(document.getElementById('offer').value);
-            pc.setRemoteDescription(new RTCSessionDescription(offer))
-                .then(() => pc.createAnswer())
+            peerConnection.setRemoteDescription(new RTCSessionDescription(offer))
+                .then(() => peerConnection.createAnswer())
                 .then(answer => {
-                    pc.setLocalDescription(answer);
+                    peerConnection.setLocalDescription(answer);
                     document.getElementById('answer').value = JSON.stringify(answer);
-                });
+                })
+                .catch(err => console.error('Fehler beim Setzen des Angebots:', err));
         }
 
-        // Antwort setzen (Nutzer A)
+        // Antwort des anderen Peers übernehmen
         function setRemoteAnswer() {
             const answer = JSON.parse(document.getElementById('answer').value);
-            pc.setRemoteDescription(new RTCSessionDescription(answer));
-        }
-
-        // Chat starten, wenn die Verbindung steht
-        function startChat() {
-            document.getElementById('setup').style.display = 'none';
-            document.getElementById('chat').style.display = 'block';
-            loadMessages();
+            peerConnection.setRemoteDescription(new RTCSessionDescription(answer))
+                .then(() => {
+                    document.getElementById('setup').style.display = 'none';
+                    document.getElementById('chat').style.display = 'block';
+                    loadMessages(); // Chatverlauf laden
+                })
+                .catch(err => console.error('Fehler beim Setzen der Antwort:', err));
         }
 
         // Nachricht senden
         function sendMessage() {
-            const message = document.getElementById('messageInput').value;
-            if (dc && dc.readyState === 'open') {
-                dc.send(message);
-                displayMessage('Du', message);
-                saveMessage('Du', message);
+            const message = document.getElementById('messageInput').value.trim();
+            if (message && dataChannel && dataChannel.readyState === 'open') {
+                dataChannel.send(message);
+                document.getElementById('messages').innerHTML += `<p class="me">Du: ${message}</p>`;
+                saveMessage('Du', message); // Gesendete Nachricht speichern
                 document.getElementById('messageInput').value = '';
+                document.getElementById('messages').scrollTop = document.getElementById('messages').scrollHeight;
             }
         }
 
-        // Nachricht empfangen
-        function handleMessage(event) {
-            const message = event.data;
-            displayMessage('Peer', message);
-            saveMessage('Peer', message);
-        }
-
-        // Nachricht anzeigen
-        function displayMessage(sender, message) {
-            const messagesDiv = document.getElementById('messages');
-            messagesDiv.innerHTML += `<p>${sender}: ${message}</p>`;
-            messagesDiv.scrollTop = messagesDiv.scrollHeight;
-        }
-
-        // Nachrichten aus localStorage laden
-        function loadMessages() {
-            const messages = JSON.parse(localStorage.getItem('chatMessages')) || [];
-            messages.forEach(msg => displayMessage(msg.sender, msg.message));
-        }
-
-        // Nachricht in localStorage speichern
-        function saveMessage(sender, message) {
-            const messages = JSON.parse(localStorage.getItem('chatMessages')) || [];
-            messages.push({ sender, message });
-            localStorage.setItem('chatMessages', JSON.stringify(messages));
-        }
+        // ICE-Kandidaten (müssen manuell ausgetauscht werden)
+        peerConnection.onicecandidate = (event) => {
+            if (event.candidate) {
+                console.log('ICE-Kandidat (manuell teilen):', JSON.stringify(event.candidate));
+            }
+        };
     </script>
 </body>
 </html>
