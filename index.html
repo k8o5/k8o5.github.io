@@ -131,7 +131,8 @@
     <script src="https://unpkg.com/peerjs@1.4.7/dist/peerjs.min.js"></script>
     <script>
         let peer, myPeerId = '', connections = [], knownPeers = new Set(), connectedPeers = new Set(),
-            isConnected = false, chatHistory = [], myName = 'noname', commandHistory = [], historyIndex = -1;
+            isConnected = false, chatHistory = [], myName = 'noname', commandHistory = [], historyIndex = -1,
+            connectedPeersList = []; // Speichert die Verbindungsnachrichten
 
         function getPeerColor(peerId) {
             let hash = 0; for (let i = 0; i < peerId.length; i++) hash = peerId.charCodeAt(i) + ((hash << 5) - hash);
@@ -183,6 +184,7 @@
                     console.log('Verbunden mit: ' + conn.peer);
                     knownPeers.add(conn.peer); 
                     connectedPeers.add(conn.peer);
+                    connectedPeersList.push(`<span class="connected-message">Verbunden mit ${conn.peer}!</span>`);
                     switchToChatMode(conn.peer);
                     conn.send(JSON.stringify({ type: 'peer_list', peers: [...knownPeers] }));
                     conn.send(JSON.stringify({ type: 'chat_history', history: chatHistory }));
@@ -191,6 +193,7 @@
                 conn.on('data', handleData);
                 conn.on('close', () => { 
                     connectedPeers.delete(conn.peer); 
+                    connectedPeersList = connectedPeersList.filter(msg => !msg.includes(conn.peer));
                     console.log('Verbindung geschlossen mit: ' + conn.peer); 
                 });
             });
@@ -222,9 +225,16 @@
                     connections.forEach(conn => conn.close());
                     connections = [];
                     connectedPeers.clear();
+                    connectedPeersList = [];
                     isConnected = false;
                     document.getElementById('prompt').innerHTML = '> ';
                     document.getElementById('output').innerHTML += renderText(`<span class="success-message">Chat verlassen.</span>\n`);
+                } else if (input === '/peers') {
+                    if (connectedPeersList.length > 0) {
+                        document.getElementById('output').innerHTML += connectedPeersList.join('<br>') + '<br>';
+                    } else {
+                        document.getElementById('output').innerHTML += renderText(`<span class="error-message">Keine Peers verbunden.</span>\n`);
+                    }
                 } else {
                     const messageEntry = { peerId: myPeerId, message: input, name: myName };
                     chatHistory.push(messageEntry);
@@ -244,6 +254,7 @@
                 console.log('Verbunden mit: ' + peerId);
                 knownPeers.add(peerId); 
                 connectedPeers.add(peerId);
+                connectedPeersList.push(`<span class="connected-message">Verbunden mit ${peerId}!</span>`);
                 switchToChatMode(peerId);
                 conn.send(JSON.stringify({ type: 'peer_list', peers: [...knownPeers] }));
                 conn.send(JSON.stringify({ type: 'chat_history', history: chatHistory }));
@@ -252,6 +263,7 @@
             conn.on('data', handleData);
             conn.on('close', () => { 
                 connectedPeers.delete(conn.peer); 
+                connectedPeersList = connectedPeersList.filter(msg => !msg.includes(peerId));
                 console.log('Verbindung geschlossen mit: ' + peerId); 
             });
         }
@@ -288,7 +300,6 @@
 
         function switchToChatMode(peerId) {
             isConnected = true;
-            document.getElementById('output').innerHTML += renderText(`<span class="connected-message">Verbunden mit ${peerId}!</span>\n`);
             document.getElementById('prompt').innerHTML = 'chat> ';
         }
 
@@ -299,6 +310,7 @@
 - <span class="command">name</span> <span class="parameter">[string]</span>: Definiere deinen Namen (z. B. name Max)
 - <span class="command">copy</span>: Kopiere deine Peer-ID in die Zwischenablage
 - <span class="command">/exit</span>: Verlasse den Chat-Modus (nur im Chat)
+- <span class="command">/peers</span>: Zeige verbundene Peers (nur im Chat)
 - <span class="command">help</span>: Zeige diese Hilfe
 `;
             document.getElementById('output').innerHTML += renderText(helpText);
