@@ -120,7 +120,113 @@
     <script src="https://unpkg.com/peerjs@1.4.7/dist/peerjs.min.js"></script>
     <script>
         let peer, myPeerId = '', connections = [], knownPeers = new Set(), connectedPeers = new Set(),
-            isConnected = false, chatHistory = [], myName = 'k8o5_0', commandHistory = [], historyIndex = -1;
+            isConnected = false, chatHistory = [], myName = 'k8o5_0', commandHistory = [], historyIndex = -1,
+            aesKey, publicKey, privateKey, lobbyId = null;
+
+        // Generate RSA key pair for secure key exchange
+        async function generateKeyPair() {
+            const keyPair = await window.crypto.subtle.generateKey(
+                { name: "RSA-OAEP", modulusLength: 2048, publicExponent: new Uint8Array([1, 0, 1]), hash: "SHA-256" },
+                true,
+                ["encrypt", "decrypt"]
+            );
+            publicKey = keyPair.publicKey;
+            privateKey = keyPair.privateKey;
+        }
+
+        // Generate AES key for message encryption
+        async function generateAESKey() {
+            aesKey = await window.crypto.subtle.generateKey(
+                { name: "AES-GCM", length: 256 },
+                true,
+                ["encrypt", "decrypt"]
+            );
+            return aesKey;
+        }
+
+        // Export AES key to share with others
+        async function exportAESKey(key) {
+            const exported = await window.crypto.subtle.exportKey("raw", key);
+            return new Uint8Array(exported);
+        }
+
+        // Import AES key from raw data
+        async function importAESKey(rawKey) {
+            return await window.crypto.subtle.importKey(
+                "raw", rawKey, { name: "AES-GCM" }, true, ["encrypt", "decrypt"]
+            );
+        }
+
+        // Encrypt AES key with RSA public key
+        async function encryptAESKey(aesKey, publicKey) {
+            const exportedKey = await exportAESKey(aesKey);
+            const encrypted = await window.crypto.subtle.encrypt(
+                { name: "RSA-OAEP" },
+                publicKey,
+                exportedKey
+            );
+            return new Uint8Array(encrypted);
+        }
+
+        // Decrypt AES key with RSA private key
+        async function decryptAESKey(encryptedKey) {
+            const decrypted = await window.crypto.subtle.decrypt(
+                { name: "RSA-OAEP" },
+                privateKey,
+                encryptedKey
+            );
+            return await importAESKey(new Uint8Array(decrypted));
+        }
+
+        // Encrypt message with AES-GCM
+        async function encryptMessage(message) {
+            const encoder = new TextEncoder();
+            const data = encoder.encode(message);
+            const iv = window.crypto.getRandomValues(new Uint8Array(12));
+            const encrypted = await window.crypto.subtle.encrypt(
+                { name: "AES-GCM", iv: iv },
+                aesKey,
+                data
+            );
+            return { iv: iv, encryptedData: new Uint8Array(encrypted) };
+        }
+
+        // Decrypt message with AES-GCM
+        async function decryptMessage(encryptedMessage) {
+            const { iv, encryptedData } = encryptedMessage;
+            const decrypted = await window.crypto.subtle.decrypt(
+                { name: "AES-GCM", iv: iv },
+                aesKey,
+                encryptedData
+            );
+            const decoder = new TextDecoder();
+            return decoder.decode(decrypted);
+        }
+
+        // Convert array buffer to base64
+        function arrayBufferToBase64(buffer) {
+            return btoa(String.fromCharCode(...new Uint8Array(buffer)));
+        }
+
+        // Convert base64 to array buffer
+        function base64ToArrayBuffer(base64) {
+            const binary = atob(base64);
+            const len = binary.length;
+            const bytes = new Uint8Array(len);
+            for (let i = 0; i < len; i++) {
+                bytes[i] = binary.charCodeAt(i);
+            }
+            return bytes;
+        }
+
+        // Parse join link
+        function parseJoinLink() {
+            const path = window.location.pathname.split('/');
+            if (path[1] === 'join' && path[2] && path[3]) {
+                return { peerId: path[2], encryptedKey: base64ToArrayBuffer(path[3]) };
+            }
+            return null;
+        }
 
         function getPeerColor(peerId) {
             let hash = 0; for (let i = 0; i < peerId.length; i++) hash = peerId.charCodeAt(i) + ((hash << 5) - hash);
@@ -152,31 +258,61 @@
                 .forEach(peerId => connectToPeer(peerId));
         }
 
-        function initPeer() {
+        async function initPeer() {
+            await generateKeyPair();
+            const joinInfo = parseJoinLink();
+
             peer = new Peer({ debug: 3 });
-            peer.on('open', id => {
-                myPeerId = id; knownPeers.add(myPeerId);
-                typeWriter('k8o5\n', 0, 40, () => {
-                    typeWriter(`Deine Peer-ID: ${myPeerId}\n`, 0, 20, () => {
-                        // Show input area after animations are complete
-                        document.getElementById('inputArea').style.display = 'flex';
-                        document.getElementById('input').focus();
+            peer.on('open', async id => {
+                myPeerId = id;
+                knownPeers.add(myPeerId);
+                lobbyId = myPeerId; // Default lobby ID is the creator's peer ID
+
+                if (joinInfo) {
+                    // Joining an existing lobby
+                    lobbyId = joinInfo.peerId;
+                    aesKey = await decryptAESKey(joinInfo.encryptedKey);
+                    connectToPeer(lobbyId);
+                    typeWriter('k8o5\n', 0, 40, () => {
+                        typeWriter(`Deine Peer-ID: ${myPeerId}\n`, 0, 20, () => {
+                            document.getElementById('inputArea').style.display = 'flex';
+                            document.getElementById('input').focus();
+                        });
                     });
-                });
+                } else {
+                    // Creating a new lobby
+                    await generateAESKey();
+                    const encryptedKey = await encryptAESKey(aesKey, publicKey);
+                    const joinLink = `https://k8o5.com/join/${myPeerId}/${arrayBufferToBase64(encryptedKey)}`;
+                    typeWriter('k8o5\n', 0, 40, () => {
+                        typeWriter(`Deine Peer-ID: ${myPeerId}\n`, 0, 20, () => {
+                            typeWriter(`Lobby-Link: ${joinLink}\n`, 0, 20, () => {
+                                document.getElementById('inputArea').style.display = 'flex';
+                                document.getElementById('input').focus();
+                            });
+                        });
+                    });
+                }
             });
 
             peer.on('connection', conn => {
                 connections.push(conn);
-                conn.on('open', () => {
+                conn.on('open', async () => {
                     console.log('Verbunden mit: ' + conn.peer);
                     knownPeers.add(conn.peer); connectedPeers.add(conn.peer);
                     switchToChatMode(conn.peer);
-                    conn.send(JSON.stringify({ type: 'peer_list', peers: [...knownPeers] }));
+                    conn.send(JSON.stringify({ type: 'peer_list', peers: [...knownPeers], lobbyId: lobbyId }));
+                    const encryptedKey = await encryptAESKey(aesKey, publicKey); // Re-encrypt for each peer
+                    conn.send(JSON.stringify({ type: 'aes_key', key: arrayBufferToBase64(encryptedKey) }));
                     conn.send(JSON.stringify({ type: 'chat_history', history: chatHistory }));
                     tryToConnectToNewPeers();
                 });
                 conn.on('data', handleData);
-                conn.on('close', () => { connectedPeers.delete(conn.peer); console.log('Verbindung geschlossen mit: ' + conn.peer); });
+                conn.on('close', () => { 
+                    connectedPeers.delete(conn.peer); 
+                    knownPeers.delete(conn.peer);
+                    console.log('Verbindung geschlossen mit: ' + conn.peer); 
+                });
             });
         }
 
@@ -209,43 +345,71 @@
             if (peerId === myPeerId || connectedPeers.has(peerId) || connections.some(conn => conn.peer === peerId)) return;
             const conn = peer.connect(peerId);
             connections.push(conn);
-            conn.on('open', () => {
+            conn.on('open', async () => {
                 console.log('Verbunden mit: ' + peerId);
                 knownPeers.add(peerId); connectedPeers.add(peerId);
                 switchToChatMode(peerId);
-                conn.send(JSON.stringify({ type: 'peer_list', peers: [...knownPeers] }));
+                conn.send(JSON.stringify({ type: 'peer_list', peers: [...knownPeers], lobbyId: lobbyId }));
+                const encryptedKey = await encryptAESKey(aesKey, publicKey);
+                conn.send(JSON.stringify({ type: 'aes_key', key: arrayBufferToBase64(encryptedKey) }));
                 conn.send(JSON.stringify({ type: 'chat_history', history: chatHistory }));
                 tryToConnectToNewPeers();
             });
             conn.on('data', handleData);
-            conn.on('close', () => { connectedPeers.delete(conn.peer); console.log('Verbindung geschlossen mit: ' + peerId); });
+            conn.on('close', () => { 
+                connectedPeers.delete(conn.peer); 
+                knownPeers.delete(conn.peer); 
+                console.log('Verbindung geschlossen mit: ' + peerId); 
+            });
         }
 
-        function broadcastMessage(message) {
-            const messageData = JSON.stringify(message);
+        async function broadcastMessage(message) {
+            const encryptedMessage = await encryptMessage(message.message);
+            const messageData = JSON.stringify({
+                peerId: message.peerId,
+                name: message.name,
+                encryptedMessage: {
+                    iv: arrayBufferToBase64(encryptedMessage.iv),
+                    encryptedData: arrayBufferToBase64(encryptedMessage.encryptedData)
+                }
+            });
             connections.forEach(conn => { if (conn.peer !== message.peerId) conn.send(messageData); });
         }
 
-        function handleData(data) {
+        async function handleData(data) {
             let messageData;
             try { messageData = JSON.parse(data); } catch (e) { messageData = { peerId: this.peer, message: data, name: `k8o5_${connections.length-1}` }; }
             if (messageData.type === 'peer_list') {
                 messageData.peers.forEach(peerId => { if (peerId !== myPeerId) knownPeers.add(peerId); });
+                if (messageData.lobbyId) lobbyId = messageData.lobbyId;
                 tryToConnectToNewPeers();
+            } else if (messageData.type === 'aes_key') {
+                const encryptedKey = base64ToArrayBuffer(messageData.key);
+                aesKey = await decryptAESKey(encryptedKey);
             } else if (messageData.type === 'chat_history') {
-                messageData.history.forEach(entry => {
-                    if (!chatHistory.some(h => h.peerId === entry.peerId && h.message === entry.message)) {
-                        chatHistory.push(entry);
-                        document.getElementById('output').innerHTML += renderText(entry.message, entry.peerId, entry.name);
+                for (const entry of messageData.history) {
+                    if (!entry.encryptedMessage) continue; // Skip unencrypted entries
+                    const iv = base64ToArrayBuffer(entry.encryptedMessage.iv);
+                    const encryptedData = base64ToArrayBuffer(entry.encryptedMessage.encryptedData);
+                    const decryptedMessage = await decryptMessage({ iv, encryptedData });
+                    const decryptedEntry = { peerId: entry.peerId, message: decryptedMessage, name: entry.name };
+                    if (!chatHistory.some(h => h.peerId === decryptedEntry.peerId && h.message === decryptedEntry.message)) {
+                        chatHistory.push(decryptedEntry);
+                        document.getElementById('output').innerHTML += renderText(decryptedMessage, entry.peerId, entry.name);
                     }
-                });
+                }
                 document.getElementById('console').scrollTop = document.getElementById('console').scrollHeight;
             } else {
-                const { peerId, message, name } = messageData;
-                if (!chatHistory.some(h => h.peerId === peerId && h.message === message)) {
-                    chatHistory.push({ peerId, message, name });
-                    document.getElementById('output').innerHTML += renderText(message, peerId, name);
-                    broadcastMessage(messageData);
+                const { peerId, encryptedMessage, name } = messageData;
+                const iv = base64ToArrayBuffer(encryptedMessage.iv);
+                const encryptedData = base64ToArrayBuffer(encryptedMessage.encryptedData);
+                const decryptedMessage = await decryptMessage({ iv, encryptedData });
+                const messageEntry = { peerId, message: decryptedMessage, name };
+                if (!chatHistory.some(h => h.peerId === peerId && h.message === decryptedMessage)) {
+                    chatHistory.push(messageEntry);
+                    document.getElementById('output').innerHTML += renderText(decryptedMessage, peerId, name);
+                    const broadcastEntry = { peerId, name, encryptedMessage };
+                    broadcastMessage(broadcastEntry);
                 }
                 document.getElementById('console').scrollTop = document.getElementById('console').scrollHeight;
             }
