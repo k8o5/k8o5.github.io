@@ -3,7 +3,7 @@
 <head>
     <meta charset="UTF-8">
     <meta name="viewport" content="width=device-width, initial-scale=1.0">
-    <title>k8o5 - P2P Chat</title>
+    <title>k8o5 Crypto Miner</title>
     <style>
         body {
             font-family: Arial, sans-serif;
@@ -14,7 +14,7 @@
         h1 {
             color: #1877f2;
         }
-        #setup, #chat {
+        #miner {
             margin: 20px auto;
             width: 80%;
             max-width: 600px;
@@ -22,30 +22,6 @@
             padding: 20px;
             border-radius: 10px;
             box-shadow: 0 2px 4px rgba(0, 0, 0, 0.1);
-        }
-        textarea {
-            width: 100%;
-            height: 100px;
-            margin: 10px 0;
-            border: 1px solid #dddfe2;
-            border-radius: 5px;
-            padding: 10px;
-            resize: none;
-        }
-        #messages {
-            border: 1px solid #dddfe2;
-            height: 300px;
-            overflow-y: scroll;
-            padding: 10px;
-            text-align: left;
-            background: #fff;
-            border-radius: 5px;
-        }
-        #messageInput {
-            width: 70%;
-            padding: 10px;
-            border: 1px solid #dddfe2;
-            border-radius: 5px;
         }
         button {
             padding: 10px 20px;
@@ -59,159 +35,127 @@
         button:hover {
             background-color: #166fe5;
         }
-        #chat {
-            display: none;
+        #status, #coinValue {
+            margin-top: 10px;
+            font-size: 16px;
         }
-        p {
-            margin: 5px 0;
-            padding: 8px;
-            border-radius: 10px;
-            background: #e4e6eb;
-        }
-        p.me {
-            background: #1877f2;
-            color: white;
-            text-align: right;
-        }
-        a {
-            color: #1877f2;
-            text-decoration: none;
+        #coinValue {
+            color: #28a745;
+            font-weight: bold;
         }
     </style>
 </head>
 <body>
-    <h1>k8o5 - P2P Chat</h1>
-    <div id="setup">
-        <button onclick="createConnection()">Neue Verbindung erstellen</button>
-        <button onclick="joinConnection()">Verbindung beitreten</button>
-        <br>
-        <div id="linkArea"></div>
-        <textarea id="offer" placeholder="Angebot hier einfügen (zum Beitreten)"></textarea>
-        <br>
-        <button onclick="setRemoteOffer()">Angebot übernehmen</button>
-        <br>
-        <textarea id="answer" placeholder="Antwort hier einfügen (nach Erstellung)"></textarea>
-        <br>
-        <button onclick="setRemoteAnswer()">Antwort übernehmen</button>
-    </div>
-    <div id="chat">
-        <div id="messages"></div>
-        <input type="text" id="messageInput" placeholder="Nachricht eingeben" onkeypress="if(event.key === 'Enter') sendMessage()">
-        <button onclick="sendMessage()">Senden</button>
+    <h1>k8o5 Crypto Miner</h1>
+    <div id="miner">
+        <button onclick="startMining()">Mining starten</button>
+        <button onclick="stopMining()">Mining stoppen</button>
+        <button onclick="resetMining()">Fortschritt zurücksetzen</button>
+        <div id="status">Status: Nicht gestartet</div>
+        <div id="coinValue">k8o5 Coin Value: 0</div>
     </div>
 
     <script>
-        let peerConnection;
-        let dataChannel;
-        const config = { iceServers: [{ urls: 'stun:stun.l.google.com:19302' }] };
+        // SHA-256 Implementierung
+        function sha256(message) {
+            const K = [0x428a2f98, 0x71374491, 0xb5c0fbcf, 0xe9b5dba5, 0x3956c25b, 0x59f111f1, 0x923f82a4, 0xab1c5ed5,
+                       0xd807aa98, 0x12835b01, 0x243185be, 0x550c7dc3, 0x72be5d74, 0x80deb1fe, 0x9bdc06a7, 0xc19bf174];
+            function rotr(x, n) { return (x >>> n) | (x << (32 - n)); }
+            function ch(x, y, z) { return (x & y) ^ (~x & z); }
+            function maj(x, y, z) { return (x & y) ^ (x & z) ^ (y & z); }
+            function sigma0(x) { return rotr(x, 2) ^ rotr(x, 13) ^ rotr(x, 22); }
+            function sigma1(x) { return rotr(x, 6) ^ rotr(x, 11) ^ rotr(x, 25); }
+            function gamma0(x) { return rotr(x, 7) ^ rotr(x, 18) ^ (x >>> 3); }
+            function gamma1(x) { return rotr(x, 17) ^ rotr(x, 19) ^ (x >>> 10); }
 
-        // Zufällige ID generieren (z. B. hbva4352)
-        function generateId() {
-            return Math.random().toString(36).substring(2, 8);
+            let msg = new TextEncoder().encode(message);
+            let h = [0x6a09e667, 0xbb67ae85, 0x3c6ef372, 0xa54ff53a, 0x510e527f, 0x9b05688c, 0x1f83d9ab, 0x5be0cd19];
+            let padded = new Uint8Array(Math.ceil((msg.length + 9) / 64) * 64);
+            padded.set(msg);
+            padded[msg.length] = 0x80;
+            let len = msg.length * 8;
+            for (let i = 0; i < 8; i++) padded[padded.length - 8 + i] = (len >>> (56 - i * 8)) & 0xff;
+
+            for (let i = 0; i < padded.length; i += 64) {
+                let w = new Uint32Array(64);
+                for (let t = 0; t < 16; t++) w[t] = (padded[i + t * 4] << 24) | (padded[i + t * 4 + 1] << 16) | (padded[i + t * 4 + 2] << 8) | padded[i + t * 4 + 3];
+                for (let t = 16; t < 64; t++) w[t] = (gamma1(w[t - 2]) + w[t - 7] + gamma0(w[t - 15]) + w[t - 16]) >>> 0;
+
+                let [a, b, c, d, e, f, g, h0] = h;
+                for (let t = 0; t < 64; t++) {
+                    let t1 = (h0 + sigma1(e) + ch(e, f, g) + K[t] + w[t]) >>> 0;
+                    let t2 = (sigma0(a) + maj(a, b, c)) >>> 0;
+                    h0 = g; g = f; f = e; e = (d + t1) >>> 0; d = c; c = b; b = a; a = (t1 + t2) >>> 0;
+                }
+                h = [h[0] + a, h[1] + b, h[2] + c, h[3] + d, h[4] + e, h[5] + f, h[6] + g, h[7] + h0].map(x => x >>> 0);
+            }
+            return h.map(x => x.toString(16).padStart(8, '0')).join('');
         }
 
-        // Chatverlauf aus Local Storage laden
-        function loadMessages() {
-            const messages = JSON.parse(localStorage.getItem('k8o5ChatMessages')) || [];
-            const messagesDiv = document.getElementById('messages');
-            messagesDiv.innerHTML = '';
-            messages.forEach(msg => {
-                const className = msg.sender === 'Du' ? 'me' : '';
-                messagesDiv.innerHTML += `<p class="${className}">${msg.sender}: ${msg.message}</p>`;
-            });
-            messagesDiv.scrollTop = messagesDiv.scrollHeight;
+        let miningActive = false;
+        let nonce = 0;
+        let blocksMined = parseInt(localStorage.getItem('k8o5BlocksMined')) || 0;
+        let coinValue = parseInt(localStorage.getItem('k8o5CoinValue')) || 0;
+        const difficultyTarget = '00000'; // Ziel: Hash muss mit 5 Nullen beginnen (schwer!)
+
+        // Status aktualisieren
+        function updateStatus(message) {
+            document.getElementById('status').textContent = `Status: ${message} | Blöcke gemined: ${blocksMined}`;
+            document.getElementById('coinValue').textContent = `k8o5 Coin Value: ${coinValue}`;
         }
 
-        // Nachricht im Local Storage speichern
-        function saveMessage(sender, message) {
-            const messages = JSON.parse(localStorage.getItem('k8o5ChatMessages')) || [];
-            messages.push({ sender, message, timestamp: new Date().toISOString() });
-            localStorage.setItem('k8o5ChatMessages', JSON.stringify(messages));
+        // Mining-Prozess (maximale CPU-Auslastung)
+        function mine() {
+            if (!miningActive) return;
+
+            const startTime = performance.now();
+            while (performance.now() - startTime < 50) { // 50ms pro Frame, um UI zu aktualisieren
+                nonce++;
+                const blockData = `k8o5-block-${blocksMined}-${nonce}-${Date.now()}`;
+                const hash = sha256(blockData);
+
+                if (hash.startsWith(difficultyTarget)) {
+                    blocksMined++;
+                    coinValue += 1; // 1 ganzer k8o5 Coin pro Block
+                    localStorage.setItem('k8o5BlocksMined', blocksMined);
+                    localStorage.setItem('k8o5CoinValue', coinValue);
+                    updateStatus(`Block gefunden! Hash: ${hash}`);
+                    break;
+                }
+            }
+
+            updateStatus(`Mining... Nonce: ${nonce} | Letzter Hash: ${hash.slice(0, 8)}...`);
+            requestAnimationFrame(mine); // Nächster Frame ohne Verzögerung
         }
 
-        // Neue Verbindung erstellen (Initiator)
-        function createConnection() {
-            const chatId = generateId(); // Zufällige ID wie "hbva4352"
-            const chatLink = `/k8o5/${chatId}`; // Beispiel: /k8o5/hbva4352
-            document.getElementById('linkArea').innerHTML = `Dein Chat-Link: <a href="${chatLink}" onclick="return false;">${chatLink}</a> (teile diesen Link mit deinem Peer)`;
-
-            peerConnection = new RTCPeerConnection(config);
-            dataChannel = peerConnection.createDataChannel('chat');
-            setupDataChannel();
-            peerConnection.createOffer()
-                .then(offer => {
-                    peerConnection.setLocalDescription(offer);
-                    document.getElementById('offer').value = JSON.stringify(offer);
-                })
-                .catch(err => console.error('Fehler beim Erstellen des Angebots:', err));
-        }
-
-        // Verbindung beitreten (Empfänger)
-        function joinConnection() {
-            peerConnection = new RTCPeerConnection(config);
-            peerConnection.ondatachannel = (event) => {
-                dataChannel = event.channel;
-                setupDataChannel();
-            };
-        }
-
-        // Datenkanal konfigurieren
-        function setupDataChannel() {
-            dataChannel.onopen = () => {
-                document.getElementById('setup').style.display = 'none';
-                document.getElementById('chat').style.display = 'block';
-                loadMessages();
-            };
-            dataChannel.onmessage = (event) => {
-                const message = event.data;
-                document.getElementById('messages').innerHTML += `<p>Peer: ${message}</p>`;
-                saveMessage('Peer', message);
-                document.getElementById('messages').scrollTop = document.getElementById('messages').scrollHeight;
-            };
-        }
-
-        // Angebot des anderen Peers übernehmen
-        function setRemoteOffer() {
-            const offer = JSON.parse(document.getElementById('offer').value);
-            peerConnection.setRemoteDescription(new RTCSessionDescription(offer))
-                .then(() => peerConnection.createAnswer())
-                .then(answer => {
-                    peerConnection.setLocalDescription(answer);
-                    document.getElementById('answer').value = JSON.stringify(answer);
-                })
-                .catch(err => console.error('Fehler beim Setzen des Angebots:', err));
-        }
-
-        // Antwort des anderen Peers übernehmen
-        function setRemoteAnswer() {
-            const answer = JSON.parse(document.getElementById('answer').value);
-            peerConnection.setRemoteDescription(new RTCSessionDescription(answer))
-                .then(() => {
-                    document.getElementById('setup').style.display = 'none';
-                    document.getElementById('chat').style.display = 'block';
-                    loadMessages();
-                })
-                .catch(err => console.error('Fehler beim Setzen der Antwort:', err));
-        }
-
-        // Nachricht senden
-        function sendMessage() {
-            const message = document.getElementById('messageInput').value.trim();
-            if (message && dataChannel && dataChannel.readyState === 'open') {
-                dataChannel.send(message);
-                document.getElementById('messages').innerHTML += `<p class="me">Du: ${message}</p>`;
-                saveMessage('Du', message);
-                document.getElementById('messageInput').value = '';
-                document.getElementById('messages').scrollTop = document.getElementById('messages').scrollHeight;
+        // Mining starten
+        function startMining() {
+            if (!miningActive) {
+                miningActive = true;
+                updateStatus('Mining gestartet');
+                mine(); // Starte die enge Schleife
             }
         }
 
-        // ICE-Kandidaten (müssen manuell ausgetauscht werden)
-        peerConnection.onicecandidate = (event) => {
-            if (event.candidate) {
-                console.log('ICE-Kandidat (manuell teilen):', JSON.stringify(event.candidate));
-            }
-        };
+        // Mining stoppen
+        function stopMining() {
+            miningActive = false;
+            updateStatus('Mining gestoppt');
+        }
+
+        // Fortschritt zurücksetzen
+        function resetMining() {
+            miningActive = false;
+            blocksMined = 0;
+            coinValue = 0;
+            nonce = 0;
+            localStorage.setItem('k8o5BlocksMined', blocksMined);
+            localStorage.setItem('k8o5CoinValue', coinValue);
+            updateStatus('Fortschritt zurückgesetzt');
+        }
+
+        // Initialen Status setzen
+        updateStatus('Nicht gestartet');
     </script>
 </body>
-</html>
+</html>s
