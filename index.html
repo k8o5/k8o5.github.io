@@ -176,10 +176,10 @@
         let commandHistory = [];
         let historyIndex = -1;
 
-        // Extract peer ID from URL
+        // Extract peer ID from URL path
         function getPeerIdFromUrl() {
-            const params = new URLSearchParams(window.location.search);
-            return params.get('peerid');
+            const path = window.location.pathname.slice(1); // Remove leading slash
+            return path.match(/^[0-9a-fA-F-]+/) ? path : null; // Match UUID-like string
         }
 
         // Generate unique color based on Peer ID
@@ -222,14 +222,12 @@
             return array;
         }
 
-        // Try to connect to new peers from knownPeers list
+        // Try to connect to all unconnected known peers
         function tryToConnectToNewPeers() {
             const potentialPeers = [...knownPeers].filter(peerId => 
                 peerId !== myPeerId && !connectedPeers.has(peerId) && !connections.some(conn => conn.peer === peerId)
             );
-            const shuffledPeers = shuffle(potentialPeers);
-            const peersToConnect = shuffledPeers.slice(0, Math.min(2, shuffledPeers.length)); // Connect to up to 2 new peers
-            peersToConnect.forEach(peerId => {
+            potentialPeers.forEach(peerId => {
                 connectToPeer(peerId);
             });
         }
@@ -247,7 +245,7 @@
                 
                 typeWriter(welcomeMsg, 0, 40, () => {
                     typeWriter(peerIdMsg, 0, 20, () => {
-                        // After displaying Peer ID, try connecting to peer from URL if present
+                        // Connect to peer from URL if present
                         const targetPeerId = getPeerIdFromUrl();
                         if (targetPeerId && targetPeerId !== myPeerId) {
                             connectToPeer(targetPeerId);
@@ -256,7 +254,7 @@
                 });
 
                 // Update URL with peer ID
-                const newUrl = `${window.location.origin}/peerid=${myPeerId}`;
+                const newUrl = `${window.location.origin}/${myPeerId}`;
                 history.pushState(null, '', newUrl);
             });
 
@@ -272,15 +270,17 @@
                     const peerList = [...knownPeers];
                     conn.send(JSON.stringify({ type: 'peer_list', peers: peerList }));
 
-                    // Share chat history
-                    chatHistory.forEach(entry => {
-                        conn.send(JSON.stringify({ peerId: entry.peerId, message: entry.message, name: entry.name || `k8o5_${connections.length - 1}` }));
-                    });
+                    // Share full chat history
+                    conn.send(JSON.stringify({ type: 'chat_history', history: chatHistory }));
 
                     // Try to connect to other peers
                     tryToConnectToNewPeers();
                 });
                 conn.on('data', handleData);
+                conn.on('close', () => {
+                    connectedPeers.delete(conn.peer);
+                    console.log('Connection closed with: ' + conn.peer);
+                });
             });
         }
 
@@ -304,7 +304,7 @@
                     const name = input.split(' ')[1];
                     if (name) {
                         myName = name;
-                        document.getElementById('output').innerHTML += renderText(`<span class="success-message">Name changed to: ${myName}</span>\n`);
+                        document.getElementById('output').innerHTML += renderText(`<span class="success-message">Name changed to: ${myName}</span>\n');
                     } else {
                         document.getElementById('output').innerHTML += renderText('<span class="error-message">Error: Enter a name! (e.g., name Max)</span>\n');
                     }
@@ -314,9 +314,7 @@
             } else {
                 const messageEntry = { peerId: myPeerId, message: input, name: myName };
                 chatHistory.push(messageEntry);
-                connections.forEach(conn => {
-                    conn.send(JSON.stringify(messageEntry));
-                });
+                broadcastMessage(messageEntry);
                 document.getElementById('output').innerHTML += renderText(`${input}`, myPeerId, myName);
             }
             document.getElementById('input').value = '';
@@ -340,15 +338,27 @@
                 const peerList = [...knownPeers];
                 conn.send(JSON.stringify({ type: 'peer_list', peers: peerList }));
 
-                // Share chat history
-                chatHistory.forEach(entry => {
-                    conn.send(JSON.stringify({ peerId: entry.peerId, message: entry.message, name: entry.name || `k8o5_${connections.length - 1}` }));
-                });
+                // Share full chat history
+                conn.send(JSON.stringify({ type: 'chat_history', history: chatHistory }));
 
                 // Try to connect to other peers
                 tryToConnectToNewPeers();
             });
             conn.on('data', handleData);
+            conn.on('close', () => {
+                connectedPeers.delete(conn.peer);
+                console.log('Connection closed with: ' + conn.peer);
+            });
+        }
+
+        // Broadcast message to all connected peers except the sender
+        function broadcastMessage(message) {
+            const messageData = JSON.stringify(message);
+            connections.forEach(conn => {
+                if (conn.peer !== message.peerId) {
+                    conn.send(messageData);
+                }
+            });
         }
 
         // Handle received data
@@ -369,11 +379,23 @@
                     }
                 });
                 tryToConnectToNewPeers();
+            } else if (messageData.type === 'chat_history') {
+                // Merge received chat history
+                messageData.history.forEach(entry => {
+                    if (!chatHistory.some(h => h.peerId === entry.peerId && h.message === entry.message)) {
+                        chatHistory.push(entry);
+                        document.getElementById('output').innerHTML += renderText(`${entry.message}`, entry.peerId, entry.name);
+                    }
+                });
+                document.getElementById('console').scrollTop = document.getElementById('console').scrollHeight;
             } else {
                 // Handle chat message
                 const { peerId, message, name } = messageData;
-                chatHistory.push({ peerId, message, name });
-                document.getElementById('output').innerHTML += renderText(`${message}`, peerId, name);
+                if (!chatHistory.some(h => h.peerId === peerId && h.message === message)) {
+                    chatHistory.push({ peerId, message, name });
+                    document.getElementById('output').innerHTML += renderText(`${message}`, peerId, name);
+                    broadcastMessage(messageData); // Forward to other peers
+                }
                 document.getElementById('console').scrollTop = document.getElementById('console').scrollHeight;
             }
         }
