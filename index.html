@@ -24,7 +24,7 @@
             overflow-y: auto;
             background: #000;
             position: relative;
-            user-select: text; /* Ermöglicht Textauswahl */
+            user-select: text;
         }
 
         #output {
@@ -34,11 +34,11 @@
             -webkit-font-smoothing: antialiased;
             color: #00cc00;
             letter-spacing: 0.05em;
-            user-select: text; /* Ermöglicht Textauswahl */
+            user-select: text;
         }
 
         #inputArea {
-            display: none; /* Initially hidden */
+            display: none;
             position: sticky;
             bottom: 10px;
             align-items: center;
@@ -66,17 +66,17 @@
         }
 
         .peer-message {
-            display: block; /* Jede Nachricht auf neuer Zeile */
+            display: block;
             padding: 4px 0;
             animation: fadeIn 0.3s ease-in;
         }
 
         .connected-message {
-            color: #ffcc00; /* Gelb für Verbindungsstatus */
+            color: #ffcc00;
             font-weight: bold;
             padding: 4px 0;
             display: block;
-            border-bottom: 1px dashed #555; /* Subtile Trennlinie */
+            border-bottom: 1px dashed #555;
             margin-bottom: 5px;
         }
 
@@ -131,7 +131,7 @@
     <script src="https://unpkg.com/peerjs@1.4.7/dist/peerjs.min.js"></script>
     <script>
         let peer, myPeerId = '', connections = [], knownPeers = new Set(), connectedPeers = new Set(),
-            isConnected = false, chatHistory = [], myName = 'k8o5_0', commandHistory = [], historyIndex = -1;
+            isConnected = false, chatHistory = [], myName = '', commandHistory = [], historyIndex = -1;
 
         function getPeerColor(peerId) {
             let hash = 0; for (let i = 0; i < peerId.length; i++) hash = peerId.charCodeAt(i) + ((hash << 5) - hash);
@@ -163,12 +163,27 @@
                 .forEach(peerId => connectToPeer(peerId));
         }
 
+        function generateUniqueName() {
+            let baseName = 'k8o5';
+            let suffix = 0;
+            let potentialName = `${baseName}_${suffix}`;
+            const existingNames = new Set(connections.map(conn => conn.metadata?.name || `k8o5_${connections.indexOf(conn)}`));
+
+            while (existingNames.has(potentialName)) {
+                suffix++;
+                potentialName = `${baseName}_${suffix}`;
+            }
+            return potentialName;
+        }
+
         function initPeer() {
             peer = new Peer({ debug: 3 });
             peer.on('open', id => {
-                myPeerId = id; knownPeers.add(myPeerId);
+                myPeerId = id; 
+                knownPeers.add(myPeerId);
+                myName = generateUniqueName(); // Setze initialen Namen
                 typeWriter('k8o5\n', 0, 40, () => {
-                    typeWriter(`Deine Peer-ID: ${myPeerId}\n`, 0, 20, () => {
+                    typeWriter(`Deine Peer-ID: ${myPeerId}\nDein Name: ${myName}\n`, 0, 20, () => {
                         document.getElementById('inputArea').style.display = 'flex';
                         document.getElementById('input').focus();
                     });
@@ -176,17 +191,22 @@
             });
 
             peer.on('connection', conn => {
+                conn.metadata = { name: conn.metadata?.name || generateUniqueName() }; // Weise neuen Peer einen eindeutigen Namen zu
                 connections.push(conn);
                 conn.on('open', () => {
                     console.log('Verbunden mit: ' + conn.peer);
-                    knownPeers.add(conn.peer); connectedPeers.add(conn.peer);
+                    knownPeers.add(conn.peer); 
+                    connectedPeers.add(conn.peer);
                     switchToChatMode(conn.peer);
                     conn.send(JSON.stringify({ type: 'peer_list', peers: [...knownPeers] }));
                     conn.send(JSON.stringify({ type: 'chat_history', history: chatHistory }));
                     tryToConnectToNewPeers();
                 });
                 conn.on('data', handleData);
-                conn.on('close', () => { connectedPeers.delete(conn.peer); console.log('Verbindung geschlossen mit: ' + conn.peer); });
+                conn.on('close', () => { 
+                    connectedPeers.delete(conn.peer); 
+                    console.log('Verbindung geschlossen mit: ' + conn.peer); 
+                });
             });
         }
 
@@ -223,18 +243,22 @@
 
         function connectToPeer(peerId) {
             if (peerId === myPeerId || connectedPeers.has(peerId) || connections.some(conn => conn.peer === peerId)) return;
-            const conn = peer.connect(peerId);
+            const conn = peer.connect(peerId, { metadata: { name: myName } });
             connections.push(conn);
             conn.on('open', () => {
                 console.log('Verbunden mit: ' + peerId);
-                knownPeers.add(peerId); connectedPeers.add(peerId);
+                knownPeers.add(peerId); 
+                connectedPeers.add(peerId);
                 switchToChatMode(peerId);
                 conn.send(JSON.stringify({ type: 'peer_list', peers: [...knownPeers] }));
                 conn.send(JSON.stringify({ type: 'chat_history', history: chatHistory }));
                 tryToConnectToNewPeers();
             });
             conn.on('data', handleData);
-            conn.on('close', () => { connectedPeers.delete(conn.peer); console.log('Verbindung geschlossen mit: ' + peerId); });
+            conn.on('close', () => { 
+                connectedPeers.delete(conn.peer); 
+                console.log('Verbindung geschlossen mit: ' + peerId); 
+            });
         }
 
         function broadcastMessage(message) {
@@ -244,7 +268,7 @@
 
         function handleData(data) {
             let messageData;
-            try { messageData = JSON.parse(data); } catch (e) { messageData = { peerId: this.peer, message: data, name: `k8o5_${connections.length-1}` }; }
+            try { messageData = JSON.parse(data); } catch (e) { messageData = { peerId: this.peer, message: data, name: this.metadata?.name || `k8o5_${connections.length-1}` }; }
             if (messageData.type === 'peer_list') {
                 messageData.peers.forEach(peerId => { if (peerId !== myPeerId) knownPeers.add(peerId); });
                 tryToConnectToNewPeers();
