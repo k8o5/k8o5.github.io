@@ -1,27 +1,37 @@
 <!DOCTYPE html>
-<html lang="de">
+<html lang="en">
 <head>
     <meta charset="UTF-8">
     <meta name="viewport" content="width=device-width, initial-scale=1.0">
-    <title>k8o5 Crypto Miner</title>
+    <title>k8o5 - Wizard Game</title>
     <style>
         body {
             font-family: Arial, sans-serif;
-            margin: 20px;
             text-align: center;
-            background-color: #f0f2f5;
+            background: #f0f2f5;
+            margin: 0;
+            padding: 20px;
         }
         h1 {
             color: #1877f2;
         }
-        #miner {
-            margin: 20px auto;
-            width: 80%;
-            max-width: 600px;
+        #setup, #game {
+            max-width: 800px;
+            margin: 0 auto;
             background: white;
             padding: 20px;
             border-radius: 10px;
             box-shadow: 0 2px 4px rgba(0, 0, 0, 0.1);
+        }
+        #game {
+            display: none;
+        }
+        textarea, input {
+            width: 100%;
+            padding: 10px;
+            margin: 5px 0;
+            border: 1px solid #dddfe2;
+            border-radius: 5px;
         }
         button {
             padding: 10px 20px;
@@ -35,127 +45,314 @@
         button:hover {
             background-color: #166fe5;
         }
-        #status, #coinValue {
-            margin-top: 10px;
-            font-size: 16px;
+        #players, #hand, #bidding, #trick {
+            margin: 10px 0;
         }
-        #coinValue {
-            color: #28a745;
-            font-weight: bold;
+        #hand span {
+            padding: 5px;
+            margin: 2px;
+            background: #e4e6eb;
+            border-radius: 3px;
+            cursor: pointer;
+        }
+        #messages {
+            height: 100px;
+            overflow-y: auto;
+            border: 1px solid #dddfe2;
+            padding: 10px;
+            text-align: left;
         }
     </style>
 </head>
 <body>
-    <h1>k8o5 Crypto Miner</h1>
-    <div id="miner">
-        <button onclick="startMining()">Mining starten</button>
-        <button onclick="stopMining()">Mining stoppen</button>
-        <button onclick="resetMining()">Fortschritt zurücksetzen</button>
-        <div id="status">Status: Nicht gestartet</div>
-        <div id="coinValue">k8o5 Coin Value: 0</div>
+    <h1>k8o5 - Wizard Game</h1>
+    <div id="setup">
+        <p>Host: Erstelle eine Lobby und teile den Link (z. B. k8o5.com/game.html?room=xyz). Spieler: Trete mit der Raum-ID bei.</p>
+        <input type="text" id="roomId" placeholder="Raum-ID eingeben (z. B. xyz)">
+        <button onclick="createRoom()">Lobby erstellen</button>
+        <button onclick="joinRoom()">Lobby beitreten</button>
+        <br>
+        <textarea id="offer" placeholder="Angebot hier einfügen (zum Beitreten)"></textarea>
+        <button onclick="setOffer()">Angebot übernehmen</button>
+        <br>
+        <textarea id="answer" placeholder="Antwort hier einfügen (nach Erstellung)"></textarea>
+        <button onclick="setAnswer()">Antwort übernehmen</button>
+    </div>
+    <div id="game">
+        <div id="players">Spieler: <span id="playerList"></span></div>
+        <div id="messages"></div>
+        <div id="hand">Deine Karten: <span id="cards"></span></div>
+        <div id="bidding" style="display: none;">
+            <input type="number" id="bidInput" min="0" placeholder="Dein Gebot">
+            <button onclick="submitBid()">Gebot abgeben</button>
+        </div>
+        <div id="trick">Aktueller Stich: <span id="currentTrick"></span></div>
+        <button onclick="startGame()" id="startButton">Spiel starten</button>
     </div>
 
+    <script src="https://unpkg.com/peerjs@1.4.7/dist/peerjs.min.js"></script>
     <script>
-        // SHA-256 Implementierung
-        function sha256(message) {
-            const K = [0x428a2f98, 0x71374491, 0xb5c0fbcf, 0xe9b5dba5, 0x3956c25b, 0x59f111f1, 0x923f82a4, 0xab1c5ed5,
-                       0xd807aa98, 0x12835b01, 0x243185be, 0x550c7dc3, 0x72be5d74, 0x80deb1fe, 0x9bdc06a7, 0xc19bf174];
-            function rotr(x, n) { return (x >>> n) | (x << (32 - n)); }
-            function ch(x, y, z) { return (x & y) ^ (~x & z); }
-            function maj(x, y, z) { return (x & y) ^ (x & z) ^ (y & z); }
-            function sigma0(x) { return rotr(x, 2) ^ rotr(x, 13) ^ rotr(x, 22); }
-            function sigma1(x) { return rotr(x, 6) ^ rotr(x, 11) ^ rotr(x, 25); }
-            function gamma0(x) { return rotr(x, 7) ^ rotr(x, 18) ^ (x >>> 3); }
-            function gamma1(x) { return rotr(x, 17) ^ rotr(x, 19) ^ (x >>> 10); }
+        let peer;
+        let roomId = new URLSearchParams(window.location.search).get('room') || '';
+        let isHost = false;
+        let connections = [];
+        let players = [];
+        let deck = [];
+        let hands = {};
+        let bids = {};
+        let currentRound = 1;
+        let currentTrick = [];
+        let scores = {};
 
-            let msg = new TextEncoder().encode(message);
-            let h = [0x6a09e667, 0xbb67ae85, 0x3c6ef372, 0xa54ff53a, 0x510e527f, 0x9b05688c, 0x1f83d9ab, 0x5be0cd19];
-            let padded = new Uint8Array(Math.ceil((msg.length + 9) / 64) * 64);
-            padded.set(msg);
-            padded[msg.length] = 0x80;
-            let len = msg.length * 8;
-            for (let i = 0; i < 8; i++) padded[padded.length - 8 + i] = (len >>> (56 - i * 8)) & 0xff;
+        // Raum-ID initial setzen
+        document.getElementById('roomId').value = roomId;
 
-            for (let i = 0; i < padded.length; i += 64) {
-                let w = new Uint32Array(64);
-                for (let t = 0; t < 16; t++) w[t] = (padded[i + t * 4] << 24) | (padded[i + t * 4 + 1] << 16) | (padded[i + t * 4 + 2] << 8) | padded[i + t * 4 + 3];
-                for (let t = 16; t < 64; t++) w[t] = (gamma1(w[t - 2]) + w[t - 7] + gamma0(w[t - 15]) + w[t - 16]) >>> 0;
+        // Deck erstellen (vereinfacht: 52 Karten, 4 Anzüge x 13 Ränge)
+        function createDeck() {
+            const suits = ['♠', '♥', '♣', '♦'];
+            const ranks = ['2', '3', '4', '5', '6', '7', '8', '9', '10', 'J', 'Q', 'K', 'A'];
+            deck = [];
+            suits.forEach(suit => ranks.forEach(rank => deck.push(rank + suit)));
+        }
 
-                let [a, b, c, d, e, f, g, h0] = h;
-                for (let t = 0; t < 64; t++) {
-                    let t1 = (h0 + sigma1(e) + ch(e, f, g) + K[t] + w[t]) >>> 0;
-                    let t2 = (sigma0(a) + maj(a, b, c)) >>> 0;
-                    h0 = g; g = f; f = e; e = (d + t1) >>> 0; d = c; c = b; b = a; a = (t1 + t2) >>> 0;
-                }
-                h = [h[0] + a, h[1] + b, h[2] + c, h[3] + d, h[4] + e, h[5] + f, h[6] + g, h[7] + h0].map(x => x >>> 0);
+        // Karten mischen
+        function shuffle(array) {
+            for (let i = array.length - 1; i > 0; i--) {
+                const j = Math.floor(Math.random() * (i + 1));
+                [array[i], array[j]] = [array[j], array[i]];
             }
-            return h.map(x => x.toString(16).padStart(8, '0')).join('');
         }
 
-        let miningActive = false;
-        let nonce = 0;
-        let blocksMined = parseInt(localStorage.getItem('k8o5BlocksMined')) || 0;
-        let coinValue = parseInt(localStorage.getItem('k8o5CoinValue')) || 0;
-        const difficultyTarget = '00000'; // Ziel: Hash muss mit 5 Nullen beginnen (schwer!)
-
-        // Status aktualisieren
-        function updateStatus(message) {
-            document.getElementById('status').textContent = `Status: ${message} | Blöcke gemined: ${blocksMined}`;
-            document.getElementById('coinValue').textContent = `k8o5 Coin Value: ${coinValue}`;
+        // Lobby erstellen
+        function createRoom() {
+            roomId = roomId || Math.random().toString(36).substr(2, 5);
+            window.history.pushState({}, document.title, `?room=${roomId}`);
+            document.getElementById('roomId').value = roomId;
+            isHost = true;
+            initPeer();
         }
 
-        // Mining-Prozess (maximale CPU-Auslastung)
-        function mine() {
-            if (!miningActive) return;
+        // Lobby beitreten
+        function joinRoom() {
+            roomId = document.getElementById('roomId').value;
+            if (!roomId) return alert('Bitte eine Raum-ID eingeben');
+            window.history.pushState({}, document.title, `?room=${roomId}`);
+            initPeer();
+        }
 
-            const startTime = performance.now();
-            while (performance.now() - startTime < 50) { // 50ms pro Frame, um UI zu aktualisieren
-                nonce++;
-                const blockData = `k8o5-block-${blocksMined}-${nonce}-${Date.now()}`;
-                const hash = sha256(blockData);
+        // PeerJS initialisieren
+        function initPeer() {
+            peer = new Peer({ debug: 3 });
+            peer.on('open', id => {
+                console.log('Mein Peer-ID: ' + id);
+                if (isHost) {
+                    document.getElementById('offer').value = JSON.stringify({ type: 'offer', peerId: id });
+                    players.push(id);
+                    updatePlayerList();
+                }
+            });
 
-                if (hash.startsWith(difficultyTarget)) {
-                    blocksMined++;
-                    coinValue += 1; // 1 ganzer k8o5 Coin pro Block
-                    localStorage.setItem('k8o5BlocksMined', blocksMined);
-                    localStorage.setItem('k8o5CoinValue', coinValue);
-                    updateStatus(`Block gefunden! Hash: ${hash}`);
+            peer.on('connection', conn => {
+                connections.push(conn);
+                conn.on('open', () => {
+                    console.log('Verbunden mit: ' + conn.peer);
+                    players.push(conn.peer);
+                    updatePlayerList();
+                    if (isHost) sendGameState();
+                });
+                conn.on('data', handleData);
+            });
+        }
+
+        // Angebot übernehmen
+        function setOffer() {
+            const offer = JSON.parse(document.getElementById('offer').value);
+            const conn = peer.connect(offer.peerId);
+            connections.push(conn);
+            conn.on('open', () => {
+                conn.send({ type: 'answer', peerId: peer.id });
+                switchToGame();
+            });
+            conn.on('data', handleData);
+        }
+
+        // Antwort übernehmen
+        function setAnswer() {
+            switchToGame();
+        }
+
+        // Spiel starten
+        function startGame() {
+            if (!isHost || players.length < 3) return alert('Mindestens 3 Spieler benötigt');
+            createDeck();
+            shuffle(deck);
+            dealCards();
+            sendGameState();
+            startBidding();
+        }
+
+        // Karten austeilen
+        function dealCards() {
+            hands = {};
+            const cardsPerPlayer = Math.min(10, Math.floor(deck.length / players.length));
+            players.forEach((playerId, index) => {
+                hands[playerId] = deck.slice(index * cardsPerPlayer, (index + 1) * cardsPerPlayer);
+            });
+            updateHand();
+        }
+
+        // Gebots-Phase starten
+        function startBidding() {
+            document.getElementById('bidding').style.display = 'block';
+            document.getElementById('startButton').style.display = 'none';
+            if (isHost) broadcast({ type: 'startBidding' });
+        }
+
+        // Gebot abgeben
+        function submitBid() {
+            const bid = parseInt(document.getElementById('bidInput').value);
+            if (isNaN(bid) || bid < 0) return alert('Ungültiges Gebot');
+            bids[peer.id] = bid;
+            document.getElementById('bidding').style.display = 'none';
+            if (isHost) {
+                broadcast({ type: 'bid', peerId: peer.id, bid });
+                checkBiddingComplete();
+            } else {
+                connections[0].send({ type: 'bid', peerId: peer.id, bid });
+            }
+        }
+
+        // Überprüfen, ob alle Gebote eingegangen sind
+        function checkBiddingComplete() {
+            if (Object.keys(bids).length === players.length) {
+                startTrickPhase();
+            }
+        }
+
+        // Stich-Phase starten
+        function startTrickPhase() {
+            currentTrick = [];
+            document.getElementById('currentTrick').textContent = '';
+            broadcast({ type: 'startTrick' });
+        }
+
+        // Karte spielen
+        function playCard(card) {
+            const hand = hands[peer.id];
+            const index = hand.indexOf(card);
+            if (index !== -1) {
+                hand.splice(index, 1);
+                currentTrick.push({ peerId: peer.id, card });
+                updateHand();
+                if (isHost) {
+                    broadcast({ type: 'playCard', peerId: peer.id, card });
+                    if (currentTrick.length === players.length) resolveTrick();
+                } else {
+                    connections[0].send({ type: 'playCard', peerId: peer.id, card });
+                }
+            }
+        }
+
+        // Stich auflösen
+        function resolveTrick() {
+            // Einfache Logik: Höchste Karte gewinnt (keine Trumpf/Spezialkarten hier)
+            const winner = currentTrick.reduce((max, curr) => 
+                parseInt(max.card) > parseInt(curr.card) ? max : curr
+            );
+            scores[winner.peerId] = (scores[winner.peerId] || 0) + 10 + (bids[winner.peerId] === currentTrick.length ? 20 : -10);
+            broadcast({ type: 'trickResult', winner: winner.peerId, scores });
+            if (hands[peer.id].length > 0) {
+                startTrickPhase();
+            } else if (currentRound < 10) {
+                currentRound++;
+                dealCards();
+                startBidding();
+            } else {
+                endGame();
+            }
+        }
+
+        // Spiel beenden
+        function endGame() {
+            let result = 'Spiel beendet! Punkte:\n';
+            for (let id in scores) {
+                result += `${id}: ${scores[id]} Punkte\n`;
+            }
+            alert(result);
+            broadcast({ type: 'gameOver', scores });
+        }
+
+        // Spielzustand senden
+        function sendGameState() {
+            broadcast({ 
+                type: 'gameState', 
+                hands, 
+                bids, 
+                currentRound, 
+                currentTrick, 
+                scores 
+            });
+        }
+
+        // Daten empfangen und verarbeiten
+        function handleData(data) {
+            switch (data.type) {
+                case 'gameState':
+                    hands = data.hands;
+                    bids = data.bids;
+                    currentRound = data.currentRound;
+                    currentTrick = data.currentTrick;
+                    scores = data.scores;
+                    updateHand();
                     break;
-                }
+                case 'startBidding':
+                    document.getElementById('bidding').style.display = 'block';
+                    break;
+                case 'bid':
+                    bids[data.peerId] = data.bid;
+                    if (isHost) checkBiddingComplete();
+                    break;
+                case 'startTrick':
+                    document.getElementById('currentTrick').textContent = '';
+                    break;
+                case 'playCard':
+                    currentTrick.push({ peerId: data.peerId, card: data.card });
+                    document.getElementById('currentTrick').textContent = currentTrick.map(t => t.card).join(', ');
+                    if (isHost && currentTrick.length === players.length) resolveTrick();
+                    break;
+                case 'trickResult':
+                    scores = data.scores;
+                    document.getElementById('currentTrick').textContent = `Gewinner: ${data.winner}`;
+                    break;
+                case 'gameOver':
+                    alert('Spiel beendet! Punkte:\n' + Object.entries(data.scores).map(([id, score]) => `${id}: ${score}`).join('\n'));
+                    break;
             }
-
-            updateStatus(`Mining... Nonce: ${nonce} | Letzter Hash: ${hash.slice(0, 8)}...`);
-            requestAnimationFrame(mine); // Nächster Frame ohne Verzögerung
         }
 
-        // Mining starten
-        function startMining() {
-            if (!miningActive) {
-                miningActive = true;
-                updateStatus('Mining gestartet');
-                mine(); // Starte die enge Schleife
-            }
+        // Nachricht an alle Spieler senden
+        function broadcast(data) {
+            connections.forEach(conn => conn.send(data));
         }
 
-        // Mining stoppen
-        function stopMining() {
-            miningActive = false;
-            updateStatus('Mining gestoppt');
+        // Spielerliste aktualisieren
+        function updatePlayerList() {
+            document.getElementById('playerList').textContent = players.join(', ');
         }
 
-        // Fortschritt zurücksetzen
-        function resetMining() {
-            miningActive = false;
-            blocksMined = 0;
-            coinValue = 0;
-            nonce = 0;
-            localStorage.setItem('k8o5BlocksMined', blocksMined);
-            localStorage.setItem('k8o5CoinValue', coinValue);
-            updateStatus('Fortschritt zurückgesetzt');
+        // Hand aktualisieren
+        function updateHand() {
+            const hand = hands[peer.id] || [];
+            document.getElementById('cards').innerHTML = hand.map(card => 
+                `<span onclick="playCard('${card}')">${card}</span>`
+            ).join(' ');
         }
 
-        // Initialen Status setzen
-        updateStatus('Nicht gestartet');
+        // Zum Spiel wechseln
+        function switchToGame() {
+            document.getElementById('setup').style.display = 'none';
+            document.getElementById('game').style.display = 'block';
+        }
     </script>
 </body>
-</html>s
+</html>
