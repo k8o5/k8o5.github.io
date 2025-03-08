@@ -81,6 +81,11 @@
             to { opacity: 1; }
         }
 
+        @keyframes cursor-blink {
+            0%, 100% { opacity: 1; }
+            50% { opacity: 0; }
+        }
+
         ::-webkit-scrollbar {
             width: 8px;
         }
@@ -168,19 +173,9 @@
         let peer;
         let myPeerId = '';
         let connections = [];
-        let knownPeers = new Set();
-        let connectedPeers = new Set();
         let isConnected = false;
         let chatHistory = [];
-        let myName = 'k8o5_0';
-        let commandHistory = [];
-        let historyIndex = -1;
-
-        // Extract peer ID from URL path
-        function getPeerIdFromUrl() {
-            const path = window.location.pathname.slice(1); // Remove leading slash
-            return path.match(/^[0-9a-fA-F-]+/) ? path : null; // Match UUID-like string
-        }
+        let myName = 'k8o5_0'; // Default name
 
         // Generate unique color based on Peer ID
         function getPeerColor(peerId) {
@@ -213,48 +208,22 @@
             }
         }
 
-        // Shuffle array for random selection
-        function shuffle(array) {
-            for (let i = array.length - 1; i > 0; i--) {
-                const j = Math.floor(Math.random() * (i + 1));
-                [array[i], array[j]] = [array[j], array[i]];
-            }
-            return array;
-        }
-
-        // Try to connect to all unconnected known peers
-        function tryToConnectToNewPeers() {
-            const potentialPeers = [...knownPeers].filter(peerId => 
-                peerId !== myPeerId && !connectedPeers.has(peerId) && !connections.some(conn => conn.peer === peerId)
-            );
-            potentialPeers.forEach(peerId => {
-                connectToPeer(peerId);
-            });
-        }
-
         // Initialize PeerJS
         function initPeer() {
             peer = new Peer({ debug: 3 });
             peer.on('open', id => {
                 myPeerId = id;
-                knownPeers.add(myPeerId);
                 const welcomeMsg = `k8o5\n`;
                 const peerIdMsg = `Your Peer-ID: ${myPeerId}\n`;
                 
                 document.getElementById('output').innerHTML = "";
                 
                 typeWriter(welcomeMsg, 0, 40, () => {
-                    typeWriter(peerIdMsg, 0, 20, () => {
-                        // Connect to peer from URL if present
-                        const targetPeerId = getPeerIdFromUrl();
-                        if (targetPeerId && targetPeerId !== myPeerId) {
-                            connectToPeer(targetPeerId);
-                        }
-                    });
+                    typeWriter(peerIdMsg, 0, 20, null);
                 });
 
                 // Update URL with peer ID
-                const newUrl = `${window.location.origin}/${myPeerId}`;
+                const newUrl = `${window.location.origin}/peerid=${myPeerId}`;
                 history.pushState(null, '', newUrl);
             });
 
@@ -262,25 +231,12 @@
                 connections.push(conn);
                 conn.on('open', () => {
                     console.log('Connected to: ' + conn.peer);
-                    knownPeers.add(conn.peer);
-                    connectedPeers.add(conn.peer);
                     switchToChatMode(conn.peer);
-
-                    // Send known peers list to the new peer
-                    const peerList = [...knownPeers];
-                    conn.send(JSON.stringify({ type: 'peer_list', peers: peerList }));
-
-                    // Share full chat history
-                    conn.send(JSON.stringify({ type: 'chat_history', history: chatHistory }));
-
-                    // Try to connect to other peers
-                    tryToConnectToNewPeers();
+                    chatHistory.forEach(entry => {
+                        conn.send(JSON.stringify({ peerId: entry.peerId, message: entry.message, name: entry.name || `k8o5_${connections.length - 1}` }));
+                    });
                 });
                 conn.on('data', handleData);
-                conn.on('close', () => {
-                    connectedPeers.delete(conn.peer);
-                    console.log('Connection closed with: ' + conn.peer);
-                });
             });
         }
 
@@ -304,7 +260,7 @@
                     const name = input.split(' ')[1];
                     if (name) {
                         myName = name;
-                        document.getElementById('output').innerHTML += renderText(`<span class="success-message">Name changed to: ${myName}</span>\n');
+                        document.getElementById('output').innerHTML += renderText(`<span class="success-message">Name changed to: ${myName}</span>\n`);
                     } else {
                         document.getElementById('output').innerHTML += renderText('<span class="error-message">Error: Enter a name! (e.g., name Max)</span>\n');
                     }
@@ -314,7 +270,9 @@
             } else {
                 const messageEntry = { peerId: myPeerId, message: input, name: myName };
                 chatHistory.push(messageEntry);
-                broadcastMessage(messageEntry);
+                connections.forEach(conn => {
+                    conn.send(JSON.stringify(messageEntry));
+                });
                 document.getElementById('output').innerHTML += renderText(`${input}`, myPeerId, myName);
             }
             document.getElementById('input').value = '';
@@ -323,42 +281,13 @@
 
         // Connect to a peer
         function connectToPeer(peerId) {
-            if (peerId === myPeerId || connectedPeers.has(peerId) || connections.some(conn => conn.peer === peerId)) {
-                return; // Avoid self-connection or duplicate connections
-            }
             const conn = peer.connect(peerId);
             connections.push(conn);
             conn.on('open', () => {
                 console.log('Connected to: ' + peerId);
-                knownPeers.add(peerId);
-                connectedPeers.add(peerId);
                 switchToChatMode(peerId);
-
-                // Send known peers list to the new peer
-                const peerList = [...knownPeers];
-                conn.send(JSON.stringify({ type: 'peer_list', peers: peerList }));
-
-                // Share full chat history
-                conn.send(JSON.stringify({ type: 'chat_history', history: chatHistory }));
-
-                // Try to connect to other peers
-                tryToConnectToNewPeers();
             });
             conn.on('data', handleData);
-            conn.on('close', () => {
-                connectedPeers.delete(conn.peer);
-                console.log('Connection closed with: ' + conn.peer);
-            });
-        }
-
-        // Broadcast message to all connected peers except the sender
-        function broadcastMessage(message) {
-            const messageData = JSON.stringify(message);
-            connections.forEach(conn => {
-                if (conn.peer !== message.peerId) {
-                    conn.send(messageData);
-                }
-            });
         }
 
         // Handle received data
@@ -367,37 +296,12 @@
             try {
                 messageData = JSON.parse(data);
             } catch (e) {
-                messageData = { peerId: this.peer, message: data, name: `k8o5_${connections.length - 1}` };
+                messageData = { peerId: this.peer, message: data, name: `k8o5_${connections.length - 1}` }; // Fallback
             }
-
-            if (messageData.type === 'peer_list') {
-                // Handle peer list message
-                const receivedPeers = messageData.peers;
-                receivedPeers.forEach(peerId => {
-                    if (peerId !== myPeerId) {
-                        knownPeers.add(peerId);
-                    }
-                });
-                tryToConnectToNewPeers();
-            } else if (messageData.type === 'chat_history') {
-                // Merge received chat history
-                messageData.history.forEach(entry => {
-                    if (!chatHistory.some(h => h.peerId === entry.peerId && h.message === entry.message)) {
-                        chatHistory.push(entry);
-                        document.getElementById('output').innerHTML += renderText(`${entry.message}`, entry.peerId, entry.name);
-                    }
-                });
-                document.getElementById('console').scrollTop = document.getElementById('console').scrollHeight;
-            } else {
-                // Handle chat message
-                const { peerId, message, name } = messageData;
-                if (!chatHistory.some(h => h.peerId === peerId && h.message === message)) {
-                    chatHistory.push({ peerId, message, name });
-                    document.getElementById('output').innerHTML += renderText(`${message}`, peerId, name);
-                    broadcastMessage(messageData); // Forward to other peers
-                }
-                document.getElementById('console').scrollTop = document.getElementById('console').scrollHeight;
-            }
+            const { peerId, message, name } = messageData;
+            chatHistory.push({ peerId, message, name });
+            document.getElementById('output').innerHTML += renderText(`${message}`, peerId, name);
+            document.getElementById('console').scrollTop = document.getElementById('console').scrollHeight;
         }
 
         // Switch to chat mode
@@ -419,6 +323,9 @@
         }
 
         // Command history navigation
+        let commandHistory = [];
+        let historyIndex = -1;
+
         document.getElementById('input').addEventListener('keydown', (e) => {
             if (e.key === 'ArrowUp') {
                 if (commandHistory.length > 0 && historyIndex < commandHistory.length - 1) {
