@@ -3,7 +3,7 @@
 <head>
     <meta charset="UTF-8">
     <meta name="viewport" content="width=device-width, initial-scale=1.0">
-    <title>k8o5 Chat</title>
+    <title>k8o5 - Console Chat</title>
     <style>
         body {
             margin: 0;
@@ -61,7 +61,6 @@
             z-index: -1;
             transition: background-image 1s ease-in-out;
         }
-        /* Animation für Konsolenstart */
         @keyframes boot {
             0% { opacity: 0; }
             50% { opacity: 0.5; }
@@ -70,12 +69,15 @@
         #console.boot {
             animation: boot 1s ease-in-out;
         }
+        .peer-message {
+            display: inline;
+        }
     </style>
 </head>
 <body>
     <div id="console" class="boot">
         <div id="background"></div>
-        <div id="output">k8o5 Console v1.0\nInitialisiere...\n</div>
+        <div id="output"></div>
         <div id="inputArea">
             <span id="prompt">> </span>
             <input type="text" id="input" autofocus>
@@ -88,6 +90,7 @@
         let myPeerId = '';
         let connections = [];
         let isConnected = false;
+        let chatHistory = []; // Speichert alle Nachrichten
         const backgrounds = [
             'url("https://i.imgur.com/1XqZ8kV.jpg")', // Matrix
             'url("https://i.imgur.com/9z5vK7L.jpg")', // Cyberpunk
@@ -97,12 +100,31 @@
         ];
         let currentBgIndex = 0;
 
+        // Eindeutige Farbe basierend auf Peer-ID generieren
+        function getPeerColor(peerId) {
+            let hash = 0;
+            for (let i = 0; i < peerId.length; i++) {
+                hash = peerId.charCodeAt(i) + ((hash << 5) - hash);
+            }
+            const hue = Math.abs(hash % 360); // HSL-Farbton (0-360)
+            return `hsl(${hue}, 70%, 50%)`; // Sättigung 70%, Helligkeit 50%
+        }
+
+        // Text mit Zeilenumbrüchen rendern
+        function renderText(text, peerId = null) {
+            if (peerId) {
+                const color = getPeerColor(peerId);
+                return `<span class="peer-message" style="color: ${color}">${text}</span><br>`;
+            }
+            return text.replace(/\n/g, '<br>');
+        }
+
         // PeerJS initialisieren
         function initPeer() {
             peer = new Peer({ debug: 3 });
             peer.on('open', id => {
                 myPeerId = id;
-                document.getElementById('output').innerHTML += `Deine Peer-ID: ${myPeerId}\nBefehl: peer [peer_id] zum Verbinden\n`;
+                document.getElementById('output').innerHTML = renderText(`k8o5 Console v1.0\nInitialisiere...\nDeine Peer-ID: ${myPeerId}\nBefehl: peer [peer_id] zum Verbinden\n`);
             });
 
             peer.on('connection', conn => {
@@ -110,6 +132,8 @@
                 conn.on('open', () => {
                     console.log('Verbunden mit: ' + conn.peer);
                     switchToChatMode(conn.peer);
+                    // Sende Chat-Historie an neuen Peer
+                    chatHistory.forEach(entry => conn.send(entry.message));
                 });
                 conn.on('data', handleData);
             });
@@ -120,24 +144,26 @@
             const input = document.getElementById('input').value.trim();
             if (!input) return;
 
-            document.getElementById('output').innerHTML += `> ${input}\n`;
+            document.getElementById('output').innerHTML += renderText(`> ${input}`);
             if (!isConnected) {
                 if (input.startsWith('peer ')) {
                     const targetPeerId = input.split(' ')[1];
                     if (targetPeerId) {
                         connectToPeer(targetPeerId);
                     } else {
-                        document.getElementById('output').innerHTML += 'Fehler: Gib eine Peer-ID ein!\n';
+                        document.getElementById('output').innerHTML += renderText('Fehler: Gib eine Peer-ID ein!\n');
                     }
                 } else {
-                    document.getElementById('output').innerHTML += 'Unbekannter Befehl. Nutze: peer [peer_id]\n';
+                    document.getElementById('output').innerHTML += renderText('Unbekannter Befehl. Nutze: peer [peer_id]\n');
                 }
             } else {
                 if (input === 'bg') {
                     changeBackground();
                 } else {
+                    const messageEntry = { peerId: myPeerId, message: input };
+                    chatHistory.push(messageEntry);
                     connections.forEach(conn => conn.send(input));
-                    document.getElementById('output').innerHTML += `${input}\n`;
+                    document.getElementById('output').innerHTML += renderText(`${input}`, myPeerId);
                 }
             }
             document.getElementById('input').value = '';
@@ -157,14 +183,16 @@
 
         // Daten empfangen
         function handleData(data) {
-            document.getElementById('output').innerHTML += `${data}\n`;
+            const messageEntry = { peerId: this.peer, message: data }; // this.peer ist die Peer-ID des Senders
+            chatHistory.push(messageEntry);
+            document.getElementById('output').innerHTML += renderText(`${data}`, this.peer);
             document.getElementById('console').scrollTop = document.getElementById('console').scrollHeight;
         }
 
         // In Chat-Modus wechseln
         function switchToChatMode(peerId) {
             isConnected = true;
-            document.getElementById('output').innerHTML += `Verbunden mit ${peerId}!\nChat-Modus aktiviert.\nBefehl: 'bg' zum Ändern der Kulisse\n`;
+            document.getElementById('output').innerHTML += renderText(`Verbunden mit ${peerId}!\nChat-Modus aktiviert.\nBefehl: 'bg' zum Ändern der Kulisse\n`);
             document.getElementById('prompt').innerHTML = 'chat> ';
         }
 
@@ -172,7 +200,7 @@
         function changeBackground() {
             currentBgIndex = (currentBgIndex + 1) % backgrounds.length;
             document.getElementById('background').style.backgroundImage = backgrounds[currentBgIndex];
-            document.getElementById('output').innerHTML += 'Hintergrund geändert!\n';
+            document.getElementById('output').innerHTML += renderText('Hintergrund geändert!\n');
         }
 
         // Event Listener für Enter
