@@ -78,8 +78,8 @@
     <div id="chat">
         <div id="console"></div>
         <div id="inputArea">
-            <input type="text" id="messageInput" placeholder="Nachricht..." onkeypress="if(event.key === 'Enter') sendMessage()">
-            <button id="sendButton" onclick="sendMessage()">Senden</button>
+            <input type="text" id="messageInput" placeholder="Nachricht..." onkeypress="if(event.key === 'Enter') handleInput()">
+            <button id="sendButton" onclick="handleInput()">Senden</button>
         </div>
     </div>
 
@@ -96,7 +96,7 @@
         } else {
             switchToChat();
             initPeer();
-            document.getElementById('console').innerHTML = `Beitreten zur Lobby ${roomId}\nWarte auf das Angebot des Hosts und füge es hier ein:\n<textarea id="offer" onpaste="setTimeout(() => joinWithOffer(document.getElementById('offer').value), 0)"></textarea>`;
+            document.getElementById('console').innerHTML = `Beitreten zur Lobby ${roomId}\nFüge das Angebot des Hosts hier ein:\n<textarea id="offer" placeholder='{"type":"offer","roomId":"${roomId}","peerId":"[Host-ID]"}' onpaste="setTimeout(() => joinWithOffer(document.getElementById('offer').value), 0)"></textarea>`;
         }
 
         // Lobby erstellen
@@ -105,8 +105,6 @@
             window.history.pushState({}, document.title, `?room=${roomId}`);
             isHost = true;
             initPeer();
-            switchToChat();
-            document.getElementById('console').innerHTML = `Lobby erstellt! Raum-ID: ${roomId}\nTeile diesen Link: k8o5.com?room=${roomId}\n\nHost-Angebot: Kopiere diesen Text und teile ihn:\n<textarea id="offer">${JSON.stringify({ type: 'offer', roomId })}</textarea>\n\nAntwort hier einfügen:\n<textarea id="answer" onpaste="setTimeout(() => joinChat(document.getElementById('answer').value), 0)"></textarea>`;
         }
 
         // PeerJS initialisieren
@@ -114,6 +112,10 @@
             peer = new Peer({ debug: 3 });
             peer.on('open', id => {
                 console.log('Mein Peer-ID: ' + id);
+                if (isHost) {
+                    switchToChat();
+                    document.getElementById('console').innerHTML = `Lobby erstellt! Raum-ID: ${roomId}\nTeile diesen Link: k8o5.com?room=${roomId}\n\nHost-Angebot: Kopiere diesen Text und teile ihn:\n<textarea id="offer">${JSON.stringify({ type: 'offer', roomId, peerId: id })}</textarea>\n\nAntwort hier einfügen:\n<textarea id="answer" onpaste="setTimeout(() => joinChat(document.getElementById('answer').value), 0)"></textarea>`;
+                }
             });
 
             peer.on('connection', conn => {
@@ -130,44 +132,64 @@
 
         // Mit Angebot beitreten
         function joinWithOffer(offerText) {
-            const offer = JSON.parse(offerText);
-            if (offer.type !== 'offer' || offer.roomId !== roomId) return alert('Ungültiges Angebot');
-            const conn = peer.connect(offer.peerId);
-            connections.push(conn);
-            conn.on('open', () => {
-                const answer = JSON.stringify({ type: 'answer', peerId: peer.id, roomId });
-                document.getElementById('console').innerHTML += `\nAntwort generiert:\n<textarea>${answer}</textarea>\nSende sie an den Host und warte...`;
-            });
-            conn.on('data', data => {
-                document.getElementById('console').innerHTML += `\n${data}`;
-                document.getElementById('console').scrollTop = document.getElementById('console').scrollHeight;
-            });
+            try {
+                const offer = JSON.parse(offerText);
+                if (offer.type !== 'offer' || offer.roomId !== roomId || !offer.peerId) {
+                    document.getElementById('console').innerHTML += '\nUngültiges Angebot! Es muss "peerId" enthalten.';
+                    return;
+                }
+                const conn = peer.connect(offer.peerId);
+                connections.push(conn);
+                conn.on('open', () => {
+                    const answer = JSON.stringify({ type: 'answer', peerId: peer.id, roomId });
+                    document.getElementById('console').innerHTML += `\nAntwort generiert:\n<textarea>${answer}</textarea>\nSende sie an den Host und warte...`;
+                });
+                conn.on('data', data => {
+                    document.getElementById('console').innerHTML += `\n${data}`;
+                    document.getElementById('console').scrollTop = document.getElementById('console').scrollHeight;
+                });
+            } catch (e) {
+                document.getElementById('console').innerHTML += '\nFehler beim Parsen des Angebots!';
+            }
         }
 
         // Chat beitreten mit Antwort
         function joinChat(answerText) {
-            const answer = JSON.parse(answerText);
-            if (answer.type !== 'answer' || answer.roomId !== roomId) return alert('Ungültige Antwort');
-            const conn = peer.connect(answer.peerId);
-            connections.push(conn);
-            conn.on('open', () => {
-                document.getElementById('console').innerHTML = 'Verbunden! Chat beginnt...';
-            });
-            conn.on('data', data => {
-                document.getElementById('console').innerHTML += `\n${data}`;
-                document.getElementById('console').scrollTop = document.getElementById('console').scrollHeight;
-            });
+            try {
+                const answer = JSON.parse(answerText);
+                if (answer.type !== 'answer' || answer.roomId !== roomId || !answer.peerId) {
+                    document.getElementById('console').innerHTML += '\nUngültige Antwort!';
+                    return;
+                }
+                const conn = peer.connect(answer.peerId);
+                connections.push(conn);
+                conn.on('open', () => {
+                    document.getElementById('console').innerHTML = 'Verbunden! Chat beginnt...';
+                });
+                conn.on('data', data => {
+                    document.getElementById('console').innerHTML += `\n${data}`;
+                    document.getElementById('console').scrollTop = document.getElementById('console').scrollHeight;
+                });
+            } catch (e) {
+                document.getElementById('console').innerHTML += '\nFehler beim Parsen der Antwort!';
+            }
         }
 
-        // Nachricht senden
-        function sendMessage() {
-            const message = document.getElementById('messageInput').value.trim();
-            if (message && connections.length > 0) {
-                connections.forEach(conn => conn.send(message));
-                document.getElementById('console').innerHTML += `\n${message}`;
-                document.getElementById('messageInput').value = '';
-                document.getElementById('console').scrollTop = document.getElementById('console').scrollHeight;
+        // Nachricht verarbeiten (für Host: Antwort einfügen, für Spieler: Nachricht senden)
+        function handleInput() {
+            const input = document.getElementById('messageInput').value.trim();
+            if (!input) return;
+
+            if (isHost && connections.length === 0) {
+                // Host fügt Antwort ein
+                joinChat(input);
+            } else if (connections.length > 0) {
+                // Nachricht senden
+                connections.forEach(conn => conn.send(input));
+                document.getElementById('console').innerHTML += `\n${input}`;
             }
+            document.getElementById('messageInput').value = '';
+            document.getElementById('console').scrollTop = document.getElementById('console').scrollHeight;
         }
 
         // Zum Chat wechseln
