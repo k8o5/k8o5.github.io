@@ -182,208 +182,207 @@
 
     <script src="https://unpkg.com/peerjs@1.4.7/dist/peerjs.min.js"></script>
     <script>
-        let peer;
-        let myPeerId = '';
-        let connections = [];
-        let isConnected = false;
-        let chatHistory = [];
-        let myName = 'k8o5_0'; // Default name
+    let peer;
+    let myPeerId = '';
+    let connections = [];
+    let isConnected = false;
+    let chatHistory = [];
+    let myName = 'k8o5_0'; // Default name
 
-        // Generate unique color based on Peer ID
-        function getPeerColor(peerId) {
-            let hash = 0;
-            for (let i = 0; i < peerId.length; i++) {
-                hash = peerId.charCodeAt(i) + ((hash << 5) - hash);
-            }
-            const hue = Math.abs(hash % 360);
-            return `hsl(${hue}, 70%, 50%)`;
+    // Generate unique color based on Peer ID
+    function getPeerColor(peerId) {
+        let hash = 0;
+        for (let i = 0; i < peerId.length; i++) {
+            hash = peerId.charCodeAt(i) + ((hash << 5) - hash);
         }
+        const hue = Math.abs(hash % 360);
+        return `hsl(${hue}, 70%, 50%)`;
+    }
 
-        // Render text with optional peer styling
-        function renderText(text, peerId = null, name = null) {
-            if (peerId) {
-                const color = getPeerColor(peerId);
-                const displayName = name || `k8o5_${connections.length - 1}`;
-                return `<span class="peer-message" style="color: ${color}">${displayName}: ${text}</span><br>`;
-            }
-            return text.replace(/\n/g, '<br>');
+    // Render text with optional peer styling
+    function renderText(text, peerId = null, name = null) {
+        if (peerId) {
+            const color = getPeerColor(peerId);
+            const displayName = name || `k8o5_${connections.length - 1}`;
+            return `<span class="peer-message" style="color: ${color}">${displayName}: ${text}</span><br>`;
         }
+        return text.replace(/\n/g, '<br>');
+    }
 
-        // Typewriter animation for text
-        function typeWriter(text, index, delay, callback) {
-            if (index < text.length) {
-                document.getElementById('output').innerHTML += text.charAt(index);
-                document.getElementById('console').scrollTop = document.getElementById('console').scrollHeight;
-                setTimeout(() => typeWriter(text, index + 1, delay, callback), delay);
-            } else {
-                if (callback) callback();
-            }
-        }
-
-        // Initialize PeerJS
-        function initPeer() {
-            peer = new Peer({ debug: 3 });
-            peer.on('open', id => {
-                myPeerId = id;
-                const welcomeMsg = `k8o5\n`;
-                const peerIdMsg = `Deine Peer-ID: ${myPeerId}\n`;
-                const commandMsg = `Befehl: peer [peer_id] zum Verbinden\n`;
-                
-                document.getElementById('output').innerHTML = "";
-                
-                typeWriter(welcomeMsg, 0, 40, () => {
-                    typeWriter(initMsg, 0, 30, () => {
-                        typeWriter(peerIdMsg, 0, 20, () => {
-                            typeWriter(commandMsg, 0, 20, null);
-                        });
-                    });
-                });
-            });
-
-            peer.on('connection', conn => {
-                connections.push(conn);
-                conn.on('open', () => {
-                    console.log('Verbunden mit: ' + conn.peer);
-                    switchToChatMode(conn.peer);
-                    chatHistory.forEach(entry => {
-                        conn.send(JSON.stringify({ peerId: entry.peerId, message: entry.message, name: entry.name || `k8o5_${connections.length - 1}` }));
-                    });
-                });
-                conn.on('data', handleData);
-            });
-        }
-
-        // Handle user input
-        function handleInput() {
-            const input = document.getElementById('input').value.trim();
-            if (!input) return;
-
-            document.getElementById('output').innerHTML += renderText(`<span class="command">> ${input}</span>\n`);
-            if (!isConnected) {
-                if (input.startsWith('peer ')) {
-                    const targetPeerId = input.split(' ')[1];
-                    if (targetPeerId) {
-                        connectToPeer(targetPeerId);
-                    } else {
-                        document.getElementById('output').innerHTML += renderText('<span class="error-message">Fehler: Gib eine Peer-ID ein!</span>\n');
-                    }
-                } else if (input.startsWith('help')) {
-                    showHelp();
-                } else if (input.startsWith('name ')) {
-                    const name = input.split(' ')[1];
-                    if (name) {
-                        myName = name;
-                        document.getElementById('output').innerHTML += renderText(`<span class="success-message">Name geändert zu: ${myName}</span>\n`);
-                    } else {
-                        document.getElementById('output').innerHTML += renderText('<span class="error-message">Fehler: Gib einen Namen ein! (z. B. name Max)</span>\n');
-                    }
-                } else {
-                    document.getElementById('output').innerHTML += renderText('<span class="error-message">Unbekannter Befehl. Nutze: help</span>\n');
-                }
-            } else {
-                const messageEntry = { peerId: myPeerId, message: input, name: myName };
-                chatHistory.push(messageEntry);
-                connections.forEach(conn => {
-                    conn.send(JSON.stringify(messageEntry));
-                });
-                document.getElementById('output').innerHTML += renderText(`${input}`, myPeerId, myName);
-            }
-            document.getElementById('input').value = '';
+    // Typewriter animation for text
+    function typeWriter(text, index, delay, callback) {
+        if (index < text.length) {
+            document.getElementById('output').innerHTML += text.charAt(index);
             document.getElementById('console').scrollTop = document.getElementById('console').scrollHeight;
+            setTimeout(() => typeWriter(text, index + 1, delay, callback), delay);
+        } else {
+            if (callback) callback();
         }
+    }
 
-        // Connect to a peer
-        function connectToPeer(peerId) {
-            const conn = peer.connect(peerId);
+    // Initialize PeerJS
+    function initPeer() {
+        peer = new Peer({ debug: 3 });
+        peer.on('open', id => {
+            myPeerId = id;
+            const welcomeMsg = `k8o5\n`;
+            const peerIdMsg = `Deine Peer-ID: ${myPeerId}\n`;
+            
+            document.getElementById('output').innerHTML = "";
+            
+            typeWriter(welcomeMsg, 0, 40, () => {
+                typeWriter(peerIdMsg, 0, 20, null);
+            });
+
+            // URL aktualisieren
+            const newUrl = `https://k8o5.com/peerid=${myPeerId}`;
+            history.pushState(null, '', newUrl);
+        });
+
+        peer.on('connection', conn => {
             connections.push(conn);
             conn.on('open', () => {
-                console.log('Verbunden mit: ' + peerId);
-                switchToChatMode(peerId);
+                console.log('Verbunden mit: ' + conn.peer);
+                switchToChatMode(conn.peer);
+                chatHistory.forEach(entry => {
+                    conn.send(JSON.stringify({ peerId: entry.peerId, message: entry.message, name: entry.name || `k8o5_${connections.length - 1}` }));
+                });
             });
             conn.on('data', handleData);
-        }
+        });
+    }
 
-        // Handle received data
-        function handleData(data) {
-            let messageData;
-            try {
-                messageData = JSON.parse(data);
-            } catch (e) {
-                messageData = { peerId: this.peer, message: data, name: `k8o5_${connections.length - 1}` }; // Fallback
+    // Handle user input
+    function handleInput() {
+        const input = document.getElementById('input').value.trim();
+        if (!input) return;
+
+        document.getElementById('output').innerHTML += renderText(`<span class="command">> ${input}</span>\n`);
+        if (!isConnected) {
+            if (input.startsWith('peer ')) {
+                const targetPeerId = input.split(' ')[1];
+                if (targetPeerId) {
+                    connectToPeer(targetPeerId);
+                } else {
+                    document.getElementById('output').innerHTML += renderText('<span class="error-message">Fehler: Gib eine Peer-ID ein!</span>\n');
+                }
+            } else if (input.startsWith('help')) {
+                showHelp();
+            } else if (input.startsWith('name ')) {
+                const name = input.split(' ')[1];
+                if (name) {
+                    myName = name;
+                    document.getElementById('output').innerHTML += renderText(`<span class="success-message">Name geändert zu: ${myName}</span>\n`);
+                } else {
+                    document.getElementById('output').innerHTML += renderText('<span class="error-message">Fehler: Gib einen Namen ein! (z. B. name Max)</span>\n');
+                }
+            } else {
+                document.getElementById('output').innerHTML += renderText('<span class="error-message">Unbekannter Befehl. Nutze: help</span>\n');
             }
-            const { peerId, message, name } = messageData;
-            chatHistory.push({ peerId, message, name });
-            document.getElementById('output').innerHTML += renderText(`${message}`, peerId, name);
-            document.getElementById('console').scrollTop = document.getElementById('console').scrollHeight;
+        } else {
+            const messageEntry = { peerId: myPeerId, message: input, name: myName };
+            chatHistory.push(messageEntry);
+            connections.forEach(conn => {
+                conn.send(JSON.stringify(messageEntry));
+            });
+            document.getElementById('output').innerHTML += renderText(`${input}`, myPeerId, myName);
         }
+        document.getElementById('input').value = '';
+        document.getElementById('console').scrollTop = document.getElementById('console').scrollHeight;
+    }
 
-        // Switch to chat mode
-        function switchToChatMode(peerId) {
-            isConnected = true;
-            document.getElementById('output').innerHTML += renderText(`<span class="success-message">Verbunden mit ${peerId}!</span>\n<span class="success-message">Chat-Modus aktiviert.</span>\n`);
-            document.getElementById('prompt').innerHTML = 'chat> ';
+    // Connect to a peer
+    function connectToPeer(peerId) {
+        const conn = peer.connect(peerId);
+        connections.push(conn);
+        conn.on('open', () => {
+            console.log('Verbunden mit: ' + peerId);
+            switchToChatMode(peerId);
+        });
+        conn.on('data', handleData);
+    }
+
+    // Handle received data
+    function handleData(data) {
+        let messageData;
+        try {
+            messageData = JSON.parse(data);
+        } catch (e) {
+            messageData = { peerId: this.peer, message: data, name: `k8o5_${connections.length - 1}` }; // Fallback
         }
+        const { peerId, message, name } = messageData;
+        chatHistory.push({ peerId, message, name });
+        document.getElementById('output').innerHTML += renderText(`${message}`, peerId, name);
+        document.getElementById('console').scrollTop = document.getElementById('console').scrollHeight;
+    }
 
-        // Display help text
-        function showHelp() {
-            const helpText = `
+    // Switch to chat mode
+    function switchToChatMode(peerId) {
+        isConnected = true;
+        document.getElementById('output').innerHTML += renderText(`<span class="success-message">Verbunden mit ${peerId}!</span>\n<span class="success-message">Chat-Modus aktiviert.</span>\n`);
+        document.getElementById('prompt').innerHTML = 'chat> ';
+    }
+
+    // Display help text
+    function showHelp() {
+        const helpText = `
 <span class="success-message">Verfügbare Befehle:</span>
 - <span class="command">peer</span> <span class="parameter">[peer_id]</span>: Verbinde dich mit einem anderen Peer
 - <span class="command">name</span> <span class="parameter">[string]</span>: Definiere deinen Namen (z. B. name Max)
 - <span class="command">help</span>: Zeige diese Hilfe
 `;
-            document.getElementById('output').innerHTML += renderText(helpText);
+        document.getElementById('output').innerHTML += renderText(helpText);
+    }
+
+    // Command history navigation
+    let commandHistory = [];
+    let historyIndex = -1;
+
+    document.getElementById('input').addEventListener('keydown', (e) => {
+        if (e.key === 'ArrowUp') {
+            if (commandHistory.length > 0 && historyIndex < commandHistory.length - 1) {
+                historyIndex++;
+                document.getElementById('input').value = commandHistory[commandHistory.length - 1 - historyIndex];
+            }
+            e.preventDefault();
+        } else if (e.key === 'ArrowDown') {
+            if (historyIndex > 0) {
+                historyIndex--;
+                document.getElementById('input').value = commandHistory[commandHistory.length - 1 - historyIndex];
+            } else if (historyIndex === 0) {
+                historyIndex = -1;
+                document.getElementById('input').value = '';
+            }
+            e.preventDefault();
         }
+    });
 
-        // Command history navigation
-        let commandHistory = [];
-        let historyIndex = -1;
+    // Focus input on console click
+    document.getElementById('console').addEventListener('click', (e) => {
+        if (!e.target.matches('#input')) {
+            document.getElementById('input').focus();
+        }
+    });
 
-        document.getElementById('input').addEventListener('keydown', (e) => {
-            if (e.key === 'ArrowUp') {
-                if (commandHistory.length > 0 && historyIndex < commandHistory.length - 1) {
-                    historyIndex++;
-                    document.getElementById('input').value = commandHistory[commandHistory.length - 1 - historyIndex];
-                }
-                e.preventDefault();
-            } else if (e.key === 'ArrowDown') {
-                if (historyIndex > 0) {
-                    historyIndex--;
-                    document.getElementById('input').value = commandHistory[commandHistory.length - 1 - historyIndex];
-                } else if (historyIndex === 0) {
-                    historyIndex = -1;
-                    document.getElementById('input').value = '';
-                }
-                e.preventDefault();
+    // Handle Enter keypress
+    document.getElementById('input').addEventListener('keypress', (e) => {
+        if (e.key === 'Enter') {
+            const inputValue = document.getElementById('input').value.trim();
+            if (inputValue) {
+                commandHistory.push(inputValue);
+                historyIndex = -1;
             }
-        });
+            handleInput();
+        }
+    });
 
-        // Focus input on console click
-        document.getElementById('console').addEventListener('click', (e) => {
-            if (!e.target.matches('#input')) {
-                document.getElementById('input').focus();
-            }
-        });
+    // Ensure input focus on touch for mobile
+    document.getElementById('input').addEventListener('touchstart', function() {
+        this.focus();
+    });
 
-        // Handle Enter keypress
-        document.getElementById('input').addEventListener('keypress', (e) => {
-            if (e.key === 'Enter') {
-                const inputValue = document.getElementById('input').value.trim();
-                if (inputValue) {
-                    commandHistory.push(inputValue);
-                    historyIndex = -1;
-                }
-                handleInput();
-            }
-        });
-
-        // Ensure input focus on touch for mobile
-        document.getElementById('input').addEventListener('touchstart', function() {
-            this.focus();
-        });
-
-        // Initialize the application
-        initPeer();
+    // Initialize the application
+    initPeer();
     </script>
 </body>
 </html>
