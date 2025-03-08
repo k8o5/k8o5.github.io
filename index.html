@@ -2,10 +2,125 @@
 <html lang="de">
 <head>
     <meta charset="UTF-8">
-    <title>Chat- und Konsolenmodus</title>
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>k8o5</title>
+    <style>
+        body {
+            margin: 0;
+            padding: 0;
+            height: 100vh;
+            background: #000;
+            font-family: "JetBrains Mono", "Fira Code", "Cascadia Code", Consolas, monospace;
+            overflow: hidden;
+            text-rendering: optimizeLegibility;
+            line-height: 1.5;
+        }
+
+        #console {
+            width: 100%;
+            height: 100%;
+            padding: 15px;
+            box-sizing: border-box;
+            overflow-y: auto;
+            background: #000;
+            position: relative;
+            user-select: text;
+        }
+
+        #output {
+            font-size: 15px;
+            white-space: pre-wrap;
+            text-align: left;
+            -webkit-font-smoothing: antialiased;
+            color: #00cc00;
+            letter-spacing: 0.05em;
+            user-select: text;
+        }
+
+        #inputArea {
+            display: none;
+            position: sticky;
+            bottom: 10px;
+            align-items: center;
+            padding: 8px 0;
+            margin-top: 15px;
+        }
+
+        #prompt {
+            font-size: 15px;
+            margin-right: 8px;
+            color: #00ff00;
+            font-weight: bold;
+        }
+
+        #input {
+            flex-grow: 1;
+            background: transparent;
+            border: none;
+            color: #00ff00;
+            font-size: 15px;
+            font-family: inherit;
+            outline: none;
+            caret-color: #00ff00;
+            caret-shape: block;
+        }
+
+        .peer-message {
+            display: block;
+            padding: 4px 0;
+            animation: fadeIn 0.3s ease-in;
+        }
+
+        .connected-message {
+            color: #ffcc00;
+            font-weight: bold;
+            padding: 4px 0;
+            display: block;
+            border-bottom: 1px dashed #555;
+            margin-bottom: 5px;
+        }
+
+        @keyframes fadeIn {
+            from { opacity: 0; }
+            to { opacity: 1; }
+        }
+
+        .command {
+            color: #0fdc5f;
+            font-weight: bold;
+        }
+
+        .parameter {
+            color: #5fb3ff;
+        }
+
+        .error-message {
+            color: #ff4f4f;
+        }
+
+        .success-message {
+            color: #2aef63;
+        }
+
+        @media (max-width: 768px) {
+            #input {
+                width: 100%;
+                font-size: 14px;
+                padding: 5px;
+            }
+
+            #inputArea {
+                padding: 10px 0;
+            }
+
+            #prompt {
+                font-size: 14px;
+            }
+        }
+    </style>
 </head>
 <body>
-    <div id="console">
+    <div id="console" tabindex="0">
         <div id="output"></div>
         <div id="inputArea">
             <span id="prompt">> </span>
@@ -13,78 +128,240 @@
         </div>
     </div>
 
+    <script src="https://unpkg.com/peerjs@1.4.7/dist/peerjs.min.js"></script>
     <script>
-        let isConnected = false; // Zeigt an, ob der Chat-Modus aktiv ist
-        let currentPath = '/';   // Aktueller Pfad für Prompt
+        let peer, myPeerId = '', connections = [], knownPeers = new Set(), connectedPeers = new Set(),
+            isConnected = false, chatHistory = [], myName = 'noname', commandHistory = [], historyIndex = -1,
+            connectedPeersList = [];
 
-        // Eingabe verarbeiten
+        function getPeerColor(peerId) {
+            let hash = 0; for (let i = 0; i < peerId.length; i++) hash = peerId.charCodeAt(i) + ((hash << 5) - hash);
+            return `hsl(${Math.abs(hash % 360)}, 70%, 50%)`;
+        }
+
+        function renderText(text, peerId = null, name = null) {
+            return peerId ? `<span class="peer-message" style="color:${getPeerColor(peerId)}">${name || 'noname'}:${text}</span><br>` : text.replace(/\n/g, '<br>');
+        }
+
+        function typeWriter(text, index = 0, delay = 50, callback) {
+            if (index < text.length) {
+                document.getElementById('output').innerHTML += text.charAt(index);
+                document.getElementById('console').scrollTop = document.getElementById('console').scrollHeight;
+                setTimeout(() => typeWriter(text, index + 1, delay, callback), delay);
+            } else if (callback) callback();
+        }
+
+        function shuffle(array) {
+            for (let i = array.length - 1; i > 0; i--) {
+                const j = Math.floor(Math.random() * (i + 1));
+                [array[i], array[j]] = [array[j], array[i]];
+            }
+            return array;
+        }
+
+        function tryToConnectToNewPeers() {
+            [...knownPeers].filter(peerId => peerId !== myPeerId && !connectedPeers.has(peerId) && !connections.some(conn => conn.peer === peerId))
+                .forEach(peerId => connectToPeer(peerId));
+        }
+
+        function initPeer() {
+            peer = new Peer({ debug: 3 });
+            peer.on('open', id => {
+                myPeerId = id; 
+                knownPeers.add(myPeerId);
+                typeWriter('k8o5\n', 0, 36, () => { // 40ms -> 36ms (10% schneller)
+                    typeWriter(`Deine Peer-ID: ${myPeerId}\n`, 0, 18, () => { // 20ms -> 18ms (10% schneller)
+                        document.getElementById('inputArea').style.display = 'flex';
+                        document.getElementById('input').focus();
+                    });
+                });
+            });
+
+            peer.on('connection', conn => {
+                conn.metadata = { name: conn.metadata?.name || 'noname' };
+                connections.push(conn);
+                conn.on('open', () => {
+                    console.log('Verbunden mit: ' + conn.peer);
+                    knownPeers.add(conn.peer); 
+                    connectedPeers.add(conn.peer);
+                    connectedPeersList.push(`<span class="connected-message">Verbunden mit ${conn.peer}!</span>`);
+                    switchToChatMode(conn.peer);
+                    conn.send(JSON.stringify({ type: 'peer_list', peers: [...knownPeers] }));
+                    conn.send(JSON.stringify({ type: 'chat_history', history: chatHistory }));
+                    tryToConnectToNewPeers();
+                });
+                conn.on('data', handleData);
+                conn.on('close', () => { 
+                    connectedPeers.delete(conn.peer); 
+                    connectedPeersList = connectedPeersList.filter(msg => !msg.includes(conn.peer));
+                    console.log('Verbindung geschlossen mit: ' + conn.peer); 
+                });
+            });
+        }
+
         function handleInput() {
             const input = document.getElementById('input').value.trim();
             if (!input) return;
-
-            const output = document.getElementById('output');
-            output.innerHTML += `<span class="command">${currentPath}> ${input}</span><br>`;
-
-            if (!isConnected) { // Konsolen-Modus
-                if (input === 'help') {
-                    showConsoleHelp();
-                } else if (input.startsWith('peer ')) {
-                    isConnected = true; // Simuliert den Wechsel in den Chat-Modus
-                    document.getElementById('prompt').innerHTML = 'chat> ';
-                    output.innerHTML += '<span class="success-message">Chat betreten.</span><br>';
-                } else {
-                    output.innerHTML += '<span class="error-message">Unbekannter Befehl. Nutze: help</span><br>';
-                }
-            } else { // Chat-Modus
-                if (input === '/help') {
-                    showChatHelp();
-                } else if (input === '/exit') {
+            if (!isConnected) {
+                document.getElementById('output').innerHTML += renderText(`<span class="command">> ${input}</span>\n`);
+                if (input.startsWith('peer ')) {
+                    const targetPeerId = input.split(' ')[1];
+                    if (targetPeerId) connectToPeer(targetPeerId);
+                    else document.getElementById('output').innerHTML += renderText('<span class="error-message">Fehler: Gib eine Peer-ID ein!</span>\n');
+                } else if (input.startsWith('help')) showHelp();
+                else if (input.startsWith('name ')) {
+                    const name = input.split(' ')[1];
+                    myName = name || myName;
+                    document.getElementById('output').innerHTML += renderText(`<span class="success-message">Name geändert zu: ${myName}</span>\n`);
+                } else if (input === 'copy') {
+                    navigator.clipboard.writeText(myPeerId).then(() => {
+                        document.getElementById('output').innerHTML += renderText(`<span class="success-message">Peer-ID ${myPeerId} in die Zwischenablage kopiert!</span>\n`);
+                    }).catch(err => {
+                        document.getElementById('output').innerHTML += renderText(`<span class="error-message">Fehler beim Kopieren: ${err}</span>\n`);
+                    });
+                } else if (input === 'clear') {
+                    document.getElementById('output').innerHTML = '';
+                } else document.getElementById('output').innerHTML += renderText('<span class="error-message">Unbekannter Befehl. Nutze: help</span>\n');
+            } else {
+                if (input === '/exit') {
+                    connections.forEach(conn => conn.close());
+                    connections = [];
+                    connectedPeers.clear();
+                    connectedPeersList = [];
                     isConnected = false;
-                    document.getElementById('prompt').innerHTML = `${currentPath}> `;
-                    output.innerHTML += '<span class="success-message">Chat verlassen.</span><br>';
+                    document.getElementById('prompt').innerHTML = '> ';
+                    document.getElementById('output').innerHTML += renderText(`<span class="success-message">Chat verlassen.</span>\n`);
+                } else if (input === '/peers') {
+                    if (connectedPeersList.length > 0) {
+                        document.getElementById('output').innerHTML += connectedPeersList.join('<br>') + '<br>';
+                    } else {
+                        document.getElementById('output').innerHTML += renderText(`<span class="error-message">Keine Peers verbunden.</span>\n`);
+                    }
+                } else if (input === 'clear') {
+                    document.getElementById('output').innerHTML = '';
                 } else {
-                    output.innerHTML += `${input}<br>`; // Simuliert eine Chat-Nachricht
+                    const messageEntry = { peerId: myPeerId, message: input, name: myName };
+                    chatHistory.push(messageEntry);
+                    broadcastMessage(messageEntry);
+                    document.getElementById('output').innerHTML += renderText(input, myPeerId, myName);
                 }
             }
-
             document.getElementById('input').value = '';
             document.getElementById('console').scrollTop = document.getElementById('console').scrollHeight;
         }
 
-        // Hilfe für Konsolen-Modus
-        function showConsoleHelp() {
+        function connectToPeer(peerId) {
+            if (peerId === myPeerId || connectedPeers.has(peerId) || connections.some(conn => conn.peer === peerId)) return;
+            const conn = peer.connect(peerId, { metadata: { name: myName } });
+            connections.push(conn);
+            conn.on('open', () => {
+                console.log('Verbunden mit: ' + peerId);
+                knownPeers.add(peerId); 
+                connectedPeers.add(peerId);
+                connectedPeersList.push(`<span class="connected-message">Verbunden mit ${peerId}!</span>`);
+                switchToChatMode(peerId);
+                conn.send(JSON.stringify({ type: 'peer_list', peers: [...knownPeers] }));
+                conn.send(JSON.stringify({ type: 'chat_history', history: chatHistory }));
+                tryToConnectToNewPeers();
+            });
+            conn.on('data', handleData);
+            conn.on('close', () => { 
+                connectedPeers.delete(conn.peer); 
+                connectedPeersList = connectedPeersList.filter(msg => !msg.includes(peerId));
+                console.log('Verbindung geschlossen mit: ' + peerId); 
+            });
+        }
+
+        function broadcastMessage(message) {
+            const messageData = JSON.stringify(message);
+            connections.forEach(conn => { if (conn.peer !== message.peerId) conn.send(messageData); });
+        }
+
+        function handleData(data) {
+            let messageData;
+            try { messageData = JSON.parse(data); } catch (e) { messageData = { peerId: this.peer, message: data, name: this.metadata?.name || 'noname' }; }
+            if (messageData.type === 'peer_list') {
+                messageData.peers.forEach(peerId => { if (peerId !== myPeerId) knownPeers.add(peerId); });
+                tryToConnectToNewPeers();
+            } else if (messageData.type === 'chat_history') {
+                messageData.history.forEach(entry => {
+                    if (!chatHistory.some(h => h.peerId === entry.peerId && h.message === entry.message)) {
+                        chatHistory.push(entry);
+                        document.getElementById('output').innerHTML += renderText(entry.message, entry.peerId, entry.name);
+                    }
+                });
+                document.getElementById('console').scrollTop = document.getElementById('console').scrollHeight;
+            } else {
+                const { peerId, message, name } = messageData;
+                if (!chatHistory.some(h => h.peerId === peerId && h.message === message)) {
+                    chatHistory.push({ peerId, message, name });
+                    document.getElementById('output').innerHTML += renderText(message, peerId, name);
+                    broadcastMessage(messageData);
+                }
+                document.getElementById('console').scrollTop = document.getElementById('console').scrollHeight;
+            }
+        }
+
+        function switchToChatMode(peerId) {
+            isConnected = true;
+            document.getElementById('prompt').innerHTML = 'chat> ';
+        }
+
+        function showHelp() {
             const helpText = `
-<span class="success-message">Verfügbare Befehle im Konsolen-Modus:</span><br>
-- <span class="command">peer</span> <span class="parameter">[peer_id]</span>: Verbinde dich mit einem anderen Peer<br>
-- <span class="command">name</span> <span class="parameter">[string]</span>: Definiere deinen Namen<br>
-- <span class="command">copy</span>: Kopiere deine Peer-ID in die Zwischenablage<br>
-- <span class="command">clear</span>: Lösche den Bildschirm<br>
+<span class="success-message">Verfügbare Befehle:</span>
+- <span class="command">peer</span> <span class="parameter">[peer_id]</span>: Verbinde dich mit einem anderen Peer
+- <span class="command">name</span> <span class="parameter">[string]</span>: Definiere deinen Namen (z. B. name Max)
+- <span class="command">copy</span>: Kopiere deine Peer-ID in die Zwischenablage
+- <span class="command">clear</span>: Lösche den Bildschirm
+- <span class="command">/exit</span>: Verlasse den Chat-Modus (nur im Chat)
+- <span class="command">/peers</span>: Zeige verbundene Peers (nur im Chat)
 - <span class="command">help</span>: Zeige diese Hilfe
-            `;
-            document.getElementById('output').innerHTML += helpText + '<br>';
+`;
+            document.getElementById('output').innerHTML += renderText(helpText);
         }
 
-        // Hilfe für Chat-Modus
-        function showChatHelp() {
-            const helpText = `
-<span class="success-message">Verfügbare Befehle im Chat-Modus:</span><br>
-- <span class="command">/exit</span>: Verlasse den Chat-Modus<br>
-- <span class="command">/peers</span>: Zeige verbundene Peers<br>
-- <span class="command">/mkdir</span> <span class="parameter">[ordner]</span>: Erstelle einen Ordner<br>
-- <span class="command">/cd</span> <span class="parameter">[ordner]</span>: Wechsle in einen Ordner<br>
-- <span class="command">/edit</span> <span class="parameter">[filename]</span>: Bearbeite eine Datei<br>
-- <span class="command">/cat</span> <span class="parameter">[filename]</span>: Zeige den Inhalt einer Datei<br>
-- <span class="command">/dir</span>: Zeige den Inhalt des aktuellen Ordners<br>
-- <span class="command">/echo</span> <span class="parameter">[text]</span>: Wiederhole den Text<br>
-- <span class="command">/help</span>: Zeige diese Hilfe
-            `;
-            document.getElementById('output').innerHTML += helpText + '<br>';
-        }
-
-        // Event-Listener für Eingabe
         document.getElementById('input').addEventListener('keydown', (e) => {
-            if (e.key === 'Enter') handleInput();
+            if (e.key === 'ArrowUp') {
+                if (commandHistory.length > 0 && historyIndex < commandHistory.length - 1) {
+                    historyIndex++;
+                    document.getElementById('input').value = commandHistory[commandHistory.length - 1 - historyIndex];
+                }
+                e.preventDefault();
+            } else if (e.key === 'ArrowDown') {
+                if (historyIndex > 0) {
+                    historyIndex--;
+                    document.getElementById('input').value = commandHistory[commandHistory.length - 1 - historyIndex];
+                } else if (historyIndex === 0) {
+                    historyIndex = -1;
+                    document.getElementById('input').value = '';
+                }
+                e.preventDefault();
+            }
         });
+
+        document.getElementById('console').addEventListener('click', (e) => {
+            if (!e.target.matches('#input')) {
+                document.getElementById('input').focus();
+            }
+        });
+
+        document.getElementById('input').addEventListener('keypress', (e) => {
+            if (e.key === 'Enter') {
+                const inputValue = document.getElementById('input').value.trim();
+                if (inputValue) {
+                    commandHistory.push(inputValue);
+                    historyIndex = -1;
+                }
+                handleInput();
+            }
+        });
+
+        document.getElementById('input').addEventListener('touchstart', function() {
+            this.focus();
+        });
+
+        initPeer();
     </script>
 </body>
 </html>
