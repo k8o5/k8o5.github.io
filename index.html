@@ -1,5 +1,5 @@
 <!DOCTYPE html>
-<html lang="en">
+<html lang="de">
 <head>
     <meta charset="UTF-8">
     <meta name="viewport" content="width=device-width, initial-scale=1.0">
@@ -26,6 +26,44 @@
             position: relative;
             border: 1px solid #1a1a1a;
             box-shadow: inset 0 0 10px rgba(0, 0, 0, 0.5);
+        }
+
+        #peerIdDisplay {
+            color: #00ff00;
+            font-size: 15px;
+            margin-bottom: 10px;
+            display: flex;
+            align-items: center;
+        }
+
+        #peerIdText {
+            margin-right: 10px;
+            user-select: text;
+            cursor: pointer;
+        }
+
+        #peerIdText:hover {
+            text-decoration: underline;
+        }
+
+        #copyButton {
+            background: #00cc00;
+            color: #0c0c0c;
+            border: none;
+            padding: 5px 10px;
+            cursor: pointer;
+            font-size: 12px;
+            border-radius: 3px;
+            transition: background 0.3s;
+        }
+
+        #copyButton:hover {
+            background: #00b300;
+        }
+
+        #copyButton.copied {
+            background: #006600;
+            cursor: default;
         }
 
         #output {
@@ -84,6 +122,14 @@
         @keyframes cursor-blink {
             0%, 100% { opacity: 1; }
             50% { opacity: 0; }
+        }
+
+        #console:not(#inputArea):active {
+            pointer-events: none;
+        }
+
+        #console:not(#inputArea):hover {
+            cursor: text;
         }
 
         ::-webkit-scrollbar {
@@ -156,11 +202,24 @@
             #prompt {
                 font-size: 14px;
             }
+
+            #peerIdText {
+                font-size: 14px;
+            }
+
+            #copyButton {
+                padding: 3px 8px;
+                font-size: 10px;
+            }
         }
     </style>
 </head>
 <body>
     <div id="console" tabindex="0">
+        <div id="peerIdDisplay">
+            Your Peer-ID: <span id="peerIdText"></span>
+            <button id="copyButton">Copy</button>
+        </div>
         <div id="output"></div>
         <div id="inputArea">
             <span id="prompt">> </span>
@@ -170,161 +229,152 @@
 
     <script src="https://unpkg.com/peerjs@1.4.7/dist/peerjs.min.js"></script>
     <script>
-        let peer;
-        let myPeerId = '';
-        let connections = [];
-        let isConnected = false;
-        let chatHistory = [];
-        let myName = 'k8o5_0'; // Default name
+        let peer, myPeerId = '', connections = [], knownPeers = new Set(), connectedPeers = new Set(),
+            isConnected = false, chatHistory = [], myName = 'k8o5_0', commandHistory = [], historyIndex = -1;
 
-        // Generate unique color based on Peer ID
         function getPeerColor(peerId) {
-            let hash = 0;
-            for (let i = 0; i < peerId.length; i++) {
-                hash = peerId.charCodeAt(i) + ((hash << 5) - hash);
-            }
-            const hue = Math.abs(hash % 360);
-            return `hsl(${hue}, 70%, 50%)`;
+            let hash = 0; for (let i = 0; i < peerId.length; i++) hash = peerId.charCodeAt(i) + ((hash << 5) - hash);
+            return `hsl(${Math.abs(hash % 360)}, 70%, 50%)`;
         }
 
-        // Render text with optional peer styling
         function renderText(text, peerId = null, name = null) {
-            if (peerId) {
-                const color = getPeerColor(peerId);
-                const displayName = name || `k8o5_${connections.length - 1}`;
-                return `<span class="peer-message" style="color: ${color}">${displayName}: ${text}</span><br>`;
-            }
-            return text.replace(/\n/g, '<br>');
+            return peerId ? `<span class="peer-message" style="color:${getPeerColor(peerId)}">${name||`k8o5_${connections.length-1}`}:${text}</span><br>` : text.replace(/\n/g, '<br>');
         }
 
-        // Typewriter animation for text
-        function typeWriter(text, index, delay, callback) {
+        function typeWriter(text, index = 0, delay = 50, callback) {
             if (index < text.length) {
                 document.getElementById('output').innerHTML += text.charAt(index);
                 document.getElementById('console').scrollTop = document.getElementById('console').scrollHeight;
                 setTimeout(() => typeWriter(text, index + 1, delay, callback), delay);
-            } else {
-                if (callback) callback();
-            }
+            } else if (callback) callback();
         }
 
-        // Initialize PeerJS
+        function shuffle(array) {
+            for (let i = array.length - 1; i > 0; i--) {
+                const j = Math.floor(Math.random() * (i + 1));
+                [array[i], array[j]] = [array[j], array[i]];
+            }
+            return array;
+        }
+
+        function tryToConnectToNewPeers() {
+            [...knownPeers].filter(peerId => peerId !== myPeerId && !connectedPeers.has(peerId) && !connections.some(conn => conn.peer === peerId))
+                .forEach(peerId => connectToPeer(peerId));
+        }
+
         function initPeer() {
             peer = new Peer({ debug: 3 });
             peer.on('open', id => {
-                myPeerId = id;
-                const welcomeMsg = `k8o5\n`;
-                const peerIdMsg = `Your Peer-ID: ${myPeerId}\n`;
-                
-                document.getElementById('output').innerHTML = "";
-                
-                typeWriter(welcomeMsg, 0, 40, () => {
-                    typeWriter(peerIdMsg, 0, 20, null);
+                myPeerId = id; knownPeers.add(myPeerId);
+                document.getElementById('peerIdText').textContent = myPeerId;
+                typeWriter('<span class="success-message">k8o5 Console v1.0</span>\n', 0, 40, () => {
+                    typeWriter('Initialisiere...\n', 0, 30, () => {
+                        typeWriter(`Deine Peer-ID: <span class="parameter">${myPeerId}</span>\n`, 0, 20, null);
+                    });
                 });
-
-                // Update URL with peer ID
-                const newUrl = `${window.location.origin}/peerid=${myPeerId}`;
-                history.pushState(null, '', newUrl);
             });
 
             peer.on('connection', conn => {
                 connections.push(conn);
                 conn.on('open', () => {
-                    console.log('Connected to: ' + conn.peer);
+                    console.log('Verbunden mit: ' + conn.peer);
+                    knownPeers.add(conn.peer); connectedPeers.add(conn.peer);
                     switchToChatMode(conn.peer);
-                    chatHistory.forEach(entry => {
-                        conn.send(JSON.stringify({ peerId: entry.peerId, message: entry.message, name: entry.name || `k8o5_${connections.length - 1}` }));
-                    });
+                    conn.send(JSON.stringify({ type: 'peer_list', peers: [...knownPeers] }));
+                    conn.send(JSON.stringify({ type: 'chat_history', history: chatHistory }));
+                    tryToConnectToNewPeers();
                 });
                 conn.on('data', handleData);
+                conn.on('close', () => { connectedPeers.delete(conn.peer); console.log('Verbindung geschlossen mit: ' + conn.peer); });
             });
         }
 
-        // Handle user input
         function handleInput() {
             const input = document.getElementById('input').value.trim();
             if (!input) return;
-
             document.getElementById('output').innerHTML += renderText(`<span class="command">> ${input}</span>\n`);
             if (!isConnected) {
                 if (input.startsWith('peer ')) {
                     const targetPeerId = input.split(' ')[1];
-                    if (targetPeerId) {
-                        connectToPeer(targetPeerId);
-                    } else {
-                        document.getElementById('output').innerHTML += renderText('<span class="error-message">Error: Enter a Peer-ID!</span>\n');
-                    }
-                } else if (input.startsWith('help')) {
-                    showHelp();
-                } else if (input.startsWith('name ')) {
+                    if (targetPeerId) connectToPeer(targetPeerId);
+                    else document.getElementById('output').innerHTML += renderText('<span class="error-message">Fehler: Gib eine Peer-ID ein!</span>\n');
+                } else if (input.startsWith('help')) showHelp();
+                else if (input.startsWith('name ')) {
                     const name = input.split(' ')[1];
-                    if (name) {
-                        myName = name;
-                        document.getElementById('output').innerHTML += renderText(`<span class="success-message">Name changed to: ${myName}</span>\n`);
-                    } else {
-                        document.getElementById('output').innerHTML += renderText('<span class="error-message">Error: Enter a name! (e.g., name Max)</span>\n');
-                    }
-                } else {
-                    document.getElementById('output').innerHTML += renderText('<span class="error-message">Unknown command. Use: help</span>\n');
-                }
+                    myName = name || myName;
+                    document.getElementById('output').innerHTML += renderText(`<span class="success-message">Name geändert zu: ${myName}</span>\n`);
+                } else document.getElementById('output').innerHTML += renderText('<span class="error-message">Unbekannter Befehl. Nutze: help</span>\n');
             } else {
                 const messageEntry = { peerId: myPeerId, message: input, name: myName };
                 chatHistory.push(messageEntry);
-                connections.forEach(conn => {
-                    conn.send(JSON.stringify(messageEntry));
-                });
-                document.getElementById('output').innerHTML += renderText(`${input}`, myPeerId, myName);
+                broadcastMessage(messageEntry);
+                document.getElementById('output').innerHTML += renderText(input, myPeerId, myName);
             }
             document.getElementById('input').value = '';
             document.getElementById('console').scrollTop = document.getElementById('console').scrollHeight;
         }
 
-        // Connect to a peer
         function connectToPeer(peerId) {
+            if (peerId === myPeerId || connectedPeers.has(peerId) || connections.some(conn => conn.peer === peerId)) return;
             const conn = peer.connect(peerId);
             connections.push(conn);
             conn.on('open', () => {
-                console.log('Connected to: ' + peerId);
+                console.log('Verbunden mit: ' + peerId);
+                knownPeers.add(peerId); connectedPeers.add(peerId);
                 switchToChatMode(peerId);
+                conn.send(JSON.stringify({ type: 'peer_list', peers: [...knownPeers] }));
+                conn.send(JSON.stringify({ type: 'chat_history', history: chatHistory }));
+                tryToConnectToNewPeers();
             });
             conn.on('data', handleData);
+            conn.on('close', () => { connectedPeers.delete(conn.peer); console.log('Verbindung geschlossen mit: ' + peerId); });
         }
 
-        // Handle received data
+        function broadcastMessage(message) {
+            const messageData = JSON.stringify(message);
+            connections.forEach(conn => { if (conn.peer !== message.peerId) conn.send(messageData); });
+        }
+
         function handleData(data) {
             let messageData;
-            try {
-                messageData = JSON.parse(data);
-            } catch (e) {
-                messageData = { peerId: this.peer, message: data, name: `k8o5_${connections.length - 1}` }; // Fallback
+            try { messageData = JSON.parse(data); } catch (e) { messageData = { peerId: this.peer, message: data, name: `k8o5_${connections.length-1}` }; }
+            if (messageData.type === 'peer_list') {
+                messageData.peers.forEach(peerId => { if (peerId !== myPeerId) knownPeers.add(peerId); });
+                tryToConnectToNewPeers();
+            } else if (messageData.type === 'chat_history') {
+                messageData.history.forEach(entry => {
+                    if (!chatHistory.some(h => h.peerId === entry.peerId && h.message === entry.message)) {
+                        chatHistory.push(entry);
+                        document.getElementById('output').innerHTML += renderText(entry.message, entry.peerId, entry.name);
+                    }
+                });
+                document.getElementById('console').scrollTop = document.getElementById('console').scrollHeight;
+            } else {
+                const { peerId, message, name } = messageData;
+                if (!chatHistory.some(h => h.peerId === peerId && h.message === message)) {
+                    chatHistory.push({ peerId, message, name });
+                    document.getElementById('output').innerHTML += renderText(message, peerId, name);
+                    broadcastMessage(messageData);
+                }
+                document.getElementById('console').scrollTop = document.getElementById('console').scrollHeight;
             }
-            const { peerId, message, name } = messageData;
-            chatHistory.push({ peerId, message, name });
-            document.getElementById('output').innerHTML += renderText(`${message}`, peerId, name);
-            document.getElementById('console').scrollTop = document.getElementById('console').scrollHeight;
         }
 
-        // Switch to chat mode
         function switchToChatMode(peerId) {
             isConnected = true;
-            document.getElementById('output').innerHTML += renderText(`<span class="success-message">Connected to ${peerId}!</span>\n<span class="success-message">Chat mode activated.</span>\n`);
+            document.getElementById('output').innerHTML += renderText(`<span class="success-message">Verbunden mit ${peerId}!</span>\n<span class="success-message">Chat-Modus aktiviert.</span>\n`);
             document.getElementById('prompt').innerHTML = 'chat> ';
         }
 
-        // Display help text
         function showHelp() {
             const helpText = `
-<span class="success-message">Available commands:</span>
-- <span class="command">peer</span> <span class="parameter">[peer_id]</span>: Connect to another peer
-- <span class="command">name</span> <span class="parameter">[string]</span>: Set your name (e.g., name Max)
-- <span class="command">help</span>: Show this help
+<span class="success-message">Verfügbare Befehle:</span>
+- <span class="command">peer</span> <span class="parameter">[peer_id]</span>: Verbinde dich mit einem anderen Peer
+- <span class="command">name</span> <span class="parameter">[string]</span>: Definiere deinen Namen (z. B. name Max)
+- <span class="command">help</span>: Zeige diese Hilfe
 `;
             document.getElementById('output').innerHTML += renderText(helpText);
         }
-
-        // Command history navigation
-        let commandHistory = [];
-        let historyIndex = -1;
 
         document.getElementById('input').addEventListener('keydown', (e) => {
             if (e.key === 'ArrowUp') {
@@ -345,14 +395,12 @@
             }
         });
 
-        // Focus input on console click
         document.getElementById('console').addEventListener('click', (e) => {
             if (!e.target.matches('#input')) {
                 document.getElementById('input').focus();
             }
         });
 
-        // Handle Enter keypress
         document.getElementById('input').addEventListener('keypress', (e) => {
             if (e.key === 'Enter') {
                 const inputValue = document.getElementById('input').value.trim();
@@ -364,12 +412,45 @@
             }
         });
 
-        // Ensure input focus on touch for mobile
         document.getElementById('input').addEventListener('touchstart', function() {
             this.focus();
         });
 
-        // Initialize the application
+        document.getElementById('peerIdText').addEventListener('click', () => {
+            const peerIdText = document.getElementById('peerIdText').textContent;
+            if (navigator.clipboard && navigator.clipboard.writeText) {
+                navigator.clipboard.writeText(peerIdText).then(() => {
+                    const button = document.getElementById('copyButton');
+                    button.textContent = 'Copied!';
+                    button.classList.add('copied');
+                    setTimeout(() => {
+                        button.textContent = 'Copy';
+                        button.classList.remove('copied');
+                    }, 2000);
+                }).catch(err => {
+                    fallbackCopy(peerIdText);
+                });
+            } else {
+                fallbackCopy(peerIdText);
+            }
+        });
+
+        function fallbackCopy(text) {
+            const temp = document.createElement('textarea');
+            temp.value = text;
+            document.body.appendChild(temp);
+            temp.select();
+            document.execCommand('copy');
+            document.body.removeChild(temp);
+            const button = document.getElementById('copyButton');
+            button.textContent = 'Copied!';
+            button.classList.add('copied');
+            setTimeout(() => {
+                button.textContent = 'Copy';
+                button.classList.remove('copied');
+            }, 2000);
+        }
+
         initPeer();
     </script>
 </body>
