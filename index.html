@@ -12,7 +12,6 @@
             background: #000;
             font-family: 'Courier New', monospace;
             overflow: hidden;
-            color: #00ff00;
         }
         #console {
             width: 100%;
@@ -23,6 +22,7 @@
             line-height: 1.4;
             text-shadow: 0 0 2px #00ff00;
             background: #000;
+            position: relative;
         }
         #output {
             font-size: 14px;
@@ -49,13 +49,26 @@
             outline: none;
             text-shadow: 0 0 2px #00ff00;
         }
+        #console:focus-within #input {
+            outline: none;
+        }
         .peer-message {
             display: inline;
+        }
+        /* Fokus auf Klick im leeren Bereich */
+        #console {
+            cursor: text;
+        }
+        #console:not(#inputArea):active {
+            pointer-events: none;
+        }
+        #console:not(#inputArea):hover {
+            cursor: text;
         }
     </style>
 </head>
 <body>
-    <div id="console">
+    <div id="console" tabindex="0">
         <div id="output"></div>
         <div id="inputArea">
             <span id="prompt">> </span>
@@ -70,6 +83,7 @@
         let connections = [];
         let isConnected = false;
         let chatHistory = [];
+        let myName = 'k8o5_0'; // Standardname
 
         // Eindeutige Farbe basierend auf Peer-ID
         function getPeerColor(peerId) {
@@ -82,10 +96,11 @@
         }
 
         // Text rendern
-        function renderText(text, peerId = null) {
+        function renderText(text, peerId = null, name = null) {
             if (peerId) {
                 const color = getPeerColor(peerId);
-                return `<span class="peer-message" style="color: ${color}">${text}</span><br>`;
+                const displayName = name || `k8o5_${connections.length - 1}`;
+                return `<span class="peer-message" style="color: ${color}">${displayName}: ${text}</span><br>`;
             }
             return text.replace(/\n/g, '<br>');
         }
@@ -103,9 +118,8 @@
                 conn.on('open', () => {
                     console.log('Verbunden mit: ' + conn.peer);
                     switchToChatMode(conn.peer);
-                    // Historie an neuen Peer senden
                     chatHistory.forEach(entry => {
-                        conn.send(JSON.stringify({ peerId: entry.peerId, message: entry.message }));
+                        conn.send(JSON.stringify({ peerId: entry.peerId, message: entry.message, name: entry.name || `k8o5_${connections.length - 1}` }));
                     });
                 });
                 conn.on('data', handleData);
@@ -126,16 +140,26 @@
                     } else {
                         document.getElementById('output').innerHTML += renderText('Fehler: Gib eine Peer-ID ein!\n');
                     }
+                } else if (input.startsWith('help')) {
+                    showHelp();
+                } else if (input.startsWith('name ')) {
+                    const name = input.split(' ')[1];
+                    if (name) {
+                        myName = name;
+                        document.getElementById('output').innerHTML += renderText(`Name geändert zu: ${myName}\n`);
+                    } else {
+                        document.getElementById('output').innerHTML += renderText('Fehler: Gib einen Namen ein! (z. B. name Max)\n');
+                    }
                 } else {
-                    document.getElementById('output').innerHTML += renderText('Unbekannter Befehl. Nutze: peer [peer_id]\n');
+                    document.getElementById('output').innerHTML += renderText('Unbekannter Befehl. Nutze: help\n');
                 }
             } else {
-                const messageEntry = { peerId: myPeerId, message: input };
+                const messageEntry = { peerId: myPeerId, message: input, name: myName };
                 chatHistory.push(messageEntry);
                 connections.forEach(conn => {
-                    conn.send(JSON.stringify({ peerId: myPeerId, message: input }));
+                    conn.send(JSON.stringify(messageEntry));
                 });
-                document.getElementById('output').innerHTML += renderText(`${input}`, myPeerId);
+                document.getElementById('output').innerHTML += renderText(`${input}`, myPeerId, myName);
             }
             document.getElementById('input').value = '';
             document.getElementById('console').scrollTop = document.getElementById('console').scrollHeight;
@@ -158,11 +182,11 @@
             try {
                 messageData = JSON.parse(data);
             } catch (e) {
-                messageData = { peerId: this.peer, message: data }; // Fallback für alte Nachrichten
+                messageData = { peerId: this.peer, message: data, name: `k8o5_${connections.length - 1}` }; // Fallback
             }
-            const { peerId, message } = messageData;
-            chatHistory.push({ peerId, message });
-            document.getElementById('output').innerHTML += renderText(`${message}`, peerId);
+            const { peerId, message, name } = messageData;
+            chatHistory.push({ peerId, message, name });
+            document.getElementById('output').innerHTML += renderText(`${message}`, peerId, name);
             document.getElementById('console').scrollTop = document.getElementById('console').scrollHeight;
         }
 
@@ -172,6 +196,24 @@
             document.getElementById('output').innerHTML += renderText(`Verbunden mit ${peerId}!\nChat-Modus aktiviert.\n`);
             document.getElementById('prompt').innerHTML = 'chat> ';
         }
+
+        // Help-Befehl anzeigen
+        function showHelp() {
+            const helpText = `
+Verfügbare Befehle:
+- peer [peer_id]: Verbinde dich mit einem anderen Peer
+- name [string]: Definiere deinen Namen (z. B. name Max)
+- help: Zeige diese Hilfe
+`;
+            document.getElementById('output').innerHTML += renderText(helpText);
+        }
+
+        // Fokus setzen bei Klick im leeren Bereich
+        document.getElementById('console').addEventListener('click', (e) => {
+            if (!e.target.matches('#input')) {
+                document.getElementById('input').focus();
+            }
+        });
 
         // Event Listener für Enter
         document.getElementById('input').addEventListener('keypress', (e) => {
