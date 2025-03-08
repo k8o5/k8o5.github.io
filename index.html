@@ -3,7 +3,7 @@
 <head>
     <meta charset="UTF-8">
     <meta name="viewport" content="width=device-width, initial-scale=1.0">
-    <title>k8o5 - Console Chat</title>
+    <title>k8o5 Chat</title>
     <style>
         body {
             margin: 0;
@@ -51,16 +51,6 @@
             font-family: 'Courier New', monospace;
             outline: none;
         }
-        #background {
-            position: absolute;
-            top: 0;
-            left: 0;
-            width: 100%;
-            height: 100%;
-            opacity: 0.1;
-            z-index: -1;
-            transition: background-image 1s ease-in-out;
-        }
         @keyframes boot {
             0% { opacity: 0; }
             50% { opacity: 0.5; }
@@ -76,7 +66,6 @@
 </head>
 <body>
     <div id="console" class="boot">
-        <div id="background"></div>
         <div id="output"></div>
         <div id="inputArea">
             <span id="prompt">> </span>
@@ -90,27 +79,19 @@
         let myPeerId = '';
         let connections = [];
         let isConnected = false;
-        let chatHistory = []; // Speichert alle Nachrichten
-        const backgrounds = [
-            'url("https://i.imgur.com/1XqZ8kV.jpg")', // Matrix
-            'url("https://i.imgur.com/9z5vK7L.jpg")', // Cyberpunk
-            'url("https://i.imgur.com/Kz6X8nL.jpg")', // Space
-            'url("https://i.imgur.com/8XyX7Zt.jpg")', // Retro Grid
-            'url("https://i.imgur.com/4vX7Y8n.jpg")'  // Neon City
-        ];
-        let currentBgIndex = 0;
+        let chatHistory = [];
 
-        // Eindeutige Farbe basierend auf Peer-ID generieren
+        // Eindeutige Farbe basierend auf Peer-ID
         function getPeerColor(peerId) {
             let hash = 0;
             for (let i = 0; i < peerId.length; i++) {
                 hash = peerId.charCodeAt(i) + ((hash << 5) - hash);
             }
-            const hue = Math.abs(hash % 360); // HSL-Farbton (0-360)
-            return `hsl(${hue}, 70%, 50%)`; // Sättigung 70%, Helligkeit 50%
+            const hue = Math.abs(hash % 360);
+            return `hsl(${hue}, 70%, 50%)`;
         }
 
-        // Text mit Zeilenumbrüchen rendern
+        // Text rendern
         function renderText(text, peerId = null) {
             if (peerId) {
                 const color = getPeerColor(peerId);
@@ -132,7 +113,6 @@
                 conn.on('open', () => {
                     console.log('Verbunden mit: ' + conn.peer);
                     switchToChatMode(conn.peer);
-                    // Sende Chat-Historie an neuen Peer
                     chatHistory.forEach(entry => conn.send(entry.message));
                 });
                 conn.on('data', handleData);
@@ -157,14 +137,10 @@
                     document.getElementById('output').innerHTML += renderText('Unbekannter Befehl. Nutze: peer [peer_id]\n');
                 }
             } else {
-                if (input === 'bg') {
-                    changeBackground();
-                } else {
-                    const messageEntry = { peerId: myPeerId, message: input };
-                    chatHistory.push(messageEntry);
-                    connections.forEach(conn => conn.send(input));
-                    document.getElementById('output').innerHTML += renderText(`${input}`, myPeerId);
-                }
+                const messageEntry = { peerId: myPeerId, message: input };
+                chatHistory.push(messageEntry);
+                connections.forEach(conn => conn.send(input));
+                document.getElementById('output').innerHTML += renderText(`${input}`, myPeerId);
             }
             document.getElementById('input').value = '';
             document.getElementById('console').scrollTop = document.getElementById('console').scrollHeight;
@@ -183,7 +159,7 @@
 
         // Daten empfangen
         function handleData(data) {
-            const messageEntry = { peerId: this.peer, message: data }; // this.peer ist die Peer-ID des Senders
+            const messageEntry = { peerId: this.peer, message: data };
             chatHistory.push(messageEntry);
             document.getElementById('output').innerHTML += renderText(`${data}`, this.peer);
             document.getElementById('console').scrollTop = document.getElementById('console').scrollHeight;
@@ -192,15 +168,8 @@
         // In Chat-Modus wechseln
         function switchToChatMode(peerId) {
             isConnected = true;
-            document.getElementById('output').innerHTML += renderText(`Verbunden mit ${peerId}!\nChat-Modus aktiviert.\nBefehl: 'bg' zum Ändern der Kulisse\n`);
+            document.getElementById('output').innerHTML += renderText(`Verbunden mit ${peerId}!\nChat-Modus aktiviert.\n`);
             document.getElementById('prompt').innerHTML = 'chat> ';
-        }
-
-        // Hintergrund ändern
-        function changeBackground() {
-            currentBgIndex = (currentBgIndex + 1) % backgrounds.length;
-            document.getElementById('background').style.backgroundImage = backgrounds[currentBgIndex];
-            document.getElementById('output').innerHTML += renderText('Hintergrund geändert!\n');
         }
 
         // Event Listener für Enter
