@@ -1,93 +1,86 @@
 <!DOCTYPE html>
-<html lang="en">
+<html lang="de">
 <head>
     <meta charset="UTF-8">
     <meta name="viewport" content="width=device-width, initial-scale=1.0">
-    <title>k8o5 - Wizard Game</title>
+    <title>k8o5 - Chat</title>
     <style>
         body {
-            font-family: Arial, sans-serif;
-            text-align: center;
-            background: #f0f2f5;
             margin: 0;
-            padding: 20px;
+            padding: 0;
+            height: 100vh;
+            display: flex;
+            justify-content: center;
+            align-items: center;
+            background: #000;
+            font-family: 'Courier New', monospace;
         }
-        h1 {
-            color: #1877f2;
+        #setup {
+            text-align: center;
         }
-        #setup, #game {
-            max-width: 800px;
-            margin: 0 auto;
-            background: white;
-            padding: 20px;
-            border-radius: 10px;
-            box-shadow: 0 2px 4px rgba(0, 0, 0, 0.1);
-        }
-        #game {
+        #chat {
             display: none;
-        }
-        textarea, input {
             width: 100%;
-            padding: 10px;
-            margin: 5px 0;
-            border: 1px solid #dddfe2;
-            border-radius: 5px;
+            height: 100%;
+            background: #000;
+            color: #0f0;
+            padding: 20px;
+            box-sizing: border-box;
         }
         button {
-            padding: 10px 20px;
-            margin: 5px;
-            background-color: #1877f2;
-            color: white;
-            border: none;
-            border-radius: 5px;
+            padding: 20px 40px;
+            font-size: 18px;
+            background: #0f0;
+            color: #000;
+            border: 2px solid #0f0;
             cursor: pointer;
+            font-family: 'Courier New', monospace;
         }
         button:hover {
-            background-color: #166fe5;
+            background: #000;
+            color: #0f0;
         }
-        #players, #hand, #bidding, #trick {
-            margin: 10px 0;
-        }
-        #hand span {
-            padding: 5px;
-            margin: 2px;
-            background: #e4e6eb;
-            border-radius: 3px;
-            cursor: pointer;
-        }
-        #messages {
-            height: 100px;
-            overflow-y: auto;
-            border: 1px solid #dddfe2;
+        #console {
+            width: 100%;
+            height: 80%;
+            background: #000;
+            border: 2px solid #0f0;
+            color: #0f0;
+            font-size: 16px;
             padding: 10px;
+            overflow-y: auto;
+            white-space: pre-wrap;
             text-align: left;
+        }
+        #inputArea {
+            display: flex;
+            margin-top: 10px;
+        }
+        input {
+            flex-grow: 1;
+            background: #000;
+            border: 2px solid #0f0;
+            color: #0f0;
+            padding: 10px;
+            font-size: 16px;
+            font-family: 'Courier New', monospace;
+        }
+        #sendButton {
+            padding: 10px 20px;
+            margin-left: 10px;
         }
     </style>
 </head>
 <body>
-    <h1>k8o5 - Wizard Game</h1>
     <div id="setup">
-        <p>Host: Erstelle eine Lobby und teile den Link (z. B. k8o5.com/game.html?room=xyz). Spieler: Trete mit der Raum-ID bei.</p>
-        <input type="text" id="roomId" placeholder="Raum-ID eingeben (z. B. xyz)">
-        <button onclick="createRoom()">Lobby erstellen</button>
-        <button onclick="joinRoom()">Lobby beitreten</button>
-        <br>
-        <textarea id="offer" placeholder="Angebot hier einfügen (zum Beitreten)"></textarea>
-        <button onclick="setOffer()">Angebot übernehmen</button>
-        <br>
-        <textarea id="answer" placeholder="Antwort hier einfügen (nach Erstellung)"></textarea>
-        <button onclick="setAnswer()">Antwort übernehmen</button>
+        <button onclick="createLobby()">Lobby erstellen</button>
     </div>
-    <div id="game">
-        <div id="players">Spieler: <span id="playerList"></span></div>
-        <div id="messages"></div>
-        <div id="hand">Deine Karten: <span id="cards"></span></div>
-        <div id="bidding" style="display: none;">
-            <input type="number" id="bidInput" min="0" placeholder="Dein Gebot">
-            <button onclick="submitBid()">Gebot abgeben</button>
+    <div id="chat">
+        <div id="console"></div>
+        <div id="inputArea">
+            <input type="text" id="messageInput" placeholder="Name eingeben oder Nachricht..." onkeypress="if(event.key === 'Enter') handleInput()">
+            <button id="sendButton" onclick="handleInput()">Senden</button>
         </div>
-        <div id="trick">Aktueller Stich: <span id="currentTrick"></span></div>
-        <button onclick="startGame()" id="startButton">Spiel starten</button>
     </div>
 
     <script src="https://unpkg.com/peerjs@1.4.7/dist/peerjs.min.js"></script>
@@ -96,48 +89,28 @@
         let roomId = new URLSearchParams(window.location.search).get('room') || '';
         let isHost = false;
         let connections = [];
-        let players = [];
-        let deck = [];
-        let hands = {};
-        let bids = {};
-        let currentRound = 1;
-        let currentTrick = [];
-        let scores = {};
+        let username = '';
+        let asciiArt = '';
 
-        // Raum-ID initial setzen
-        document.getElementById('roomId').value = roomId;
-
-        // Deck erstellen (vereinfacht: 52 Karten, 4 Anzüge x 13 Ränge)
-        function createDeck() {
-            const suits = ['♠', '♥', '♣', '♦'];
-            const ranks = ['2', '3', '4', '5', '6', '7', '8', '9', '10', 'J', 'Q', 'K', 'A'];
-            deck = [];
-            suits.forEach(suit => ranks.forEach(rank => deck.push(rank + suit)));
-        }
-
-        // Karten mischen
-        function shuffle(array) {
-            for (let i = array.length - 1; i > 0; i--) {
-                const j = Math.floor(Math.random() * (i + 1));
-                [array[i], array[j]] = [array[j], array[i]];
-            }
+        // Einzigartige ASCII-Art generieren
+        function generateAsciiArt() {
+            const patterns = [
+                `  .-""""""""-.\n .'          '.\n|  **    **  |\n: ,          :\n '._         _.'\n    '-....-'`,
+                `  .-""""""""-.\n .'          '.\n|  @@    @@  |\n: ,          :\n '._         _.'\n    '-....-'`,
+                `  .-""""""""-.\n .'          '.\n|  $$    $$  |\n: ,          :\n '._         _.'\n    '-....-'`
+            ];
+            return patterns[Math.floor(Math.random() * patterns.length)];
         }
 
         // Lobby erstellen
-        function createRoom() {
+        function createLobby() {
             roomId = roomId || Math.random().toString(36).substr(2, 5);
             window.history.pushState({}, document.title, `?room=${roomId}`);
-            document.getElementById('roomId').value = roomId;
             isHost = true;
             initPeer();
-        }
-
-        // Lobby beitreten
-        function joinRoom() {
-            roomId = document.getElementById('roomId').value;
-            if (!roomId) return alert('Bitte eine Raum-ID eingeben');
-            window.history.pushState({}, document.title, `?room=${roomId}`);
-            initPeer();
+            document.getElementById('setup').style.display = 'none';
+            document.getElementById('chat').style.display = 'block';
+            document.getElementById('console').innerHTML = `Lobby erstellt! Raum-ID: ${roomId}\nTeile diesen Link: k8o5.com?room=${roomId}\n\nHost-Angebot: Kopiere den Text unten und teile ihn mit anderen:\n<textarea>${JSON.stringify({ type: 'offer', roomId })}</textarea>\n\nAntwort hier einfügen (von anderen erhalten):\n<textarea id="answer" onpaste="setTimeout(() => joinChat(document.getElementById('answer').value), 0)"></textarea>`;
         }
 
         // PeerJS initialisieren
@@ -145,213 +118,56 @@
             peer = new Peer({ debug: 3 });
             peer.on('open', id => {
                 console.log('Mein Peer-ID: ' + id);
-                if (isHost) {
-                    document.getElementById('offer').value = JSON.stringify({ type: 'offer', peerId: id });
-                    players.push(id);
-                    updatePlayerList();
-                }
             });
 
             peer.on('connection', conn => {
                 connections.push(conn);
                 conn.on('open', () => {
                     console.log('Verbunden mit: ' + conn.peer);
-                    players.push(conn.peer);
-                    updatePlayerList();
-                    if (isHost) sendGameState();
                 });
-                conn.on('data', handleData);
+                conn.on('data', data => {
+                    const [senderArt, sender, msg] = data.split('|');
+                    document.getElementById('console').innerHTML += `\n${senderArt}\n${sender}: ${msg}`;
+                    document.getElementById('console').scrollTop = document.getElementById('console').scrollHeight;
+                });
             });
         }
 
-        // Angebot übernehmen
-        function setOffer() {
-            const offer = JSON.parse(document.getElementById('offer').value);
-            const conn = peer.connect(offer.peerId);
+        // Chat beitreten
+        function joinChat(answerText) {
+            const answer = JSON.parse(answerText);
+            if (answer.type !== 'answer' || answer.roomId !== roomId) return alert('Ungültige Antwort');
+            const conn = peer.connect(answer.peerId);
             connections.push(conn);
             conn.on('open', () => {
-                conn.send({ type: 'answer', peerId: peer.id });
-                switchToGame();
+                document.getElementById('console').innerHTML = 'Verbunden! Gib deinen Namen ein...';
             });
-            conn.on('data', handleData);
-        }
-
-        // Antwort übernehmen
-        function setAnswer() {
-            switchToGame();
-        }
-
-        // Spiel starten
-        function startGame() {
-            if (!isHost || players.length < 3) return alert('Mindestens 3 Spieler benötigt');
-            createDeck();
-            shuffle(deck);
-            dealCards();
-            sendGameState();
-            startBidding();
-        }
-
-        // Karten austeilen
-        function dealCards() {
-            hands = {};
-            const cardsPerPlayer = Math.min(10, Math.floor(deck.length / players.length));
-            players.forEach((playerId, index) => {
-                hands[playerId] = deck.slice(index * cardsPerPlayer, (index + 1) * cardsPerPlayer);
+            conn.on('data', data => {
+                const [senderArt, sender, msg] = data.split('|');
+                document.getElementById('console').innerHTML += `\n${senderArt}\n${sender}: ${msg}`;
+                document.getElementById('console').scrollTop = document.getElementById('console').scrollHeight;
             });
-            updateHand();
         }
 
-        // Gebots-Phase starten
-        function startBidding() {
-            document.getElementById('bidding').style.display = 'block';
-            document.getElementById('startButton').style.display = 'none';
-            if (isHost) broadcast({ type: 'startBidding' });
-        }
+        // Eingabe verarbeiten
+        function handleInput() {
+            const input = document.getElementById('messageInput').value.trim();
+            if (!input) return;
 
-        // Gebot abgeben
-        function submitBid() {
-            const bid = parseInt(document.getElementById('bidInput').value);
-            if (isNaN(bid) || bid < 0) return alert('Ungültiges Gebot');
-            bids[peer.id] = bid;
-            document.getElementById('bidding').style.display = 'none';
-            if (isHost) {
-                broadcast({ type: 'bid', peerId: peer.id, bid });
-                checkBiddingComplete();
-            } else {
-                connections[0].send({ type: 'bid', peerId: peer.id, bid });
-            }
-        }
-
-        // Überprüfen, ob alle Gebote eingegangen sind
-        function checkBiddingComplete() {
-            if (Object.keys(bids).length === players.length) {
-                startTrickPhase();
-            }
-        }
-
-        // Stich-Phase starten
-        function startTrickPhase() {
-            currentTrick = [];
-            document.getElementById('currentTrick').textContent = '';
-            broadcast({ type: 'startTrick' });
-        }
-
-        // Karte spielen
-        function playCard(card) {
-            const hand = hands[peer.id];
-            const index = hand.indexOf(card);
-            if (index !== -1) {
-                hand.splice(index, 1);
-                currentTrick.push({ peerId: peer.id, card });
-                updateHand();
-                if (isHost) {
-                    broadcast({ type: 'playCard', peerId: peer.id, card });
-                    if (currentTrick.length === players.length) resolveTrick();
-                } else {
-                    connections[0].send({ type: 'playCard', peerId: peer.id, card });
+            if (!username) {
+                username = input;
+                asciiArt = generateAsciiArt();
+                document.getElementById('console').innerHTML += `\n${asciiArt}\n${username} hat den Chat betreten!`;
+                if (!isHost) {
+                    document.getElementById('console').innerHTML = `Teile diese Antwort mit dem Host:\n<textarea>${JSON.stringify({ type: 'answer', peerId: peer.id, roomId })}</textarea>\n\nChat beginnt, sobald der Host verbunden ist...`;
                 }
-            }
-        }
-
-        // Stich auflösen
-        function resolveTrick() {
-            // Einfache Logik: Höchste Karte gewinnt (keine Trumpf/Spezialkarten hier)
-            const winner = currentTrick.reduce((max, curr) => 
-                parseInt(max.card) > parseInt(curr.card) ? max : curr
-            );
-            scores[winner.peerId] = (scores[winner.peerId] || 0) + 10 + (bids[winner.peerId] === currentTrick.length ? 20 : -10);
-            broadcast({ type: 'trickResult', winner: winner.peerId, scores });
-            if (hands[peer.id].length > 0) {
-                startTrickPhase();
-            } else if (currentRound < 10) {
-                currentRound++;
-                dealCards();
-                startBidding();
             } else {
-                endGame();
+                const message = `${asciiArt}|${username}|${input}`;
+                connections.forEach(conn => conn.send(message));
+                document.getElementById('console').innerHTML += `\n${asciiArt}\n${username}: ${input}`;
             }
-        }
-
-        // Spiel beenden
-        function endGame() {
-            let result = 'Spiel beendet! Punkte:\n';
-            for (let id in scores) {
-                result += `${id}: ${scores[id]} Punkte\n`;
-            }
-            alert(result);
-            broadcast({ type: 'gameOver', scores });
-        }
-
-        // Spielzustand senden
-        function sendGameState() {
-            broadcast({ 
-                type: 'gameState', 
-                hands, 
-                bids, 
-                currentRound, 
-                currentTrick, 
-                scores 
-            });
-        }
-
-        // Daten empfangen und verarbeiten
-        function handleData(data) {
-            switch (data.type) {
-                case 'gameState':
-                    hands = data.hands;
-                    bids = data.bids;
-                    currentRound = data.currentRound;
-                    currentTrick = data.currentTrick;
-                    scores = data.scores;
-                    updateHand();
-                    break;
-                case 'startBidding':
-                    document.getElementById('bidding').style.display = 'block';
-                    break;
-                case 'bid':
-                    bids[data.peerId] = data.bid;
-                    if (isHost) checkBiddingComplete();
-                    break;
-                case 'startTrick':
-                    document.getElementById('currentTrick').textContent = '';
-                    break;
-                case 'playCard':
-                    currentTrick.push({ peerId: data.peerId, card: data.card });
-                    document.getElementById('currentTrick').textContent = currentTrick.map(t => t.card).join(', ');
-                    if (isHost && currentTrick.length === players.length) resolveTrick();
-                    break;
-                case 'trickResult':
-                    scores = data.scores;
-                    document.getElementById('currentTrick').textContent = `Gewinner: ${data.winner}`;
-                    break;
-                case 'gameOver':
-                    alert('Spiel beendet! Punkte:\n' + Object.entries(data.scores).map(([id, score]) => `${id}: ${score}`).join('\n'));
-                    break;
-            }
-        }
-
-        // Nachricht an alle Spieler senden
-        function broadcast(data) {
-            connections.forEach(conn => conn.send(data));
-        }
-
-        // Spielerliste aktualisieren
-        function updatePlayerList() {
-            document.getElementById('playerList').textContent = players.join(', ');
-        }
-
-        // Hand aktualisieren
-        function updateHand() {
-            const hand = hands[peer.id] || [];
-            document.getElementById('cards').innerHTML = hand.map(card => 
-                `<span onclick="playCard('${card}')">${card}</span>`
-            ).join(' ');
-        }
-
-        // Zum Spiel wechseln
-        function switchToGame() {
-            document.getElementById('setup').style.display = 'none';
-            document.getElementById('game').style.display = 'block';
+            document.getElementById('messageInput').value = '';
+            document.getElementById('console').scrollTop = document.getElementById('console').scrollHeight;
         }
     </script>
 </body>
