@@ -181,7 +181,7 @@
             peer.on('open', id => {
                 myPeerId = id; 
                 knownPeers.add(myPeerId);
-                myName = generateUniqueName(); // Setze initialen Namen
+                myName = generateUniqueName();
                 typeWriter('k8o5\n', 0, 40, () => {
                     typeWriter(`Deine Peer-ID: ${myPeerId}\nDein Name: ${myName}\n`, 0, 20, () => {
                         document.getElementById('inputArea').style.display = 'flex';
@@ -191,7 +191,7 @@
             });
 
             peer.on('connection', conn => {
-                conn.metadata = { name: conn.metadata?.name || generateUniqueName() }; // Weise neuen Peer einen eindeutigen Namen zu
+                conn.metadata = { name: conn.metadata?.name || generateUniqueName() };
                 connections.push(conn);
                 conn.on('open', () => {
                     console.log('Verbunden mit: ' + conn.peer);
@@ -232,10 +232,19 @@
                     });
                 } else document.getElementById('output').innerHTML += renderText('<span class="error-message">Unbekannter Befehl. Nutze: help</span>\n');
             } else {
-                const messageEntry = { peerId: myPeerId, message: input, name: myName };
-                chatHistory.push(messageEntry);
-                broadcastMessage(messageEntry);
-                document.getElementById('output').innerHTML += renderText(input, myPeerId, myName);
+                if (input === '/exit') {
+                    connections.forEach(conn => conn.close());
+                    connections = [];
+                    connectedPeers.clear();
+                    isConnected = false;
+                    document.getElementById('prompt').innerHTML = '> ';
+                    document.getElementById('output').innerHTML += renderText(`<span class="success-message">Chat verlassen.</span>\n`);
+                } else {
+                    const messageEntry = { peerId: myPeerId, message: input, name: myName };
+                    chatHistory.push(messageEntry);
+                    broadcastMessage(messageEntry);
+                    document.getElementById('output').innerHTML += renderText(input, myPeerId, myName);
+                }
             }
             document.getElementById('input').value = '';
             document.getElementById('console').scrollTop = document.getElementById('console').scrollHeight;
@@ -303,6 +312,7 @@
 - <span class="command">peer</span> <span class="parameter">[peer_id]</span>: Verbinde dich mit einem anderen Peer
 - <span class="command">name</span> <span class="parameter">[string]</span>: Definiere deinen Namen (z. B. name Max)
 - <span class="command">copy</span>: Kopiere deine Peer-ID in die Zwischenablage
+- <span class="command">/exit</span>: Verlasse den Chat-Modus (nur im Chat)
 - <span class="command">help</span>: Zeige diese Hilfe
 `;
             document.getElementById('output').innerHTML += renderText(helpText);
