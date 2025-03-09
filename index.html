@@ -165,60 +165,71 @@
         }
 
         function initPeer() {
-            // Konfiguration mit kostenlosen STUN-Servern von Google
-            peer = new Peer({
-                debug: 3, // Debug-Level auf 3 für detaillierte Logs
-                config: {
-                    iceServers: [
-                        { urls: 'stun:stun.l.google.com:19302' }, // Kostenloser STUN-Server von Google
-                        { urls: 'stun:stun1.l.google.com:19302' },
-                        { urls: 'stun:stun2.l.google.com:19302' },
-                        { urls: 'stun:stun3.l.google.com:19302' },
-                        { urls: 'stun:stun4.l.google.com:19302' }
-                    ]
-                }
-            });
+            try {
+                // Konfiguration mit kostenlosen STUN-Servern von Google
+                peer = new Peer({
+                    debug: 3, // Debug-Level auf 3 für detaillierte Logs
+                    config: {
+                        iceServers: [
+                            { urls: 'stun:stun.l.google.com:19302' }, // Kostenloser STUN-Server von Google
+                            { urls: 'stun:stun1.l.google.com:19302' },
+                            { urls: 'stun:stun2.l.google.com:19302' },
+                            { urls: 'stun:stun3.l.google.com:19302' },
+                            { urls: 'stun:stun4.l.google.com:19302' }
+                        ]
+                    }
+                });
 
-            peer.on('open', id => {
-                myPeerId = id; 
-                knownPeers.add(myPeerId);
-                typeWriter('k8o5\n', 0, 36, () => {
-                    typeWriter(`Deine Peer-ID: ${myPeerId}\n`, 0, 18, () => {
-                        document.getElementById('inputArea').style.display = 'flex';
-                        document.getElementById('input').focus();
+                peer.on('open', id => {
+                    myPeerId = id; 
+                    knownPeers.add(myPeerId);
+                    typeWriter('k8o5\n', 0, 36, () => {
+                        typeWriter(`Deine Peer-ID: ${myPeerId}\n`, 0, 18, () => {
+                            document.getElementById('inputArea').style.display = 'flex';
+                            document.getElementById('input').focus();
+                        });
                     });
                 });
-            });
 
-            peer.on('connection', conn => {
-                conn.metadata = { name: conn.metadata?.name || 'noname' };
-                connections.push(conn);
-                conn.on('open', () => {
-                    console.log('Verbunden mit: ' + conn.peer);
-                    knownPeers.add(conn.peer); 
-                    connectedPeers.add(conn.peer);
-                    connectedPeersList.push(`<span class="connected-message">Verbunden mit ${conn.peer}!</span>`);
-                    switchToChatMode(conn.peer);
-                    conn.send(JSON.stringify({ type: 'peer_list', peers: [...knownPeers] }));
-                    conn.send(JSON.stringify({ type: 'chat_history', history: chatHistory }));
-                    tryToConnectToNewPeers();
+                peer.on('connection', conn => {
+                    conn.metadata = { name: conn.metadata?.name || 'noname' };
+                    connections.push(conn);
+                    conn.on('open', () => {
+                        console.log('Verbunden mit: ' + conn.peer);
+                        knownPeers.add(conn.peer); 
+                        connectedPeers.add(conn.peer);
+                        connectedPeersList.push(`<span class="connected-message">Verbunden mit ${conn.peer}!</span>`);
+                        switchToChatMode(conn.peer);
+                        conn.send(JSON.stringify({ type: 'peer_list', peers: [...knownPeers] }));
+                        conn.send(JSON.stringify({ type: 'chat_history', history: chatHistory }));
+                        tryToConnectToNewPeers();
+                    });
+                    conn.on('data', handleData);
+                    conn.on('close', () => { 
+                        connectedPeers.delete(conn.peer); 
+                        connectedPeersList = connectedPeersList.filter(msg => !msg.includes(conn.peer));
+                        console.log('Verbindung geschlossen mit: ' + conn.peer); 
+                    });
+                    conn.on('error', err => {
+                        document.getElementById('output').innerHTML += renderText(`<span class="error-message">Verbindungsfehler mit ${conn.peer}: ${err.message}</span>\n`);
+                        console.error('Verbindungsfehler:', err);
+                    });
                 });
-                conn.on('data', handleData);
-                conn.on('close', () => { 
-                    connectedPeers.delete(conn.peer); 
-                    connectedPeersList = connectedPeersList.filter(msg => !msg.includes(conn.peer));
-                    console.log('Verbindung geschlossen mit: ' + conn.peer); 
-                });
-                conn.on('error', err => {
-                    document.getElementById('output').innerHTML += renderText(`<span class="error-message">Verbindungsfehler mit ${conn.peer}: ${err.message}</span>\n`);
-                    console.error('Verbindungsfehler:', err);
-                });
-            });
 
-            peer.on('error', err => {
-                document.getElementById('output').innerHTML += renderText(`<span class="error-message">Peer-Fehler: ${err.message}</span>\n`);
-                console.error('Peer-Fehler:', err);
-            });
+                peer.on('error', err => {
+                    document.getElementById('output').innerHTML += renderText(`<span class="error-message">Peer-Fehler: ${err.message}</span>\n`);
+                    console.error('Peer-Fehler:', err);
+                    // Stelle sicher, dass der Eingabebereich trotzdem angezeigt wird
+                    document.getElementById('inputArea').style.display = 'flex';
+                    document.getElementById('input').focus();
+                });
+            } catch (err) {
+                console.error('Fehler bei der PeerJS-Initialisierung:', err);
+                document.getElementById('output').innerHTML += renderText(`<span class="error-message">Fehler bei der PeerJS-Initialisierung: ${err.message}</span>\n`);
+                // Stelle sicher, dass der Eingabebereich trotzdem angezeigt wird
+                document.getElementById('inputArea').style.display = 'flex';
+                document.getElementById('input').focus();
+            }
         }
 
         function handleInput() {
@@ -229,7 +240,7 @@
                 if (input.startsWith('peer ')) {
                     const targetPeerId = input.split(' ')[1];
                     if (targetPeerId) connectToPeer(targetPeerId);
-                    else document.getElementById('output').innerHTML += renderText(`<span class="error-message">Fehler: Gib eine Peer-ID ein!</span>\n');
+                    else document.getElementById('output').innerHTML += renderText(`<span class="error-message">Fehler: Gib eine Peer-ID ein!</span>\n`);
                 } else if (input.startsWith('help')) showHelp();
                 else if (input.startsWith('name ')) {
                     const name = input.split(' ')[1];
@@ -274,28 +285,33 @@
 
         function connectToPeer(peerId) {
             if (peerId === myPeerId || connectedPeers.has(peerId) || connections.some(conn => conn.peer === peerId)) return;
-            const conn = peer.connect(peerId, { metadata: { name: myName } });
-            connections.push(conn);
-            conn.on('open', () => {
-                console.log('Verbunden mit: ' + peerId);
-                knownPeers.add(peerId); 
-                connectedPeers.add(peerId);
-                connectedPeersList.push(`<span class="connected-message">Verbunden mit ${peerId}!</span>`);
-                switchToChatMode(peerId);
-                conn.send(JSON.stringify({ type: 'peer_list', peers: [...knownPeers] }));
-                conn.send(JSON.stringify({ type: 'chat_history', history: chatHistory }));
-                tryToConnectToNewPeers();
-            });
-            conn.on('data', handleData);
-            conn.on('close', () => { 
-                connectedPeers.delete(conn.peer); 
-                connectedPeersList = connectedPeersList.filter(msg => !msg.includes(peerId));
-                console.log('Verbindung geschlossen mit: ' + peerId); 
-            });
-            conn.on('error', err => {
-                document.getElementById('output').innerHTML += renderText(`<span class="error-message">Verbindungsfehler mit ${peerId}: ${err.message}</span>\n`);
-                console.error('Verbindungsfehler:', err);
-            });
+            try {
+                const conn = peer.connect(peerId, { metadata: { name: myName } });
+                connections.push(conn);
+                conn.on('open', () => {
+                    console.log('Verbunden mit: ' + peerId);
+                    knownPeers.add(peerId); 
+                    connectedPeers.add(peerId);
+                    connectedPeersList.push(`<span class="connected-message">Verbunden mit ${peerId}!</span>`);
+                    switchToChatMode(peerId);
+                    conn.send(JSON.stringify({ type: 'peer_list', peers: [...knownPeers] }));
+                    conn.send(JSON.stringify({ type: 'chat_history', history: chatHistory }));
+                    tryToConnectToNewPeers();
+                });
+                conn.on('data', handleData);
+                conn.on('close', () => { 
+                    connectedPeers.delete(conn.peer); 
+                    connectedPeersList = connectedPeersList.filter(msg => !msg.includes(peerId));
+                    console.log('Verbindung geschlossen mit: ' + peerId); 
+                });
+                conn.on('error', err => {
+                    document.getElementById('output').innerHTML += renderText(`<span class="error-message">Verbindungsfehler mit ${peerId}: ${err.message}</span>\n`);
+                    console.error('Verbindungsfehler:', err);
+                });
+            } catch (err) {
+                document.getElementById('output').innerHTML += renderText(`<span class="error-message">Fehler beim Verbinden mit ${peerId}: ${err.message}</span>\n`);
+                console.error('Fehler beim Verbinden:', err);
+            }
         }
 
         function broadcastMessage(message) {
@@ -305,7 +321,11 @@
 
         function handleData(data) {
             let messageData;
-            try { messageData = JSON.parse(data); } catch (e) { messageData = { peerId: this.peer, message: data, name: this.metadata?.name || 'noname' }; }
+            try { 
+                messageData = JSON.parse(data); 
+            } catch (e) { 
+                messageData = { peerId: this.peer, message: data, name: this.metadata?.name || 'noname' }; 
+            }
             if (messageData.type === 'peer_list') {
                 messageData.peers.forEach(peerId => { if (peerId !== myPeerId) knownPeers.add(peerId); });
                 tryToConnectToNewPeers();
@@ -387,7 +407,16 @@
             this.focus();
         });
 
-        initPeer();
+        // Initialisiere die Seite
+        try {
+            document.getElementById('output').innerHTML = renderText('k8o5\nInitialisiere...\n');
+            initPeer();
+        } catch (err) {
+            console.error('Fehler beim Laden der Seite:', err);
+            document.getElementById('output').innerHTML += renderText(`<span class="error-message">Fehler beim Laden der Seite: ${err.message}</span>\n`);
+            document.getElementById('inputArea').style.display = 'flex';
+            document.getElementById('input').focus();
+        }
     </script>
 </body>
 </html>
