@@ -8,8 +8,8 @@
     <meta name="keywords" content="P2P Chat, Terminal Chat, PeerJS, dezentraler Chat, serverloser Chat">
     <meta name="author" content="k8o5">
     <meta name="robots" content="index, follow">
-    <meta property="og:title" content="k8o5 - P2P Terminal Chat">
-    <meta property="og:description" content="Verbinde dich direkt über P2P - keine Überwachung, nur du und deine Crew!">
+    <meta property="og:title" content="k8o5 - P2P Chat">
+    <meta property="og:description" content="Verbinde dich direkt über P2P">
     <meta property="og:type" content="website">
     <meta property="og:url" content="https://k8o5.com">
     <script type="application/ld+json">
@@ -17,7 +17,7 @@
       "@context": "https://schema.org",
       "@type": "WebApplication",
       "name": "k8o5",
-      "description": "Ein Peer-to-Peer-Chat im Terminal-Stil, der direkte Verbindungen ohne Server ermöglicht.",
+      "description": "p2pk8o5",
       "url": "https://k8o5.com",
       "applicationCategory": "Communication",
       "operatingSystem": "Web"
@@ -34,7 +34,6 @@
             text-rendering: optimizeLegibility;
             line-height: 1.5;
         }
-
         #console {
             width: 100%;
             height: 100%;
@@ -45,7 +44,6 @@
             position: relative;
             user-select: text;
         }
-
         #output {
             font-size: 15px;
             white-space: pre-wrap;
@@ -55,7 +53,6 @@
             letter-spacing: 0.05em;
             user-select: text;
         }
-
         #inputArea {
             display: none;
             position: sticky;
@@ -64,14 +61,12 @@
             padding: 8px 0;
             margin-top: 15px;
         }
-
         #prompt {
             font-size: 15px;
             margin-right: 8px;
             color: #00ff00;
             font-weight: bold;
         }
-
         #input {
             flex-grow: 1;
             background: transparent;
@@ -83,13 +78,11 @@
             caret-color: #00ff00;
             caret-shape: block;
         }
-
         .peer-message {
             display: block;
             padding: 4px 0;
             animation: fadeIn 0.3s ease-in;
         }
-
         .connected-message {
             color: #ffcc00;
             font-weight: bold;
@@ -98,43 +91,18 @@
             border-bottom: 1px dashed #555;
             margin-bottom: 5px;
         }
-
         @keyframes fadeIn {
             from { opacity: 0; }
             to { opacity: 1; }
         }
-
-        .command {
-            color: #0fdc5f;
-            font-weight: bold;
-        }
-
-        .parameter {
-            color: #5fb3ff;
-        }
-
-        .error-message {
-            color: #ff4f4f;
-        }
-
-        .success-message {
-            color: #2aef63;
-        }
-
+        .command { color: #0fdc5f; font-weight: bold; }
+        .parameter { color: #5fb3ff; }
+        .error-message { color: #ff4f4f; }
+        .success-message { color: #2aef63; }
         @media (max-width: 768px) {
-            #input {
-                width: 100%;
-                font-size: 14px;
-                padding: 5px;
-            }
-
-            #inputArea {
-                padding: 10px 0;
-            }
-
-            #prompt {
-                font-size: 14px;
-            }
+            #input { width: 100%; font-size: 14px; padding: 5px; }
+            #inputArea { padding: 10px 0; }
+            #prompt { font-size: 14px; }
         }
     </style>
 </head>
@@ -151,7 +119,8 @@
     <script>
         let peer, myPeerId = '', connections = [], knownPeers = new Set(), connectedPeers = new Set(),
             isConnected = false, chatHistory = [], myName = 'noname', commandHistory = [], historyIndex = -1,
-            connectedPeersList = [];
+            connectedPeersList = [], gameState = null;
+        const deck = ['R1', 'R2', 'R3', 'R4', 'G1', 'G2', 'G3', 'G4', 'B1', 'B2', 'B3', 'B4', 'Y1', 'Y2', 'Y3', 'Y4', 'W', 'N'];
 
         function getPeerColor(peerId) {
             let hash = 0; for (let i = 0; i < peerId.length; i++) hash = peerId.charCodeAt(i) + ((hash << 5) - hash);
@@ -185,12 +154,11 @@
 
         function initPeer() {
             try {
-                // Konfiguration mit kostenlosen STUN-Servern von Google
                 peer = new Peer({
-                    debug: 3, // Debug-Level auf 3 für detaillierte Logs
+                    debug: 3,
                     config: {
                         iceServers: [
-                            { urls: 'stun:stun.l.google.com:19302' }, // Kostenloser STUN-Server von Google
+                            { urls: 'stun:stun.l.google.com:19302' },
                             { urls: 'stun:stun1.l.google.com:19302' },
                             { urls: 'stun:stun2.l.google.com:19302' },
                             { urls: 'stun:stun3.l.google.com:19302' },
@@ -238,14 +206,12 @@
                 peer.on('error', err => {
                     document.getElementById('output').innerHTML += renderText(`<span class="error-message">Peer-Fehler: ${err.message}</span>\n`);
                     console.error('Peer-Fehler:', err);
-                    // Stelle sicher, dass der Eingabebereich trotzdem angezeigt wird
                     document.getElementById('inputArea').style.display = 'flex';
                     document.getElementById('input').focus();
                 });
             } catch (err) {
                 console.error('Fehler bei der PeerJS-Initialisierung:', err);
                 document.getElementById('output').innerHTML += renderText(`<span class="error-message">Fehler bei der PeerJS-Initialisierung: ${err.message}</span>\n`);
-                // Stelle sicher, dass der Eingabebereich trotzdem angezeigt wird
                 document.getElementById('inputArea').style.display = 'flex';
                 document.getElementById('input').focus();
             }
@@ -273,14 +239,19 @@
                     });
                 } else if (input === 'clear') {
                     document.getElementById('output').innerHTML = '';
+                } else if (input === 'wizard') {
+                    startWizardGame();
                 } else document.getElementById('output').innerHTML += renderText('<span class="error-message">Unbekannter Befehl. Nutze: help</span>\n');
             } else {
-                if (input === '/exit') {
+                if (gameState && (gameState.status === 'predicting' || gameState.status === 'playing')) {
+                    handleWizardInput(input);
+                } else if (input === '/exit') {
                     connections.forEach(conn => conn.close());
                     connections = [];
                     connectedPeers.clear();
                     connectedPeersList = [];
                     isConnected = false;
+                    gameState = null;
                     document.getElementById('prompt').innerHTML = '> ';
                     document.getElementById('output').innerHTML += renderText(`<span class="success-message">Chat verlassen.</span>\n`);
                 } else if (input === '/peers') {
@@ -345,7 +316,39 @@
             } catch (e) { 
                 messageData = { peerId: this.peer, message: data, name: this.metadata?.name || 'noname' }; 
             }
-            if (messageData.type === 'peer_list') {
+            if (messageData.type === 'wizard_invitation') {
+                const join = confirm(`Einladung zum Wizard-Spiel von ${messageData.from}. Möchtest du beitreten?`);
+                if (join) {
+                    gameState = {
+                        round: 1,
+                        players: [
+                            { peerId: messageData.from, name: 'Spieler 1', hand: [], prediction: null, tricksWon: 0, score: 0 }, 
+                            { peerId: myPeerId, name: myName, hand: [], prediction: null, tricksWon: 0, score: 0 }
+                        ],
+                        currentPlayerIndex: 0,
+                        trump: null,
+                        playedCards: [],
+                        status: 'predicting'
+                    };
+                    const joinMessage = { type: 'wizard_join', from: myPeerId };
+                    broadcastMessage(joinMessage);
+                    dealCards();
+                }
+            } else if (messageData.type === 'wizard_join' && gameState && gameState.status === 'inviting') {
+                gameState.players.push({ peerId: messageData.from, name: 'Spieler ' + (gameState.players.length + 1), hand: [], prediction: null, tricksWon: 0, score: 0 });
+                gameState.status = 'predicting';
+                dealCards();
+            } else if (messageData.type === 'wizard_state') {
+                gameState = messageData.state;
+                displayGameState();
+            } else if (messageData.type === 'wizard_prediction') {
+                gameState.players.find(p => p.peerId === messageData.peerId).prediction = messageData.prediction;
+                checkPredictionsComplete();
+            } else if (messageData.type === 'wizard_play') {
+                gameState.players.find(p => p.peerId === messageData.peerId).hand = gameState.players.find(p => p.peerId === messageData.peerId).hand.filter(c => c !== messageData.card);
+                gameState.playedCards.push({ peerId: messageData.peerId, card: messageData.card });
+                advanceTurn();
+            } else if (messageData.type === 'peer_list') {
                 messageData.peers.forEach(peerId => { if (peerId !== myPeerId) knownPeers.add(peerId); });
                 tryToConnectToNewPeers();
             } else if (messageData.type === 'chat_history') {
@@ -379,11 +382,133 @@
 - <span class="command">name</span> <span class="parameter">[string]</span>: Definiere deinen Namen (z. B. name Max)
 - <span class="command">copy</span>: Kopiere deine Peer-ID in die Zwischenablage
 - <span class="command">clear</span>: Lösche den Bildschirm
+- <span class="command">wizard</span>: Starte ein Wizard-Spiel
 - <span class="command">/exit</span>: Verlasse den Chat-Modus (nur im Chat)
 - <span class="command">/peers</span>: Zeige verbundene Peers (nur im Chat)
 - <span class="command">help</span>: Zeige diese Hilfe
 `;
             document.getElementById('output').innerHTML += renderText(helpText);
+        }
+
+        function startWizardGame() {
+            if (gameState) {
+                document.getElementById('output').innerHTML += renderText(`<span class="error-message">Ein Spiel läuft bereits!</span>\n`);
+                return;
+            }
+            gameState = {
+                round: 1,
+                players: [{ peerId: myPeerId, name: myName, hand: [], prediction: null, tricksWon: 0, score: 0 }],
+                currentPlayerIndex: 0,
+                trump: null,
+                playedCards: [],
+                status: 'inviting'
+            };
+            const gameInvitation = { type: 'wizard_invitation', from: myPeerId };
+            broadcastMessage(gameInvitation);
+            document.getElementById('output').innerHTML += renderText(`<span class="success-message">Wizard-Spiel gestartet. Warte auf Mitspieler...</span>\n`);
+        }
+
+        function dealCards() {
+            const shuffledDeck = shuffle([...deck]);
+            const cardsPerPlayer = gameState.round;
+            gameState.players.forEach((player, index) => {
+                player.hand = shuffledDeck.slice(index * cardsPerPlayer, (index + 1) * cardsPerPlayer);
+            });
+            gameState.trump = shuffledDeck[cardsPerPlayer * gameState.players.length] || 'Kein Trumpf';
+            broadcastMessage({ type: 'wizard_state', state: gameState });
+            displayGameState();
+        }
+
+        function displayGameState() {
+            const myPlayer = gameState.players.find(p => p.peerId === myPeerId);
+            let output = `<span class="success-message">Runde ${gameState.round} | Trumpf: ${gameState.trump}</span>\n`;
+            output += `Deine Karten: ${myPlayer.hand.join(', ')}\n`;
+            if (gameState.status === 'predicting' && myPlayer.prediction === null) {
+                output += `<span class="command">Gib deine Vorhersage ein (0-${gameState.round}): </span>`;
+            } else if (gameState.status === 'playing' && gameState.players[gameState.currentPlayerIndex].peerId === myPeerId) {
+                output += `<span class="command">Spiele eine Karte (z.B. R1): </span>`;
+            }
+            document.getElementById('output').innerHTML += renderText(output);
+        }
+
+        function handleWizardInput(input) {
+            if (gameState.status === 'predicting' && gameState.players.find(p => p.peerId === myPeerId).prediction === null) {
+                const prediction = parseInt(input);
+                if (!isNaN(prediction) && prediction >= 0 && prediction <= gameState.round) {
+                    gameState.players.find(p => p.peerId === myPeerId).prediction = prediction;
+                    broadcastMessage({ type: 'wizard_prediction', peerId: myPeerId, prediction });
+                    checkPredictionsComplete();
+                } else {
+                    document.getElementById('output').innerHTML += renderText(`<span class="error-message">Ungültige Vorhersage! (0-${gameState.round})</span>\n`);
+                }
+            } else if (gameState.status === 'playing' && gameState.players[gameState.currentPlayerIndex].peerId === myPeerId) {
+                const card = input.trim();
+                const myPlayer = gameState.players.find(p => p.peerId === myPeerId);
+                if (myPlayer.hand.includes(card)) {
+                    myPlayer.hand = myPlayer.hand.filter(c => c !== card);
+                    gameState.playedCards.push({ peerId: myPeerId, card });
+                    broadcastMessage({ type: 'wizard_play', peerId: myPeerId, card });
+                    advanceTurn();
+                } else {
+                    document.getElementById('output').innerHTML += renderText(`<span class="error-message">Ungültige Karte!</span>\n`);
+                }
+            }
+        }
+
+        function checkPredictionsComplete() {
+            if (gameState.players.every(p => p.prediction !== null)) {
+                gameState.status = 'playing';
+                broadcastMessage({ type: 'wizard_state', state: gameState });
+                displayGameState();
+            }
+        }
+
+        function advanceTurn() {
+            if (gameState.playedCards.length === gameState.players.length) {
+                const winner = determineTrickWinner();
+                winner.tricksWon++;
+                document.getElementById('output').innerHTML += renderText(`<span class="success-message">${winner.name} gewinnt den Stich!</span>\n`);
+                gameState.currentPlayerIndex = gameState.players.findIndex(p => p.peerId === winner.peerId);
+                gameState.playedCards = [];
+                if (gameState.players.every(p => p.hand.length === 0)) {
+                    endRound();
+                } else {
+                    broadcastMessage({ type: 'wizard_state', state: gameState });
+                    displayGameState();
+                }
+            } else {
+                gameState.currentPlayerIndex = (gameState.currentPlayerIndex + 1) % gameState.players.length;
+                broadcastMessage({ type: 'wizard_state', state: gameState });
+                displayGameState();
+            }
+        }
+
+        function determineTrickWinner() {
+            const trickCards = gameState.playedCards;
+            let winner = trickCards[0];
+            trickCards.forEach(play => {
+                if (play.card === 'W') winner = play;
+                else if (winner.card !== 'W' && play.card !== 'N' && play.card > winner.card) winner = play;
+            });
+            return gameState.players.find(p => p.peerId === winner.peerId);
+        }
+
+        function endRound() {
+            gameState.players.forEach(p => {
+                p.score += p.prediction === p.tricksWon ? 20 + p.tricksWon * 10 : -10 * Math.abs(p.prediction - p.tricksWon);
+            });
+            document.getElementById('output').innerHTML += renderText(`<span class="success-message">Runde ${gameState.round} beendet. Punkte:</span>\n`);
+            gameState.players.forEach(p => {
+                document.getElementById('output').innerHTML += renderText(`${p.name}: ${p.score}\n`);
+            });
+            gameState.round++;
+            gameState.players.forEach(p => {
+                p.hand = [];
+                p.prediction = null;
+                p.tricksWon = 0;
+            });
+            gameState.status = 'predicting';
+            dealCards();
         }
 
         document.getElementById('input').addEventListener('keydown', (e) => {
@@ -406,9 +531,7 @@
         });
 
         document.getElementById('console').addEventListener('click', (e) => {
-            if (!e.target.matches('#input')) {
-                document.getElementById('input').focus();
-            }
+            if (!e.target.matches('#input')) document.getElementById('input').focus();
         });
 
         document.getElementById('input').addEventListener('keypress', (e) => {
@@ -426,7 +549,6 @@
             this.focus();
         });
 
-        // Initialisiere die Seite
         try {
             document.getElementById('output').innerHTML = renderText('Initialisiere...\n');
             initPeer();
