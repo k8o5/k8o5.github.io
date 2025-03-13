@@ -2,165 +2,440 @@
 <html lang="de">
 <head>
     <meta charset="UTF-8">
-    <title>Dezentraler P2P Chat</title>
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>k8o5</title>
+    <meta name="description" content="Verbinde dich direkt über P2P - keine Überwachung, nur du und deine Crew!">
+    <meta name="keywords" content="P2P Chat, Terminal Chat, PeerJS, dezentraler Chat, serverloser Chat">
+    <meta name="author" content="k8o5">
+    <meta name="robots" content="index, follow">
+    <meta property="og:title" content="k8o5 - P2P Terminal Chat">
+    <meta property="og:description" content="Verbinde dich direkt über P2P - keine Überwachung, nur du und deine Crew!">
+    <meta property="og:type" content="website">
+    <meta property="og:url" content="https://k8o5.com">
+    <script type="application/ld+json">
+    {
+      "@context": "https://schema.org",
+      "@type": "WebApplication",
+      "name": "k8o5",
+      "description": "Ein Peer-to-Peer-Chat im Terminal-Stil, der direkte Verbindungen ohne Server ermöglicht.",
+      "url": "https://k8o5.com",
+      "applicationCategory": "Communication",
+      "operatingSystem": "Web"
+    }
+    </script>
     <style>
-        #chat-box {
-            width: 400px;
-            height: 300px;
-            border: 1px solid #ccc;
-            overflow-y: scroll;
-            margin: 10px 0;
-            padding: 10px;
+        body {
+            margin: 0;
+            padding: 0;
+            height: 100vh;
+            background: #000;
+            font-family: "JetBrains Mono", "Fira Code", "Cascadia Code", Consolas, monospace;
+            overflow: hidden;
+            text-rendering: optimizeLegibility;
+            line-height: 1.5;
         }
-        #message-input {
-            width: 300px;
-            margin-right: 10px;
+
+        #console {
+            width: 100%;
+            height: 100%;
+            padding: 15px;
+            box-sizing: border-box;
+            overflow-y: auto;
+            background: #000;
+            position: relative;
+            user-select: text;
         }
-        #connection-info {
-            margin: 10px 0;
-            word-wrap: break-word;
+
+        #output {
+            font-size: 15px;
+            white-space: pre-wrap;
+            text-align: left;
+            -webkit-font-smoothing: antialiased;
+            color: #00cc00;
+            letter-spacing: 0.05em;
+            user-select: text;
+        }
+
+        #inputArea {
+            display: none;
+            position: sticky;
+            bottom: 10px;
+            align-items: center;
+            padding: 8px 0;
+            margin-top: 15px;
+        }
+
+        #prompt {
+            font-size: 15px;
+            margin-right: 8px;
+            color: #00ff00;
+            font-weight: bold;
+        }
+
+        #input {
+            flex-grow: 1;
+            background: transparent;
+            border: none;
+            color: #00ff00;
+            font-size: 15px;
+            font-family: inherit;
+            outline: none;
+            caret-color: #00ff00;
+            caret-shape: block;
+        }
+
+        .peer-message {
+            display: block;
+            padding: 4px 0;
+            animation: fadeIn 0.3s ease-in;
+        }
+
+        .connected-message {
+            color: #ffcc00;
+            font-weight: bold;
+            padding: 4px 0;
+            display: block;
+            border-bottom: 1px dashed #555;
+            margin-bottom: 5px;
+        }
+
+        @keyframes fadeIn {
+            from { opacity: 0; }
+            to { opacity: 1; }
+        }
+
+        .command {
+            color: #0fdc5f;
+            font-weight: bold;
+        }
+
+        .parameter {
+            color: #5fb3ff;
+        }
+
+        .error-message {
+            color: #ff4f4f;
+        }
+
+        .success-message {
+            color: #2aef63;
+        }
+
+        @media (max-width: 768px) {
+            #input {
+                width: 100%;
+                font-size: 14px;
+                padding: 5px;
+            }
+
+            #inputArea {
+                padding: 10px 0;
+            }
+
+            #prompt {
+                font-size: 14px;
+            }
         }
     </style>
 </head>
 <body>
-    <h2>Dezentraler End-to-End Encrypted Chat</h2>
-    <div>
-        <button onclick="startConnection()">Chat starten</button>
-        <div id="connection-info"></div>
-    </div>
-    <div id="chat-box"></div>
-    <div>
-        <input type="text" id="message-input" placeholder="Nachricht eingeben" disabled>
-        <button onclick="sendMessage()" disabled id="send-btn">Senden</button>
+    <div id="console" tabindex="0">
+        <div id="output"></div>
+        <div id="inputArea">
+            <span id="prompt">> </span>
+            <input type="text" id="input" autofocus>
+        </div>
     </div>
 
+    <script src="https://unpkg.com/peerjs@1.4.7/dist/peerjs.min.js"></script>
     <script>
-        const configuration = {
-            iceServers: [{ urls: 'stun:stun.l.google.com:19302' }]
-        };
-        let peerConnection;
-        let dataChannel;
-        let encryptionKey;
+        let peer, myPeerId = '', connections = [], knownPeers = new Set(), connectedPeers = new Set(),
+            isConnected = false, chatHistory = [], myName = 'noname', commandHistory = [], historyIndex = -1,
+            connectedPeersList = [];
 
-        async function generateKey() {
-            encryptionKey = await window.crypto.subtle.generateKey(
-                {
-                    name: "AES-GCM",
-                    length: 256
-                },
-                true,
-                ["encrypt", "decrypt"]
-            );
+        function getPeerColor(peerId) {
+            let hash = 0; for (let i = 0; i < peerId.length; i++) hash = peerId.charCodeAt(i) + ((hash << 5) - hash);
+            return `hsl(${Math.abs(hash % 360)}, 70%, 50%)`;
         }
 
-        async function encryptMessage(message) {
-            const encoder = new TextEncoder();
-            const data = encoder.encode(message);
-            const iv = window.crypto.getRandomValues(new Uint8Array(12));
-            const encrypted = await window.crypto.subtle.encrypt(
-                { name: "AES-GCM", iv },
-                encryptionKey,
-                data
-            );
-            return { iv, encrypted };
+        function renderText(text, peerId = null, name = null) {
+            return peerId ? `<span class="peer-message" style="color:${getPeerColor(peerId)}">${name || 'noname'}:${text}</span><br>` : text.replace(/\n/g, '<br>');
         }
 
-        async function decryptMessage(encryptedData, iv) {
-            const decrypted = await window.crypto.subtle.decrypt(
-                { name: "AES-GCM", iv },
-                encryptionKey,
-                encryptedData
-            );
-            return new TextDecoder().decode(decrypted);
+        function typeWriter(text, index = 0, delay = 50, callback) {
+            if (index < text.length) {
+                document.getElementById('output').innerHTML += text.charAt(index);
+                document.getElementById('console').scrollTop = document.getElementById('console').scrollHeight;
+                setTimeout(() => typeWriter(text, index + 1, delay, callback), delay);
+            } else if (callback) callback();
         }
 
-        async function startConnection() {
-            await generateKey();
-            peerConnection = new RTCPeerConnection(configuration);
-            
-            dataChannel = peerConnection.createDataChannel('chat');
-            dataChannel.onmessage = handleMessage;
-            dataChannel.onopen = () => {
-                document.getElementById('message-input').disabled = false;
-                document.getElementById('send-btn').disabled = false;
-                addToChat('System: Verbindung hergestellt!');
-            };
+        function shuffle(array) {
+            for (let i = array.length - 1; i > 0; i--) {
+                const j = Math.floor(Math.random() * (i + 1));
+                [array[i], array[j]] = [array[j], array[i]];
+            }
+            return array;
+        }
 
-            let iceCandidates = [];
-            peerConnection.onicecandidate = (event) => {
-                if (event.candidate) {
-                    iceCandidates.push(event.candidate);
-                    updateConnectionInfo();
+        function tryToConnectToNewPeers() {
+            [...knownPeers].filter(peerId => peerId !== myPeerId && !connectedPeers.has(peerId) && !connections.some(conn => conn.peer === peerId))
+                .forEach(peerId => connectToPeer(peerId));
+        }
+
+        function initPeer() {
+            try {
+                // Konfiguration mit kostenlosen STUN-Servern von Google
+                peer = new Peer({
+                    debug: 3, // Debug-Level auf 3 für detaillierte Logs
+                    config: {
+                        iceServers: [
+                            { urls: 'stun:stun.l.google.com:19302' }, // Kostenloser STUN-Server von Google
+                            { urls: 'stun:stun1.l.google.com:19302' },
+                            { urls: 'stun:stun2.l.google.com:19302' },
+                            { urls: 'stun:stun3.l.google.com:19302' },
+                            { urls: 'stun:stun4.l.google.com:19302' }
+                        ]
+                    }
+                });
+
+                peer.on('open', id => {
+                    myPeerId = id; 
+                    knownPeers.add(myPeerId);
+                    typeWriter('k8o5\n', 0, 36, () => {
+                        typeWriter(`Deine Peer-ID: ${myPeerId}\n`, 0, 18, () => {
+                            document.getElementById('inputArea').style.display = 'flex';
+                            document.getElementById('input').focus();
+                        });
+                    });
+                });
+
+                peer.on('connection', conn => {
+                    conn.metadata = { name: conn.metadata?.name || 'noname' };
+                    connections.push(conn);
+                    conn.on('open', () => {
+                        console.log('Verbunden mit: ' + conn.peer);
+                        knownPeers.add(conn.peer); 
+                        connectedPeers.add(conn.peer);
+                        connectedPeersList.push(`<span class="connected-message">Verbunden mit ${conn.peer}!</span>`);
+                        switchToChatMode(conn.peer);
+                        conn.send(JSON.stringify({ type: 'peer_list', peers: [...knownPeers] }));
+                        conn.send(JSON.stringify({ type: 'chat_history', history: chatHistory }));
+                        tryToConnectToNewPeers();
+                    });
+                    conn.on('data', handleData);
+                    conn.on('close', () => { 
+                        connectedPeers.delete(conn.peer); 
+                        connectedPeersList = connectedPeersList.filter(msg => !msg.includes(conn.peer));
+                        console.log('Verbindung geschlossen mit: ' + conn.peer); 
+                    });
+                    conn.on('error', err => {
+                        document.getElementById('output').innerHTML += renderText(`<span class="error-message">Verbindungsfehler mit ${conn.peer}: ${err.message}</span>\n`);
+                        console.error('Verbindungsfehler:', err);
+                    });
+                });
+
+                peer.on('error', err => {
+                    document.getElementById('output').innerHTML += renderText(`<span class="error-message">Peer-Fehler: ${err.message}</span>\n`);
+                    console.error('Peer-Fehler:', err);
+                    // Stelle sicher, dass der Eingabebereich trotzdem angezeigt wird
+                    document.getElementById('inputArea').style.display = 'flex';
+                    document.getElementById('input').focus();
+                });
+            } catch (err) {
+                console.error('Fehler bei der PeerJS-Initialisierung:', err);
+                document.getElementById('output').innerHTML += renderText(`<span class="error-message">Fehler bei der PeerJS-Initialisierung: ${err.message}</span>\n`);
+                // Stelle sicher, dass der Eingabebereich trotzdem angezeigt wird
+                document.getElementById('inputArea').style.display = 'flex';
+                document.getElementById('input').focus();
+            }
+        }
+
+        function handleInput() {
+            const input = document.getElementById('input').value.trim();
+            if (!input) return;
+            if (!isConnected) {
+                document.getElementById('output').innerHTML += renderText(`<span class="command">> ${input}</span>\n`);
+                if (input.startsWith('peer ')) {
+                    const targetPeerId = input.split(' ')[1];
+                    if (targetPeerId) connectToPeer(targetPeerId);
+                    else document.getElementById('output').innerHTML += renderText(`<span class="error-message">Fehler: Gib eine Peer-ID ein!</span>\n`);
+                } else if (input.startsWith('help')) showHelp();
+                else if (input.startsWith('name ')) {
+                    const name = input.split(' ')[1];
+                    myName = name || myName;
+                    document.getElementById('output').innerHTML += renderText(`<span class="success-message">Name geändert zu: ${myName}</span>\n`);
+                } else if (input === 'copy') {
+                    navigator.clipboard.writeText(myPeerId).then(() => {
+                        document.getElementById('output').innerHTML += renderText(`<span class="success-message">Peer-ID ${myPeerId} in die Zwischenablage kopiert!</span>\n`);
+                    }).catch(err => {
+                        document.getElementById('output').innerHTML += renderText(`<span class="error-message">Fehler beim Kopieren: ${err}</span>\n`);
+                    });
+                } else if (input === 'clear') {
+                    document.getElementById('output').innerHTML = '';
+                } else document.getElementById('output').innerHTML += renderText('<span class="error-message">Unbekannter Befehl. Nutze: help</span>\n');
+            } else {
+                if (input === '/exit') {
+                    connections.forEach(conn => conn.close());
+                    connections = [];
+                    connectedPeers.clear();
+                    connectedPeersList = [];
+                    isConnected = false;
+                    document.getElementById('prompt').innerHTML = '> ';
+                    document.getElementById('output').innerHTML += renderText(`<span class="success-message">Chat verlassen.</span>\n`);
+                } else if (input === '/peers') {
+                    if (connectedPeersList.length > 0) {
+                        document.getElementById('output').innerHTML += connectedPeersList.join('<br>') + '<br>';
+                    } else {
+                        document.getElementById('output').innerHTML += renderText(`<span class="error-message">Keine Peers verbunden.</span>\n`);
+                    }
+                } else if (input === 'clear') {
+                    document.getElementById('output').innerHTML = '';
+                } else {
+                    const messageEntry = { peerId: myPeerId, message: input, name: myName };
+                    chatHistory.push(messageEntry);
+                    broadcastMessage(messageEntry);
+                    document.getElementById('output').innerHTML += renderText(input, myPeerId, myName);
                 }
-            };
-
-            const offer = await peerConnection.createOffer();
-            await peerConnection.setLocalDescription(offer);
-
-            function updateConnectionInfo() {
-                const connectionData = {
-                    offer: peerConnection.localDescription,
-                    candidates: iceCandidates
-                };
-                const infoDiv = document.getElementById('connection-info');
-                infoDiv.innerHTML = `
-                    <p>1. Kopiere diesen Text:</p>
-                    <textarea readonly>${JSON.stringify(connectionData)}</textarea>
-                    <p>2. Sende ihn an deinen Chat-Partner</p>
-                    <p>3. Füge die Antwort deines Partners hier ein:</p>
-                    <textarea id="remote-data" placeholder="Antwort hier einfügen"></textarea>
-                    <button onclick="connectToRemote()">Verbinden</button>
-                `;
             }
-            updateConnectionInfo();
+            document.getElementById('input').value = '';
+            document.getElementById('console').scrollTop = document.getElementById('console').scrollHeight;
         }
 
-        async function connectToRemote() {
-            const remoteDataText = document.getElementById('remote-data').value;
-            if (!remoteDataText) return;
-
-            const remoteData = JSON.parse(remoteDataText);
-            await peerConnection.setRemoteDescription(remoteData.offer);
-            
-            for (const candidate of remoteData.candidates) {
-                await peerConnection.addIceCandidate(candidate);
+        function connectToPeer(peerId) {
+            if (peerId === myPeerId || connectedPeers.has(peerId) || connections.some(conn => conn.peer === peerId)) return;
+            try {
+                const conn = peer.connect(peerId, { metadata: { name: myName } });
+                connections.push(conn);
+                conn.on('open', () => {
+                    console.log('Verbunden mit: ' + peerId);
+                    knownPeers.add(peerId); 
+                    connectedPeers.add(peerId);
+                    connectedPeersList.push(`<span class="connected-message">Verbunden mit ${peerId}!</span>`);
+                    switchToChatMode(peerId);
+                    conn.send(JSON.stringify({ type: 'peer_list', peers: [...knownPeers] }));
+                    conn.send(JSON.stringify({ type: 'chat_history', history: chatHistory }));
+                    tryToConnectToNewPeers();
+                });
+                conn.on('data', handleData);
+                conn.on('close', () => { 
+                    connectedPeers.delete(conn.peer); 
+                    connectedPeersList = connectedPeersList.filter(msg => !msg.includes(peerId));
+                    console.log('Verbindung geschlossen mit: ' + peerId); 
+                });
+                conn.on('error', err => {
+                    document.getElementById('output').innerHTML += renderText(`<span class="error-message">Verbindungsfehler mit ${peerId}: ${err.message}</span>\n`);
+                    console.error('Verbindungsfehler:', err);
+                });
+            } catch (err) {
+                document.getElementById('output').innerHTML += renderText(`<span class="error-message">Fehler beim Verbinden mit ${peerId}: ${err.message}</span>\n`);
+                console.error('Fehler beim Verbinden:', err);
             }
         }
 
-        async function handleMessage(event) {
-            const data = JSON.parse(event.data);
-            const message = await decryptMessage(
-                new Uint8Array(Object.values(data.encrypted)),
-                new Uint8Array(Object.values(data.iv))
-            );
-            addToChat(`Peer: ${message}`);
+        function broadcastMessage(message) {
+            const messageData = JSON.stringify(message);
+            connections.forEach(conn => { if (conn.peer !== message.peerId) conn.send(messageData); });
         }
 
-        async function sendMessage() {
-            const input = document.getElementById('message-input');
-            const message = input.value;
-            if (!message || !dataChannel) return;
-
-            const { iv, encrypted } = await encryptMessage(message);
-            const data = {
-                iv: Array.from(iv),
-                encrypted: Array.from(new Uint8Array(encrypted))
-            };
-            dataChannel.send(JSON.stringify(data));
-            
-            addToChat(`Du: ${message}`);
-            input.value = '';
+        function handleData(data) {
+            let messageData;
+            try { 
+                messageData = JSON.parse(data); 
+            } catch (e) { 
+                messageData = { peerId: this.peer, message: data, name: this.metadata?.name || 'noname' }; 
+            }
+            if (messageData.type === 'peer_list') {
+                messageData.peers.forEach(peerId => { if (peerId !== myPeerId) knownPeers.add(peerId); });
+                tryToConnectToNewPeers();
+            } else if (messageData.type === 'chat_history') {
+                messageData.history.forEach(entry => {
+                    if (!chatHistory.some(h => h.peerId === entry.peerId && h.message === entry.message)) {
+                        chatHistory.push(entry);
+                        document.getElementById('output').innerHTML += renderText(entry.message, entry.peerId, entry.name);
+                    }
+                });
+                document.getElementById('console').scrollTop = document.getElementById('console').scrollHeight;
+            } else {
+                const { peerId, message, name } = messageData;
+                if (!chatHistory.some(h => h.peerId === peerId && h.message === message)) {
+                    chatHistory.push({ peerId, message, name });
+                    document.getElementById('output').innerHTML += renderText(message, peerId, name);
+                    broadcastMessage(messageData);
+                }
+                document.getElementById('console').scrollTop = document.getElementById('console').scrollHeight;
+            }
         }
 
-        function addToChat(message) {
-            const chatBox = document.getElementById('chat-box');
-            chatBox.innerHTML += `<div>${message}</div>`;
-            chatBox.scrollTop = chatBox.scrollHeight;
+        function switchToChatMode(peerId) {
+            isConnected = true;
+            document.getElementById('prompt').innerHTML = 'chat> ';
         }
 
-        document.getElementById('message-input').addEventListener('keypress', (e) => {
-            if (e.key === 'Enter') sendMessage();
+        function showHelp() {
+            const helpText = `
+<span class="success-message">Verfügbare Befehle:</span>
+- <span class="command">peer</span> <span class="parameter">[peer_id]</span>: Verbinde dich mit einem anderen Peer
+- <span class="command">name</span> <span class="parameter">[string]</span>: Definiere deinen Namen (z. B. name Max)
+- <span class="command">copy</span>: Kopiere deine Peer-ID in die Zwischenablage
+- <span class="command">clear</span>: Lösche den Bildschirm
+- <span class="command">/exit</span>: Verlasse den Chat-Modus (nur im Chat)
+- <span class="command">/peers</span>: Zeige verbundene Peers (nur im Chat)
+- <span class="command">help</span>: Zeige diese Hilfe
+`;
+            document.getElementById('output').innerHTML += renderText(helpText);
+        }
+
+        document.getElementById('input').addEventListener('keydown', (e) => {
+            if (e.key === 'ArrowUp') {
+                if (commandHistory.length > 0 && historyIndex < commandHistory.length - 1) {
+                    historyIndex++;
+                    document.getElementById('input').value = commandHistory[commandHistory.length - 1 - historyIndex];
+                }
+                e.preventDefault();
+            } else if (e.key === 'ArrowDown') {
+                if (historyIndex > 0) {
+                    historyIndex--;
+                    document.getElementById('input').value = commandHistory[commandHistory.length - 1 - historyIndex];
+                } else if (historyIndex === 0) {
+                    historyIndex = -1;
+                    document.getElementById('input').value = '';
+                }
+                e.preventDefault();
+            }
         });
+
+        document.getElementById('console').addEventListener('click', (e) => {
+            if (!e.target.matches('#input')) {
+                document.getElementById('input').focus();
+            }
+        });
+
+        document.getElementById('input').addEventListener('keypress', (e) => {
+            if (e.key === 'Enter') {
+                const inputValue = document.getElementById('input').value.trim();
+                if (inputValue) {
+                    commandHistory.push(inputValue);
+                    historyIndex = -1;
+                }
+                handleInput();
+            }
+        });
+
+        document.getElementById('input').addEventListener('touchstart', function() {
+            this.focus();
+        });
+
+        // Initialisiere die Seite
+        try {
+            document.getElementById('output').innerHTML = renderText('Initialisiere...\n');
+            initPeer();
+        } catch (err) {
+            console.error('Fehler beim Laden der Seite:', err);
+            document.getElementById('output').innerHTML += renderText(`<span class="error-message">Fehler beim Laden der Seite: ${err.message}</span>\n`);
+            document.getElementById('inputArea').style.display = 'flex';
+            document.getElementById('input').focus();
+        }
     </script>
 </body>
 </html>
