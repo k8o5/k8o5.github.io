@@ -2,82 +2,161 @@
 <html lang="de">
 <head>
     <meta charset="UTF-8">
-    <title>Prüfungsdateien Übersicht</title>
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Statischer Chat ohne Backend (WebRTC)</title>
     <style>
         body {
             font-family: Arial, sans-serif;
             margin: 20px;
-            background-color: #f4f4f4;
+            background-color: #f0f0f0;
         }
-        .container {
-            max-width: 800px;
-            margin: 0 auto;
+        #chat-box {
+            width: 100%;
+            max-width: 600px;
+            height: 400px;
+            border: 1px solid #ccc;
+            padding: 10px;
+            overflow-y: scroll;
             background-color: white;
-            padding: 20px;
-            border-radius: 8px;
-            box-shadow: 0 0 10px rgba(0, 0, 0, 0.1);
+            margin-bottom: 20px;
         }
-        h1 {
-            text-align: center;
-            color: #333;
+        #message-input {
+            width: 100%;
+            max-width: 500px;
+            padding: 10px;
         }
-        ul {
-            list-style-type: none;
-            padding: 0;
+        #send-button {
+            padding: 10px 20px;
+            background-color: #007bff;
+            color: white;
+            border: none;
+            cursor: pointer;
         }
-        li {
-            margin: 10px 0;
+        #send-button:hover {
+            background-color: #0056b3;
         }
-        a {
-            text-decoration: none;
-            color: #007BFF;
-            font-size: 18px;
-        }
-        a:hover {
-            text-decoration: underline;
-            color: #0056b3;
+        #online-users {
+            margin-top: 10px;
+            font-weight: bold;
         }
     </style>
 </head>
 <body>
-    <div class="container">
-        <h1>Prüfungsdateien Übersicht</h1>
-        <ul id="fileList">
-            <!-- Dateien werden hier dynamisch eingefügt -->
-        </ul>
-    </div>
+    <h1>Statischer Chat ohne Backend (WebRTC)</h1>
+    <div id="online-users">Online Nutzer: 1</div>
+    <div id="chat-box"></div>
+    <input type="text" id="message-input" placeholder="Nachricht eingeben...">
+    <button id="send-button">Senden</button>
 
+    <!-- PeerJS einbinden -->
+    <script src="https://unpkg.com/peerjs@1.5.2/dist/peerjs.min.js"></script>
     <script>
-        // Liste der Dateien (aus deinem Verzeichnis)
-        const files = [
-            "Frühjahr2019.pdf",
-            "Frühjahr2020.pdf",
-            "Frühjahr2023.pdf",
-            "Herbst2016.pdf",
-            "Herbst2017(1).pdf",
-            "Herbst2017(2).pdf",
-            "Herbst2018.pdf",
-            "Herbst2021.pdf",
-            "Herbst2022.pdf",
-            "Herbst2023.pdf"
-        ];
+        // Vordefinierte Liste von Peer-IDs (für bis zu 10 Nutzer)
+        const POSSIBLE_PEER_IDS = Array.from({ length: 10 }, (_, i) => `peer-${i + 1}`);
 
-        // Funktion zum Erstellen der Dateiliste
-        function populateFileList() {
-            const fileList = document.getElementById('fileList');
-            files.forEach(file => {
-                const li = document.createElement('li');
-                const a = document.createElement('a');
-                a.href = file; // Relativer Pfad, da die HTML-Datei im selben Verzeichnis ist
-                a.textContent = file;
-                a.target = "_blank"; // Öffnet die Datei in einem neuen Tab
-                li.appendChild(a);
-                fileList.appendChild(li);
+        // Wähle eine zufällige Peer-ID aus der Liste für diesen Nutzer
+        const myPeerId = POSSIBLE_PEER_IDS[Math.floor(Math.random() * POSSIBLE_PEER_IDS.length)];
+        const userId = `Nutzer-${myPeerId}`;
+
+        // PeerJS initialisieren mit der ausgewählten Peer-ID
+        const peer = new Peer(myPeerId, {
+            config: {
+                iceServers: [
+                    { urls: 'stun:stun.l.google.com:19302' }, // Öffentlicher STUN-Server von Google
+                    { urls: 'stun:stun1.l.google.com:19302' }
+                ]
+            }
+        });
+
+        // Liste der verbundenen Peers
+        const connections = new Map();
+
+        // Chat-Box und Eingabefeld
+        const chatBox = document.getElementById('chat-box');
+        const messageInput = document.getElementById('message-input');
+        const sendButton = document.getElementById('send-button');
+        const onlineUsers = document.getElementById('online-users');
+
+        // Funktion zum Hinzufügen einer Nachricht zur Chat-Box
+        function addMessage(message) {
+            const messageElement = document.createElement('p');
+            messageElement.textContent = message;
+            chatBox.appendChild(messageElement);
+            chatBox.scrollTop = chatBox.scrollHeight;
+        }
+
+        // Wenn der Peer initialisiert wird, erhalten wir eine ID
+        peer.on('open', (id) => {
+            addMessage(`Deine ID: ${id} (${userId})`);
+            addMessage('Versuche, dich mit anderen Peers zu verbinden...');
+            connectToOtherPeers();
+        });
+
+        // Funktion, um sich mit anderen Peers zu verbinden
+        function connectToOtherPeers() {
+            POSSIBLE_PEER_IDS.forEach(peerId => {
+                if (peerId !== myPeerId && !connections.has(peerId)) {
+                    const conn = peer.connect(peerId);
+                    setupConnection(conn);
+                }
             });
         }
 
-        // Dateiliste beim Laden der Seite füllen
-        window.onload = populateFileList;
+        // Wenn ein anderer Peer sich mit uns verbindet
+        peer.on('connection', (conn) => {
+            setupConnection(conn);
+        });
+
+        // Verbindung einrichten
+        function setupConnection(conn) {
+            const peerId = conn.peer;
+            if (connections.has(peerId)) return;
+
+            conn.on('open', () => {
+                connections.set(peerId, conn);
+                addMessage(`Verbunden mit ${peerId}`);
+                conn.send(`Hallo von ${userId}!`);
+                onlineUsers.textContent = `Online Nutzer: ${connections.size + 1}`;
+            });
+
+            conn.on('data', (data) => {
+                addMessage(`${peerId}: ${data}`);
+            });
+
+            conn.on('close', () => {
+                connections.delete(peerId);
+                addMessage(`${peerId} hat den Chat verlassen.`);
+                onlineUsers.textContent = `Online Nutzer: ${connections.size + 1}`;
+            });
+
+            conn.on('error', (err) => {
+                addMessage(`Fehler mit ${peerId}: ${err}`);
+            });
+        }
+
+        // Nachricht senden
+        sendButton.addEventListener('click', () => {
+            const message = messageInput.value.trim();
+            if (message) {
+                addMessage(`Du: ${message}`);
+                connections.forEach((conn, peerId) => {
+                    conn.send(message);
+                });
+                messageInput.value = '';
+            }
+        });
+
+        // Nachricht senden mit Enter-Taste
+        messageInput.addEventListener('keypress', (e) => {
+            if (e.key === 'Enter') {
+                sendButton.click();
+            }
+        });
+
+        // Fehlerbehandlung
+        peer.on('error', (err) => {
+            addMessage(`Fehler: ${err}`);
+        });
     </script>
 </body>
 </html>
