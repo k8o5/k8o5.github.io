@@ -134,13 +134,17 @@
             isConnected = false, chatHistory = [], myName = 'noname', commandHistory = [], historyIndex = -1,
             connectedPeersList = [];
 
+        // Vordefinierte Liste von Peer-IDs für die "Community" (für bis zu 10 Nutzer)
+        const COMMUNITY_PEER_IDS = Array.from({ length: 10 }, (_, i) => `community-peer-${i + 1}`);
+
         function getPeerColor(peerId) {
-            let hash = 0; for (let i = 0; i < peerId.length; i++) hash = peerId.charCodeAt(i) + ((hash << 5) - hash);
+            let hash = 0;
+            for (let i = 0; i < peerId.length; i++) hash = peerId.charCodeAt(i) + ((hash << 5) - hash);
             return `hsl(${Math.abs(hash % 360)}, 70%, 50%)`;
         }
 
         function renderText(text, peerId = null, name = null) {
-            return peerId ? `<span class="peer-message" style="color:${getPeerColor(peerId)}">${name || 'noname'}:${text}</span><br>` : text.replace(/\n/g, '<br>');
+            return peerId ? `<span class="peer-message" style="color:${getPeerColor(peerId)}">${name || 'noname'}: ${text}</span><br>` : text.replace(/\n/g, '<br>');
         }
 
         function typeWriter(text, index = 0, delay = 50, callback) {
@@ -164,14 +168,28 @@
                 .forEach(peerId => connectToPeer(peerId));
         }
 
-        function initPeer() {
+        function connectToCommunity() {
+            // Wähle eine zufällige Peer-ID aus der Community-Liste für diesen Nutzer
+            if (!myPeerId.startsWith('community-peer-')) {
+                peer.destroy(); // Zerstöre den aktuellen Peer, um eine neue ID zu setzen
+                myPeerId = COMMUNITY_PEER_IDS[Math.floor(Math.random() * COMMUNITY_PEER_IDS.length)];
+                initPeerWithId(myPeerId);
+            }
+            // Versuche, dich mit allen anderen Community-Peer-IDs zu verbinden
+            COMMUNITY_PEER_IDS.forEach(peerId => {
+                if (peerId !== myPeerId && !connectedPeers.has(peerId) && !connections.some(conn => conn.peer === peerId)) {
+                    connectToPeer(peerId);
+                }
+            });
+        }
+
+        function initPeerWithId(peerId) {
             try {
-                // Konfiguration mit kostenlosen STUN-Servern von Google
-                peer = new Peer({
-                    debug: 3, // Debug-Level auf 3 für detaillierte Logs
+                peer = new Peer(peerId, {
+                    debug: 3,
                     config: {
                         iceServers: [
-                            { urls: 'stun:stun.l.google.com:19302' }, // Kostenloser STUN-Server von Google
+                            { urls: 'stun:stun.l.google.com:19302' },
                             { urls: 'stun:stun1.l.google.com:19302' },
                             { urls: 'stun:stun2.l.google.com:19302' },
                             { urls: 'stun:stun3.l.google.com:19302' },
@@ -181,7 +199,69 @@
                 });
 
                 peer.on('open', id => {
-                    myPeerId = id; 
+                    myPeerId = id;
+                    knownPeers.add(myPeerId);
+                    document.getElementById('output').innerHTML += renderText(`<span class="success-message">Deine neue Peer-ID: ${myPeerId}</span>\n`);
+                    document.getElementById('inputArea').style.display = 'flex';
+                    document.getElementById('input').focus();
+                    // Versuche, dich mit anderen Community-Peers zu verbinden
+                    connectToCommunity();
+                });
+
+                peer.on('connection', conn => {
+                    conn.metadata = { name: conn.metadata?.name || 'noname' };
+                    connections.push(conn);
+                    conn.on('open', () => {
+                        console.log('Verbunden mit: ' + conn.peer);
+                        knownPeers.add(conn.peer);
+                        connectedPeers.add(conn.peer);
+                        connectedPeersList.push(`<span class="connected-message">Verbunden mit ${conn.peer}!</span>`);
+                        switchToChatMode(conn.peer);
+                        conn.send(JSON.stringify({ type: 'peer_list', peers: [...knownPeers] }));
+                        conn.send(JSON.stringify({ type: 'chat_history', history: chatHistory }));
+                        tryToConnectToNewPeers();
+                    });
+                    conn.on('data', handleData);
+                    conn.on('close', () => {
+                        connectedPeers.delete(conn.peer);
+                        connectedPeersList = connectedPeersList.filter(msg => !msg.includes(conn.peer));
+                        console.log('Verbindung geschlossen mit: ' + conn.peer);
+                    });
+                    conn.on('error', err => {
+                        console.log(`Verbindungsfehler mit ${conn.peer}: ${err.message}`);
+                    });
+                });
+
+                peer.on('error', err => {
+                    console.log(`Peer-Fehler: ${err.message}`);
+                    document.getElementById('inputArea').style.display = 'flex';
+                    document.getElementById('input').focus();
+                });
+            } catch (err) {
+                console.error('Fehler bei der PeerJS-Initialisierung:', err);
+                document.getElementById('output').innerHTML += renderText(`<span class="error-message">Fehler bei der PeerJS-Initialisierung: ${err.message}</span>\n`);
+                document.getElementById('inputArea').style.display = 'flex';
+                document.getElementById('input').focus();
+            }
+        }
+
+        function initPeer() {
+            try {
+                peer = new Peer({
+                    debug: 3,
+                    config: {
+                        iceServers: [
+                            { urls: 'stun:stun.l.google.com:19302' },
+                            { urls: 'stun:stun1.l.google.com:19302' },
+                            { urls: 'stun:stun2.l.google.com:19302' },
+                            { urls: 'stun:stun3.l.google.com:19302' },
+                            { urls: 'stun:stun4.l.google.com:19302' }
+                        ]
+                    }
+                });
+
+                peer.on('open', id => {
+                    myPeerId = id;
                     knownPeers.add(myPeerId);
                     typeWriter('k8o5\n', 0, 36, () => {
                         typeWriter(`Deine Peer-ID: ${myPeerId}\n`, 0, 18, () => {
@@ -196,7 +276,7 @@
                     connections.push(conn);
                     conn.on('open', () => {
                         console.log('Verbunden mit: ' + conn.peer);
-                        knownPeers.add(conn.peer); 
+                        knownPeers.add(conn.peer);
                         connectedPeers.add(conn.peer);
                         connectedPeersList.push(`<span class="connected-message">Verbunden mit ${conn.peer}!</span>`);
                         switchToChatMode(conn.peer);
@@ -205,28 +285,24 @@
                         tryToConnectToNewPeers();
                     });
                     conn.on('data', handleData);
-                    conn.on('close', () => { 
-                        connectedPeers.delete(conn.peer); 
+                    conn.on('close', () => {
+                        connectedPeers.delete(conn.peer);
                         connectedPeersList = connectedPeersList.filter(msg => !msg.includes(conn.peer));
-                        console.log('Verbindung geschlossen mit: ' + conn.peer); 
+                        console.log('Verbindung geschlossen mit: ' + conn.peer);
                     });
                     conn.on('error', err => {
-                        document.getElementById('output').innerHTML += renderText(`<span class="error-message">Verbindungsfehler mit ${conn.peer}: ${err.message}</span>\n`);
-                        console.error('Verbindungsfehler:', err);
+                        console.log(`Verbindungsfehler mit ${conn.peer}: ${err.message}`);
                     });
                 });
 
                 peer.on('error', err => {
-                    document.getElementById('output').innerHTML += renderText(`<span class="error-message">Peer-Fehler: ${err.message}</span>\n`);
-                    console.error('Peer-Fehler:', err);
-                    // Stelle sicher, dass der Eingabebereich trotzdem angezeigt wird
+                    console.log(`Peer-Fehler: ${err.message}`);
                     document.getElementById('inputArea').style.display = 'flex';
                     document.getElementById('input').focus();
                 });
             } catch (err) {
                 console.error('Fehler bei der PeerJS-Initialisierung:', err);
                 document.getElementById('output').innerHTML += renderText(`<span class="error-message">Fehler bei der PeerJS-Initialisierung: ${err.message}</span>\n`);
-                // Stelle sicher, dass der Eingabebereich trotzdem angezeigt wird
                 document.getElementById('inputArea').style.display = 'flex';
                 document.getElementById('input').focus();
             }
@@ -237,7 +313,10 @@
             if (!input) return;
             if (!isConnected) {
                 document.getElementById('output').innerHTML += renderText(`<span class="command">> ${input}</span>\n`);
-                if (input.startsWith('peer ')) {
+                if (input === 'public') {
+                    document.getElementById('output').innerHTML += renderText(`<span class="success-message">Verbinde mit der Community...</span>\n`);
+                    connectToCommunity();
+                } else if (input.startsWith('peer ')) {
                     const targetPeerId = input.split(' ')[1];
                     if (targetPeerId) connectToPeer(targetPeerId);
                     else document.getElementById('output').innerHTML += renderText(`<span class="error-message">Fehler: Gib eine Peer-ID ein!</span>\n`);
@@ -254,7 +333,9 @@
                     });
                 } else if (input === 'clear') {
                     document.getElementById('output').innerHTML = '';
-                } else document.getElementById('output').innerHTML += renderText('<span class="error-message">Unbekannter Befehl. Nutze: help</span>\n');
+                } else {
+                    document.getElementById('output').innerHTML += renderText('<span class="error-message">Unbekannter Befehl. Nutze: help</span>\n');
+                }
             } else {
                 if (input === '/exit') {
                     connections.forEach(conn => conn.close());
@@ -290,7 +371,7 @@
                 connections.push(conn);
                 conn.on('open', () => {
                     console.log('Verbunden mit: ' + peerId);
-                    knownPeers.add(peerId); 
+                    knownPeers.add(peerId);
                     connectedPeers.add(peerId);
                     connectedPeersList.push(`<span class="connected-message">Verbunden mit ${peerId}!</span>`);
                     switchToChatMode(peerId);
@@ -299,17 +380,15 @@
                     tryToConnectToNewPeers();
                 });
                 conn.on('data', handleData);
-                conn.on('close', () => { 
-                    connectedPeers.delete(conn.peer); 
+                conn.on('close', () => {
+                    connectedPeers.delete(conn.peer);
                     connectedPeersList = connectedPeersList.filter(msg => !msg.includes(peerId));
-                    console.log('Verbindung geschlossen mit: ' + peerId); 
+                    console.log('Verbindung geschlossen mit: ' + peerId);
                 });
                 conn.on('error', err => {
-                    document.getElementById('output').innerHTML += renderText(`<span class="error-message">Verbindungsfehler mit ${peerId}: ${err.message}</span>\n`);
-                    console.error('Verbindungsfehler:', err);
+                    console.log(`Verbindungsfehler mit ${peerId}: ${err.message}`);
                 });
             } catch (err) {
-                document.getElementById('output').innerHTML += renderText(`<span class="error-message">Fehler beim Verbinden mit ${peerId}: ${err.message}</span>\n`);
                 console.error('Fehler beim Verbinden:', err);
             }
         }
@@ -321,10 +400,10 @@
 
         function handleData(data) {
             let messageData;
-            try { 
-                messageData = JSON.parse(data); 
-            } catch (e) { 
-                messageData = { peerId: this.peer, message: data, name: this.metadata?.name || 'noname' }; 
+            try {
+                messageData = JSON.parse(data);
+            } catch (e) {
+                messageData = { peerId: this.peer, message: data, name: this.metadata?.name || 'noname' };
             }
             if (messageData.type === 'peer_list') {
                 messageData.peers.forEach(peerId => { if (peerId !== myPeerId) knownPeers.add(peerId); });
@@ -356,6 +435,7 @@
         function showHelp() {
             const helpText = `
 <span class="success-message">Verfügbare Befehle:</span>
+- <span class="command">public</span>: Verbinde dich mit der Community
 - <span class="command">peer</span> <span class="parameter">[peer_id]</span>: Verbinde dich mit einem anderen Peer
 - <span class="command">name</span> <span class="parameter">[string]</span>: Definiere deinen Namen (z. B. name Max)
 - <span class="command">copy</span>: Kopiere deine Peer-ID in die Zwischenablage
