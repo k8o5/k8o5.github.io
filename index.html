@@ -2,7 +2,7 @@
 <html lang="de">
 <head>
     <meta charset="UTF-8">
-    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0, user-scalable=no">
     <title>Fart Tag - Das lustigste Spiel ohne Backend!</title>
     <style>
         * {
@@ -10,6 +10,7 @@
             padding: 0;
             box-sizing: border-box;
             font-family: 'Comic Sans MS', 'Segoe UI', Tahoma, Geneva, Verdana, sans-serif;
+            touch-action: none; /* Verhindert Scrollen/Zoom auf mobilen Geräten */
         }
         body {
             background: linear-gradient(135deg, #ffeb3b 0%, #ff9800 100%);
@@ -18,7 +19,7 @@
             display: flex;
             justify-content: center;
             align-items: center;
-            padding: 20px;
+            padding: 10px;
             overflow: hidden;
         }
         .container {
@@ -37,7 +38,7 @@
             color: #ff5722;
             text-shadow: 2px 2px 4px rgba(0, 0, 0, 0.3);
             margin-bottom: 10px;
-            font-size: 2rem;
+            font-size: 1.5rem;
         }
         #game-area {
             width: 100%;
@@ -48,12 +49,12 @@
         }
         .player {
             position: absolute;
-            width: 50px;
-            height: 50px;
-            font-size: 2rem;
+            width: 40px;
+            height: 40px;
+            font-size: 1.5rem;
             text-align: center;
-            line-height: 50px;
-            transition: all 0.1s;
+            line-height: 40px;
+            transition: all 0.05s linear; /* Sanfte Bewegung */
         }
         .player.it {
             border-radius: 50%;
@@ -67,8 +68,8 @@
         }
         .fart-effect {
             position: absolute;
-            width: 50px;
-            height: 50px;
+            width: 40px;
+            height: 40px;
             background: rgba(139, 69, 19, 0.5);
             border-radius: 50%;
             animation: fart 0.5s forwards;
@@ -81,8 +82,30 @@
             text-align: center;
             color: #ff5722;
             font-weight: bold;
-            font-size: 1.1rem;
+            font-size: 1rem;
             margin-bottom: 10px;
+        }
+        #joystick {
+            position: fixed;
+            bottom: 20px;
+            left: 20px;
+            width: 100px;
+            height: 100px;
+            background: rgba(0, 0, 0, 0.3);
+            border-radius: 50%;
+            display: none;
+            touch-action: none;
+        }
+        #joystick-knob {
+            position: absolute;
+            width: 50px;
+            height: 50px;
+            background: #ff5722;
+            border-radius: 50%;
+            top: 25px;
+            left: 25px;
+            transform: translate(0, 0);
+            touch-action: none;
         }
         @media (max-width: 600px) {
             .container {
@@ -90,13 +113,22 @@
                 height: 400px;
             }
             h1 {
-                font-size: 1.5rem;
+                font-size: 1.2rem;
+            }
+            #game-area {
+                height: calc(100% - 50px);
             }
             .player {
-                width: 40px;
-                height: 40px;
-                font-size: 1.5rem;
-                line-height: 40px;
+                width: 30px;
+                height: 30px;
+                font-size: 1.2rem;
+                line-height: 30px;
+            }
+            #online-users {
+                font-size: 0.9rem;
+            }
+            #joystick {
+                display: block;
             }
         }
     </style>
@@ -106,6 +138,9 @@
         <h1>Fart Tag - Wer furzt dich?!</h1>
         <div id="online-users">Online Spieler: 1</div>
         <div id="game-area"></div>
+    </div>
+    <div id="joystick">
+        <div id="joystick-knob"></div>
     </div>
 
     <!-- PeerJS einbinden -->
@@ -135,10 +170,12 @@
         const players = new Map();
         let myPlayer = {
             id: myPeerId,
-            x: Math.random() * 700,
-            y: Math.random() * 500,
+            x: Math.random() * (window.innerWidth - 50),
+            y: Math.random() * (window.innerHeight - 50),
             emoji: getRandomEmoji(),
-            isIt: false
+            isIt: false,
+            vx: 0, // Geschwindigkeit in x-Richtung
+            vy: 0  // Geschwindigkeit in y-Richtung
         };
         players.set(myPeerId, myPlayer);
 
@@ -165,28 +202,87 @@
             });
         }
 
-        // Bewegung des Spielers
+        // Bewegung aktualisieren
         const speed = 5;
+        function updateMovement() {
+            myPlayer.x += myPlayer.vx;
+            myPlayer.y += myPlayer.vy;
+
+            // Begrenze die Bewegung innerhalb des Spielfelds
+            myPlayer.x = Math.max(0, Math.min(myPlayer.x, gameArea.clientWidth - 40));
+            myPlayer.y = Math.max(0, Math.min(myPlayer.y, gameArea.clientHeight - 40));
+
+            broadcastPlayerUpdate();
+            checkCollisions();
+            renderPlayers();
+
+            requestAnimationFrame(updateMovement);
+        }
+
+        // Desktop-Steuerung (Pfeiltasten)
+        const keys = { ArrowLeft: false, ArrowRight: false, ArrowUp: false, ArrowDown: false };
         document.addEventListener('keydown', (e) => {
-            let moved = false;
-            if (e.key === 'ArrowLeft' && myPlayer.x > 0) {
-                myPlayer.x -= speed;
-                moved = true;
-            } else if (e.key === 'ArrowRight' && myPlayer.x < gameArea.clientWidth - 50) {
-                myPlayer.x += speed;
-                moved = true;
-            } else if (e.key === 'ArrowUp' && myPlayer.y > 0) {
-                myPlayer.y -= speed;
-                moved = true;
-            } else if (e.key === 'ArrowDown' && myPlayer.y < gameArea.clientHeight - 50) {
-                myPlayer.y += speed;
-                moved = true;
+            if (e.key in keys) {
+                keys[e.key] = true;
+                updateVelocity();
             }
-            if (moved) {
-                broadcastPlayerUpdate();
-                checkCollisions();
-                renderPlayers();
+        });
+        document.addEventListener('keyup', (e) => {
+            if (e.key in keys) {
+                keys[e.key] = false;
+                updateVelocity();
             }
+        });
+
+        function updateVelocity() {
+            myPlayer.vx = 0;
+            myPlayer.vy = 0;
+            if (keys.ArrowLeft) myPlayer.vx = -speed;
+            if (keys.ArrowRight) myPlayer.vx = speed;
+            if (keys.ArrowUp) myPlayer.vy = -speed;
+            if (keys.ArrowDown) myPlayer.vy = speed;
+        }
+
+        // Mobile-Steuerung (Joystick)
+        const joystick = document.getElementById('joystick');
+        const joystickKnob = document.getElementById('joystick-knob');
+        let isDragging = false;
+        let joystickCenterX, joystickCenterY;
+
+        joystick.addEventListener('touchstart', (e) => {
+            e.preventDefault();
+            isDragging = true;
+            const touch = e.touches[0];
+            joystickCenterX = joystick.offsetLeft + 50;
+            joystickCenterY = joystick.offsetTop + 50;
+        });
+
+        joystick.addEventListener('touchmove', (e) => {
+            e.preventDefault();
+            if (!isDragging) return;
+            const touch = e.touches[0];
+            const dx = touch.clientX - joystickCenterX;
+            const dy = touch.clientY - joystickCenterY;
+            const distance = Math.sqrt(dx * dx + dy * dy);
+            const maxDistance = 50;
+            const angle = Math.atan2(dy, dx);
+
+            if (distance > maxDistance) {
+                joystickKnob.style.transform = `translate(${Math.cos(angle) * maxDistance}px, ${Math.sin(angle) * maxDistance}px)`;
+            } else {
+                joystickKnob.style.transform = `translate(${dx}px, ${dy}px)`;
+            }
+
+            const speedFactor = Math.min(distance / maxDistance, 1);
+            myPlayer.vx = Math.cos(angle) * speed * speedFactor;
+            myPlayer.vy = Math.sin(angle) * speed * speedFactor;
+        });
+
+        joystick.addEventListener('touchend', () => {
+            isDragging = false;
+            joystickKnob.style.transform = 'translate(0, 0)';
+            myPlayer.vx = 0;
+            myPlayer.vy = 0;
         });
 
         // Kollisionen prüfen
@@ -197,7 +293,7 @@
                 const dx = myPlayer.x - player.x;
                 const dy = myPlayer.y - player.y;
                 const distance = Math.sqrt(dx * dx + dy * dy);
-                if (distance < 50) {
+                if (distance < 40) {
                     // Spieler wurde gefurzt
                     myPlayer.isIt = false;
                     player.isIt = true;
@@ -243,6 +339,7 @@
                 myPlayer.isIt = true;
             }
             renderPlayers();
+            updateMovement(); // Starte die Animationsschleife
         });
 
         // Funktion, um sich mit anderen Peers zu verbinden
