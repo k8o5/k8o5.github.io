@@ -132,10 +132,10 @@
     <script>
         let peer, myPeerId = '', connections = [], knownPeers = new Set(), connectedPeers = new Set(),
             isConnected = false, chatHistory = [], myName = 'noname', commandHistory = [], historyIndex = -1,
-            connectedPeersList = [];
+            connectedPeersList = [], isMainPeer = false;
 
-        // Vordefinierte Liste von Peer-IDs für die "Community" (für bis zu 10 Nutzer)
-        const COMMUNITY_PEER_IDS = Array.from({ length: 10 }, (_, i) => `community-peer-${i + 1}`);
+        // Feste Peer-ID für die "public" Lobby
+        const PUBLIC_LOBBY_PEER_ID = 'public-lobby';
 
         function getPeerColor(peerId) {
             let hash = 0;
@@ -168,22 +168,17 @@
                 .forEach(peerId => connectToPeer(peerId));
         }
 
-        function connectToCommunity() {
-            // Wähle eine zufällige Peer-ID aus der Community-Liste für diesen Nutzer
-            if (!myPeerId.startsWith('community-peer-')) {
-                peer.destroy(); // Zerstöre den aktuellen Peer, um eine neue ID zu setzen
-                myPeerId = COMMUNITY_PEER_IDS[Math.floor(Math.random() * COMMUNITY_PEER_IDS.length)];
-                initPeerWithId(myPeerId);
-            }
-            // Versuche, dich mit allen anderen Community-Peer-IDs zu verbinden
-            COMMUNITY_PEER_IDS.forEach(peerId => {
-                if (peerId !== myPeerId && !connectedPeers.has(peerId) && !connections.some(conn => conn.peer === peerId)) {
-                    connectToPeer(peerId);
-                }
-            });
-            // Setze direkt in den Chat-Modus, unabhängig von der Verbindung
-            isConnected = true;
-            document.getElementById('prompt').innerHTML = 'chat> ';
+        function connectToPublicLobby() {
+            // Versuche zuerst, dich mit dem Haupt-Peer (public-lobby) zu verbinden
+            connectToPeer(PUBLIC_LOBBY_PEER_ID);
+        }
+
+        function becomeMainPeer() {
+            if (isMainPeer) return; // Bereits Haupt-Peer
+            peer.destroy(); // Zerstöre den aktuellen Peer, um eine neue ID zu setzen
+            myPeerId = PUBLIC_LOBBY_PEER_ID;
+            isMainPeer = true;
+            initPeerWithId(myPeerId);
         }
 
         function initPeerWithId(peerId) {
@@ -205,10 +200,13 @@
                     myPeerId = id;
                     knownPeers.add(myPeerId);
                     document.getElementById('output').innerHTML += renderText(`<span class="success-message">Deine neue Peer-ID: ${myPeerId}</span>\n`);
+                    if (isMainPeer) {
+                        document.getElementById('output').innerHTML += renderText(`<span class="success-message">Du bist jetzt der Haupt-Peer der public Lobby!</span>\n`);
+                    } else {
+                        connectToPublicLobby(); // Versuche erneut, dich mit der Lobby zu verbinden
+                    }
                     document.getElementById('inputArea').style.display = 'flex';
                     document.getElementById('input').focus();
-                    // Versuche, dich mit anderen Community-Peers zu verbinden
-                    connectToCommunity();
                 });
 
                 peer.on('connection', conn => {
@@ -219,6 +217,8 @@
                         knownPeers.add(conn.peer);
                         connectedPeers.add(conn.peer);
                         connectedPeersList.push(`<span class="connected-message">Verbunden mit ${conn.peer}!</span>`);
+                        isConnected = true;
+                        document.getElementById('prompt').innerHTML = 'chat> ';
                         conn.send(JSON.stringify({ type: 'peer_list', peers: [...knownPeers] }));
                         conn.send(JSON.stringify({ type: 'chat_history', history: chatHistory }));
                         tryToConnectToNewPeers();
@@ -228,6 +228,10 @@
                         connectedPeers.delete(conn.peer);
                         connectedPeersList = connectedPeersList.filter(msg => !msg.includes(conn.peer));
                         console.log('Verbindung geschlossen mit: ' + conn.peer);
+                        // Wenn der Haupt-Peer offline geht und ich nicht der Haupt-Peer bin, versuche, Haupt-Peer zu werden
+                        if (conn.peer === PUBLIC_LOBBY_PEER_ID && !isMainPeer) {
+                            becomeMainPeer();
+                        }
                     });
                     conn.on('error', err => {
                         console.log(`Verbindungsfehler mit ${conn.peer}: ${err.message}`);
@@ -281,6 +285,8 @@
                         knownPeers.add(conn.peer);
                         connectedPeers.add(conn.peer);
                         connectedPeersList.push(`<span class="connected-message">Verbunden mit ${conn.peer}!</span>`);
+                        isConnected = true;
+                        document.getElementById('prompt').innerHTML = 'chat> ';
                         conn.send(JSON.stringify({ type: 'peer_list', peers: [...knownPeers] }));
                         conn.send(JSON.stringify({ type: 'chat_history', history: chatHistory }));
                         tryToConnectToNewPeers();
@@ -290,6 +296,10 @@
                         connectedPeers.delete(conn.peer);
                         connectedPeersList = connectedPeersList.filter(msg => !msg.includes(conn.peer));
                         console.log('Verbindung geschlossen mit: ' + conn.peer);
+                        // Wenn der Haupt-Peer offline geht und ich nicht der Haupt-Peer bin, versuche, Haupt-Peer zu werden
+                        if (conn.peer === PUBLIC_LOBBY_PEER_ID && !isMainPeer) {
+                            becomeMainPeer();
+                        }
                     });
                     conn.on('error', err => {
                         console.log(`Verbindungsfehler mit ${conn.peer}: ${err.message}`);
@@ -315,8 +325,8 @@
             if (!isConnected) {
                 document.getElementById('output').innerHTML += renderText(`<span class="command">> ${input}</span>\n`);
                 if (input === 'public') {
-                    document.getElementById('output').innerHTML += renderText(`<span class="success-message">Verbinde mit der Community...</span>\n`);
-                    connectToCommunity();
+                    document.getElementById('output').innerHTML += renderText(`<span class="success-message">Verbinde mit der public Lobby...</span>\n`);
+                    connectToPublicLobby();
                 } else if (input.startsWith('peer ')) {
                     const targetPeerId = input.split(' ')[1];
                     if (targetPeerId) connectToPeer(targetPeerId);
@@ -344,6 +354,7 @@
                     connectedPeers.clear();
                     connectedPeersList = [];
                     isConnected = false;
+                    isMainPeer = false;
                     document.getElementById('prompt').innerHTML = '> ';
                     document.getElementById('output').innerHTML += renderText(`<span class="success-message">Chat verlassen.</span>\n`);
                 } else if (input === '/peers') {
@@ -375,6 +386,8 @@
                     knownPeers.add(peerId);
                     connectedPeers.add(peerId);
                     connectedPeersList.push(`<span class="connected-message">Verbunden mit ${peerId}!</span>`);
+                    isConnected = true;
+                    document.getElementById('prompt').innerHTML = 'chat> ';
                     conn.send(JSON.stringify({ type: 'peer_list', peers: [...knownPeers] }));
                     conn.send(JSON.stringify({ type: 'chat_history', history: chatHistory }));
                     tryToConnectToNewPeers();
@@ -384,9 +397,17 @@
                     connectedPeers.delete(conn.peer);
                     connectedPeersList = connectedPeersList.filter(msg => !msg.includes(peerId));
                     console.log('Verbindung geschlossen mit: ' + peerId);
+                    // Wenn der Haupt-Peer offline geht und ich nicht der Haupt-Peer bin, versuche, Haupt-Peer zu werden
+                    if (peerId === PUBLIC_LOBBY_PEER_ID && !isMainPeer) {
+                        becomeMainPeer();
+                    }
                 });
                 conn.on('error', err => {
                     console.log(`Verbindungsfehler mit ${peerId}: ${err.message}`);
+                    // Wenn die Verbindung zum Haupt-Peer fehlschlägt, versuche, selbst Haupt-Peer zu werden
+                    if (peerId === PUBLIC_LOBBY_PEER_ID && !isMainPeer) {
+                        becomeMainPeer();
+                    }
                 });
             } catch (err) {
                 console.error('Fehler beim Verbinden:', err);
@@ -430,7 +451,7 @@
         function showHelp() {
             const helpText = `
 <span class="success-message">Verfügbare Befehle:</span>
-- <span class="command">public</span>: Verbinde dich mit der Community
+- <span class="command">public</span>: Verbinde dich mit der public Lobby
 - <span class="command">peer</span> <span class="parameter">[peer_id]</span>: Verbinde dich mit einem anderen Peer
 - <span class="command">name</span> <span class="parameter">[string]</span>: Definiere deinen Namen (z. B. name Max)
 - <span class="command">copy</span>: Kopiere deine Peer-ID in die Zwischenablage
@@ -462,7 +483,6 @@
         });
 
         document.getElementById('console').addEventListener('click', (e) => {
-            // Nur den Fokus auf das Eingabefeld setzen, wenn kein Text markiert ist
             const selection = window.getSelection();
             if (!selection.toString() && !e.target.matches('#input')) {
                 document.getElementById('input').focus();
