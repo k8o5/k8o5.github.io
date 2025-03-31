@@ -3,514 +3,489 @@
 <head>
     <meta charset="UTF-8">
     <meta name="viewport" content="width=device-width, initial-scale=1.0">
-    <title>k8o5</title>
+    <title>Wizard P2P Lobby (PeerJS)</title>
     <style>
-        body {
-            margin: 0;
-            padding: 0;
-            height: 100vh;
-            background: #000;
-            font-family: "JetBrains Mono", "Fira Code", "Cascadia Code", Consolas, monospace;
-            overflow: hidden;
-            text-rendering: optimizeLegibility;
-            line-height: 1.5;
-        }
-
-        #console {
-            width: 100%;
-            height: 100%;
-            padding: 15px;
-            box-sizing: border-box;
-            overflow-y: auto;
-            background: #000;
-            position: relative;
-            user-select: text;
-        }
-
-        #output {
-            font-size: 15px;
-            white-space: pre-wrap;
-            text-align: left;
-            -webkit-font-smoothing: antialiased;
-            color: #00cc00;
-            letter-spacing: 0.05em;
-            user-select: text;
-        }
-
-        #inputArea {
-            display: none;
-            position: sticky;
-            bottom: 10px;
-            align-items: center;
-            padding: 8px 0;
-            margin-top: 15px;
-        }
-
-        #prompt {
-            font-size: 15px;
-            margin-right: 8px;
-            color: #00ff00;
-            font-weight: bold;
-        }
-
-        #input {
-            flex-grow: 1;
-            background: transparent;
-            border: none;
-            color: #00ff00;
-            font-size: 15px;
-            font-family: inherit;
-            outline: none;
-            caret-color: #00ff00;
-            caret-shape: block;
-        }
-
-        .peer-message {
-            display: block;
-            padding: 4px 0;
-            animation: fadeIn 0.3s ease-in;
-        }
-
-        .connected-message {
-            color: #ffcc00;
-            font-weight: bold;
-            padding: 4px 0;
-            display: block;
-            border-bottom: 1px dashed #555;
-            margin-bottom: 5px;
-        }
-
-        @keyframes fadeIn {
-            from { opacity: 0; }
-            to { opacity: 1; }
-        }
-
-        .command {
-            color: #0fdc5f;
-            font-weight: bold;
-        }
-
-        .parameter {
-            color: #5fb3ff;
-        }
-
-        .error-message {
-            color: #ff4f4f;
-        }
-
-        .success-message {
-            color: #2aef63;
-        }
-
-        @media (max-width: 768px) {
-            #input {
-                width: 100%;
-                font-size: 14px;
-                padding: 5px;
-            }
-
-            #inputArea {
-                padding: 10px 0;
-            }
-
-            #prompt {
-                font-size: 14px;
-            }
-        }
+        body { font-family: sans-serif; padding: 20px; max-width: 600px; margin: auto; }
+        #roomSection, #nameSection { margin-bottom: 20px; padding: 15px; border: 1px solid #ccc; border-radius: 5px; }
+        #roomIdDisplay { font-weight: bold; background-color: #eee; padding: 5px; user-select: all; } /* Allow selection */
+        #shareLink { word-break: break-all; }
+        ul { list-style: none; padding: 0; }
+        li { border-bottom: 1px solid #eee; padding: 8px 5px; }
+        li:last-child { border-bottom: none; }
+        button, input[type="text"], input[type="button"] { padding: 10px; font-size: 1rem; margin-right: 5px; margin-bottom: 5px; }
+        input[type="text"] { width: calc(100% - 22px); } /* Adjust for padding */
+        #chatOutput { height: 150px; border: 1px solid #ccc; overflow-y: scroll; margin-bottom: 10px; padding: 5px; background-color: #f9f9f9; }
+        .hidden { display: none; }
+        .status { font-style: italic; color: #555; margin-top: 15px;}
+        .error { color: red; font-weight: bold; }
+        label { display: block; margin-bottom: 5px;}
     </style>
+    <!-- PeerJS Library von CDN -->
+    <script src="https://unpkg.com/peerjs@1.4.7/dist/peerjs.min.js"></script>
 </head>
 <body>
-    <div id="console" tabindex="0">
-        <div id="output"></div>
-        <div id="inputArea">
-            <span id="prompt">> </span>
-            <input type="text" id="input" autofocus>
-        </div>
+
+    <h1>Wizard P2P Lobby</h1>
+
+    <div id="nameSection">
+        <label for="playerName">Dein Name:</label>
+        <input type="text" id="playerName" placeholder="Gib deinen Namen ein">
+        <button id="createRoomBtn">Neuen Raum erstellen</button>
+        <hr>
+        <label for="roomIdToJoin">Raum-ID zum Beitreten:</label>
+        <input type="text" id="roomIdToJoin" placeholder="Raum-ID eingeben">
+        <button id="joinRoomBtn">Raum beitreten</button>
     </div>
 
-    <script src="https://unpkg.com/peerjs@1.4.7/dist/peerjs.min.js"></script>
+    <div id="roomSection" class="hidden">
+        <p>Dein Name: <strong id="myNameDisplay"></strong></p>
+        <p>Raum-ID (Teilen zum Einladen): <span id="roomIdDisplay"></span></p>
+        <p>Teilbarer Link: <a id="shareLink" href="#" target="_blank"></a></p>
+
+        <div id="playerListContainer">
+            <h2>Spieler im Raum:</h2>
+            <ul id="playerList">
+                <!-- Spieler werden hier per JavaScript eingefügt -->
+            </ul>
+        </div>
+
+        <div id="chatContainer">
+            <h2>Chat</h2>
+            <div id="chatOutput"></div>
+            <input type="text" id="chatInput" placeholder="Nachricht eingeben...">
+            <button id="sendChatBtn">Senden</button>
+        </div>
+         <button id="leaveRoomBtn">Raum verlassen</button>
+    </div>
+
+    <div id="status" class="status">Verbinde mit PeerJS Netzwerk...</div>
+    <div id="error" class="error"></div>
+
     <script>
-        let peer, myPeerId = '', connections = [], knownPeers = new Set(), connectedPeers = new Set(),
-            isConnected = false, chatHistory = [], myName = 'noname', commandHistory = [], historyIndex = -1,
-            connectedPeersList = [], isMainPeer = false;
+        document.addEventListener('DOMContentLoaded', () => {
+            const nameSection = document.getElementById('nameSection');
+            const roomSection = document.getElementById('roomSection');
+            const createRoomBtn = document.getElementById('createRoomBtn');
+            const joinRoomBtn = document.getElementById('joinRoomBtn');
+            const leaveRoomBtn = document.getElementById('leaveRoomBtn');
+            const playerNameInput = document.getElementById('playerName');
+            const roomIdToJoinInput = document.getElementById('roomIdToJoin');
+            const myNameDisplay = document.getElementById('myNameDisplay');
+            const roomIdDisplay = document.getElementById('roomIdDisplay');
+            const shareLink = document.getElementById('shareLink');
+            const playerListUl = document.getElementById('playerList');
+            const chatOutput = document.getElementById('chatOutput');
+            const chatInput = document.getElementById('chatInput');
+            const sendChatBtn = document.getElementById('sendChatBtn');
+            const statusDiv = document.getElementById('status');
+            const errorDiv = document.getElementById('error');
 
-        // Feste Peer-ID für die "public" Lobby
-        const PUBLIC_LOBBY_PEER_ID = 'public-lobby';
+            let peer = null; // PeerJS Objekt
+            let myPeerId = null;
+            let myPlayerName = '';
+            let currentRoomId = null; // Die ID des Raums, dem wir beigetreten sind oder den wir erstellt haben
+            let isHost = false;
+            let connections = {}; // Speichert aktive Verbindungen { peerId: DataConnection }
+            let playerNames = {}; // Speichert Namen { peerId: playerName }
 
-        function getPeerColor(peerId) {
-            let hash = 0;
-            for (let i = 0; i < peerId.length; i++) hash = peerId.charCodeAt(i) + ((hash << 5) - hash);
-            return `hsl(${Math.abs(hash % 360)}, 70%, 50%)`;
-        }
-
-        function renderText(text, peerId = null, name = null) {
-            return peerId ? `<span class="peer-message" style="color:${getPeerColor(peerId)}">${name || 'noname'}: ${text}</span><br>` : text.replace(/\n/g, '<br>');
-        }
-
-        function typeWriter(text, index = 0, delay = 50, callback) {
-            if (index < text.length) {
-                document.getElementById('output').innerHTML += text.charAt(index);
-                document.getElementById('console').scrollTop = document.getElementById('console').scrollHeight;
-                setTimeout(() => typeWriter(text, index + 1, delay, callback), delay);
-            } else if (callback) callback();
-        }
-
-        function shuffle(array) {
-            for (let i = array.length - 1; i > 0; i--) {
-                const j = Math.floor(Math.random() * (i + 1));
-                [array[i], array[j]] = [array[j], array[i]];
+            function setStatus(message) {
+                statusDiv.textContent = message;
+                console.log("Status:", message);
             }
-            return array;
-        }
 
-        function tryToConnectToNewPeers() {
-            [...knownPeers].filter(peerId => peerId !== myPeerId && !connectedPeers.has(peerId) && !connections.some(conn => conn.peer === peerId))
-                .forEach(peerId => connectToPeer(peerId));
-        }
-
-        function connectToPublicLobby() {
-            // Setze direkt in den Chat-Modus, unabhängig von der Verbindung
-            isConnected = true;
-            document.getElementById('prompt').innerHTML = 'chat> ';
-            // Versuche, dich mit dem Haupt-Peer (public-lobby) zu verbinden
-            connectToPeer(PUBLIC_LOBBY_PEER_ID);
-        }
-
-        function becomeMainPeer() {
-            if (isMainPeer) return; // Bereits Haupt-Peer
-            peer.destroy(); // Zerstöre den aktuellen Peer, um eine neue ID zu setzen
-            myPeerId = PUBLIC_LOBBY_PEER_ID;
-            isMainPeer = true;
-            initPeerWithId(myPeerId);
-        }
-
-        function initPeerWithId(peerId) {
-            try {
-                peer = new Peer(peerId, {
-                    debug: 3,
-                    config: {
-                        iceServers: [
-                            { urls: 'stun:stun.l.google.com:19302' },
-                            { urls: 'stun:stun1.l.google.com:19302' },
-                            { urls: 'stun:stun2.l.google.com:19302' },
-                            { urls: 'stun:stun3.l.google.com:19302' },
-                            { urls: 'stun:stun4.l.google.com:19302' }
-                        ]
-                    }
-                });
-
-                peer.on('open', id => {
-                    myPeerId = id;
-                    knownPeers.add(myPeerId);
-                    document.getElementById('output').innerHTML += renderText(`<span class="success-message">Deine neue Peer-ID: ${myPeerId}</span>\n`);
-                    if (isMainPeer) {
-                        document.getElementById('output').innerHTML += renderText(`<span class="success-message">Du bist jetzt der Haupt-Peer der public Lobby!</span>\n`);
-                    } else {
-                        connectToPublicLobby(); // Versuche erneut, dich mit der Lobby zu verbinden
-                    }
-                    document.getElementById('inputArea').style.display = 'flex';
-                    document.getElementById('input').focus();
-                });
-
-                peer.on('connection', conn => {
-                    conn.metadata = { name: conn.metadata?.name || 'noname' };
-                    connections.push(conn);
-                    conn.on('open', () => {
-                        console.log('Verbunden mit: ' + conn.peer);
-                        knownPeers.add(conn.peer);
-                        connectedPeers.add(conn.peer);
-                        connectedPeersList.push(`<span class="connected-message">Verbunden mit ${conn.peer}!</span>`);
-                        conn.send(JSON.stringify({ type: 'peer_list', peers: [...knownPeers] }));
-                        conn.send(JSON.stringify({ type: 'chat_history', history: chatHistory }));
-                        tryToConnectToNewPeers();
-                    });
-                    conn.on('data', handleData);
-                    conn.on('close', () => {
-                        connectedPeers.delete(conn.peer);
-                        connectedPeersList = connectedPeersList.filter(msg => !msg.includes(conn.peer));
-                        console.log('Verbindung geschlossen mit: ' + conn.peer);
-                        // Wenn der Haupt-Peer offline geht und ich nicht der Haupt-Peer bin, versuche, Haupt-Peer zu werden
-                        if (conn.peer === PUBLIC_LOBBY_PEER_ID && !isMainPeer) {
-                            becomeMainPeer();
-                        }
-                    });
-                    conn.on('error', err => {
-                        console.log(`Verbindungsfehler mit ${conn.peer}: ${err.message}`);
-                    });
-                });
-
-                peer.on('error', err => {
-                    console.log(`Peer-Fehler: ${err.message}`);
-                    document.getElementById('inputArea').style.display = 'flex';
-                    document.getElementById('input').focus();
-                });
-            } catch (err) {
-                console.error('Fehler bei der PeerJS-Initialisierung:', err);
-                document.getElementById('output').innerHTML += renderText(`<span class="error-message">Fehler bei der PeerJS-Initialisierung: ${err.message}</span>\n`);
-                document.getElementById('inputArea').style.display = 'flex';
-                document.getElementById('input').focus();
+            function setError(message) {
+                errorDiv.textContent = message;
+                console.error("Error:", message);
             }
-        }
 
-        function initPeer() {
-            try {
-                peer = new Peer({
-                    debug: 3,
-                    config: {
-                        iceServers: [
-                            { urls: 'stun:stun.l.google.com:19302' },
-                            { urls: 'stun:stun1.l.google.com:19302' },
-                            { urls: 'stun:stun2.l.google.com:19302' },
-                            { urls: 'stun:stun3.l.google.com:19302' },
-                            { urls: 'stun:stun4.l.google.com:19302' }
-                        ]
-                    }
-                });
-
-                peer.on('open', id => {
-                    myPeerId = id;
-                    knownPeers.add(myPeerId);
-                    typeWriter('k8o5\n', 0, 36, () => {
-                        typeWriter(`Deine Peer-ID: ${myPeerId}\n`, 0, 18, () => {
-                            document.getElementById('inputArea').style.display = 'flex';
-                            document.getElementById('input').focus();
-                        });
-                    });
-                });
-
-                peer.on('connection', conn => {
-                    conn.metadata = { name: conn.metadata?.name || 'noname' };
-                    connections.push(conn);
-                    conn.on('open', () => {
-                        console.log('Verbunden mit: ' + conn.peer);
-                        knownPeers.add(conn.peer);
-                        connectedPeers.add(conn.peer);
-                        connectedPeersList.push(`<span class="connected-message">Verbunden mit ${conn.peer}!</span>`);
-                        conn.send(JSON.stringify({ type: 'peer_list', peers: [...knownPeers] }));
-                        conn.send(JSON.stringify({ type: 'chat_history', history: chatHistory }));
-                        tryToConnectToNewPeers();
-                    });
-                    conn.on('data', handleData);
-                    conn.on('close', () => {
-                        connectedPeers.delete(conn.peer);
-                        connectedPeersList = connectedPeersList.filter(msg => !msg.includes(conn.peer));
-                        console.log('Verbindung geschlossen mit: ' + conn.peer);
-                        // Wenn der Haupt-Peer offline geht und ich nicht der Haupt-Peer bin, versuche, Haupt-Peer zu werden
-                        if (conn.peer === PUBLIC_LOBBY_PEER_ID && !isMainPeer) {
-                            becomeMainPeer();
-                        }
-                    });
-                    conn.on('error', err => {
-                        console.log(`Verbindungsfehler mit ${conn.peer}: ${err.message}`);
-                    });
-                });
-
-                peer.on('error', err => {
-                    console.log(`Peer-Fehler: ${err.message}`);
-                    document.getElementById('inputArea').style.display = 'flex';
-                    document.getElementById('input').focus();
-                });
-            } catch (err) {
-                console.error('Fehler bei der PeerJS-Initialisierung:', err);
-                document.getElementById('output').innerHTML += renderText(`<span class="error-message">Fehler bei der PeerJS-Initialisierung: ${err.message}</span>\n`);
-                document.getElementById('inputArea').style.display = 'flex';
-                document.getElementById('input').focus();
-            }
-        }
-
-        function handleInput() {
-            const input = document.getElementById('input').value.trim();
-            if (!input) return;
-            if (!isConnected) {
-                document.getElementById('output').innerHTML += renderText(`<span class="command">> ${input}</span>\n`);
-                if (input === 'public') {
-                    document.getElementById('output').innerHTML += renderText(`<span class="success-message">Verbinde mit der public Lobby...</span>\n`);
-                    connectToPublicLobby();
-                } else if (input.startsWith('peer ')) {
-                    const targetPeerId = input.split(' ')[1];
-                    if (targetPeerId) connectToPeer(targetPeerId);
-                    else document.getElementById('output').innerHTML += renderText(`<span class="error-message">Fehler: Gib eine Peer-ID ein!</span>\n`);
-                } else if (input.startsWith('help')) showHelp();
-                else if (input.startsWith('name ')) {
-                    const name = input.split(' ')[1];
-                    myName = name || myName;
-                    document.getElementById('output').innerHTML += renderText(`<span class="success-message">Name geändert zu: ${myName}</span>\n`);
-                } else if (input === 'copy') {
-                    navigator.clipboard.writeText(myPeerId).then(() => {
-                        document.getElementById('output').innerHTML += renderText(`<span class="success-message">Peer-ID ${myPeerId} in die Zwischenablage kopiert!</span>\n`);
-                    }).catch(err => {
-                        document.getElementById('output').innerHTML += renderText(`<span class="error-message">Fehler beim Kopieren: ${err}</span>\n`);
-                    });
-                } else if (input === 'clear') {
-                    document.getElementById('output').innerHTML = '';
-                } else {
-                    document.getElementById('output').innerHTML += renderText('<span class="error-message">Unbekannter Befehl. Nutze: help</span>\n');
+            function addChatMessage(senderName, message, isSystem = false) {
+                const messageElement = document.createElement('div');
+                messageElement.innerHTML = `<strong>${senderName}:</strong> ${message}`;
+                if (isSystem) {
+                    messageElement.style.fontStyle = 'italic';
+                    messageElement.style.color = '#444';
                 }
-            } else {
-                if (input === '/exit') {
-                    connections.forEach(conn => conn.close());
-                    connections = [];
-                    connectedPeers.clear();
-                    connectedPeersList = [];
-                    isConnected = false;
-                    isMainPeer = false;
-                    document.getElementById('prompt').innerHTML = '> ';
-                    document.getElementById('output').innerHTML += renderText(`<span class="success-message">Chat verlassen.</span>\n`);
-                } else if (input === '/peers') {
-                    if (connectedPeersList.length > 0) {
-                        document.getElementById('output').innerHTML += connectedPeersList.join('<br>') + '<br>';
-                    } else {
-                        document.getElementById('output').innerHTML += renderText(`<span class="error-message">Keine Peers verbunden.</span>\n`);
+                chatOutput.appendChild(messageElement);
+                chatOutput.scrollTop = chatOutput.scrollHeight; // Auto-scroll
+            }
+
+            function updatePlayerListUI() {
+                playerListUl.innerHTML = ''; // Liste leeren
+                // Füge dich selbst hinzu
+                const selfLi = document.createElement('li');
+                selfLi.textContent = `${myPlayerName} (Du) ${isHost ? '[Host]' : ''}`;
+                playerListUl.appendChild(selfLi);
+                 playerNames[myPeerId] = myPlayerName; // Ensure self is in names list
+
+                // Füge verbundene Peers hinzu
+                for (const peerId in connections) {
+                    if (connections.hasOwnProperty(peerId) && connections[peerId].open) {
+                        const li = document.createElement('li');
+                        const name = playerNames[peerId] || peerId; // Fallback auf ID falls Name fehlt
+                        li.textContent = `${name} ${peerId === currentRoomId && !isHost ? '[Host]' : ''}`;
+                        playerListUl.appendChild(li);
                     }
-                } else if (input === 'clear') {
-                    document.getElementById('output').innerHTML = '';
-                } else {
-                    const messageEntry = { peerId: myPeerId, message: input, name: myName };
-                    chatHistory.push(messageEntry);
-                    broadcastMessage(messageEntry);
-                    document.getElementById('output').innerHTML += renderText(input, myPeerId, myName);
                 }
             }
-            document.getElementById('input').value = '';
-            document.getElementById('console').scrollTop = document.getElementById('console').scrollHeight;
-        }
 
-        function connectToPeer(peerId) {
-            if (peerId === myPeerId || connectedPeers.has(peerId) || connections.some(conn => conn.peer === peerId)) return;
-            try {
-                const conn = peer.connect(peerId, { metadata: { name: myName } });
-                connections.push(conn);
-                conn.on('open', () => {
-                    console.log('Verbunden mit: ' + peerId);
-                    knownPeers.add(peerId);
-                    connectedPeers.add(peerId);
-                    connectedPeersList.push(`<span class="connected-message">Verbunden mit ${peerId}!</span>`);
-                    conn.send(JSON.stringify({ type: 'peer_list', peers: [...knownPeers] }));
-                    conn.send(JSON.stringify({ type: 'chat_history', history: chatHistory }));
-                    tryToConnectToNewPeers();
+            function broadcastMessage(data) {
+                 if (!isHost && connections[currentRoomId]) { // If client, only send to host
+                    connections[currentRoomId].send(data);
+                } else if (isHost) { // If host, send to all clients
+                    console.log("Host broadcasting:", data, "to", Object.keys(connections));
+                    for (const peerId in connections) {
+                        if (connections.hasOwnProperty(peerId) && connections[peerId].open) {
+                            connections[peerId].send(data);
+                        }
+                    }
+                }
+            }
+
+            function handleConnectionData(peerId, data) {
+                console.log(`Daten empfangen von ${peerId}:`, data);
+                switch (data.type) {
+                    case 'chat':
+                        addChatMessage(playerNames[peerId] || peerId, data.message);
+                        // Host leitet Chat an andere weiter
+                        if (isHost) {
+                             broadcastMessage({ type: 'chat', senderPeerId: peerId, senderName: playerNames[peerId] || peerId, message: data.message });
+                        }
+                        break;
+                     case 'set_name':
+                        playerNames[peerId] = data.name;
+                        updatePlayerListUI();
+                         addChatMessage('System', `${data.name} (${peerId}) ist beigetreten.`, true);
+                        // Host informiert andere über den neuen Spieler und sendet aktuelle Liste
+                        if (isHost) {
+                           // Send new player info to existing clients
+                            broadcastMessage({ type: 'player_joined', peerId: peerId, name: data.name });
+                            // Send full list to the new player
+                             connections[peerId].send({ type: 'player_list', players: playerNames });
+                        }
+                        break;
+                    case 'player_joined': // Nur für Clients relevant
+                         if (!isHost) {
+                            playerNames[data.peerId] = data.name;
+                            updatePlayerListUI();
+                            addChatMessage('System', `${data.name} (${data.peerId}) ist beigetreten.`, true);
+                         }
+                        break;
+                    case 'player_list': // Nur für Clients relevant
+                         if (!isHost) {
+                            playerNames = data.players; // Update local list
+                            updatePlayerListUI();
+                         }
+                        break;
+                    case 'player_left':
+                         const leftName = playerNames[data.peerId] || data.peerId;
+                         addChatMessage('System', `${leftName} hat den Raum verlassen.`, true);
+                         delete playerNames[data.peerId];
+                         delete connections[data.peerId]; // Ensure connection removed if not already by 'close'
+                         updatePlayerListUI();
+                        break;
+                    // --- HIER KÖNNTEN SPIELSPEZIFISCHE NACHRICHTEN HIN ---
+                    // case 'deal_cards': ...
+                    // case 'play_card': ...
+                }
+            }
+
+             function setupConnectionEventHandlers(conn) {
+                conn.on('data', (data) => {
+                    handleConnectionData(conn.peer, data);
                 });
-                conn.on('data', handleData);
+
                 conn.on('close', () => {
-                    connectedPeers.delete(conn.peer);
-                    connectedPeersList = connectedPeersList.filter(msg => !msg.includes(peerId));
-                    console.log('Verbindung geschlossen mit: ' + peerId);
-                    // Wenn der Haupt-Peer offline geht und ich nicht der Haupt-Peer bin, versuche, Haupt-Peer zu werden
-                    if (peerId === PUBLIC_LOBBY_PEER_ID && !isMainPeer) {
-                        becomeMainPeer();
+                    const closedPeerId = conn.peer;
+                    const name = playerNames[closedPeerId] || closedPeerId;
+                    addChatMessage('System', `${name} hat die Verbindung verloren.`, true);
+                    setStatus(`${name} hat die Verbindung verloren.`);
+                    delete connections[closedPeerId];
+                    delete playerNames[closedPeerId];
+                    updatePlayerListUI();
+                    // Host informiert andere über den Verlust
+                    if (isHost) {
+                         broadcastMessage({ type: 'player_left', peerId: closedPeerId });
                     }
                 });
-                conn.on('error', err => {
-                    console.log(`Verbindungsfehler mit ${peerId}: ${err.message}`);
-                    // Wenn die Verbindung zum Haupt-Peer fehlschlägt, versuche, selbst Haupt-Peer zu werden
-                    if (peerId === PUBLIC_LOBBY_PEER_ID && !isMainPeer) {
-                        becomeMainPeer();
-                    }
+
+                 conn.on('error', (err) => {
+                    setError(`Verbindungsfehler mit ${conn.peer}: ${err}`);
+                     // Clean up potentially problematic connection
+                    delete connections[conn.peer];
+                    delete playerNames[conn.peer];
+                    updatePlayerListUI();
+                 });
+            }
+
+            function initializePeerJS() {
+                setError(''); // Clear previous errors
+                // // Option: Use a specific key for the PeerServer Cloud (get one for free)
+                // peer = new Peer({
+                //     key: 'YOUR_API_KEY', // Optional: Replace with your PeerJS API key
+                //     debug: 2 // 0=none, 1=errors, 2=warnings+errors, 3=all
+                // });
+
+                 // Use the public PeerJS server (no API key needed, but less reliable for production)
+                 peer = new Peer(undefined, { // Use undefined ID to let the server assign one
+                     debug: 2 // 0=none, 1=errors, 2=warnings+errors, 3=all
+                 });
+
+                peer.on('open', (id) => {
+                    myPeerId = id;
+                    setStatus(`Verbunden mit PeerJS Netzwerk. Deine ID: ${myPeerId}`);
+                    console.log('My peer ID is: ' + myPeerId);
+                    nameSection.classList.remove('hidden'); // Allow name input and actions
+                     roomSection.classList.add('hidden'); // Hide room initially
+
+                    // Check if joining via URL hash
+                    const hash = window.location.hash;
+                     if (hash && hash.length > 1) {
+                         const roomIdFromUrl = hash.substring(1);
+                         roomIdToJoinInput.value = roomIdFromUrl;
+                         setStatus(`Bereit zum Beitreten zu Raum ${roomIdFromUrl} (aus URL). Bitte Namen eingeben.`);
+                     } else {
+                        setStatus("Bereit. Erstelle einen Raum oder tritt einem bei.");
+                     }
                 });
-            } catch (err) {
-                console.error('Fehler beim Verbinden:', err);
-            }
-        }
 
-        function broadcastMessage(message) {
-            const messageData = JSON.stringify(message);
-            connections.forEach(conn => { if (conn.peer !== message.peerId) conn.send(messageData); });
-        }
-
-        function handleData(data) {
-            let messageData;
-            try {
-                messageData = JSON.parse(data);
-            } catch (e) {
-                messageData = { peerId: this.peer, message: data, name: this.metadata?.name || 'noname' };
-            }
-            if (messageData.type === 'peer_list') {
-                messageData.peers.forEach(peerId => { if (peerId !== myPeerId) knownPeers.add(peerId); });
-                tryToConnectToNewPeers();
-            } else if (messageData.type === 'chat_history') {
-                messageData.history.forEach(entry => {
-                    if (!chatHistory.some(h => h.peerId === entry.peerId && h.message === entry.message)) {
-                        chatHistory.push(entry);
-                        document.getElementById('output').innerHTML += renderText(entry.message, entry.peerId, entry.name);
+                peer.on('connection', (conn) => {
+                    setStatus(`Eingehende Verbindung von ${conn.peer}`);
+                    if (!isHost) {
+                        console.warn("Eingehende Verbindung erhalten, aber nicht der Host. Abgelehnt.");
+                        conn.close(); // Nur der Host akzeptiert Verbindungen direkt
+                        return;
                     }
+
+                     if (connections[conn.peer]) {
+                        console.warn(`Doppelte Verbindung von ${conn.peer}. Schließe alte.`);
+                        connections[conn.peer].close();
+                    }
+
+                    connections[conn.peer] = conn;
+                    console.log(`Verbunden mit ${conn.peer}`);
+                    setupConnectionEventHandlers(conn);
+
+                     // Request name from new client when connection opens
+                     conn.on('open', () => {
+                         console.log(`Verbindung zu ${conn.peer} geöffnet. Sende Namensanfrage.`);
+                         // Der Client sollte nach dem Verbinden seinen Namen senden (siehe joinRoom)
+                         // Hier warten wir auf die 'set_name' Nachricht
+                         // Optional: Man könnte hier auch eine explizite Anfrage senden
+                         // conn.send({ type: 'request_name' });
+                     });
+
                 });
-                document.getElementById('console').scrollTop = document.getElementById('console').scrollHeight;
-            } else {
-                const { peerId, message, name } = messageData;
-                if (!chatHistory.some(h => h.peerId === peerId && h.message === message)) {
-                    chatHistory.push({ peerId, message, name });
-                    document.getElementById('output').innerHTML += renderText(message, peerId, name);
-                    broadcastMessage(messageData);
-                }
-                document.getElementById('console').scrollTop = document.getElementById('console').scrollHeight;
+
+                peer.on('disconnected', () => {
+                    setStatus('Verbindung zum PeerJS Server verloren. Versuche erneut zu verbinden...');
+                    // Versucht automatisch wieder zu verbinden
+                    // peer.reconnect(); // Kann zu Problemen führen, wenn die alte ID nicht mehr verfügbar ist
+                    setError('Verbindung zum PeerJS Server getrennt. Bitte Seite neu laden.');
+                    cleanup(); // Reset UI
+                });
+
+                peer.on('close', () => {
+                    setError('Peer-Verbindung geschlossen. Bitte Seite neu laden.');
+                    cleanup();
+                });
+
+                peer.on('error', (err) => {
+                    setError(`PeerJS Fehler: ${err.type} - ${err.message || err}`);
+                    // Mögliche Fehler: 'network', 'unavailable-id', 'peer-unavailable', 'server-error', 'socket-error', 'webrtc'
+                     if (err.type === 'peer-unavailable') {
+                        setStatus(`Fehler beim Verbinden: Raum/Peer ${roomIdToJoinInput.value} nicht gefunden.`);
+                        // Reset join attempt
+                        delete connections[roomIdToJoinInput.value];
+                     } else if (err.type === 'unavailable-id' && !isHost) {
+                         // Happens if the ID used to create the peer object is taken
+                         setError("Fehler: Peer ID bereits vergeben. Versuche es erneut.");
+                         peer = null; // Force re-initialization maybe? Or ask user to reload.
+                     }
+                     // Reset relevant UI parts if needed
+                    // cleanup(); // Could be too aggressive
+                });
             }
-        }
 
-        function showHelp() {
-            const helpText = `
-<span class="success-message">Verfügbare Befehle:</span>
-- <span class="command">public</span>: Verbinde dich mit der public Lobby
-- <span class="command">peer</span> <span class="parameter">[peer_id]</span>: Verbinde dich mit einem anderen Peer
-- <span class="command">name</span> <span class="parameter">[string]</span>: Definiere deinen Namen (z. B. name Max)
-- <span class="command">copy</span>: Kopiere deine Peer-ID in die Zwischenablage
-- <span class="command">clear</span>: Lösche den Bildschirm
-- <span class="command">/exit</span>: Verlasse den Chat-Modus (nur im Chat)
-- <span class="command">/peers</span>: Zeige verbundene Peers (nur im Chat)
-- <span class="command">help</span>: Zeige diese Hilfe
-`;
-            document.getElementById('output').innerHTML += renderText(helpText);
-        }
-
-        document.getElementById('input').addEventListener('keydown', (e) => {
-            if (e.key === 'ArrowUp') {
-                if (commandHistory.length > 0 && historyIndex < commandHistory.length - 1) {
-                    historyIndex++;
-                    document.getElementById('input').value = commandHistory[commandHistory.length - 1 - historyIndex];
-                }
-                e.preventDefault();
-            } else if (e.key === 'ArrowDown') {
-                if (historyIndex > 0) {
-                    historyIndex--;
-                    document.getElementById('input').value = commandHistory[commandHistory.length - 1 - historyIndex];
-                } else if (historyIndex === 0) {
-                    historyIndex = -1;
-                    document.getElementById('input').value = '';
-                }
-                e.preventDefault();
+            function cleanup() {
+                 // Close all connections
+                 for (const peerId in connections) {
+                     if (connections.hasOwnProperty(peerId)) {
+                         connections[peerId].close();
+                     }
+                 }
+                 connections = {};
+                 playerNames = {};
+                 if (peer && !peer.destroyed) {
+                     peer.destroy(); // Clean up PeerJS object
+                 }
+                 peer = null;
+                 myPeerId = null;
+                 currentRoomId = null;
+                 isHost = false;
+                 nameSection.classList.remove('hidden');
+                 roomSection.classList.add('hidden');
+                 playerListUl.innerHTML = '';
+                 chatOutput.innerHTML = '';
+                 setError(''); // Clear errors on cleanup
             }
-        });
 
-        document.getElementById('console').addEventListener('click', (e) => {
-            const selection = window.getSelection();
-            if (!selection.toString() && !e.target.matches('#input')) {
-                document.getElementById('input').focus();
-            }
-        });
-
-        document.getElementById('input').addEventListener('keypress', (e) => {
-            if (e.key === 'Enter') {
-                const inputValue = document.getElementById('input').value.trim();
-                if (inputValue) {
-                    commandHistory.push(inputValue);
-                    historyIndex = -1;
+             function joinRoom(roomId) {
+                if (!peer || !peer.id) {
+                    setError("Noch nicht mit PeerJS verbunden.");
+                    return;
                 }
-                handleInput();
+                if (!roomId) {
+                    setError("Bitte eine Raum-ID eingeben.");
+                    return;
+                }
+                 if (!myPlayerName) {
+                    setError("Bitte zuerst einen Namen eingeben.");
+                    return;
+                }
+                 if (roomId === myPeerId) {
+                    setError("Du kannst deinem eigenen Raum nicht beitreten.");
+                    return;
+                 }
+
+                 cleanup(); // Clean up previous state before joining
+                 initializePeerJS(); // Re-initialize PeerJS if necessary (ensures fresh state)
+
+                 peer.on('open', (id) => { // Wait for peer to be ready again
+                     myPeerId = id; // Update potentially new ID
+                     setStatus(`Verbinde mit Raum ${roomId}...`);
+                     currentRoomId = roomId; // The Host's Peer ID is the Room ID
+                     isHost = false;
+
+                     const conn = peer.connect(roomId, {
+                         metadata: { playerName: myPlayerName } // Send name during connection attempt
+                     });
+
+                     connections[roomId] = conn; // Store host connection
+                     setupConnectionEventHandlers(conn);
+
+                     conn.on('open', () => {
+                         setStatus(`Erfolgreich mit Raum ${roomId} verbunden.`);
+                         nameSection.classList.add('hidden');
+                         roomSection.classList.remove('hidden');
+                         myNameDisplay.textContent = myPlayerName;
+                         roomIdDisplay.textContent = roomId; // Show the ID we joined
+                         shareLink.href = '#'; // Cannot share when joining
+                         shareLink.textContent = '(Nur der Host kann einladen)';
+                         shareLink.style.pointerEvents = 'none';
+                         shareLink.style.opacity = '0.6';
+
+                         // Send name to Host immediately after connection is open
+                         conn.send({ type: 'set_name', name: myPlayerName });
+                         playerNames[myPeerId] = myPlayerName; // Add self locally
+                         // Host name will be added when list is received
+                         updatePlayerListUI(); // Show self immediately
+                         addChatMessage('System', `Du bist dem Raum ${roomId} beigetreten.`, true);
+                     });
+                 });
             }
-        });
 
-        document.getElementById('input').addEventListener('touchstart', function() {
-            this.focus();
-        });
+             function createRoom() {
+                 if (!peer || !peer.id) {
+                    setError("Noch nicht mit PeerJS verbunden.");
+                    return;
+                }
+                 if (!myPlayerName) {
+                    setError("Bitte zuerst einen Namen eingeben.");
+                    return;
+                }
 
-        // Initialisiere die Seite
-        try {
-            document.getElementById('output').innerHTML = renderText('Initialisiere...\n');
-            initPeer();
-        } catch (err) {
-            console.error('Fehler beim Laden der Seite:', err);
-            document.getElementById('output').innerHTML += renderText(`<span class="error-message">Fehler beim Laden der Seite: ${err.message}</span>\n`);
-            document.getElementById('inputArea').style.display = 'flex';
-            document.getElementById('input').focus();
-        }
+                 cleanup(); // Clean up previous state
+                 initializePeerJS(); // Re-initialize PeerJS
+
+                 peer.on('open', (id) => { // Wait for peer to be ready again
+                     myPeerId = id; // Update potentially new ID if re-initialized
+                     isHost = true;
+                     currentRoomId = myPeerId; // Host's own Peer ID becomes the Room ID
+                     setStatus(`Raum ${currentRoomId} erstellt. Warte auf Spieler...`);
+
+                     playerNames[myPeerId] = myPlayerName; // Add self to player list
+
+                     nameSection.classList.add('hidden');
+                     roomSection.classList.remove('hidden');
+                     myNameDisplay.textContent = myPlayerName;
+                     roomIdDisplay.textContent = currentRoomId;
+                     const url = window.location.origin + window.location.pathname + '#' + currentRoomId;
+                     shareLink.href = url;
+                     shareLink.textContent = url;
+                     shareLink.style.pointerEvents = 'auto';
+                     shareLink.style.opacity = '1';
+
+                     updatePlayerListUI();
+                     addChatMessage('System', `Raum ${currentRoomId} erstellt. Teile den Link!`, true);
+                     // Host is now ready to receive connections via the 'connection' event handler
+                 });
+            }
+
+            // --- Event Listener ---
+             playerNameInput.addEventListener('keyup', (event) => {
+                 if (event.key === 'Enter') {
+                     // Optionally trigger create or join if fields are filled
+                 }
+             });
+
+            createRoomBtn.addEventListener('click', () => {
+                myPlayerName = playerNameInput.value.trim();
+                if(myPlayerName) {
+                    createRoom();
+                } else {
+                    setError("Bitte gib einen Namen ein.");
+                }
+            });
+
+            joinRoomBtn.addEventListener('click', () => {
+                 myPlayerName = playerNameInput.value.trim();
+                 const roomId = roomIdToJoinInput.value.trim();
+                 if(myPlayerName && roomId) {
+                    joinRoom(roomId);
+                 } else if (!myPlayerName) {
+                     setError("Bitte gib zuerst einen Namen ein.");
+                 } else {
+                     setError("Bitte gib eine Raum-ID zum Beitreten ein.");
+                 }
+            });
+
+             leaveRoomBtn.addEventListener('click', () => {
+                 addChatMessage('System', `Du verlässt den Raum...`, true);
+                 setStatus("Raum verlassen.");
+                 if (!isHost && connections[currentRoomId]) {
+                     // Inform host about leaving
+                    connections[currentRoomId].send({ type: 'player_left', peerId: myPeerId });
+                 } else if (isHost) {
+                     // Inform all clients about host leaving (which closes the room)
+                     broadcastMessage({ type: 'player_left', peerId: myPeerId }); // Announce self leaving
+                 }
+                 cleanup();
+                 initializePeerJS(); // Re-initialize to be ready for new actions
+             });
+
+            sendChatBtn.addEventListener('click', () => {
+                const message = chatInput.value.trim();
+                if (message && (Object.keys(connections).length > 0 || isHost)) { // Allow host to chat even alone
+                    addChatMessage(myPlayerName + ' (Du)', message); // Display own message locally
+                    broadcastMessage({ type: 'chat', message: message, senderPeerId: myPeerId, senderName: myPlayerName });
+                    chatInput.value = '';
+                } else if (!message) {
+                    // do nothing
+                } else {
+                    addChatMessage('System', 'Niemand zum Chatten da.', true);
+                }
+            });
+            chatInput.addEventListener('keyup', (event) => {
+                if (event.key === 'Enter') {
+                    sendChatBtn.click();
+                }
+            });
+
+            // --- Initialisierung ---
+            initializePeerJS();
+
+        }); // Ende DOMContentLoaded
     </script>
+
 </body>
 </html>
