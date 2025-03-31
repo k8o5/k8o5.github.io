@@ -504,7 +504,10 @@
             return cardElement;
         }
          function getColorName(suit) { return COLOR_NAMES[suit] || 'Special'; }
-         function getPlayerNameById(peerId) { return gameState.players[peerId]?.name || peerId.substring(0,6) + '...'; }
+         function getPlayerNameById(peerId) { 
+            if (!peerId) return 'Unknown Player';
+            return gameState.players[peerId]?.name || peerId.substring(0,6) + '...'; 
+        }
 
         // --- UI Update Functions ---
         function showScreen(screenName) {
@@ -728,7 +731,7 @@
                  return;
             }
             roundInfoElement.textContent = `Round: ${gameState.roundNumber} / ${gameState.maxRounds}`;
-            const dealerName = getPlayerNameById(gameState.dealerPeerId);
+            const dealerName = gameState.dealerPeerId ? getPlayerNameById(gameState.dealerPeerId) : 'None';
             dealerInfoElement.textContent = `Dealer: ${dealerName}`;
             // Status set elsewhere based on phase/turn
         }
@@ -1560,78 +1563,61 @@
         }
         function handlePlayerDisconnectDuringGame(disconnectedPeerId) { // Host only
             if (!isHost || !gameState.isGameStarted || gameState.phase === 'gameOver') return;
-            const name = getPlayerNameById(disconnectedPeerId) || disconnectedPeerId;
+            const name = getPlayerNameById(disconnectedPeerId);
             logMessage(`Host: Player ${name} disconnected during game!`);
 
             // Remove player from playerOrder
-             gameState.playerOrder = gameState.playerOrder.filter(pid => pid !== disconnectedPeerId);
-             const remainingPlayers = gameState.playerOrder.length;
+            gameState.playerOrder = gameState.playerOrder.filter(pid => pid !== disconnectedPeerId);
+            const remainingPlayers = gameState.playerOrder.length;
 
-             if (remainingPlayers < MIN_PLAYERS) {
-                  logMessage(`Host: Too few players (${remainingPlayers}). Ending game.`);
-                  setError(`Game aborted: ${name} left.`);
-                  gameState.phase = 'gameOver'; // Treat as game over
-                   broadcastMessage({ type: 'error_message', message: `Game aborted: ${name} left.` });
-                   broadcastGameState(`Game aborted: ${name} left.`);
-                  // Consider cleanup? Or just let it sit in game over state?
-             } else {
-                 // Try to continue
-                 logMessage(`Host: Continuing game with ${remainingPlayers} players.`);
-                 // If it was the disconnected player's turn, advance turn
-                 if (gameState.currentTurnPeerId === disconnectedPeerId) {
-                     logMessage(`Host: Advancing turn from disconnected player.`);
-                     if (gameState.phase === 'bidding') {
-                         // Need to decide how to handle bid - maybe auto-bid 0?
-                         gameState.bids[disconnectedPeerId] = 0; // Assign 0 bid automatically?
-                         gameState.players[disconnectedPeerId].bid = 0;
-                         const currentBidderIndex = gameState.playerOrder.indexOf(disconnectedPeerId); // This index won't exist anymore
-                         // Find the *next* player in the *updated* playerOrder
-                         const logicalNextIndex = (gameState.playerOrder.indexOf(gameState.lastValidPeerIdBeforeDisconnect) + 1) % remainingPlayers; // Need to track last valid player
-                         // This gets complicated quickly. Simplest might be to skip to next player if found.
-                         // Let's find the player who *would* have been next based on original order.
-                          const originalIndex = gameState.playerOrder.indexOf(disconnectedPeerId); // Find where they WERE
-                          let nextOriginalIndex = (originalIndex + 1) % (remainingPlayers + 1); // Index in old order
-                          let nextPlayerId = null;
-                          // Find the next player in the original sequence who is STILL in the game
-                          while (!nextPlayerId && nextOriginalIndex !== originalIndex) {
-                              const potentialNextId = gameState.playerOrder[nextOriginalIndex]; // Use old order to find who *should* be next
-                              if (gameState.playerOrder.includes(potentialNextId)) { // Check if they are still present
-                                  nextPlayerId = potentialNextId;
-                              }
-                              nextOriginalIndex = (nextOriginalIndex + 1) % (remainingPlayers + 1);
-                          }
-                          if (nextPlayerId) gameState.currentTurnPeerId = nextPlayerId;
-                          else { /* Error case - couldn't find next player? End game? */ gameState.phase = 'gameOver'; }
-
-
-                     } else if (gameState.phase === 'playing') {
+            if (remainingPlayers < MIN_PLAYERS) {
+                logMessage(`Host: Too few players (${remainingPlayers}). Ending game.`);
+                setError(`Game aborted: ${name} left.`);
+                gameState.phase = 'gameOver'; // Treat as game over
+                broadcastMessage({ type: 'error_message', message: `Game aborted: ${name} left.` });
+                broadcastGameState(`Game aborted: ${name} left.`);
+            } else {
+                // Try to continue
+                logMessage(`Host: Continuing game with ${remainingPlayers} players.`);
+                // If it was the disconnected player's turn, advance turn
+                if (gameState.currentTurnPeerId === disconnectedPeerId) {
+                    logMessage(`Host: Advancing turn from disconnected player.`);
+                    if (gameState.phase === 'bidding') {
+                        // Need to decide how to handle bid - maybe auto-bid 0?
+                        gameState.bids[disconnectedPeerId] = 0; // Assign 0 bid automatically?
+                        gameState.players[disconnectedPeerId].bid = 0;
+                        
+                        // Find next player in updated order
+                        const nextPlayerIndex = 0; // Start with first player in new order
+                        if (nextPlayerIndex < remainingPlayers) {
+                            gameState.currentTurnPeerId = gameState.playerOrder[nextPlayerIndex];
+                        } else {
+                            gameState.phase = 'gameOver';
+                        }
+                    } else if (gameState.phase === 'playing') {
                         // If they were leading, who leads now? Maybe winner of last trick?
                         if (gameState.trickCards.length === 0 && gameState.lastTrickWinnerPeerId && gameState.playerOrder.includes(gameState.lastTrickWinnerPeerId)) {
                             gameState.currentTurnPeerId = gameState.lastTrickWinnerPeerId;
                         } else if (gameState.trickCards.length === 0) { // First trick, leader left
-                             const dealerIndex = gameState.playerOrder.indexOf(gameState.dealerPeerId); // Dealer might also be gone...
-                             let firstPlayerIndex = -1;
-                             if (dealerIndex !== -1) {
-                                firstPlayerIndex = (dealerIndex + 1) % remainingPlayers;
-                             } else { // Dealer also left? Assign lead to first player in remaining order?
-                                firstPlayerIndex = 0;
-                             }
-                             gameState.currentTurnPeerId = gameState.playerOrder[firstPlayerIndex];
+                            const dealerIndex = gameState.playerOrder.indexOf(gameState.dealerPeerId);
+                            let firstPlayerIndex = dealerIndex !== -1 ? (dealerIndex + 1) % remainingPlayers : 0;
+                            gameState.currentTurnPeerId = gameState.playerOrder[firstPlayerIndex];
                         } else { // Mid-trick
-                            const lastPlayerIndex = gameState.playerOrder.indexOf(gameState.lastValidPeerIdBeforeDisconnect); // Need to track
-                             const nextPlayerIndex = (lastPlayerIndex + 1) % remainingPlayers;
-                             gameState.currentTurnPeerId = gameState.playerOrder[nextPlayerIndex];
+                            const nextPlayerIndex = 0; // Start with first player in new order
+                            if (nextPlayerIndex < remainingPlayers) {
+                                gameState.currentTurnPeerId = gameState.playerOrder[nextPlayerIndex];
+                            } else {
+                                gameState.phase = 'gameOver';
+                            }
                         }
-                     }
-                      logMessage(`Host: Turn advanced to ${getPlayerNameById(gameState.currentTurnPeerId)}`);
-                      broadcastGameState(`Player ${name} left. Turn passes to ${getPlayerNameById(gameState.currentTurnPeerId)}.`);
-                 } else {
-                     // Disconnected player wasn't active, just update state
-                     broadcastGameState(`Player ${name} left. Continuing game.`);
-                 }
-                 // Need to track last player who successfully took a turn
-                 // gameState.lastValidPeerIdBeforeDisconnect = ...
-             }
+                    }
+                    logMessage(`Host: Turn advanced to ${getPlayerNameById(gameState.currentTurnPeerId)}`);
+                    broadcastGameState(`Player ${name} left. Turn passes to ${getPlayerNameById(gameState.currentTurnPeerId)}.`);
+                } else {
+                    // Disconnected player wasn't active, just update state
+                    broadcastGameState(`Player ${name} left. Continuing game.`);
+                }
+            }
         }
 
         // --- Client-Side Action Handling ---
