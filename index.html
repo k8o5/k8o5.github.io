@@ -5,44 +5,32 @@
     <meta name="viewport" content="width=device-width, initial-scale=1.0">
     <title>k8o5</title>
     <style>
-        body { margin: 0; overflow: hidden; background-color: #222; }
+        body { margin: 0; overflow: hidden; background-color: #222; color: white; font-family: monospace;}
         canvas { display: block; }
-        #info {
-            position: absolute;
-            top: 10px;
-            width: 100%;
-            text-align: center;
-            z-index: 100;
-            display: block;
-            color: white;
-            font-family: monospace;
-            font-size: 24px;
-        }
-        #game-over {
+        #info { position: absolute; top: 10px; width: 100%; text-align: center; z-index: 100; display:block; font-size: 24px; }
+        #game-over { position: absolute; top: 50%; left: 50%; transform: translate(-50%, -50%); z-index: 101; display: none; color: red; background-color: rgba(0, 0, 0, 0.7); padding: 20px; border-radius: 10px; font-size: 36px; text-align: center; border: 2px solid red;}
+        #game-over button { margin-top: 15px; padding: 10px 20px; font-size: 20px; cursor: pointer; }
+        /* Add a start button to handle audio context resume */
+        #start-button {
             position: absolute;
             top: 50%;
             left: 50%;
             transform: translate(-50%, -50%);
-            z-index: 101;
-            display: none; /* Hidden by default */
-            color: red;
-            background-color: rgba(0, 0, 0, 0.7);
-            padding: 20px;
-            border-radius: 10px;
-            font-family: monospace;
-            font-size: 36px;
-            text-align: center;
-            border: 2px solid red;
-        }
-         #game-over button {
-            margin-top: 15px;
-            padding: 10px 20px;
-            font-size: 20px;
+            z-index: 102;
+            padding: 20px 40px;
+            font-size: 30px;
             cursor: pointer;
-         }
+            background-color: #4CAF50;
+            color: white;
+            border: none;
+            border-radius: 5px;
+        }
     </style>
 </head>
 <body>
+    <!-- Add a start button -->
+    <button id="start-button">Start Game</button>
+
     <div id="info">Score: 0</div>
     <div id="game-over">
         Game Over!<br>
@@ -71,8 +59,17 @@
         const PLAYER_SPEED = 15;
         const OBSTACLE_START_Z = -100;
         const OBSTACLE_BASE_SPEED = 0.3;
-        const OBSTACLE_SPAWN_RATE = 0.01; // Probability per frame
-        const SCORE_MULTIPLIER = 10; // Score increases faster
+        const OBSTACLE_SPAWN_RATE = 0.01;
+        const SCORE_MULTIPLIER = 10;
+
+        // --- Audio Constants ---
+        const BASE_TEMPO_BPM = 100;
+        const NOTE_DURATION_SEC = 60.0 / (BASE_TEMPO_BPM * 2); // Eighth notes duration at base tempo
+        const LOOKAHEAD_TIME_SEC = 0.1; // How far ahead to schedule notes (seconds)
+        const SCHEDULE_INTERVAL_MS = 25; // How often the scheduler checks (milliseconds)
+        // C Minor Pentatonic Scale (MIDI note numbers: 60=C4, 63=Eb4, 65=F4, 67=G4, 70=Bb4)
+        const SCALE_MIDI_NOTES = [60, 63, 65, 67, 70, 72, 75, 77, 79, 82]; // Two octaves
+        const BASS_MIDI_NOTES = [36, 39, 41, 43, 46]; // Lower octave C Minor Pentatonic roots
 
         // --- Game Variables ---
         let scene, camera, renderer;
@@ -80,9 +77,19 @@
         let obstacles = [];
         let score = 0;
         let isGameOver = false;
+        let isGameRunning = false; // Track if game logic should run
         let animationFrameId = null;
         let currentObstacleSpeed = OBSTACLE_BASE_SPEED;
         let clock = new THREE.Clock();
+
+        // --- Audio Variables ---
+        let audioCtx;
+        let nextNoteTime = 0.0; // When the next note is due
+        let currentMelodyNoteIndex = 0; // Index in SCALE_MIDI_NOTES
+        let currentBassNoteIndex = 0; // Index in BASS_MIDI_NOTES
+        let schedulerIntervalId = null;
+        let masterGain;
+        let tempoMultiplier = 1.0; // Will adapt based on game speed
 
         // --- DOM Elements ---
         const infoElement = document.getElementById('info');
@@ -90,40 +97,32 @@
         const finalScoreElement = document.getElementById('final-score');
         const restartButton = document.getElementById('restart-button');
         const container = document.getElementById('game-container');
+        const startButton = document.getElementById('start-button');
 
         // --- Initialization ---
-        function init() {
-            isGameOver = false;
-            score = 0;
-            obstacles = [];
-            playerTargetX = 0;
-            currentObstacleSpeed = OBSTACLE_BASE_SPEED;
-            gameOverElement.style.display = 'none'; // Hide game over screen
-
+        function initGameGraphics() {
             // Scene
             scene = new THREE.Scene();
             scene.background = new THREE.Color(0x222244);
-            scene.fog = new THREE.Fog(0x222244, 50, 150); // Add fog for depth
+            scene.fog = new THREE.Fog(0x222244, 50, 150);
 
             // Camera
             camera = new THREE.PerspectiveCamera(75, window.innerWidth / window.innerHeight, 0.1, 200);
-            camera.position.set(0, 5, 15); // Positioned behind and slightly above the player
+            camera.position.set(0, 5, 15);
             camera.lookAt(0, 0, 0);
 
             // Renderer
             renderer = new THREE.WebGLRenderer({ antialias: true });
             renderer.setSize(window.innerWidth, window.innerHeight);
-            renderer.shadowMap.enabled = true; // Enable shadows
+            renderer.shadowMap.enabled = true;
             container.appendChild(renderer.domElement);
 
-            // Lighting
+            // Lighting (same as before)
             const ambientLight = new THREE.AmbientLight(0x606060);
             scene.add(ambientLight);
-
             const directionalLight = new THREE.DirectionalLight(0xffffff, 0.8);
             directionalLight.position.set(5, 10, 7.5);
             directionalLight.castShadow = true;
-            // Configure shadow properties for performance
             directionalLight.shadow.mapSize.width = 1024;
             directionalLight.shadow.mapSize.height = 1024;
             directionalLight.shadow.camera.near = 0.5;
@@ -133,103 +132,255 @@
             directionalLight.shadow.camera.top = 10;
             directionalLight.shadow.camera.bottom = -10;
             scene.add(directionalLight);
-            // const shadowHelper = new THREE.CameraHelper(directionalLight.shadow.camera); // Optional: visualize shadow frustum
-            // scene.add(shadowHelper);
 
-
-            // Ground
-            const groundGeometry = new THREE.PlaneGeometry(TRACK_WIDTH * 1.5, 200); // Long plane
+            // Ground (same as before)
+            const groundGeometry = new THREE.PlaneGeometry(TRACK_WIDTH * 1.5, 200);
             const groundMaterial = new THREE.MeshStandardMaterial({ color: 0x444444, side: THREE.DoubleSide });
             const ground = new THREE.Mesh(groundGeometry, groundMaterial);
-            ground.rotation.x = -Math.PI / 2; // Rotate flat
-            ground.position.y = -0.5; // Slightly below player origin
+            ground.rotation.x = -Math.PI / 2;
+            ground.position.y = -0.5;
             ground.receiveShadow = true;
             scene.add(ground);
 
-            // Player
-            const playerGeometry = new THREE.BoxGeometry(1.5, 1.5, 1.5); // Slightly larger cube
-            const playerMaterial = new THREE.MeshStandardMaterial({ color: 0x00ff00 }); // Green cube
+            // Player (same as before)
+            const playerGeometry = new THREE.BoxGeometry(1.5, 1.5, 1.5);
+            const playerMaterial = new THREE.MeshStandardMaterial({ color: 0x00ff00 });
             player = new THREE.Mesh(playerGeometry, playerMaterial);
-            player.position.set(0, playerGeometry.parameters.height / 2 - 0.5, 5); // Start slightly forward
+            player.position.set(0, playerGeometry.parameters.height / 2 - 0.5, 5);
             player.castShadow = true;
             scene.add(player);
 
-            // Event Listeners
-            window.addEventListener('resize', onWindowResize, false);
-            document.addEventListener('keydown', onKeyDown, false);
-            restartButton.addEventListener('click', restartGame, false);
-
-            // Start Animation Loop
-            clock.start();
-            animate();
+            // Initial obstacle setup (can be empty)
+            obstacles = [];
         }
 
-        // --- Obstacle Creation ---
+        function resetGameState() {
+            isGameOver = false;
+            score = 0;
+            playerTargetX = 0;
+            currentObstacleSpeed = OBSTACLE_BASE_SPEED;
+            tempoMultiplier = 1.0; // Reset tempo adaptation
+            gameOverElement.style.display = 'none';
+
+            // Clear existing obstacles from scene and array
+            obstacles.forEach(obstacle => scene.remove(obstacle));
+            obstacles = [];
+
+            // Reset player position
+            if (player) {
+                player.position.x = 0;
+                player.position.z = 5; // Reset forward position too if needed
+            }
+
+            infoElement.textContent = `Score: 0`; // Reset score display
+        }
+
+        // --- Audio Setup and Control ---
+        function setupAudio() {
+            if (!audioCtx) { // Create context only once
+                try {
+                    audioCtx = new (window.AudioContext || window.webkitAudioContext)();
+                    masterGain = audioCtx.createGain();
+                    masterGain.gain.setValueAtTime(0.3, audioCtx.currentTime); // Start with moderate volume
+                    masterGain.connect(audioCtx.destination);
+                    console.log("AudioContext created successfully.");
+                } catch (e) {
+                    console.error("Web Audio API is not supported in this browser", e);
+                    alert("Web Audio API is not supported in this browser. Music cannot be played.");
+                    return false; // Indicate failure
+                }
+            }
+            // Attempt to resume context if it's suspended (required after user interaction)
+            if (audioCtx.state === 'suspended') {
+                audioCtx.resume().then(() => {
+                     console.log("AudioContext resumed successfully.");
+                });
+            }
+            return true; // Indicate success or already running
+        }
+
+        // Convert MIDI note number to frequency (Hz)
+        function midiNoteToFrequency(midiNote) {
+            return Math.pow(2, (midiNote - 69) / 12) * 440;
+        }
+
+        // Schedules a single note to play
+        function scheduleNote(type, noteMidi, startTime, duration, volume = 0.8) {
+            if (!audioCtx) return;
+
+            const osc = audioCtx.createOscillator();
+            const noteGain = audioCtx.createGain();
+
+            osc.connect(noteGain);
+            noteGain.connect(masterGain); // Connect note's gain to master gain
+
+            // Set oscillator type (waveform)
+             osc.type = (type === 'melody') ? 'triangle' : 'sine'; // Different sounds for melody/bass
+
+            // Set frequency based on MIDI note
+            osc.frequency.setValueAtTime(midiNoteToFrequency(noteMidi), startTime);
+
+            // Simple envelope: Attack-Decay
+            noteGain.gain.setValueAtTime(0, startTime); // Start silent
+            noteGain.gain.linearRampToValueAtTime(volume, startTime + duration * 0.1); // Quick attack
+            noteGain.gain.linearRampToValueAtTime(0, startTime + duration); // Decay to silence by end
+
+            osc.start(startTime);
+            osc.stop(startTime + duration + 0.05); // Stop slightly after fade out
+        }
+
+         // The "ML" part: Decides the next note based on simple rules and randomness
+        function generateNextMelodyNoteIndex(currentIndex) {
+            const rand = Math.random();
+             const maxIndex = SCALE_MIDI_NOTES.length - 1;
+
+            // Higher probability to stay near current note or repeat
+             if (rand < 0.3) { // 30% chance to repeat
+                 return currentIndex;
+             } else if (rand < 0.6) { // 30% chance step up/down by 1
+                let nextIndex = currentIndex + (Math.random() < 0.5 ? -1 : 1);
+                return THREE.MathUtils.clamp(nextIndex, 0, maxIndex); // Clamp within scale bounds
+            } else if (rand < 0.8) { // 20% chance step up/down by 2
+                 let nextIndex = currentIndex + (Math.random() < 0.5 ? -2 : 2);
+                 return THREE.MathUtils.clamp(nextIndex, 0, maxIndex);
+             } else { // 20% chance bigger jump or random note
+                 return Math.floor(Math.random() * (maxIndex + 1));
+             }
+        }
+
+        // Simpler bass logic: mostly plays root notes or steps nearby
+         function generateNextBassNoteIndex(currentIndex) {
+            const rand = Math.random();
+             const maxIndex = BASS_MIDI_NOTES.length - 1;
+
+             if (rand < 0.6) { // 60% chance stay on same bass note
+                 return currentIndex;
+             } else if (rand < 0.9) { // 30% chance step by 1
+                 let nextIndex = currentIndex + (Math.random() < 0.5 ? -1 : 1);
+                 return THREE.MathUtils.clamp(nextIndex, 0, maxIndex);
+             } else { // 10% chance random bass note
+                 return Math.floor(Math.random() * (maxIndex + 1));
+             }
+         }
+
+
+        // Scheduler loop: checks if notes need to be scheduled
+        function scheduler() {
+             if (!isGameRunning || isGameOver || !audioCtx) return;
+
+            // Calculate current effective note duration based on tempo multiplier
+            const currentNoteDuration = NOTE_DURATION_SEC / tempoMultiplier;
+
+            while (nextNoteTime < audioCtx.currentTime + LOOKAHEAD_TIME_SEC) {
+                // --- Schedule Melody Note ---
+                // Add randomness: Sometimes skip a melody note (create rests)
+                 if (Math.random() < 0.9) { // 90% chance to play a melody note
+                    currentMelodyNoteIndex = generateNextMelodyNoteIndex(currentMelodyNoteIndex);
+                    const melodyNote = SCALE_MIDI_NOTES[currentMelodyNoteIndex];
+                    scheduleNote('melody', melodyNote, nextNoteTime, currentNoteDuration * 0.9, 0.7); // Slightly shorter melody notes
+                 }
+
+                // --- Schedule Bass Note (less frequently) ---
+                // Play bass note on every other beat (roughly quarter notes)
+                 // Check if this `nextNoteTime` corresponds roughly to a downbeat or upbeat (relative to start)
+                const beatsElapsed = (nextNoteTime / (NOTE_DURATION_SEC * 2 / tempoMultiplier));
+                if (beatsElapsed % 1 < 0.1) { // Play bass near the start of every beat
+                     currentBassNoteIndex = generateNextBassNoteIndex(currentBassNoteIndex);
+                     const bassNote = BASS_MIDI_NOTES[currentBassNoteIndex];
+                    scheduleNote('bass', bassNote, nextNoteTime, currentNoteDuration * 1.8, 0.5); // Longer bass notes
+                }
+
+                // Advance the next note time
+                nextNoteTime += currentNoteDuration;
+            }
+        }
+
+        function startMusicLoop() {
+            if (!setupAudio()) return; // Ensure context is ready, exit if not supported
+
+            if (schedulerIntervalId) clearInterval(schedulerIntervalId); // Clear previous interval if any
+
+            nextNoteTime = audioCtx.currentTime + 0.1; // Start scheduling slightly ahead
+            currentMelodyNoteIndex = Math.floor(SCALE_MIDI_NOTES.length / 2); // Start near middle of scale
+             currentBassNoteIndex = 0; // Start on root bass note
+
+            schedulerIntervalId = setInterval(scheduler, SCHEDULE_INTERVAL_MS);
+            console.log("Music loop started.");
+        }
+
+        function stopMusicLoop() {
+            if (schedulerIntervalId) {
+                clearInterval(schedulerIntervalId);
+                schedulerIntervalId = null;
+                console.log("Music loop stopped.");
+                // Optional: Fade out master volume smoothly
+                if(audioCtx && masterGain) {
+                     masterGain.gain.cancelScheduledValues(audioCtx.currentTime);
+                     masterGain.gain.linearRampToValueAtTime(0, audioCtx.currentTime + 0.5); // Fade out over 0.5 sec
+                     // Reset gain for next start
+                     setTimeout(() => {
+                          if(masterGain) masterGain.gain.setValueAtTime(0.3, audioCtx.currentTime);
+                     }, 550);
+                }
+            }
+        }
+
+
+        // --- Obstacle Creation (same as before) ---
         function createObstacle() {
-            const obstacleGeometry = new THREE.BoxGeometry(LANE_WIDTH * 0.8, 2, 2); // Wide obstacles
-            const obstacleMaterial = new THREE.MeshStandardMaterial({ color: 0xff0000 }); // Red obstacles
+             // Only create obstacles if the game is running
+            if (!isGameRunning || isGameOver) return;
+
+            const obstacleGeometry = new THREE.BoxGeometry(LANE_WIDTH * 0.8, 2, 2);
+            const obstacleMaterial = new THREE.MeshStandardMaterial({ color: 0xff0000 });
             const obstacle = new THREE.Mesh(obstacleGeometry, obstacleMaterial);
-
-            // Choose a random lane (-1, 0, or 1) * LANE_WIDTH
-            const laneIndex = Math.floor(Math.random() * NUM_LANES) - Math.floor(NUM_LANES / 2); // -1, 0, 1 for 3 lanes
+            const laneIndex = Math.floor(Math.random() * NUM_LANES) - Math.floor(NUM_LANES / 2);
             const xPos = laneIndex * LANE_WIDTH;
-
-            obstacle.position.set(
-                xPos,
-                obstacleGeometry.parameters.height / 2 - 0.5,
-                OBSTACLE_START_Z
-            );
+            obstacle.position.set(xPos, obstacleGeometry.parameters.height / 2 - 0.5, OBSTACLE_START_Z);
             obstacle.castShadow = true;
-            obstacle.receiveShadow = true; // Obstacles can receive shadows from others
-
-            // Add bounding box for easier collision detection
+            obstacle.receiveShadow = true;
             obstacle.userData.boundingBox = new THREE.Box3().setFromObject(obstacle);
-
             obstacles.push(obstacle);
             scene.add(obstacle);
         }
 
         // --- Game Loop ---
         function animate() {
-            if (isGameOver) return; // Stop the loop if game is over
+             animationFrameId = requestAnimationFrame(animate); // Keep requesting frames
 
-            animationFrameId = requestAnimationFrame(animate);
-            const delta = clock.getDelta(); // Time since last frame
+             if (!isGameRunning || isGameOver) return; // Only run game logic if active
 
-            // --- Player Movement ---
-            const moveAmount = PLAYER_SPEED * delta;
-            // Lerp for smoother movement
-            player.position.x = THREE.MathUtils.lerp(player.position.x, playerTargetX, moveAmount);
-             // Keep player within track bounds (slightly less than full width)
-            const halfTrack = TRACK_WIDTH / 2 - player.geometry.parameters.width / 2;
-            player.position.x = THREE.MathUtils.clamp(player.position.x, -halfTrack, halfTrack);
+            const delta = clock.getDelta();
 
+            // --- Player Movement (same as before) ---
+             const moveAmount = PLAYER_SPEED * delta;
+             player.position.x = THREE.MathUtils.lerp(player.position.x, playerTargetX, moveAmount);
+             const halfTrack = TRACK_WIDTH / 2 - player.geometry.parameters.width / 2;
+             player.position.x = THREE.MathUtils.clamp(player.position.x, -halfTrack, halfTrack);
 
             // --- Obstacle Spawning ---
             if (Math.random() < OBSTACLE_SPAWN_RATE) {
                 createObstacle();
             }
 
-             // --- Increase Difficulty ---
-             currentObstacleSpeed += delta * 0.01; // Speed increases slowly over time
+             // --- Increase Difficulty & Adapt Music Tempo ---
+             currentObstacleSpeed += delta * 0.01;
+             // Adapt tempo multiplier based on speed (subtly)
+            tempoMultiplier = 1.0 + (currentObstacleSpeed - OBSTACLE_BASE_SPEED) * 0.5; // Adjust multiplier as needed
+            tempoMultiplier = Math.min(tempoMultiplier, 2.0); // Cap tempo increase
+
 
             // --- Obstacle Movement & Collision ---
-            const playerBox = new THREE.Box3().setFromObject(player); // Update player box each frame
-
+            const playerBox = new THREE.Box3().setFromObject(player);
             for (let i = obstacles.length - 1; i >= 0; i--) {
                 const obstacle = obstacles[i];
-                obstacle.position.z += currentObstacleSpeed; // Move obstacle towards player
-
-                // Update obstacle bounding box
+                obstacle.position.z += currentObstacleSpeed; // Use adapted speed
                  obstacle.userData.boundingBox.setFromObject(obstacle);
 
-                // Collision Check
                 if (playerBox.intersectsBox(obstacle.userData.boundingBox)) {
-                    gameOver();
-                    return; // Exit loop immediately on collision
+                    triggerGameOver(); // Use new game over function
+                    return;
                 }
-
-                // Remove obstacles that have passed
                 if (obstacle.position.z > camera.position.z + 10) {
                     scene.remove(obstacle);
                     obstacles.splice(i, 1);
@@ -245,79 +396,87 @@
         }
 
         // --- Game Over ---
-        function gameOver() {
+        function triggerGameOver() {
+            if (isGameOver) return; // Prevent multiple triggers
+
+            console.log("Game Over triggered!");
             isGameOver = true;
-            cancelAnimationFrame(animationFrameId); // Stop the animation loop
+            isGameRunning = false; // Stop game logic
+            // Don't cancel animation frame here, let it run for potential menus etc.
             clock.stop();
+            stopMusicLoop(); // Stop the music
+
             finalScoreElement.textContent = `Final Score: ${Math.floor(score)}`;
-            gameOverElement.style.display = 'block'; // Show game over screen
-            // Optional: Add sound effect here
+            gameOverElement.style.display = 'block';
         }
+
+        // --- Start Game ---
+         function startGame() {
+             startButton.style.display = 'none'; // Hide start button
+             if (!setupAudio()) return; // Crucial: Ensure audio is ready *after user interaction*
+
+             resetGameState(); // Prepare game state
+             isGameRunning = true; // Allow game logic to run
+             isGameOver = false;
+
+             // Ensure clock is running
+             if (!clock.running) {
+                 clock.start();
+             } else {
+                 // If clock was stopped (e.g., game over), getDelta() might be large on restart. Reset it.
+                 clock.getDelta(); // Call once to reset internal timer
+             }
+
+             startMusicLoop(); // Start the music
+
+             // Start animation loop if not already running (important for restart)
+             if (animationFrameId === null) {
+                 console.log("Starting animation loop.");
+                 animate();
+             }
+              console.log("Game Started!");
+         }
+
 
         // --- Restart Game ---
         function restartGame() {
-             // Clean up old scene objects
-             while(scene.children.length > 0){
-                const object = scene.children[0];
-                if(object.geometry) object.geometry.dispose();
-                if(object.material) {
-                    // Ensure textures are disposed if they exist
-                    if (object.material.map) object.material.map.dispose();
-                    if (object.material.lightMap) object.material.lightMap.dispose();
-                    if (object.material.aoMap) object.material.aoMap.dispose();
-                    if (object.material.emissiveMap) object.material.emissiveMap.dispose();
-                    if (object.material.bumpMap) object.material.bumpMap.dispose();
-                    if (object.material.normalMap) object.material.normalMap.dispose();
-                    if (object.material.displacementMap) object.material.displacementMap.dispose();
-                    if (object.material.roughnessMap) object.material.roughnessMap.dispose();
-                    if (object.material.metalnessMap) object.material.metalnessMap.dispose();
-                    if (object.material.alphaMap) object.material.alphaMap.dispose();
-                    if (object.material.envMap) object.material.envMap.dispose();
-                    object.material.dispose();
-                }
-                scene.remove(object);
-            }
-
-            // Dispose of renderer resources if possible (may not be fully necessary but good practice)
-            renderer.dispose();
-            container.removeChild(renderer.domElement); // Remove old canvas
-
-
-            // Remove event listeners to avoid duplicates (important!)
-            window.removeEventListener('resize', onWindowResize, false);
-            document.removeEventListener('keydown', onKeyDown, false);
-            // Note: restartButton listener remains
-
-            // Re-initialize the game
-            init();
+            gameOverElement.style.display = 'none'; // Hide game over screen
+             startGame(); // Use the main start function to reset everything
         }
-
 
         // --- Event Handlers ---
         function onWindowResize() {
+            if (!camera || !renderer) return; // Check if initialized
             camera.aspect = window.innerWidth / window.innerHeight;
             camera.updateProjectionMatrix();
             renderer.setSize(window.innerWidth, window.innerHeight);
         }
 
         function onKeyDown(event) {
-            if (isGameOver) return;
+            // Only allow movement if the game is actively running
+             if (!isGameRunning || isGameOver) return;
 
-            const halfLane = LANE_WIDTH / 2;
-            const maxLaneIndex = Math.floor(NUM_LANES / 2); // 1 for 3 lanes
+             const maxLaneIndex = Math.floor(NUM_LANES / 2);
 
             if (event.key === 'ArrowLeft' || event.key.toLowerCase() === 'a') {
-                // Move target one lane left, clamped
                  playerTargetX = Math.max(-maxLaneIndex * LANE_WIDTH, playerTargetX - LANE_WIDTH);
-
             } else if (event.key === 'ArrowRight' || event.key.toLowerCase() === 'd') {
-                // Move target one lane right, clamped
                  playerTargetX = Math.min(maxLaneIndex * LANE_WIDTH, playerTargetX + LANE_WIDTH);
             }
         }
 
-        // --- Start the game ---
-        init();
+        // --- Initial Setup Call ---
+        initGameGraphics(); // Set up scene, camera, renderer etc.
+        window.addEventListener('resize', onWindowResize, false);
+        document.addEventListener('keydown', onKeyDown, false);
+        restartButton.addEventListener('click', restartGame, false);
+        startButton.addEventListener('click', startGame, false); // Add listener for start button
+
+        // Do not start game logic or music automatically. Wait for the start button.
+        console.log("Game initialized. Press 'Start Game' to play.");
+        // Start rendering loop immediately to show the initial state (player, ground)
+        animate();
+
 
     </script>
 </body>
