@@ -1,9 +1,9 @@
 <!DOCTYPE html>
-<html lang="en">
+<html lang="de">
 <head>
     <meta charset="UTF-8">
     <meta name="viewport" content="width=device-width, initial-scale=1.0">
-    <title>Three.js Game with Jump & Music</title>
+    <title>Three.js Spiel - Konfetti Boom Edition</title>
     <style>
         body { margin: 0; overflow: hidden; background-color: #222; color: white; font-family: monospace;}
         canvas { display: block; }
@@ -24,20 +24,33 @@
             border: none;
             border-radius: 5px;
         }
+        #achievement-popup {
+            position: absolute;
+            bottom: 20px;
+            left: 50%;
+            transform: translateX(-50%);
+            background-color: rgba(0, 200, 0, 0.8);
+            color: white;
+            padding: 10px 20px;
+            border-radius: 5px;
+            font-size: 18px;
+            z-index: 105;
+            display: none;
+            transition: opacity 0.5s ease-out;
+        }
     </style>
 </head>
 <body>
-    <button id="start-button">Start Game</button>
-
-    <div id="info">Score: 0</div>
+    <button id="start-button">Spiel Starten</button>
+    <div id="info">Punkte: 0</div>
     <div id="game-over">
         Game Over!<br>
         <span id="final-score"></span><br>
-        <button id="restart-button">Restart</button>
+        <button id="restart-button">Neustart</button>
     </div>
+    <div id="achievement-popup">Achievement Unlocked!</div>
     <div id="game-container"></div>
 
-    <!-- Import THREE.js using importmap -->
     <script type="importmap">
         {
             "imports": {
@@ -47,400 +60,375 @@
     </script>
 
     <script type="module">
-        // Import Three.js
         import * as THREE from 'three';
 
-        // --- Game Constants ---
-        const LANE_WIDTH = 5;
-        const NUM_LANES = 3;
-        const TRACK_WIDTH = LANE_WIDTH * NUM_LANES;
-        const PLAYER_SPEED_X = 15; // Horizontal speed
-        const OBSTACLE_START_Z = -100;
-        const OBSTACLE_BASE_SPEED = 0.3;
-        const OBSTACLE_SPAWN_RATE = 0.01;
-        const SCORE_MULTIPLIER = 10;
-        const GRAVITY = 25.0; // Acceleration due to gravity (units per second squared)
-        const JUMP_FORCE = 10.0; // Initial upward velocity on jump (units per second)
-        const PLAYER_SIZE = 1.5; // Use a constant for player dimensions
-        const GROUND_Y = (PLAYER_SIZE / 2) - 0.5; // Player's Y position when on the ground plane at y=-0.5
+        // --- Konstanten ---
+        // Spiel
+        const LANE_WIDTH = 5; const NUM_LANES = 3; const TRACK_WIDTH = LANE_WIDTH * NUM_LANES;
+        const PLAYER_SPEED_X = 15; const OBSTACLE_START_Z = -100; const OBSTACLE_BASE_SPEED = 0.3;
+        const OBSTACLE_SPAWN_RATE = 0.01; const SCORE_MULTIPLIER = 10; const GRAVITY = 18.0; // Angepasste Gravitation für Konfetti
+        const JUMP_FORCE = 10.0; const PLAYER_SIZE = 1.5; const GROUND_Y = (PLAYER_SIZE / 2) - 0.5;
+        // Explosion
+        const CONFETTI_COUNT = 500; // Anzahl Konfetti-Stücke
+        const CONFETTI_SPREAD = 8;  // Wie weit sich Konfetti initial verteilt
+        const CONFETTI_INITIAL_SPEED = 15; // Anfangsgeschwindigkeit
+        const CONFETTI_DURATION_MS = 4000; // Dauer der Konfetti-Animation
+        const CONFETTI_FADE_START_RATIO = 0.6; // Ab wann das Ausblenden beginnt (60% der Lebenszeit)
+        const CONFETTI_AIR_RESISTANCE = 0.98; // Faktor zur Verlangsamung
 
-        // --- Audio Constants ---
-        const BASE_TEMPO_BPM = 100;
-        const NOTE_DURATION_SEC = 60.0 / (BASE_TEMPO_BPM * 2);
-        const LOOKAHEAD_TIME_SEC = 0.1;
-        const SCHEDULE_INTERVAL_MS = 25;
+        // Audio
+        const BASE_TEMPO_BPM = 100; const NOTE_DURATION_SEC = 60.0 / (BASE_TEMPO_BPM * 2);
+        const LOOKAHEAD_TIME_SEC = 0.1; const SCHEDULE_INTERVAL_MS = 25;
         const SCALE_MIDI_NOTES = [60, 63, 65, 67, 70, 72, 75, 77, 79, 82];
         const BASS_MIDI_NOTES = [36, 39, 41, 43, 46];
 
-        // --- Game Variables ---
-        let scene, camera, renderer;
-        let player, playerTargetX = 0;
-        let playerVelocityY = 0; // Vertical velocity for jumping
-        let isPlayerOnGround = true; // Track if player can jump
-        let obstacles = [];
-        let score = 0;
-        let isGameOver = false;
-        let isGameRunning = false;
-        let animationFrameId = null;
-        let currentObstacleSpeed = OBSTACLE_BASE_SPEED;
+        // --- Variablen ---
+        // Spiel
+        let scene, camera, renderer; let player, playerTargetX = 0;
+        let playerVelocityY = 0; let isPlayerOnGround = true; let obstacles = [];
+        let score = 0; let isGameOver = false; let isGameRunning = false;
+        let animationFrameId = null; let currentObstacleSpeed = OBSTACLE_BASE_SPEED;
         let clock = new THREE.Clock();
+        let activeConfettiExplosion = null; // Referenz auf InstancedMesh
+        let confettiData = []; // Array zum Speichern von Zustand pro Konfetti-Stück
 
-        // --- Audio Variables ---
-        let audioCtx;
-        let nextNoteTime = 0.0;
-        let currentMelodyNoteIndex = 0;
-        let currentBassNoteIndex = 0;
-        let schedulerIntervalId = null;
-        let masterGain;
+        // Audio
+        let audioCtx; let nextNoteTime = 0.0; let currentMelodyNoteIndex = 0;
+        let currentBassNoteIndex = 0; let schedulerIntervalId = null; let masterGain;
         let tempoMultiplier = 1.0;
 
-        // --- DOM Elements ---
-        const infoElement = document.getElementById('info');
-        const gameOverElement = document.getElementById('game-over');
-        const finalScoreElement = document.getElementById('final-score');
-        const restartButton = document.getElementById('restart-button');
-        const container = document.getElementById('game-container');
-        const startButton = document.getElementById('start-button');
+        // Achievements
+        const achievements = [ { score: 100, name: "Anfänger", unlocked: false }, { score: 500, name: "Läufer", unlocked: false }, { score: 1000, name: "Download the HTML", unlocked: false }, { score: 2000, name: "Meister", unlocked: false }, { score: 5000, name: "Legende", unlocked: false } ];
+        let achievementPopupTimeout = null;
 
-        // --- Initialization ---
+        // DOM
+        const infoElement = document.getElementById('info'); const gameOverElement = document.getElementById('game-over');
+        const finalScoreElement = document.getElementById('final-score'); const restartButton = document.getElementById('restart-button');
+        const container = document.getElementById('game-container'); const startButton = document.getElementById('start-button');
+        const achievementPopupElement = document.getElementById('achievement-popup');
+
+        // --- Hilfsobjekte (einmal erstellen) ---
+        const dummy = new THREE.Object3D(); // Für Matrix-Updates bei InstancedMesh
+        const tempColor = new THREE.Color(); // Wiederverwendbares Farbobjekt
+        const tempMatrix = new THREE.Matrix4(); // Wiederverwendbare Matrix
+        const tempQuaternion = new THREE.Quaternion(); // Wiederverwendbares Quaternion
+        const tempVector3 = new THREE.Vector3(); // Wiederverwendbarer Vektor
+
+        // --- Initialisierung (Grafik) ---
         function initGameGraphics() {
-            // Scene
-            scene = new THREE.Scene();
-            scene.background = new THREE.Color(0x222244);
-            scene.fog = new THREE.Fog(0x222244, 50, 150);
-
-            // Camera
-            camera = new THREE.PerspectiveCamera(75, window.innerWidth / window.innerHeight, 0.1, 200);
-            camera.position.set(0, 5, 15);
-            camera.lookAt(0, 0, 0);
-
-            // Renderer
-            renderer = new THREE.WebGLRenderer({ antialias: true });
-            renderer.setSize(window.innerWidth, window.innerHeight);
-            renderer.shadowMap.enabled = true;
-            container.appendChild(renderer.domElement);
-
-            // Lighting
-            const ambientLight = new THREE.AmbientLight(0x606060);
-            scene.add(ambientLight);
-            const directionalLight = new THREE.DirectionalLight(0xffffff, 0.8);
-            directionalLight.position.set(5, 10, 7.5);
-            directionalLight.castShadow = true;
-            // Shadow settings (same as before)
-            directionalLight.shadow.mapSize.width = 1024;
-            directionalLight.shadow.mapSize.height = 1024;
-            directionalLight.shadow.camera.near = 0.5;
-            directionalLight.shadow.camera.far = 50;
-            directionalLight.shadow.camera.left = -TRACK_WIDTH;
-            directionalLight.shadow.camera.right = TRACK_WIDTH;
-            directionalLight.shadow.camera.top = 10;
-            directionalLight.shadow.camera.bottom = -10;
-            scene.add(directionalLight);
-
-            // Ground
-            const groundGeometry = new THREE.PlaneGeometry(TRACK_WIDTH * 1.5, 200);
-            const groundMaterial = new THREE.MeshStandardMaterial({ color: 0x444444, side: THREE.DoubleSide });
-            const ground = new THREE.Mesh(groundGeometry, groundMaterial);
-            ground.rotation.x = -Math.PI / 2;
-            ground.position.y = -0.5; // Ground plane position
-            ground.receiveShadow = true;
-            scene.add(ground);
-
-            // Player
-            const playerGeometry = new THREE.BoxGeometry(PLAYER_SIZE, PLAYER_SIZE, PLAYER_SIZE); // Use constant
-            const playerMaterial = new THREE.MeshStandardMaterial({ color: 0x00ff00 });
-            player = new THREE.Mesh(playerGeometry, playerMaterial);
-            player.position.set(0, GROUND_Y, 5); // Start player exactly on the ground
-            player.castShadow = true;
-            scene.add(player);
-
+            // Szene, Kamera, Renderer, Licht, Boden, Spieler (wie zuvor)
+            scene = new THREE.Scene(); scene.background = new THREE.Color(0x222244); scene.fog = new THREE.Fog(0x222244, 50, 150);
+            camera = new THREE.PerspectiveCamera(75, window.innerWidth / window.innerHeight, 0.1, 200); camera.position.set(0, 5, 15); camera.lookAt(0, 0, 0);
+            renderer = new THREE.WebGLRenderer({ antialias: true }); renderer.setSize(window.innerWidth, window.innerHeight); renderer.shadowMap.enabled = true; container.appendChild(renderer.domElement);
+            const ambientLight = new THREE.AmbientLight(0x606060); scene.add(ambientLight);
+            const directionalLight = new THREE.DirectionalLight(0xffffff, 0.8); directionalLight.position.set(5, 10, 7.5); directionalLight.castShadow = true; directionalLight.shadow.mapSize.width = 1024; directionalLight.shadow.mapSize.height = 1024; directionalLight.shadow.camera.near = 0.5; directionalLight.shadow.camera.far = 50; directionalLight.shadow.camera.left = -TRACK_WIDTH; directionalLight.shadow.camera.right = TRACK_WIDTH; directionalLight.shadow.camera.top = 10; directionalLight.shadow.camera.bottom = -10; scene.add(directionalLight);
+            const groundGeometry = new THREE.PlaneGeometry(TRACK_WIDTH * 1.5, 200); const groundMaterial = new THREE.MeshStandardMaterial({ color: 0x444444, side: THREE.DoubleSide }); const ground = new THREE.Mesh(groundGeometry, groundMaterial); ground.rotation.x = -Math.PI / 2; ground.position.y = -0.5; ground.receiveShadow = true; scene.add(ground);
+            const playerGeometry = new THREE.BoxGeometry(PLAYER_SIZE, PLAYER_SIZE, PLAYER_SIZE); const playerMaterial = new THREE.MeshStandardMaterial({ color: 0x00ff00 }); player = new THREE.Mesh(playerGeometry, playerMaterial); player.position.set(0, GROUND_Y, 5); player.castShadow = true; player.visible = true; scene.add(player);
             obstacles = [];
+            console.log("Spielgrafik initialisiert.");
         }
 
+        // --- Spielzustand zurücksetzen ---
         function resetGameState() {
-            isGameOver = false;
-            score = 0;
-            playerTargetX = 0;
-            playerVelocityY = 0; // Reset vertical velocity
-            isPlayerOnGround = true; // Player starts on ground
-            currentObstacleSpeed = OBSTACLE_BASE_SPEED;
-            tempoMultiplier = 1.0;
-            gameOverElement.style.display = 'none';
+            isGameOver = false; score = 0; playerTargetX = 0; playerVelocityY = 0; isPlayerOnGround = true;
+            currentObstacleSpeed = OBSTACLE_BASE_SPEED; tempoMultiplier = 1.0;
+            gameOverElement.style.display = 'none'; achievements.forEach(ach => ach.unlocked = false); hideAchievementPopup();
+            obstacles.forEach(obstacle => scene.remove(obstacle)); obstacles = [];
 
-            obstacles.forEach(obstacle => scene.remove(obstacle));
-            obstacles = [];
-
-            if (player) {
-                player.position.x = 0;
-                player.position.y = GROUND_Y; // Ensure player is on ground
-                player.position.z = 5;
+            // Alte Konfetti-Explosion aufräumen
+            if (activeConfettiExplosion) {
+                scene.remove(activeConfettiExplosion);
+                activeConfettiExplosion.geometry.dispose();
+                // Material nur disposen, wenn es nicht wiederverwendet wird (hier sicher)
+                if(activeConfettiExplosion.material) activeConfettiExplosion.material.dispose();
+                activeConfettiExplosion = null;
+                confettiData = []; // Daten leeren
             }
 
-            infoElement.textContent = `Score: 0`;
+            if (player) { player.position.set(0, GROUND_Y, 5); player.visible = true; }
+            infoElement.textContent = `Punkte: 0`;
+            console.log("Spielzustand zurückgesetzt.");
         }
 
-        // --- Audio Setup and Control (Identical to previous version) ---
-        function setupAudio() {
-            if (!audioCtx) {
-                try {
-                    audioCtx = new (window.AudioContext || window.webkitAudioContext)();
-                    masterGain = audioCtx.createGain();
-                    masterGain.gain.setValueAtTime(0.3, audioCtx.currentTime);
-                    masterGain.connect(audioCtx.destination);
-                    console.log("AudioContext created successfully.");
-                } catch (e) {
-                    console.error("Web Audio API is not supported", e);
-                    alert("Web Audio API is not supported. Music cannot be played.");
-                    return false;
+        // --- Audio Setup & Steuerung (identisch) ---
+        function setupAudio() { if (!audioCtx) { try { audioCtx = new (window.AudioContext || window.webkitAudioContext)(); masterGain = audioCtx.createGain(); masterGain.gain.setValueAtTime(0.3, audioCtx.currentTime); masterGain.connect(audioCtx.destination); console.log("AudioContext ok."); } catch (e) { console.error("Web Audio API nicht unterstützt", e); alert("Web Audio API nicht unterstützt."); return false; } } if (audioCtx.state === 'suspended') { audioCtx.resume().then(() => console.log("AudioContext fortgesetzt.")); } return true; }
+        function midiNoteToFrequency(n) { return Math.pow(2, (n - 69) / 12) * 440; }
+        function scheduleNote(type, note, time, dur, vol = 0.8) { if (!audioCtx) return; const o = audioCtx.createOscillator(), g = audioCtx.createGain(); o.connect(g); g.connect(masterGain); o.type = (type === 'melody') ? 'triangle' : 'sine'; o.frequency.setValueAtTime(midiNoteToFrequency(note), time); g.gain.setValueAtTime(0, time); g.gain.linearRampToValueAtTime(vol, time + dur * 0.1); g.gain.linearRampToValueAtTime(0, time + dur); o.start(time); o.stop(time + dur + 0.05); }
+        function generateNextMelodyNoteIndex(c) { const r=Math.random(), m=SCALE_MIDI_NOTES.length-1; if (r<0.3) return c; if (r<0.6) return THREE.MathUtils.clamp(c+(Math.random()<0.5?-1:1),0,m); if (r<0.8) return THREE.MathUtils.clamp(c+(Math.random()<0.5?-2:2),0,m); return Math.floor(Math.random()*(m+1)); }
+        function generateNextBassNoteIndex(c) { const r=Math.random(), m=BASS_MIDI_NOTES.length-1; if (r<0.6) return c; if (r<0.9) return THREE.MathUtils.clamp(c+(Math.random()<0.5?-1:1),0,m); return Math.floor(Math.random()*(m+1)); }
+        function scheduler() { if (!isGameRunning || isGameOver || !audioCtx) return; const dur=NOTE_DURATION_SEC/tempoMultiplier; while (nextNoteTime < audioCtx.currentTime + LOOKAHEAD_TIME_SEC) { if (Math.random() < 0.9) { currentMelodyNoteIndex=generateNextMelodyNoteIndex(currentMelodyNoteIndex); scheduleNote('melody', SCALE_MIDI_NOTES[currentMelodyNoteIndex], nextNoteTime, dur * 0.9, 0.7); } const b=(nextNoteTime/(NOTE_DURATION_SEC*2/tempoMultiplier)); if (b%1<0.1) { currentBassNoteIndex=generateNextBassNoteIndex(currentBassNoteIndex); scheduleNote('bass', BASS_MIDI_NOTES[currentBassNoteIndex], nextNoteTime, dur * 1.8, 0.5); } nextNoteTime += dur; } }
+        function startMusicLoop() { if (!setupAudio()) return; if (schedulerIntervalId) clearInterval(schedulerIntervalId); nextNoteTime=audioCtx.currentTime+0.1; currentMelodyNoteIndex=Math.floor(SCALE_MIDI_NOTES.length/2); currentBassNoteIndex=0; schedulerIntervalId=setInterval(scheduler, SCHEDULE_INTERVAL_MS); console.log("Musik gestartet."); }
+        function stopMusicLoop() { if (schedulerIntervalId) { clearInterval(schedulerIntervalId); schedulerIntervalId=null; console.log("Musik gestoppt."); if(audioCtx && masterGain) { masterGain.gain.cancelScheduledValues(audioCtx.currentTime); masterGain.gain.linearRampToValueAtTime(0, audioCtx.currentTime + 0.5); setTimeout(() => { if(masterGain) masterGain.gain.setValueAtTime(0.3, audioCtx.currentTime); }, 550); } } }
+
+        // --- Hindernis-Erstellung (identisch) ---
+        function createObstacle() { if (!isGameRunning || isGameOver) return; const g=new THREE.BoxGeometry(LANE_WIDTH*0.8, PLAYER_SIZE, PLAYER_SIZE), m=new THREE.MeshStandardMaterial({color: 0xff0000}), o=new THREE.Mesh(g,m); const l=Math.floor(Math.random()*NUM_LANES)-Math.floor(NUM_LANES/2), x=l*LANE_WIDTH; o.position.set(x,GROUND_Y,OBSTACLE_START_Z); o.castShadow=true; o.receiveShadow=true; o.userData.boundingBox=new THREE.Box3().setFromObject(o); obstacles.push(o); scene.add(o); }
+
+        // --- Achievement-Funktionen (identisch) ---
+        function checkAchievements() { for (const a of achievements) { if (!a.unlocked && score >= a.score) { a.unlocked = true; showAchievementPopup(a.name); console.log(`Achievement: ${a.name}`); } } }
+        function showAchievementPopup(n) { if (achievementPopupTimeout) clearTimeout(achievementPopupTimeout); achievementPopupElement.textContent = `Errungenschaft: ${n}!`; achievementPopupElement.style.display = 'block'; achievementPopupElement.style.opacity = '1'; achievementPopupTimeout = setTimeout(hideAchievementPopup, 3000); }
+        function hideAchievementPopup(){ achievementPopupElement.style.opacity = '0'; if (achievementPopupTimeout) clearTimeout(achievementPopupTimeout); achievementPopupTimeout = setTimeout(() => { achievementPopupElement.style.display = 'none'; achievementPopupTimeout = null; }, 500); }
+
+        // --- Konfetti-Explosionsfunktionen ---
+        function createConfettiExplosion(position) {
+            if (activeConfettiExplosion) return; // Nur eine Explosion
+
+            const confettiGeometry = new THREE.PlaneGeometry(0.3, 0.3); // Kleine Quadrate für Konfetti
+            const confettiMaterial = new THREE.MeshBasicMaterial({
+                side: THREE.DoubleSide,
+                vertexColors: true, // Farben pro Instanz setzen
+                transparent: true,
+                depthWrite: false // Wichtig für korrekte Darstellung übereinander
+            });
+
+            activeConfettiExplosion = new THREE.InstancedMesh(confettiGeometry, confettiMaterial, CONFETTI_COUNT);
+            activeConfettiExplosion.position.copy(position); // Explosion am Spielerort zentrieren
+
+            const brightColors = [0xff0000, 0x00ff00, 0x0000ff, 0xffff00, 0x00ffff, 0xff00ff, 0xffa500, 0xff1493];
+            confettiData = []; // Reset data array
+
+            for (let i = 0; i < CONFETTI_COUNT; i++) {
+                // Initialisiere Daten für jedes Konfetti-Stück
+                const life = CONFETTI_DURATION_MS / 1000.0; // Lebensdauer in Sekunden
+                const initialPosition = new THREE.Vector3(
+                    (Math.random() - 0.5) * CONFETTI_SPREAD * 0.2, // Starte näher am Zentrum
+                    (Math.random() - 0.5) * CONFETTI_SPREAD * 0.2,
+                    (Math.random() - 0.5) * CONFETTI_SPREAD * 0.2
+                );
+
+                // Zufällige Ausbreitungsrichtung
+                const velocity = new THREE.Vector3(
+                    (Math.random() - 0.5),
+                    Math.random() * 0.8 + 0.2, // Eher nach oben gerichtet
+                    (Math.random() - 0.5)
+                ).normalize().multiplyScalar(CONFETTI_INITIAL_SPEED * (0.5 + Math.random() * 0.5)); // Varianz in Geschwindigkeit
+
+                // Zufällige Rotationsachse und -geschwindigkeit
+                const rotationAxis = new THREE.Vector3(Math.random() * 2 - 1, Math.random() * 2 - 1, Math.random() * 2 - 1).normalize();
+                const rotationSpeed = Math.random() * Math.PI * 4; // Bis zu 2 Umdrehungen pro Sekunde
+
+                // Daten speichern
+                confettiData.push({
+                    position: initialPosition,
+                    quaternion: new THREE.Quaternion().setFromAxisAngle(rotationAxis, Math.random() * Math.PI * 2), // Startrotation
+                    velocity: velocity,
+                    rotationAxis: rotationAxis,
+                    rotationSpeed: rotationSpeed,
+                    initialLife: life,
+                    life: life,
+                    baseColor: new THREE.Color(brightColors[Math.floor(Math.random() * brightColors.length)])
+                });
+
+                // Initialisiere Matrix und Farbe der Instanz (wird im Update überschrieben)
+                dummy.position.copy(initialPosition);
+                dummy.setRotationFromQuaternion(confettiData[i].quaternion);
+                dummy.updateMatrix();
+                activeConfettiExplosion.setMatrixAt(i, dummy.matrix);
+                activeConfettiExplosion.setColorAt(i, confettiData[i].baseColor);
+            }
+            activeConfettiExplosion.instanceMatrix.needsUpdate = true;
+            activeConfettiExplosion.instanceColor.needsUpdate = true;
+
+            scene.add(activeConfettiExplosion);
+            console.log("Konfetti-Explosion erstellt.");
+
+            // Geplantes Aufräumen
+            setTimeout(() => {
+                if (activeConfettiExplosion) {
+                    scene.remove(activeConfettiExplosion);
+                    activeConfettiExplosion.geometry.dispose();
+                    activeConfettiExplosion.material.dispose();
+                    activeConfettiExplosion = null;
+                    confettiData = [];
+                    console.log("Konfetti aufgeräumt.");
                 }
-            }
-            if (audioCtx.state === 'suspended') {
-                audioCtx.resume().then(() => console.log("AudioContext resumed."));
-            }
-            return true;
+            }, CONFETTI_DURATION_MS);
         }
 
-        function midiNoteToFrequency(midiNote) {
-            return Math.pow(2, (midiNote - 69) / 12) * 440;
-        }
+        function updateConfettiExplosion(delta) {
+            if (!activeConfettiExplosion || confettiData.length === 0) return;
 
-        function scheduleNote(type, noteMidi, startTime, duration, volume = 0.8) {
-            if (!audioCtx) return;
-            const osc = audioCtx.createOscillator();
-            const noteGain = audioCtx.createGain();
-            osc.connect(noteGain);
-            noteGain.connect(masterGain);
-            osc.type = (type === 'melody') ? 'triangle' : 'sine';
-            osc.frequency.setValueAtTime(midiNoteToFrequency(noteMidi), startTime);
-            noteGain.gain.setValueAtTime(0, startTime);
-            noteGain.gain.linearRampToValueAtTime(volume, startTime + duration * 0.1);
-            noteGain.gain.linearRampToValueAtTime(0, startTime + duration);
-            osc.start(startTime);
-            osc.stop(startTime + duration + 0.05);
-        }
+            let needsMatrixUpdate = false;
+            let needsColorUpdate = false;
 
-         function generateNextMelodyNoteIndex(currentIndex) {
-            const rand = Math.random();
-            const maxIndex = SCALE_MIDI_NOTES.length - 1;
-            if (rand < 0.3) return currentIndex;
-            if (rand < 0.6) return THREE.MathUtils.clamp(currentIndex + (Math.random() < 0.5 ? -1 : 1), 0, maxIndex);
-            if (rand < 0.8) return THREE.MathUtils.clamp(currentIndex + (Math.random() < 0.5 ? -2 : 2), 0, maxIndex);
-            return Math.floor(Math.random() * (maxIndex + 1));
-         }
+            for (let i = 0; i < CONFETTI_COUNT; i++) {
+                const data = confettiData[i];
+                if (data.life <= 0) continue; // Überspringe tote Partikel
 
-         function generateNextBassNoteIndex(currentIndex) {
-            const rand = Math.random();
-            const maxIndex = BASS_MIDI_NOTES.length - 1;
-            if (rand < 0.6) return currentIndex;
-            if (rand < 0.9) return THREE.MathUtils.clamp(currentIndex + (Math.random() < 0.5 ? -1 : 1), 0, maxIndex);
-            return Math.floor(Math.random() * (maxIndex + 1));
-         }
+                // Lebenszeit reduzieren
+                data.life -= delta;
+                if (data.life <= 0) { // Partikel ist "gestorben"
+                    // Optional: Matrix auf Skalierung 0 setzen, um es verschwinden zu lassen
+                    tempMatrix.identity().scale(tempVector3.set(0,0,0)); // Skaliere auf 0
+                    activeConfettiExplosion.setMatrixAt(i, tempMatrix);
+                    needsMatrixUpdate = true;
+                    continue; // Nächstes Partikel
+                }
 
-        function scheduler() {
-             if (!isGameRunning || isGameOver || !audioCtx) return;
-             const currentNoteDuration = NOTE_DURATION_SEC / tempoMultiplier;
-             while (nextNoteTime < audioCtx.currentTime + LOOKAHEAD_TIME_SEC) {
-                 if (Math.random() < 0.9) {
-                    currentMelodyNoteIndex = generateNextMelodyNoteIndex(currentMelodyNoteIndex);
-                    scheduleNote('melody', SCALE_MIDI_NOTES[currentMelodyNoteIndex], nextNoteTime, currentNoteDuration * 0.9, 0.7);
+                // Physik anwenden
+                data.velocity.y -= GRAVITY * delta; // Schwerkraft
+                data.velocity.multiplyScalar(CONFETTI_AIR_RESISTANCE); // Luftwiderstand
+                data.position.addScaledVector(data.velocity, delta); // Position aktualisieren
+
+                // Rotation anwenden
+                 tempQuaternion.setFromAxisAngle(data.rotationAxis, data.rotationSpeed * delta);
+                 data.quaternion.premultiply(tempQuaternion); // Aktuelle Rotation mit neuer Rotation multiplizieren
+
+                // Matrix für diese Instanz setzen
+                 dummy.position.copy(data.position);
+                 dummy.setRotationFromQuaternion(data.quaternion);
+                 // Optional: Skalierung ändern, z.B. zum Schrumpfen
+                 // dummy.scale.set(scale, scale, scale);
+                 dummy.updateMatrix();
+                 activeConfettiExplosion.setMatrixAt(i, dummy.matrix);
+                 needsMatrixUpdate = true;
+
+                // Farbe/Deckkraft basierend auf Lebenszeit anpassen (Ausblenden)
+                const lifeRatio = data.life / data.initialLife;
+                if (lifeRatio < CONFETTI_FADE_START_RATIO) {
+                    const fadeRatio = lifeRatio / CONFETTI_FADE_START_RATIO;
+                    tempColor.copy(data.baseColor); // Arbeite mit Kopie der Basisfarbe
+                    // Setze Deckkraft direkt (Material muss transparent sein)
+                    // Die Farbe selbst ändern wir hier nicht, nur die Deckkraft im Material
+                    // Für InstancedMesh muss die Deckkraft über die Farbe gesteuert werden, wenn Material.opacity = 1 ist
+                    // Hier ist es einfacher, die Farbe mit Alpha zu setzen, wenn das Material das unterstützt oder wenn wir Shader nutzen.
+                    // Alternative: Wir manipulieren die Farbe, um sie dunkler/grauer werden zu lassen.
+                    tempColor.lerp(new THREE.Color(0x333333), 1.0 - fadeRatio); // Blende zu grau aus
+                    activeConfettiExplosion.setColorAt(i, tempColor);
+                    needsColorUpdate = true;
+                }
+                 // Stelle sicher, dass die Farbe gesetzt ist, auch wenn nicht gefadet wird (falls vorher auf 0 gesetzt)
+                 else if (activeConfettiExplosion.instanceColor) {
+                     activeConfettiExplosion.setColorAt(i, data.baseColor); // Setze normale Farbe
+                     needsColorUpdate = true; // Falls vorher gefadet
                  }
-                const beatsElapsed = (nextNoteTime / (NOTE_DURATION_SEC * 2 / tempoMultiplier));
-                if (beatsElapsed % 1 < 0.1) {
-                     currentBassNoteIndex = generateNextBassNoteIndex(currentBassNoteIndex);
-                    scheduleNote('bass', BASS_MIDI_NOTES[currentBassNoteIndex], nextNoteTime, currentNoteDuration * 1.8, 0.5);
-                }
-                nextNoteTime += currentNoteDuration;
+
             }
+
+            // Updates an Three.js melden, wenn nötig
+            if (needsMatrixUpdate) activeConfettiExplosion.instanceMatrix.needsUpdate = true;
+            if (needsColorUpdate) activeConfettiExplosion.instanceColor.needsUpdate = true;
         }
 
-        function startMusicLoop() {
-            if (!setupAudio()) return;
-            if (schedulerIntervalId) clearInterval(schedulerIntervalId);
-            nextNoteTime = audioCtx.currentTime + 0.1;
-            currentMelodyNoteIndex = Math.floor(SCALE_MIDI_NOTES.length / 2);
-            currentBassNoteIndex = 0;
-            schedulerIntervalId = setInterval(scheduler, SCHEDULE_INTERVAL_MS);
-            console.log("Music loop started.");
+
+        // --- Tiefer Boom Sound ---
+        function playDeepBoomSound() {
+            if (!audioCtx) return;
+
+            const duration = 1.5; // Längere Dauer für mehr "Boom"
+            const now = audioCtx.currentTime;
+
+            // 1. Haupt-Thump (tiefer, länger)
+            const thumpOsc = audioCtx.createOscillator();
+            thumpOsc.type = 'square'; // Kräftiger als Sinus
+            // Frequenz tief starten und tief fallen lassen
+            thumpOsc.frequency.setValueAtTime(80, now); // Tiefer Start
+            thumpOsc.frequency.exponentialRampToValueAtTime(25, now + duration * 0.6); // Sehr tiefer Ausklang
+
+            const thumpGain = audioCtx.createGain();
+            // Scharfer Attack, längerer Decay
+            thumpGain.gain.setValueAtTime(0, now);
+            thumpGain.gain.linearRampToValueAtTime(0.9, now + 0.02); // Sehr schneller Attack
+            thumpGain.gain.exponentialRampToValueAtTime(0.1, now + duration * 0.8); // Längerer Ausklang
+            thumpGain.gain.linearRampToValueAtTime(0.001, now + duration); // Zum Ende hin leise
+
+            thumpOsc.connect(thumpGain);
+            thumpGain.connect(masterGain);
+            thumpOsc.start(now);
+            thumpOsc.stop(now + duration);
+
+            // 2. Sub-Bass Rumble (optional, für mehr Tiefe)
+            const subOsc = audioCtx.createOscillator();
+            subOsc.type = 'sine';
+            subOsc.frequency.setValueAtTime(40, now); // Konstante tiefe Frequenz
+            subOsc.frequency.linearRampToValueAtTime(30, now + duration); // Leichter Pitch Drop
+
+            const subGain = audioCtx.createGain();
+            subGain.gain.setValueAtTime(0, now);
+            subGain.gain.linearRampToValueAtTime(0.5, now + 0.1); // Langsamerer Attack als Thump
+            subGain.gain.exponentialRampToValueAtTime(0.01, now + duration); // Klingt lange aus
+
+            subOsc.connect(subGain);
+            subGain.connect(masterGain);
+            subOsc.start(now);
+            subOsc.stop(now + duration);
+
+             // 3. Noise Burst (kurz, für den "Crack")
+             const noiseDuration = 0.2;
+             const bufferSize = audioCtx.sampleRate * noiseDuration;
+             const noiseBuffer = audioCtx.createBuffer(1, bufferSize, audioCtx.sampleRate);
+             const output = noiseBuffer.getChannelData(0);
+             for (let i = 0; i < bufferSize; i++) { output[i] = Math.random() * 2 - 1; }
+             const noiseSource = audioCtx.createBufferSource(); noiseSource.buffer = noiseBuffer;
+             const noiseGain = audioCtx.createGain();
+             // Sehr kurzer, lauter Burst
+             noiseGain.gain.setValueAtTime(0.6, now);
+             noiseGain.gain.exponentialRampToValueAtTime(0.001, now + noiseDuration * 0.8);
+             noiseSource.connect(noiseGain); noiseGain.connect(masterGain);
+             noiseSource.start(now); noiseSource.stop(now + noiseDuration); // Stoppt schnell
+
+             console.log("Tiefes Boom-Geräusch abgespielt.");
         }
 
-        function stopMusicLoop() {
-            if (schedulerIntervalId) {
-                clearInterval(schedulerIntervalId);
-                schedulerIntervalId = null;
-                console.log("Music loop stopped.");
-                if(audioCtx && masterGain) {
-                     masterGain.gain.cancelScheduledValues(audioCtx.currentTime);
-                     masterGain.gain.linearRampToValueAtTime(0, audioCtx.currentTime + 0.5);
-                     setTimeout(() => {
-                          if(masterGain) masterGain.gain.setValueAtTime(0.3, audioCtx.currentTime);
-                     }, 550);
-                }
-            }
-        }
-
-        // --- Obstacle Creation (Identical to previous version) ---
-        function createObstacle() {
-            if (!isGameRunning || isGameOver) return;
-            const obstacleGeometry = new THREE.BoxGeometry(LANE_WIDTH * 0.8, PLAYER_SIZE, PLAYER_SIZE); // Make obstacles player height
-            const obstacleMaterial = new THREE.MeshStandardMaterial({ color: 0xff0000 });
-            const obstacle = new THREE.Mesh(obstacleGeometry, obstacleMaterial);
-            const laneIndex = Math.floor(Math.random() * NUM_LANES) - Math.floor(NUM_LANES / 2);
-            const xPos = laneIndex * LANE_WIDTH;
-            // Obstacles start on the ground
-            obstacle.position.set(xPos, GROUND_Y, OBSTACLE_START_Z);
-            obstacle.castShadow = true;
-            obstacle.receiveShadow = true;
-            obstacle.userData.boundingBox = new THREE.Box3().setFromObject(obstacle);
-            obstacles.push(obstacle);
-            scene.add(obstacle);
-        }
 
         // --- Game Loop ---
         function animate() {
-             animationFrameId = requestAnimationFrame(animate);
+            animationFrameId = requestAnimationFrame(animate);
+            const delta = clock.running ? clock.getDelta() : 0;
 
-             if (!isGameRunning || isGameOver) return;
-
-            const delta = clock.getDelta(); // Time since last frame
-
-            // --- Player Horizontal Movement ---
-             const moveAmountX = PLAYER_SPEED_X * delta;
-             player.position.x = THREE.MathUtils.lerp(player.position.x, playerTargetX, moveAmountX);
-             const halfTrack = TRACK_WIDTH / 2 - player.geometry.parameters.width / 2;
-             player.position.x = THREE.MathUtils.clamp(player.position.x, -halfTrack, halfTrack);
-
-            // --- Player Vertical (Jump) Movement ---
-            if (!isPlayerOnGround) {
-                // Apply gravity
-                playerVelocityY -= GRAVITY * delta;
-                // Update position
-                player.position.y += playerVelocityY * delta;
-
-                // Check for landing
-                if (player.position.y <= GROUND_Y) {
-                    player.position.y = GROUND_Y; // Snap to ground
-                    playerVelocityY = 0;          // Stop vertical movement
-                    isPlayerOnGround = true;      // Allow jumping again
-                }
+            // Konfetti-Explosion immer aktualisieren
+            if (activeConfettiExplosion) {
+                updateConfettiExplosion(delta);
             }
 
-            // --- Obstacle Spawning ---
-            if (Math.random() < OBSTACLE_SPAWN_RATE) {
-                createObstacle();
+            // Kern-Spiellogik nur wenn aktiv
+            if (!isGameRunning || isGameOver) {
+                 renderer.render(scene, camera); // Szene trotzdem rendern
+                 return;
             }
 
-             // --- Increase Difficulty & Adapt Music Tempo ---
-             currentObstacleSpeed += delta * 0.01;
-             tempoMultiplier = 1.0 + (currentObstacleSpeed - OBSTACLE_BASE_SPEED) * 0.5;
-             tempoMultiplier = Math.min(tempoMultiplier, 2.0);
+            // Spielerbewegung horizontal & vertikal (wie zuvor)
+            const moveX = PLAYER_SPEED_X * delta; player.position.x = THREE.MathUtils.lerp(player.position.x, playerTargetX, moveX);
+            const halfT = TRACK_WIDTH / 2 - PLAYER_SIZE / 2; player.position.x = THREE.MathUtils.clamp(player.position.x, -halfT, halfT);
+            if (!isPlayerOnGround) { playerVelocityY -= GRAVITY * delta; player.position.y += playerVelocityY * delta; if (player.position.y <= GROUND_Y) { player.position.y = GROUND_Y; playerVelocityY = 0; isPlayerOnGround = true; } }
 
-            // --- Obstacle Movement & Collision ---
-            // Update player's bounding box *after* position updates
-             const playerBox = new THREE.Box3().setFromObject(player);
+            // Hindernisse (Spawn, Bewegung, Kollision) (wie zuvor)
+            if (Math.random() < OBSTACLE_SPAWN_RATE) { createObstacle(); }
+            currentObstacleSpeed += delta * 0.01; tempoMultiplier = 1.0 + (currentObstacleSpeed - OBSTACLE_BASE_SPEED) * 0.5; tempoMultiplier = Math.min(tempoMultiplier, 2.0);
+            const pBox = new THREE.Box3().setFromObject(player);
+            for (let i = obstacles.length - 1; i >= 0; i--) { const o = obstacles[i]; o.position.z += currentObstacleSpeed; o.userData.boundingBox.setFromObject(o); if (pBox.intersectsBox(o.userData.boundingBox)) { triggerGameOver(); return; } if (o.position.z > camera.position.z + 10) { scene.remove(o); obstacles.splice(i, 1); } }
 
-            for (let i = obstacles.length - 1; i >= 0; i--) {
-                const obstacle = obstacles[i];
-                obstacle.position.z += currentObstacleSpeed; // Move obstacle
-                 obstacle.userData.boundingBox.setFromObject(obstacle); // Update obstacle box
+            // Score & Achievements (wie zuvor)
+            score += delta * SCORE_MULTIPLIER; infoElement.textContent = `Punkte: ${Math.floor(score)}`; checkAchievements();
 
-                // Collision Check (uses updated player and obstacle boxes)
-                if (playerBox.intersectsBox(obstacle.userData.boundingBox)) {
-                    triggerGameOver();
-                    return;
-                }
-                // Remove obstacles that have passed
-                if (obstacle.position.z > camera.position.z + 10) {
-                    scene.remove(obstacle);
-                    obstacles.splice(i, 1);
-                }
-            }
-
-            // --- Update Score ---
-            score += delta * SCORE_MULTIPLIER;
-            infoElement.textContent = `Score: ${Math.floor(score)}`;
-
-            // --- Render ---
+            // Rendern
             renderer.render(scene, camera);
         }
 
         // --- Game Over ---
         function triggerGameOver() {
-            if (isGameOver) return;
-            console.log("Game Over triggered!");
-            isGameOver = true;
-            isGameRunning = false;
-            clock.stop();
-            stopMusicLoop();
-            finalScoreElement.textContent = `Final Score: ${Math.floor(score)}`;
-            gameOverElement.style.display = 'block';
+            if (isGameOver) return; console.log("Game Over!"); isGameOver = true; isGameRunning = false; clock.stop(); stopMusicLoop();
+            if(player) player.visible = false; // Spieler ausblenden
+            createConfettiExplosion(player.position.clone()); // NEUE Explosion
+            playDeepBoomSound(); // NEUER Sound
+            finalScoreElement.textContent = `Endpunktzahl: ${Math.floor(score)}`; gameOverElement.style.display = 'block';
         }
 
-        // --- Start Game ---
-         function startGame() {
-             startButton.style.display = 'none';
-             if (!setupAudio()) return;
-             resetGameState();
-             isGameRunning = true;
-             isGameOver = false;
-             if (!clock.running) {
-                 clock.start();
-             } else {
-                 clock.getDelta();
-             }
-             startMusicLoop();
-             if (animationFrameId === null) {
-                 console.log("Starting animation loop.");
-                 animate();
-             } else {
-                 // If restarting, ensure game loop continues processing
-                 // This branch might not be strictly necessary if animate() keeps running
-                 // but ensures the logic restarts if animate was somehow paused externally.
-             }
-             console.log("Game Started!");
-         }
+        // --- Spiel starten & Neustarten (identisch) ---
+        function startGame() { startButton.style.display = 'none'; if (!setupAudio()) return; resetGameState(); isGameRunning = true; isGameOver = false; if (!clock.running) { clock.start(); } else { clock.getDelta(); } startMusicLoop(); if (animationFrameId === null) { console.log("Animations-Loop gestartet."); animate(); } console.log("Spiel gestartet!"); }
+        function restartGame() { gameOverElement.style.display = 'none'; startGame(); }
 
-        // --- Restart Game ---
-        function restartGame() {
-            gameOverElement.style.display = 'none';
-            startGame(); // Use the main start function
-        }
+        // --- Event-Handler (identisch) ---
+        function onWindowResize() { if (!c||!r) return; c.aspect = window.innerWidth / window.innerHeight; c.updateProjectionMatrix(); r.setSize(window.innerWidth, window.innerHeight); }
+        function onKeyDown(e) { if (!isGameRunning || isGameOver) return; const m=Math.floor(NUM_LANES/2); if(e.key==='ArrowLeft'||e.key.toLowerCase()==='a'){playerTargetX=Math.max(-m*LANE_WIDTH,playerTargetX-LANE_WIDTH);} else if(e.key==='ArrowRight'||e.key.toLowerCase()==='d'){playerTargetX=Math.min(m*LANE_WIDTH,playerTargetX+LANE_WIDTH);} if((e.key===' '||e.key==='ArrowUp'||e.key.toLowerCase()==='w')&&isPlayerOnGround){playerVelocityY=JUMP_FORCE;isPlayerOnGround=false;} }
 
-        // --- Event Handlers ---
-        function onWindowResize() {
-            if (!camera || !renderer) return;
-            camera.aspect = window.innerWidth / window.innerHeight;
-            camera.updateProjectionMatrix();
-            renderer.setSize(window.innerWidth, window.innerHeight);
-        }
-
-        function onKeyDown(event) {
-             if (!isGameRunning || isGameOver) return;
-
-             const maxLaneIndex = Math.floor(NUM_LANES / 2);
-
-            // Horizontal Movement
-            if (event.key === 'ArrowLeft' || event.key.toLowerCase() === 'a') {
-                 playerTargetX = Math.max(-maxLaneIndex * LANE_WIDTH, playerTargetX - LANE_WIDTH);
-            } else if (event.key === 'ArrowRight' || event.key.toLowerCase() === 'd') {
-                 playerTargetX = Math.min(maxLaneIndex * LANE_WIDTH, playerTargetX + LANE_WIDTH);
-            }
-
-            // Jump Trigger
-             if ((event.key === ' ' || event.key === 'ArrowUp' || event.key.toLowerCase() === 'w') && isPlayerOnGround) {
-                 playerVelocityY = JUMP_FORCE; // Apply upward force
-                 isPlayerOnGround = false;    // Player is now airborne
-             }
-        }
-
-        // --- Initial Setup Call ---
+        // --- Initialer Setup-Aufruf ---
         initGameGraphics();
         window.addEventListener('resize', onWindowResize, false);
         document.addEventListener('keydown', onKeyDown, false);
         restartButton.addEventListener('click', restartGame, false);
         startButton.addEventListener('click', startGame, false);
-
-        console.log("Game initialized. Press 'Start Game' to play. Use Arrows/A/D to move, Space/Up/W to jump.");
-        animate(); // Start rendering loop immediately
+        console.log("Spiel initialisiert. Drücke 'Spiel Starten'. Bewegen/Springen wie gehabt.");
+        animate(); // Render-Loop starten
 
     </script>
 </body>
