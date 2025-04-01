@@ -3,365 +3,292 @@
 <head>
     <meta charset="UTF-8">
     <meta name="viewport" content="width=device-width, initial-scale=1.0">
-    <title>Brainrot Chill Fisher Deluxe™</title>
+    <title>k8o5</title>
     <style>
-        body { margin: 0; overflow: hidden; background-color: #add8e6; font-family: 'Courier New', Courier, monospace; }
-        canvas { display: block; }
-        #info {
-            position: absolute;
-            top: 10px;
-            width: 100%;
-            text-align: center;
-            z-index: 100;
-            display:block;
-            color: #ffffff;
-            background-color: rgba(0,0,0,0.3);
-            padding: 10px;
-            font-size: 20px;
+        body {
+            font-family: sans-serif;
+            line-height: 1.6;
+            padding: 20px;
+            background-color: #f4f4f4;
+            color: #333;
         }
-        #instructions {
-            position: absolute;
-            bottom: 10px;
-            width: 100%;
-            text-align: center;
-            color: #ffffff;
-            font-size: 16px;
-            text-shadow: 1px 1px 2px black;
+        .container {
+            background-color: #fff;
+            padding: 25px;
+            border-radius: 8px;
+            box-shadow: 0 2px 5px rgba(0,0,0,0.1);
+            max-width: 700px;
+            margin: auto;
+        }
+        h1, h2 {
+            color: #0056b3;
+            border-bottom: 2px solid #eee;
+            padding-bottom: 5px;
+        }
+        pre {
+            background-color: #eee;
+            padding: 10px;
+            border-radius: 4px;
+            white-space: pre-wrap; /* Allow wrapping */
+            word-wrap: break-word; /* Break long words */
+        }
+        button {
+            background-color: #007bff;
+            color: white;
+            border: none;
+            padding: 10px 15px;
+            border-radius: 4px;
+            cursor: pointer;
+            font-size: 1em;
+            margin-top: 10px;
+            transition: background-color 0.2s ease;
+        }
+        button:hover {
+            background-color: #0056b3;
+        }
+        button:disabled {
+            background-color: #ccc;
+            cursor: not-allowed;
+        }
+        input[type="number"] {
+            padding: 8px;
+            border: 1px solid #ccc;
+            border-radius: 4px;
+            margin-right: 5px;
+        }
+        label {
+            margin-right: 5px;
+            font-weight: bold;
+        }
+        #model-results, #prediction-result {
+            margin-top: 10px;
+            font-weight: bold;
+            background-color: #e9f5ff;
+            padding: 10px;
+            border-left: 4px solid #007bff;
+            border-radius: 4px;
+        }
+        canvas {
+            border: 1px solid #ccc;
+            margin-top: 15px;
+            background-color: #fdfdfd;
+            display: block; /* Prevents extra space below canvas */
+            max-width: 100%; /* Make it responsive */
+            height: auto;
         }
     </style>
 </head>
 <body>
-    <div id="info">Fish Caught: 0 | State: Idle</div>
-    <div id="instructions">Click anywhere to Cast/Reel</div>
-    <script type="importmap">
-        {
-            "imports": {
-                "three": "https://unpkg.com/three@0.160.0/build/three.module.js",
-                "three/addons/": "https://unpkg.com/three@0.160.0/examples/jsm/"
+    <div class="container">
+        <h1>Simple Machine Learning Demo</h1>
+        <p>This demonstrates <strong>Simple Linear Regression</strong> using JavaScript. We "train" a model to find the best-fit line (y = mx + b) for the given data points.</p>
+
+        <h2>1. Data Points (x, y)</h2>
+        <p>Here's the sample data we'll use:</p>
+        <pre id="data-display"></pre>
+
+        <h2>2. Train the Model</h2>
+        <p>Click the button to calculate the slope (m) and intercept (b) using the least squares method.</p>
+        <button id="train-button">Train Model</button>
+        <div id="model-results">Model not trained yet.</div>
+
+        <h2>3. Make a Prediction</h2>
+        <p>Enter a value for X and predict Y using the trained model (y = mx + b).</p>
+        <div>
+            <label for="predict-x">Enter X:</label>
+            <input type="number" id="predict-x" value="5" step="any">
+            <button id="predict-button" disabled>Predict Y</button>
+        </div>
+        <div id="prediction-result"></div>
+
+        <h2>4. Visualization</h2>
+        <p>A plot showing the data points and the learned regression line.</p>
+        <canvas id="plot" width="500" height="350"></canvas>
+    </div>
+
+    <script>
+        // --- Data ---
+        // Simple dataset - trying to approximate something like y = 2x + 1 + noise
+        const data = [
+            { x: 0, y: 1.2 },
+            { x: 1, y: 3.1 },
+            { x: 2, y: 4.8 },
+            { x: 3, y: 7.3 },
+            { x: 4, y: 8.9 },
+            { x: 5, y: 11.5 },
+            { x: 6, y: 12.2 },
+            { x: 7, y: 15.1 },
+            { x: 8, y: 17.5 },
+            { x: 9, y: 18.8 }
+        ];
+
+        // --- Global Model Parameters ---
+        let m = 0; // Slope
+        let b = 0; // Intercept
+        let modelTrained = false;
+
+        // --- DOM Elements ---
+        const dataDisplay = document.getElementById('data-display');
+        const trainButton = document.getElementById('train-button');
+        const modelResults = document.getElementById('model-results');
+        const predictButton = document.getElementById('predict-button');
+        const predictXInput = document.getElementById('predict-x');
+        const predictionResult = document.getElementById('prediction-result');
+        const canvas = document.getElementById('plot');
+        const ctx = canvas.getContext('2d');
+
+        // --- Display Initial Data ---
+        dataDisplay.textContent = JSON.stringify(data, null, 2);
+
+        // --- Linear Regression Logic (Least Squares) ---
+        function trainLinearRegression(dataPoints) {
+            let sumX = 0, sumY = 0, sumXY = 0, sumXSquare = 0;
+            const n = dataPoints.length;
+
+            if (n === 0) return { m: 0, b: 0 }; // Avoid division by zero
+
+            for (const point of dataPoints) {
+                sumX += point.x;
+                sumY += point.y;
+                sumXY += point.x * point.y;
+                sumXSquare += point.x * point.x;
             }
+
+            // Calculate slope (m) and intercept (b)
+            // Formula: m = (n * sumXY - sumX * sumY) / (n * sumXSquare - sumX * sumX)
+            // Formula: b = (sumY - m * sumX) / n
+            const denominator = n * sumXSquare - sumX * sumX;
+            if (denominator === 0) return { m: 0, b: sumY / n }; // Handle vertical line case (or single point)
+
+            const slope = (n * sumXY - sumX * sumY) / denominator;
+            const intercept = (sumY - slope * sumX) / n;
+
+            return { m: slope, b: intercept };
         }
-    </script>
-    <script type="module">
-        import * as THREE from 'three';
-        import { OrbitControls } from 'three/addons/controls/OrbitControls.js';
 
-        let scene, camera, renderer, controls;
-        let water, bobber, fishingLine;
-        let caughtFish = null;
+        // --- Prediction Function ---
+        function predict(xValue) {
+            if (!modelTrained) {
+                return 'Model not trained yet.';
+            }
+            return m * xValue + b;
+        }
 
-        // --- Game State ---
-        const STATE = {
-            IDLE: 'Idle',
-            CASTING: 'Casting',
-            WAITING: 'Waiting for Bite',
-            BITING: 'BITING! CLICK NOW!',
-            REELING: 'Reeling In',
-            SHOWING_CATCH: 'Showing Catch'
-        };
-        let currentState = STATE.IDLE;
-        let fishCaughtCount = 0;
-        let biteTimer = null;
-        let showCatchTimer = null;
-        let biteWindowTimer = null;
+        // --- Visualization Function ---
+        function drawPlot() {
+            const padding = 40; // Padding around the plot
+            const width = canvas.width;
+            const height = canvas.height;
+            const plotWidth = width - 2 * padding;
+            const plotHeight = height - 2 * padding;
 
-        // --- Parameters ---
-        const waterSize = 100;
-        const castDistance = 30;
-        const castTime = 1; // seconds
-        const reelTime = 1.5; // seconds
-        const minWaitTime = 3; // seconds
-        const maxWaitTime = 8; // seconds
-        const biteTime = 1.5; // seconds user has to click
-        const showCatchDuration = 2.5; // seconds
+            // Find data ranges
+            const xValues = data.map(p => p.x);
+            const yValues = data.map(p => p.y);
+            const minX = Math.min(...xValues, 0); // Include 0 in range
+            const maxX = Math.max(...xValues);
+            const minY = Math.min(...yValues, 0); // Include 0 in range
+            const maxY = Math.max(...yValues);
 
-        // --- Animation Variables ---
-        let animationProgress = 0; // 0 to 1
-        let targetBobberPos = new THREE.Vector3(0, 0.5, 5); // Start near camera implied rod
-        const idleBobberPos = new THREE.Vector3(0, 0.5, 5);
-        const castBobberPos = new THREE.Vector3(0, 0.1, -castDistance + 5); // Target position in water
+            // Add some buffer to ranges
+            const rangeX = (maxX - minX) * 1.1 || 10; // Prevent zero range
+            const rangeY = (maxY - minY) * 1.1 || 10; // Prevent zero range
+            const displayMinX = minX - (rangeX * 0.05);
+            const displayMaxX = maxX + (rangeX * 0.05);
+            const displayMinY = minY - (rangeY * 0.05);
+            const displayMaxY = maxY + (rangeY * 0.05);
 
-        init();
-        animate();
 
-        function init() {
-            // Scene
-            scene = new THREE.Scene();
-            scene.background = new THREE.Color(0xadd8e6); // Light blue sky
-            scene.fog = new THREE.Fog(0xadd8e6, 50, 150);
+            // Clear canvas
+            ctx.clearRect(0, 0, width, height);
+            ctx.fillStyle = "#fdfdfd";
+            ctx.fillRect(0, 0, width, height);
 
-            // Camera
-            camera = new THREE.PerspectiveCamera(75, window.innerWidth / window.innerHeight, 0.1, 1000);
-            camera.position.set(0, 10, 15);
 
-            // Renderer
-            renderer = new THREE.WebGLRenderer({ antialias: true });
-            renderer.setSize(window.innerWidth, window.innerHeight);
-            renderer.shadowMap.enabled = true; // Soft shadows for relaxation
-            document.body.appendChild(renderer.domElement);
+            // Function to map data coordinates to canvas coordinates
+            function mapX(x) {
+                return padding + ((x - displayMinX) / (displayMaxX - displayMinX)) * plotWidth;
+            }
+            function mapY(y) {
+                return height - padding - ((y - displayMinY) / (displayMaxY - displayMinY)) * plotHeight;
+            }
 
-            // Controls
-            controls = new OrbitControls(camera, renderer.domElement);
-            controls.enableDamping = true; // Smooth camera movement
-            controls.dampingFactor = 0.05;
-            controls.screenSpacePanning = false;
-            controls.maxPolarAngle = Math.PI / 2 - 0.05; // Don't look below water horizon much
-            controls.minDistance = 5;
-            controls.maxDistance = 50;
-            controls.target.set(0, 0, 0); // Look towards the center
+            // Draw axes
+            ctx.beginPath();
+            ctx.strokeStyle = '#aaa';
+            ctx.lineWidth = 1;
+            // Y axis
+            ctx.moveTo(padding, padding / 2);
+            ctx.lineTo(padding, height - padding);
+            // X axis
+            ctx.lineTo(width - padding / 2, height - padding);
+            ctx.stroke();
 
-            // Lighting
-            const ambientLight = new THREE.AmbientLight(0xffffff, 0.6);
-            scene.add(ambientLight);
-            const directionalLight = new THREE.DirectionalLight(0xffffff, 0.8);
-            directionalLight.position.set(5, 10, 7.5);
-            directionalLight.castShadow = true;
-            directionalLight.shadow.mapSize.width = 1024;
-            directionalLight.shadow.mapSize.height = 1024;
-            scene.add(directionalLight);
+            // Draw Axis Labels (simple)
+             ctx.fillStyle = '#333';
+             ctx.textAlign = 'center';
+             ctx.fillText('X', width / 2, height - padding / 3);
+             ctx.textAlign = 'right';
+             ctx.textBaseline = 'middle';
+             ctx.fillText('Y', padding / 2, height / 2);
 
-            // Water
-            const waterGeometry = new THREE.PlaneGeometry(waterSize, waterSize);
-            const waterMaterial = new THREE.MeshPhongMaterial({
-                color: 0x4682b4, // Steel Blue
-                transparent: true,
-                opacity: 0.85,
-                shininess: 60,
-                side: THREE.DoubleSide
+
+            // Draw data points
+            ctx.fillStyle = '#007bff';
+            data.forEach(point => {
+                ctx.beginPath();
+                ctx.arc(mapX(point.x), mapY(point.y), 4, 0, Math.PI * 2); // Draw small circles
+                ctx.fill();
             });
-            water = new THREE.Mesh(waterGeometry, waterMaterial);
-            water.rotation.x = -Math.PI / 2;
-            water.receiveShadow = true;
-            scene.add(water);
 
-            // Bobber
-            const bobberGeometry = new THREE.SphereGeometry(0.3, 16, 16);
-            const bobberMaterial = new THREE.MeshPhongMaterial({ color: 0xff4500 }); // OrangeRed
-            bobber = new THREE.Mesh(bobberGeometry, bobberMaterial);
-            bobber.castShadow = true;
-            bobber.position.copy(targetBobberPos);
-            scene.add(bobber);
+            // Draw the regression line if model is trained
+            if (modelTrained) {
+                ctx.beginPath();
+                ctx.strokeStyle = '#dc3545'; // Red color for the line
+                ctx.lineWidth = 2;
+                const startX = displayMinX;
+                const startY = predict(startX);
+                const endX = displayMaxX;
+                const endY = predict(endX);
 
-            // Fishing Line
-            const lineMaterial = new THREE.LineBasicMaterial({ color: 0x000000, linewidth: 1 }); // Simple black line
-            const points = [];
-            points.push(new THREE.Vector3(0, 15, 8)); // Implied rod tip position (offscreen high)
-            points.push(bobber.position); // Connects to bobber
-            const lineGeometry = new THREE.BufferGeometry().setFromPoints(points);
-            fishingLine = new THREE.Line(lineGeometry, lineMaterial);
-            scene.add(fishingLine);
-
-            // Event Listeners
-            window.addEventListener('resize', onWindowResize);
-            window.addEventListener('mousedown', onMouseDown); // Use mousedown for quicker response
-
-            updateInfo();
-        }
-
-        function onWindowResize() {
-            camera.aspect = window.innerWidth / window.innerHeight;
-            camera.updateProjectionMatrix();
-            renderer.setSize(window.innerWidth, window.innerHeight);
-        }
-
-        function updateInfo() {
-            document.getElementById('info').innerText = `Fish Caught: ${fishCaughtCount} | State: ${currentState}`;
-        }
-
-        function setState(newState) {
-            currentState = newState;
-            // Clear any pending timers from previous states
-            clearTimeout(biteTimer);
-            clearTimeout(showCatchTimer);
-            clearTimeout(biteWindowTimer);
-            biteTimer = null;
-            showCatchTimer = null;
-            biteWindowTimer = null;
-
-            animationProgress = 0; // Reset animation progress for transitions
-            updateInfo();
-        }
-
-        function onMouseDown() {
-            switch (currentState) {
-                case STATE.IDLE:
-                case STATE.SHOWING_CATCH:
-                    cast();
-                    break;
-                case STATE.BITING:
-                    reel();
-                    break;
-                // Ignore clicks during other states like CASTING, REELING, WAITING
+                ctx.moveTo(mapX(startX), mapY(startY));
+                ctx.lineTo(mapX(endX), mapY(endY));
+                ctx.stroke();
             }
         }
 
-        function cast() {
-            if (currentState !== STATE.IDLE && currentState !== STATE.SHOWING_CATCH) return;
+        // --- Event Listeners ---
+        trainButton.addEventListener('click', () => {
+            const result = trainLinearRegression(data);
+            m = result.m;
+            b = result.b;
+            modelTrained = true;
 
-            // Remove caught fish if it exists
-            if (caughtFish) {
-                scene.remove(caughtFish);
-                caughtFish.geometry.dispose();
-                caughtFish.material.dispose();
-                caughtFish = null;
+            modelResults.textContent = `Training complete! Learned parameters: m = ${m.toFixed(4)}, b = ${b.toFixed(4)} (Equation: y = ${m.toFixed(4)}x + ${b.toFixed(4)})`;
+            modelResults.style.backgroundColor = '#d4edda'; // Greenish background for success
+            modelResults.style.borderColor = '#28a745';
+
+            predictButton.disabled = false; // Enable prediction
+            predictionResult.textContent = ''; // Clear previous prediction
+            drawPlot(); // Redraw plot with the line
+        });
+
+        predictButton.addEventListener('click', () => {
+            const xValue = parseFloat(predictXInput.value);
+            if (isNaN(xValue)) {
+                predictionResult.textContent = 'Please enter a valid number for X.';
+                predictionResult.style.backgroundColor = '#f8d7da';
+                predictionResult.style.borderColor = '#dc3545';
+                return;
             }
+            const yValue = predict(xValue);
+            predictionResult.textContent = `For X = ${xValue}, predicted Y = ${yValue.toFixed(4)}`;
+            predictionResult.style.backgroundColor = '#e9f5ff';
+            predictionResult.style.borderColor = '#007bff';
+        });
 
-            setState(STATE.CASTING);
-            targetBobberPos.copy(castBobberPos); // Set target for animation
-        }
-
-        function startWaitForBite() {
-            setState(STATE.WAITING);
-            const waitTime = (minWaitTime + Math.random() * (maxWaitTime - minWaitTime)) * 1000;
-            biteTimer = setTimeout(startBiting, waitTime);
-        }
-
-        function startBiting() {
-            setState(STATE.BITING);
-            // Set a timer for how long the player has to react
-            biteWindowTimer = setTimeout(missedBite, biteTime * 1000);
-        }
-
-        function missedBite() {
-             if (currentState !== STATE.BITING) return; // Avoid state conflicts
-            console.log("Missed it!");
-            // Go back to waiting or idle? Let's go back to waiting for more chill repetition
-             targetBobberPos.copy(castBobberPos); // Ensure bobber stays out
-             startWaitForBite();
-            // Or reset completely:
-            // targetBobberPos.copy(idleBobberPos);
-            // setState(STATE.IDLE);
-        }
-
-        function reel() {
-            if (currentState !== STATE.BITING) return;
-            setState(STATE.REELING);
-            targetBobberPos.copy(idleBobberPos); // Set target for animation (back to start)
-
-            // Create the "fish" - Make it appear instantly attached for simplicity
-            caughtFish = createRandomCatch();
-            caughtFish.position.copy(bobber.position).sub(new THREE.Vector3(0, 0.5, 0)); // Attach below bobber
-            scene.add(caughtFish);
-        }
-
-        function showCatch() {
-            setState(STATE.SHOWING_CATCH);
-            fishCaughtCount++;
-            updateInfo(); // Update score immediately
-
-             // Keep fish visible for a short duration
-            showCatchTimer = setTimeout(() => {
-                 // Option 1: Fish disappears, ready to cast again
-                 if (caughtFish) {
-                     scene.remove(caughtFish);
-                     caughtFish.geometry.dispose();
-                     caughtFish.material.dispose();
-                     caughtFish = null;
-                 }
-                 setState(STATE.IDLE);
-                 // Option 2: Fish stays until next cast (handled in cast())
-                 // setState(STATE.IDLE); // Or stay in SHOWING_CATCH until cast? Let's go IDLE.
-            }, showCatchDuration * 1000);
-        }
-
-        function createRandomCatch() {
-            const randomValue = Math.random();
-            let geometry;
-            let material = new THREE.MeshPhongMaterial({ color: Math.random() * 0xffffff });
-            let fishMesh;
-
-            if (randomValue < 0.4) { // 40% chance Cube
-                geometry = new THREE.BoxGeometry(0.8, 0.8, 0.8);
-            } else if (randomValue < 0.7) { // 30% chance Torus (Donut)
-                geometry = new THREE.TorusGeometry(0.4, 0.15, 8, 20);
-            } else if (randomValue < 0.9) { // 20% chance Cone
-                 geometry = new THREE.ConeGeometry(0.5, 1, 16);
-            } else { // 10% chance Icosahedron (Shiny Crystal?)
-                 geometry = new THREE.IcosahedronGeometry(0.6, 0);
-                 material = new THREE.MeshStandardMaterial({
-                      color: Math.random() * 0xffffff,
-                      metalness: 0.5,
-                      roughness: 0.2
-                  });
-            }
-            // Maybe add a "?" block texture later for peak brainrot
-
-            fishMesh = new THREE.Mesh(geometry, material);
-            fishMesh.castShadow = true;
-            fishMesh.rotation.set(Math.random() * Math.PI, Math.random() * Math.PI, Math.random() * Math.PI);
-            return fishMesh;
-        }
-
-        let clock = new THREE.Clock();
-        let time = 0;
-
-        function animate() {
-            requestAnimationFrame(animate);
-            const delta = clock.getDelta();
-            time += delta;
-
-            controls.update(); // Only required if controls.enableDamping = true
-
-            // --- State-based Animations ---
-            let lerpFactor = Math.min(delta * (1 / (currentState === STATE.CASTING ? castTime : reelTime)), 1); // Adjust speed based on action
-
-             // Smoothly move bobber towards target position
-             if (currentState === STATE.CASTING || currentState === STATE.REELING) {
-                 animationProgress += delta / (currentState === STATE.CASTING ? castTime : reelTime);
-                 animationProgress = Math.min(animationProgress, 1); // Clamp between 0 and 1
-
-                 bobber.position.lerpVectors(
-                     currentState === STATE.CASTING ? idleBobberPos : castBobberPos, // Start position
-                     currentState === STATE.CASTING ? castBobberPos : idleBobberPos, // End position
-                     animationProgress // Use eased progress if desired, linear is fine for brainrot
-                 );
-
-
-                 // If animation finished
-                 if (animationProgress >= 1) {
-                     if (currentState === STATE.CASTING) {
-                         startWaitForBite();
-                     } else if (currentState === STATE.REELING) {
-                         showCatch();
-                     }
-                 }
-            }
-
-            // Bobbing animation when waiting or biting
-            if (currentState === STATE.WAITING || currentState === STATE.BITING) {
-                 bobber.position.y = castBobberPos.y + Math.sin(time * 5) * 0.05; // Gentle up/down bob
-            }
-             // Exaggerated bite animation
-             if (currentState === STATE.BITING) {
-                 bobber.position.y -= Math.abs(Math.sin(time * 20)) * 0.2; // Sharp dips
-             }
-
-             // Gentle rotation for the caught fish
-             if (currentState === STATE.SHOWING_CATCH && caughtFish) {
-                 caughtFish.rotation.y += delta * 0.5;
-                 caughtFish.rotation.x += delta * 0.3;
-             }
-
-
-            // --- Update Fishing Line ---
-            const points = fishingLine.geometry.attributes.position.array;
-            // Point 0 (rod tip) remains fixed relative to camera conceptually, or just high up
-             points[0] = 0; // x1
-             points[1] = 15; // y1 (High up, 'offscreen')
-             points[2] = 8; // z1 (Slightly in front of camera)
-            // Point 1 updates to bobber position
-            points[3] = bobber.position.x;
-            points[4] = bobber.position.y;
-            points[5] = bobber.position.z;
-            fishingLine.geometry.attributes.position.needsUpdate = true;
-
-             // Make caught fish follow bobber if reeling
-             if (currentState === STATE.REELING && caughtFish) {
-                 caughtFish.position.copy(bobber.position).sub(new THREE.Vector3(0, 0.5 + Math.sin(time * 10) * 0.1, 0)); // Follow below bobber wobbly
-             }
-
-
-            renderer.render(scene, camera);
-        }
+        // --- Initial Plot ---
+        drawPlot(); // Draw initial data points without the line
 
     </script>
 </body>
