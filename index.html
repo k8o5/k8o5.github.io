@@ -5,290 +5,319 @@
     <meta name="viewport" content="width=device-width, initial-scale=1.0">
     <title>k8o5</title>
     <style>
-        body {
-            font-family: sans-serif;
-            line-height: 1.6;
-            padding: 20px;
-            background-color: #f4f4f4;
-            color: #333;
-        }
-        .container {
-            background-color: #fff;
-            padding: 25px;
-            border-radius: 8px;
-            box-shadow: 0 2px 5px rgba(0,0,0,0.1);
-            max-width: 700px;
-            margin: auto;
-        }
-        h1, h2 {
-            color: #0056b3;
-            border-bottom: 2px solid #eee;
-            padding-bottom: 5px;
-        }
-        pre {
-            background-color: #eee;
-            padding: 10px;
-            border-radius: 4px;
-            white-space: pre-wrap; /* Allow wrapping */
-            word-wrap: break-word; /* Break long words */
-        }
-        button {
-            background-color: #007bff;
+        body { margin: 0; overflow: hidden; background-color: #222; }
+        canvas { display: block; }
+        #info {
+            position: absolute;
+            top: 10px;
+            width: 100%;
+            text-align: center;
+            z-index: 100;
+            display: block;
             color: white;
-            border: none;
-            padding: 10px 15px;
-            border-radius: 4px;
-            cursor: pointer;
-            font-size: 1em;
-            margin-top: 10px;
-            transition: background-color 0.2s ease;
+            font-family: monospace;
+            font-size: 24px;
         }
-        button:hover {
-            background-color: #0056b3;
+        #game-over {
+            position: absolute;
+            top: 50%;
+            left: 50%;
+            transform: translate(-50%, -50%);
+            z-index: 101;
+            display: none; /* Hidden by default */
+            color: red;
+            background-color: rgba(0, 0, 0, 0.7);
+            padding: 20px;
+            border-radius: 10px;
+            font-family: monospace;
+            font-size: 36px;
+            text-align: center;
+            border: 2px solid red;
         }
-        button:disabled {
-            background-color: #ccc;
-            cursor: not-allowed;
-        }
-        input[type="number"] {
-            padding: 8px;
-            border: 1px solid #ccc;
-            border-radius: 4px;
-            margin-right: 5px;
-        }
-        label {
-            margin-right: 5px;
-            font-weight: bold;
-        }
-        #model-results, #prediction-result {
-            margin-top: 10px;
-            font-weight: bold;
-            background-color: #e9f5ff;
-            padding: 10px;
-            border-left: 4px solid #007bff;
-            border-radius: 4px;
-        }
-        canvas {
-            border: 1px solid #ccc;
+         #game-over button {
             margin-top: 15px;
-            background-color: #fdfdfd;
-            display: block; /* Prevents extra space below canvas */
-            max-width: 100%; /* Make it responsive */
-            height: auto;
-        }
+            padding: 10px 20px;
+            font-size: 20px;
+            cursor: pointer;
+         }
     </style>
 </head>
 <body>
-    <div class="container">
-        <h1>Simple Machine Learning Demo</h1>
-        <p>This demonstrates <strong>Simple Linear Regression</strong> using JavaScript. We "train" a model to find the best-fit line (y = mx + b) for the given data points.</p>
-
-        <h2>1. Data Points (x, y)</h2>
-        <p>Here's the sample data we'll use:</p>
-        <pre id="data-display"></pre>
-
-        <h2>2. Train the Model</h2>
-        <p>Click the button to calculate the slope (m) and intercept (b) using the least squares method.</p>
-        <button id="train-button">Train Model</button>
-        <div id="model-results">Model not trained yet.</div>
-
-        <h2>3. Make a Prediction</h2>
-        <p>Enter a value for X and predict Y using the trained model (y = mx + b).</p>
-        <div>
-            <label for="predict-x">Enter X:</label>
-            <input type="number" id="predict-x" value="5" step="any">
-            <button id="predict-button" disabled>Predict Y</button>
-        </div>
-        <div id="prediction-result"></div>
-
-        <h2>4. Visualization</h2>
-        <p>A plot showing the data points and the learned regression line.</p>
-        <canvas id="plot" width="500" height="350"></canvas>
+    <div id="info">Score: 0</div>
+    <div id="game-over">
+        Game Over!<br>
+        <span id="final-score"></span><br>
+        <button id="restart-button">Restart</button>
     </div>
+    <div id="game-container"></div>
 
-    <script>
-        // --- Data ---
-        // Simple dataset - trying to approximate something like y = 2x + 1 + noise
-        const data = [
-            { x: 0, y: 1.2 },
-            { x: 1, y: 3.1 },
-            { x: 2, y: 4.8 },
-            { x: 3, y: 7.3 },
-            { x: 4, y: 8.9 },
-            { x: 5, y: 11.5 },
-            { x: 6, y: 12.2 },
-            { x: 7, y: 15.1 },
-            { x: 8, y: 17.5 },
-            { x: 9, y: 18.8 }
-        ];
+    <!-- Import THREE.js using importmap -->
+    <script type="importmap">
+        {
+            "imports": {
+                "three": "https://unpkg.com/three@0.160.0/build/three.module.js"
+            }
+        }
+    </script>
 
-        // --- Global Model Parameters ---
-        let m = 0; // Slope
-        let b = 0; // Intercept
-        let modelTrained = false;
+    <script type="module">
+        // Import Three.js
+        import * as THREE from 'three';
+
+        // --- Game Constants ---
+        const LANE_WIDTH = 5;
+        const NUM_LANES = 3;
+        const TRACK_WIDTH = LANE_WIDTH * NUM_LANES;
+        const PLAYER_SPEED = 15;
+        const OBSTACLE_START_Z = -100;
+        const OBSTACLE_BASE_SPEED = 0.3;
+        const OBSTACLE_SPAWN_RATE = 0.01; // Probability per frame
+        const SCORE_MULTIPLIER = 10; // Score increases faster
+
+        // --- Game Variables ---
+        let scene, camera, renderer;
+        let player, playerTargetX = 0;
+        let obstacles = [];
+        let score = 0;
+        let isGameOver = false;
+        let animationFrameId = null;
+        let currentObstacleSpeed = OBSTACLE_BASE_SPEED;
+        let clock = new THREE.Clock();
 
         // --- DOM Elements ---
-        const dataDisplay = document.getElementById('data-display');
-        const trainButton = document.getElementById('train-button');
-        const modelResults = document.getElementById('model-results');
-        const predictButton = document.getElementById('predict-button');
-        const predictXInput = document.getElementById('predict-x');
-        const predictionResult = document.getElementById('prediction-result');
-        const canvas = document.getElementById('plot');
-        const ctx = canvas.getContext('2d');
+        const infoElement = document.getElementById('info');
+        const gameOverElement = document.getElementById('game-over');
+        const finalScoreElement = document.getElementById('final-score');
+        const restartButton = document.getElementById('restart-button');
+        const container = document.getElementById('game-container');
 
-        // --- Display Initial Data ---
-        dataDisplay.textContent = JSON.stringify(data, null, 2);
+        // --- Initialization ---
+        function init() {
+            isGameOver = false;
+            score = 0;
+            obstacles = [];
+            playerTargetX = 0;
+            currentObstacleSpeed = OBSTACLE_BASE_SPEED;
+            gameOverElement.style.display = 'none'; // Hide game over screen
 
-        // --- Linear Regression Logic (Least Squares) ---
-        function trainLinearRegression(dataPoints) {
-            let sumX = 0, sumY = 0, sumXY = 0, sumXSquare = 0;
-            const n = dataPoints.length;
+            // Scene
+            scene = new THREE.Scene();
+            scene.background = new THREE.Color(0x222244);
+            scene.fog = new THREE.Fog(0x222244, 50, 150); // Add fog for depth
 
-            if (n === 0) return { m: 0, b: 0 }; // Avoid division by zero
+            // Camera
+            camera = new THREE.PerspectiveCamera(75, window.innerWidth / window.innerHeight, 0.1, 200);
+            camera.position.set(0, 5, 15); // Positioned behind and slightly above the player
+            camera.lookAt(0, 0, 0);
 
-            for (const point of dataPoints) {
-                sumX += point.x;
-                sumY += point.y;
-                sumXY += point.x * point.y;
-                sumXSquare += point.x * point.x;
-            }
+            // Renderer
+            renderer = new THREE.WebGLRenderer({ antialias: true });
+            renderer.setSize(window.innerWidth, window.innerHeight);
+            renderer.shadowMap.enabled = true; // Enable shadows
+            container.appendChild(renderer.domElement);
 
-            // Calculate slope (m) and intercept (b)
-            // Formula: m = (n * sumXY - sumX * sumY) / (n * sumXSquare - sumX * sumX)
-            // Formula: b = (sumY - m * sumX) / n
-            const denominator = n * sumXSquare - sumX * sumX;
-            if (denominator === 0) return { m: 0, b: sumY / n }; // Handle vertical line case (or single point)
+            // Lighting
+            const ambientLight = new THREE.AmbientLight(0x606060);
+            scene.add(ambientLight);
 
-            const slope = (n * sumXY - sumX * sumY) / denominator;
-            const intercept = (sumY - slope * sumX) / n;
+            const directionalLight = new THREE.DirectionalLight(0xffffff, 0.8);
+            directionalLight.position.set(5, 10, 7.5);
+            directionalLight.castShadow = true;
+            // Configure shadow properties for performance
+            directionalLight.shadow.mapSize.width = 1024;
+            directionalLight.shadow.mapSize.height = 1024;
+            directionalLight.shadow.camera.near = 0.5;
+            directionalLight.shadow.camera.far = 50;
+            directionalLight.shadow.camera.left = -TRACK_WIDTH;
+            directionalLight.shadow.camera.right = TRACK_WIDTH;
+            directionalLight.shadow.camera.top = 10;
+            directionalLight.shadow.camera.bottom = -10;
+            scene.add(directionalLight);
+            // const shadowHelper = new THREE.CameraHelper(directionalLight.shadow.camera); // Optional: visualize shadow frustum
+            // scene.add(shadowHelper);
 
-            return { m: slope, b: intercept };
+
+            // Ground
+            const groundGeometry = new THREE.PlaneGeometry(TRACK_WIDTH * 1.5, 200); // Long plane
+            const groundMaterial = new THREE.MeshStandardMaterial({ color: 0x444444, side: THREE.DoubleSide });
+            const ground = new THREE.Mesh(groundGeometry, groundMaterial);
+            ground.rotation.x = -Math.PI / 2; // Rotate flat
+            ground.position.y = -0.5; // Slightly below player origin
+            ground.receiveShadow = true;
+            scene.add(ground);
+
+            // Player
+            const playerGeometry = new THREE.BoxGeometry(1.5, 1.5, 1.5); // Slightly larger cube
+            const playerMaterial = new THREE.MeshStandardMaterial({ color: 0x00ff00 }); // Green cube
+            player = new THREE.Mesh(playerGeometry, playerMaterial);
+            player.position.set(0, playerGeometry.parameters.height / 2 - 0.5, 5); // Start slightly forward
+            player.castShadow = true;
+            scene.add(player);
+
+            // Event Listeners
+            window.addEventListener('resize', onWindowResize, false);
+            document.addEventListener('keydown', onKeyDown, false);
+            restartButton.addEventListener('click', restartGame, false);
+
+            // Start Animation Loop
+            clock.start();
+            animate();
         }
 
-        // --- Prediction Function ---
-        function predict(xValue) {
-            if (!modelTrained) {
-                return 'Model not trained yet.';
-            }
-            return m * xValue + b;
+        // --- Obstacle Creation ---
+        function createObstacle() {
+            const obstacleGeometry = new THREE.BoxGeometry(LANE_WIDTH * 0.8, 2, 2); // Wide obstacles
+            const obstacleMaterial = new THREE.MeshStandardMaterial({ color: 0xff0000 }); // Red obstacles
+            const obstacle = new THREE.Mesh(obstacleGeometry, obstacleMaterial);
+
+            // Choose a random lane (-1, 0, or 1) * LANE_WIDTH
+            const laneIndex = Math.floor(Math.random() * NUM_LANES) - Math.floor(NUM_LANES / 2); // -1, 0, 1 for 3 lanes
+            const xPos = laneIndex * LANE_WIDTH;
+
+            obstacle.position.set(
+                xPos,
+                obstacleGeometry.parameters.height / 2 - 0.5,
+                OBSTACLE_START_Z
+            );
+            obstacle.castShadow = true;
+            obstacle.receiveShadow = true; // Obstacles can receive shadows from others
+
+            // Add bounding box for easier collision detection
+            obstacle.userData.boundingBox = new THREE.Box3().setFromObject(obstacle);
+
+            obstacles.push(obstacle);
+            scene.add(obstacle);
         }
 
-        // --- Visualization Function ---
-        function drawPlot() {
-            const padding = 40; // Padding around the plot
-            const width = canvas.width;
-            const height = canvas.height;
-            const plotWidth = width - 2 * padding;
-            const plotHeight = height - 2 * padding;
+        // --- Game Loop ---
+        function animate() {
+            if (isGameOver) return; // Stop the loop if game is over
 
-            // Find data ranges
-            const xValues = data.map(p => p.x);
-            const yValues = data.map(p => p.y);
-            const minX = Math.min(...xValues, 0); // Include 0 in range
-            const maxX = Math.max(...xValues);
-            const minY = Math.min(...yValues, 0); // Include 0 in range
-            const maxY = Math.max(...yValues);
+            animationFrameId = requestAnimationFrame(animate);
+            const delta = clock.getDelta(); // Time since last frame
 
-            // Add some buffer to ranges
-            const rangeX = (maxX - minX) * 1.1 || 10; // Prevent zero range
-            const rangeY = (maxY - minY) * 1.1 || 10; // Prevent zero range
-            const displayMinX = minX - (rangeX * 0.05);
-            const displayMaxX = maxX + (rangeX * 0.05);
-            const displayMinY = minY - (rangeY * 0.05);
-            const displayMaxY = maxY + (rangeY * 0.05);
+            // --- Player Movement ---
+            const moveAmount = PLAYER_SPEED * delta;
+            // Lerp for smoother movement
+            player.position.x = THREE.MathUtils.lerp(player.position.x, playerTargetX, moveAmount);
+             // Keep player within track bounds (slightly less than full width)
+            const halfTrack = TRACK_WIDTH / 2 - player.geometry.parameters.width / 2;
+            player.position.x = THREE.MathUtils.clamp(player.position.x, -halfTrack, halfTrack);
 
 
-            // Clear canvas
-            ctx.clearRect(0, 0, width, height);
-            ctx.fillStyle = "#fdfdfd";
-            ctx.fillRect(0, 0, width, height);
-
-
-            // Function to map data coordinates to canvas coordinates
-            function mapX(x) {
-                return padding + ((x - displayMinX) / (displayMaxX - displayMinX)) * plotWidth;
-            }
-            function mapY(y) {
-                return height - padding - ((y - displayMinY) / (displayMaxY - displayMinY)) * plotHeight;
+            // --- Obstacle Spawning ---
+            if (Math.random() < OBSTACLE_SPAWN_RATE) {
+                createObstacle();
             }
 
-            // Draw axes
-            ctx.beginPath();
-            ctx.strokeStyle = '#aaa';
-            ctx.lineWidth = 1;
-            // Y axis
-            ctx.moveTo(padding, padding / 2);
-            ctx.lineTo(padding, height - padding);
-            // X axis
-            ctx.lineTo(width - padding / 2, height - padding);
-            ctx.stroke();
+             // --- Increase Difficulty ---
+             currentObstacleSpeed += delta * 0.01; // Speed increases slowly over time
 
-            // Draw Axis Labels (simple)
-             ctx.fillStyle = '#333';
-             ctx.textAlign = 'center';
-             ctx.fillText('X', width / 2, height - padding / 3);
-             ctx.textAlign = 'right';
-             ctx.textBaseline = 'middle';
-             ctx.fillText('Y', padding / 2, height / 2);
+            // --- Obstacle Movement & Collision ---
+            const playerBox = new THREE.Box3().setFromObject(player); // Update player box each frame
+
+            for (let i = obstacles.length - 1; i >= 0; i--) {
+                const obstacle = obstacles[i];
+                obstacle.position.z += currentObstacleSpeed; // Move obstacle towards player
+
+                // Update obstacle bounding box
+                 obstacle.userData.boundingBox.setFromObject(obstacle);
+
+                // Collision Check
+                if (playerBox.intersectsBox(obstacle.userData.boundingBox)) {
+                    gameOver();
+                    return; // Exit loop immediately on collision
+                }
+
+                // Remove obstacles that have passed
+                if (obstacle.position.z > camera.position.z + 10) {
+                    scene.remove(obstacle);
+                    obstacles.splice(i, 1);
+                }
+            }
+
+            // --- Update Score ---
+            score += delta * SCORE_MULTIPLIER;
+            infoElement.textContent = `Score: ${Math.floor(score)}`;
+
+            // --- Render ---
+            renderer.render(scene, camera);
+        }
+
+        // --- Game Over ---
+        function gameOver() {
+            isGameOver = true;
+            cancelAnimationFrame(animationFrameId); // Stop the animation loop
+            clock.stop();
+            finalScoreElement.textContent = `Final Score: ${Math.floor(score)}`;
+            gameOverElement.style.display = 'block'; // Show game over screen
+            // Optional: Add sound effect here
+        }
+
+        // --- Restart Game ---
+        function restartGame() {
+             // Clean up old scene objects
+             while(scene.children.length > 0){
+                const object = scene.children[0];
+                if(object.geometry) object.geometry.dispose();
+                if(object.material) {
+                    // Ensure textures are disposed if they exist
+                    if (object.material.map) object.material.map.dispose();
+                    if (object.material.lightMap) object.material.lightMap.dispose();
+                    if (object.material.aoMap) object.material.aoMap.dispose();
+                    if (object.material.emissiveMap) object.material.emissiveMap.dispose();
+                    if (object.material.bumpMap) object.material.bumpMap.dispose();
+                    if (object.material.normalMap) object.material.normalMap.dispose();
+                    if (object.material.displacementMap) object.material.displacementMap.dispose();
+                    if (object.material.roughnessMap) object.material.roughnessMap.dispose();
+                    if (object.material.metalnessMap) object.material.metalnessMap.dispose();
+                    if (object.material.alphaMap) object.material.alphaMap.dispose();
+                    if (object.material.envMap) object.material.envMap.dispose();
+                    object.material.dispose();
+                }
+                scene.remove(object);
+            }
+
+            // Dispose of renderer resources if possible (may not be fully necessary but good practice)
+            renderer.dispose();
+            container.removeChild(renderer.domElement); // Remove old canvas
 
 
-            // Draw data points
-            ctx.fillStyle = '#007bff';
-            data.forEach(point => {
-                ctx.beginPath();
-                ctx.arc(mapX(point.x), mapY(point.y), 4, 0, Math.PI * 2); // Draw small circles
-                ctx.fill();
-            });
+            // Remove event listeners to avoid duplicates (important!)
+            window.removeEventListener('resize', onWindowResize, false);
+            document.removeEventListener('keydown', onKeyDown, false);
+            // Note: restartButton listener remains
 
-            // Draw the regression line if model is trained
-            if (modelTrained) {
-                ctx.beginPath();
-                ctx.strokeStyle = '#dc3545'; // Red color for the line
-                ctx.lineWidth = 2;
-                const startX = displayMinX;
-                const startY = predict(startX);
-                const endX = displayMaxX;
-                const endY = predict(endX);
+            // Re-initialize the game
+            init();
+        }
 
-                ctx.moveTo(mapX(startX), mapY(startY));
-                ctx.lineTo(mapX(endX), mapY(endY));
-                ctx.stroke();
+
+        // --- Event Handlers ---
+        function onWindowResize() {
+            camera.aspect = window.innerWidth / window.innerHeight;
+            camera.updateProjectionMatrix();
+            renderer.setSize(window.innerWidth, window.innerHeight);
+        }
+
+        function onKeyDown(event) {
+            if (isGameOver) return;
+
+            const halfLane = LANE_WIDTH / 2;
+            const maxLaneIndex = Math.floor(NUM_LANES / 2); // 1 for 3 lanes
+
+            if (event.key === 'ArrowLeft' || event.key.toLowerCase() === 'a') {
+                // Move target one lane left, clamped
+                 playerTargetX = Math.max(-maxLaneIndex * LANE_WIDTH, playerTargetX - LANE_WIDTH);
+
+            } else if (event.key === 'ArrowRight' || event.key.toLowerCase() === 'd') {
+                // Move target one lane right, clamped
+                 playerTargetX = Math.min(maxLaneIndex * LANE_WIDTH, playerTargetX + LANE_WIDTH);
             }
         }
 
-        // --- Event Listeners ---
-        trainButton.addEventListener('click', () => {
-            const result = trainLinearRegression(data);
-            m = result.m;
-            b = result.b;
-            modelTrained = true;
-
-            modelResults.textContent = `Training complete! Learned parameters: m = ${m.toFixed(4)}, b = ${b.toFixed(4)} (Equation: y = ${m.toFixed(4)}x + ${b.toFixed(4)})`;
-            modelResults.style.backgroundColor = '#d4edda'; // Greenish background for success
-            modelResults.style.borderColor = '#28a745';
-
-            predictButton.disabled = false; // Enable prediction
-            predictionResult.textContent = ''; // Clear previous prediction
-            drawPlot(); // Redraw plot with the line
-        });
-
-        predictButton.addEventListener('click', () => {
-            const xValue = parseFloat(predictXInput.value);
-            if (isNaN(xValue)) {
-                predictionResult.textContent = 'Please enter a valid number for X.';
-                predictionResult.style.backgroundColor = '#f8d7da';
-                predictionResult.style.borderColor = '#dc3545';
-                return;
-            }
-            const yValue = predict(xValue);
-            predictionResult.textContent = `For X = ${xValue}, predicted Y = ${yValue.toFixed(4)}`;
-            predictionResult.style.backgroundColor = '#e9f5ff';
-            predictionResult.style.borderColor = '#007bff';
-        });
-
-        // --- Initial Plot ---
-        drawPlot(); // Draw initial data points without the line
+        // --- Start the game ---
+        init();
 
     </script>
 </body>
