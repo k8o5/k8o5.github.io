@@ -3,609 +3,365 @@
 <head>
     <meta charset="UTF-8">
     <meta name="viewport" content="width=device-width, initial-scale=1.0">
-    <title>k8o5</title>
+    <title>Brainrot Chill Fisher Deluxe™</title>
     <style>
-        body { margin: 0; overflow: hidden; background-color: #050005; font-family: 'Courier New', Courier, monospace; /* More glitchy font */ }
+        body { margin: 0; overflow: hidden; background-color: #add8e6; font-family: 'Courier New', Courier, monospace; }
         canvas { display: block; }
-        #ui { position: absolute; top: 10px; left: 10px; color: #00ff00; text-shadow: 1px 1px 2px #ff00ff; z-index: 10; background-color: rgba(0,0,0,0.5); padding: 8px; border: 1px solid #00ff00; font-size: 14px; max-width: 250px; }
-        #score-display, #difficulty-display, #brainrot-display { display: block; margin-bottom: 4px; }
-        #game-over { display: none; position: absolute; top: 50%; left: 50%; transform: translate(-50%, -50%); color: #ff0000; background-color: rgba(0, 0, 0, 0.95); border: 3px dashed #ffff00; padding: 30px; text-align: center; font-size: 36px; font-weight: bolder; z-index: 100; text-shadow: 2px 2px 5px #ffffff; animation: gameOverTextGlow 1s infinite alternate; }
-        #game-over button { font-family: 'Courier New', Courier, monospace; font-size: 18px; padding: 10px 15px; margin-top: 20px; cursor: pointer; background-color: #ff0000; color: #ffffff; border: 2px solid #ffffff; font-weight: bold; }
-
-        /* --- Chat & P2P UI --- */
-        #p2p-controls { position: absolute; bottom: 10px; left: 10px; background-color: rgba(50, 0, 50, 0.8); border: 2px solid #ff00ff; padding: 10px; z-index: 20; color: #00ff00; font-size: 12px; max-width: 300px; }
-        #p2p-controls h4 { margin-top: 0; margin-bottom: 5px; color: #ffff00; }
-        #p2p-controls textarea { width: 95%; height: 40px; background: #111; color: #00ff00; border: 1px solid #00ff00; font-size: 10px; margin-bottom: 5px; resize: none; }
-        #p2p-controls button { background: #330033; color: #ff00ff; border: 1px solid #ff00ff; padding: 3px 6px; font-size: 11px; cursor: pointer; margin-right: 5px; }
-        #p2p-status { margin-top: 5px; font-weight: bold; }
-        #chat-log { height: 100px; overflow-y: scroll; border: 1px dashed #00ff00; padding: 5px; margin-bottom: 5px; background: rgba(0, 0, 0, 0.7); scrollbar-width: thin; scrollbar-color: #00ff00 #000000; }
-        #chat-log p { margin: 2px 0; word-wrap: break-word; }
-        #chat-log .local { color: #00ffff; } /* Cyan for local */
-        #chat-log .remote { color: #ff8000; } /* Orange for remote */
-        #chat-input { width: calc(100% - 60px); background: #111; border: 1px solid #00ff00; color: #00ff00; padding: 4px; font-size: 12px; }
-        #send-button { width: 50px; background: #003300; color: #00ff00; border: 1px solid #00ff00; padding: 4px; font-size: 12px; cursor: pointer; }
-
-        /* --- Animations --- */
-         @keyframes gameOverTextGlow { from { text-shadow: 2px 2px 5px #ffffff, 0 0 5px #ff0000; } to { text-shadow: 2px 2px 10px #ffffff, 0 0 15px #ff0000, 0 0 20px #ff0000; } }
-         @keyframes gameOverPulse { 0% { background-color: #050005; } 50% { background-color: #400000; } 100% { background-color: #050005; } }
-         @keyframes brainrotFlicker { 0%, 100% { opacity: 0; } 50% { opacity: 0.15; } }
-
+        #info {
+            position: absolute;
+            top: 10px;
+            width: 100%;
+            text-align: center;
+            z-index: 100;
+            display:block;
+            color: #ffffff;
+            background-color: rgba(0,0,0,0.3);
+            padding: 10px;
+            font-size: 20px;
+        }
+        #instructions {
+            position: absolute;
+            bottom: 10px;
+            width: 100%;
+            text-align: center;
+            color: #ffffff;
+            font-size: 16px;
+            text-shadow: 1px 1px 2px black;
+        }
     </style>
 </head>
 <body>
-
-    <div id="ui">
-        <div id="score-display">Score: <span id="score">0</span></div>
-        <div id="difficulty-display">Speed x<span id="difficulty">1.00</span></div>
-        <div id="brainrot-display">Brainrot Lvl: <span id="brainrot">1.00</span></div>
-    </div>
-
-    <div id="game-over">
-        k8o5_PROCESS_TERMINATED<br>DATA CORRUPTION IMMINENT<br>
-        Final Score: <span id="final-score">0</span><br>
-        <button onclick="window.location.reload()">REBOOT REALITY?</button>
-    </div>
-
-    <!-- P2P Chat UI -->
-    <div id="p2p-controls">
-        <h4>P2P Chat (Manual Signaling)</h4>
-        <div id="p2p-status">Status: Disconnected</div>
-        <button id="create-offer-btn">1. Create Offer</button>
-        <textarea id="offer-area" placeholder="Paste Offer from peer here, then press Submit" readonly></textarea>
-        <button id="submit-offer-btn">2. Submit Pasted Offer</button>
-        <textarea id="answer-area" placeholder="Copy this Answer and send to peer" readonly></textarea>
-        <button id="submit-answer-btn">3. Submit Pasted Answer</button>
-        <textarea id="ice-area" placeholder="Copy/Paste any ICE Candidates if needed (advanced)" readonly></textarea>
-        <button id="add-ice-btn">Add ICE</button>
-        <hr style="border-color: #ff00ff;">
-        <div id="chat-log"></div>
-        <input type="text" id="chat-input" placeholder="Type message..." disabled>
-        <button id="send-button" disabled>Send</button>
-    </div>
-
-    <!-- Flicker Overlay -->
-    <div id="flicker-overlay" style="position: absolute; top: 0; left: 0; width: 100%; height: 100%; background-color: white; opacity: 0; pointer-events: none; z-index: 50;"></div>
-
-    <!-- Load Three.js library from CDN -->
-    <script src="https://unpkg.com/three@0.160.0/build/three.min.js"></script>
-
-    <script type="module">
-        // --- Game Variables ---
-        let scene, camera, renderer, player, clock;
-        let obstacles = [], collectibles = [], tunnelSegments = [];
-        const BASE_GAME_SPEED = 4; // Slightly lower base
-        let currentGameSpeed = BASE_GAME_SPEED;
-        let score = 0;
-        let isGameOver = false;
-        const playSound = (soundName, intensity = 1) => { console.log(`SOUND: ${soundName} (Intensity: ${intensity.toFixed(2)})`); }; // Placeholder
-
-        const LANE_WIDTH = 2.5, LANES = [-LANE_WIDTH, 0, LANE_WIDTH];
-        let currentLane = 1;
-        const TUNNEL_LENGTH = 15, VISIBLE_SEGMENTS = 10;
-
-        // --- Persistent Playtime & Brainrot ---
-        const PLAYTIME_STORAGE_KEY = 'k8o5TotalPlaytime';
-        let totalTimePlayed = 0, sessionTimePlayed = 0, lastSaveTime = 0;
-        let currentBrainrotLevel = 1.0; // Separate level for non-speed effects
-
-        // --- P2P Variables ---
-        let peerConnection;
-        let dataChannel;
-        let isPeerConnected = false;
-        const p2pStatus = document.getElementById('p2p-status');
-        const chatLog = document.getElementById('chat-log');
-        const chatInput = document.getElementById('chat-input');
-        const sendButton = document.getElementById('send-button');
-        const offerArea = document.getElementById('offer-area');
-        const answerArea = document.getElementById('answer-area');
-        const iceArea = document.getElementById('ice-area'); // For manual ICE exchange if needed
-
-        // Public STUN server (needed for NAT traversal)
-        const iceServers = {
-            iceServers: [ { urls: 'stun:stun.l.google.com:19302' } ]
-        };
-
-        // --- Initialization ---
-        function init() {
-            loadProgress();
-            setupThreeJS();
-            createInitialTunnel();
-            setupP2PListeners(); // Add listeners for P2P buttons
-            updateDifficultyAndBrainrot(0); // Initial update
-            animate();
-        }
-
-        function loadProgress() {
-            const storedTime = localStorage.getItem(PLAYTIME_STORAGE_KEY);
-            if (storedTime) {
-                totalTimePlayed = parseFloat(storedTime) || 0;
-                console.log(`Loaded total playtime: ${totalTimePlayed.toFixed(2)} seconds`);
+    <div id="info">Fish Caught: 0 | State: Idle</div>
+    <div id="instructions">Click anywhere to Cast/Reel</div>
+    <script type="importmap">
+        {
+            "imports": {
+                "three": "https://unpkg.com/three@0.160.0/build/three.module.js",
+                "three/addons/": "https://unpkg.com/three@0.160.0/examples/jsm/"
             }
         }
+    </script>
+    <script type="module">
+        import * as THREE from 'three';
+        import { OrbitControls } from 'three/addons/controls/OrbitControls.js';
 
-        function saveProgress() {
-             const currentTotalTime = totalTimePlayed + sessionTimePlayed;
-            try {
-                localStorage.setItem(PLAYTIME_STORAGE_KEY, currentTotalTime.toString());
-            } catch (e) { console.error("Failed to save playtime:", e); }
-        }
+        let scene, camera, renderer, controls;
+        let water, bobber, fishingLine;
+        let caughtFish = null;
 
-        function setupThreeJS() {
+        // --- Game State ---
+        const STATE = {
+            IDLE: 'Idle',
+            CASTING: 'Casting',
+            WAITING: 'Waiting for Bite',
+            BITING: 'BITING! CLICK NOW!',
+            REELING: 'Reeling In',
+            SHOWING_CATCH: 'Showing Catch'
+        };
+        let currentState = STATE.IDLE;
+        let fishCaughtCount = 0;
+        let biteTimer = null;
+        let showCatchTimer = null;
+        let biteWindowTimer = null;
+
+        // --- Parameters ---
+        const waterSize = 100;
+        const castDistance = 30;
+        const castTime = 1; // seconds
+        const reelTime = 1.5; // seconds
+        const minWaitTime = 3; // seconds
+        const maxWaitTime = 8; // seconds
+        const biteTime = 1.5; // seconds user has to click
+        const showCatchDuration = 2.5; // seconds
+
+        // --- Animation Variables ---
+        let animationProgress = 0; // 0 to 1
+        let targetBobberPos = new THREE.Vector3(0, 0.5, 5); // Start near camera implied rod
+        const idleBobberPos = new THREE.Vector3(0, 0.5, 5);
+        const castBobberPos = new THREE.Vector3(0, 0.1, -castDistance + 5); // Target position in water
+
+        init();
+        animate();
+
+        function init() {
+            // Scene
             scene = new THREE.Scene();
-            // Intense fog that changes color/density with brainrot
-            scene.fog = new THREE.Fog(0x660066, 15, 60);
+            scene.background = new THREE.Color(0xadd8e6); // Light blue sky
+            scene.fog = new THREE.Fog(0xadd8e6, 50, 150);
 
-            camera = new THREE.PerspectiveCamera(85, window.innerWidth / window.innerHeight, 0.1, 100);
-            camera.position.set(0, 1.7, 4.5); // Even closer/lower
-            camera.lookAt(0, 1, -10);
+            // Camera
+            camera = new THREE.PerspectiveCamera(75, window.innerWidth / window.innerHeight, 0.1, 1000);
+            camera.position.set(0, 10, 15);
 
-            renderer = new THREE.WebGLRenderer({ antialias: false });
+            // Renderer
+            renderer = new THREE.WebGLRenderer({ antialias: true });
             renderer.setSize(window.innerWidth, window.innerHeight);
-            renderer.setPixelRatio(window.devicePixelRatio * 0.85); // Lower res for performance/effect
+            renderer.shadowMap.enabled = true; // Soft shadows for relaxation
             document.body.appendChild(renderer.domElement);
 
-            clock = new THREE.Clock();
+            // Controls
+            controls = new OrbitControls(camera, renderer.domElement);
+            controls.enableDamping = true; // Smooth camera movement
+            controls.dampingFactor = 0.05;
+            controls.screenSpacePanning = false;
+            controls.maxPolarAngle = Math.PI / 2 - 0.05; // Don't look below water horizon much
+            controls.minDistance = 5;
+            controls.maxDistance = 50;
+            controls.target.set(0, 0, 0); // Look towards the center
 
-            // Chaotic lighting
-            const lights = [];
-            lights.push(new THREE.AmbientLight(0xffffff, 0.3));
-            lights.push(new THREE.PointLight(0xff0000, 80, 40));
-            lights.push(new THREE.PointLight(0x0000ff, 80, 40));
-            lights.push(new THREE.DirectionalLight(0x00ff00, 0.5));
-            lights.forEach(light => {
-                if (light.position) light.position.set(Math.random() * 20 - 10, Math.random() * 10 + 5, Math.random() * 20 - 10);
-                scene.add(light);
+            // Lighting
+            const ambientLight = new THREE.AmbientLight(0xffffff, 0.6);
+            scene.add(ambientLight);
+            const directionalLight = new THREE.DirectionalLight(0xffffff, 0.8);
+            directionalLight.position.set(5, 10, 7.5);
+            directionalLight.castShadow = true;
+            directionalLight.shadow.mapSize.width = 1024;
+            directionalLight.shadow.mapSize.height = 1024;
+            scene.add(directionalLight);
+
+            // Water
+            const waterGeometry = new THREE.PlaneGeometry(waterSize, waterSize);
+            const waterMaterial = new THREE.MeshPhongMaterial({
+                color: 0x4682b4, // Steel Blue
+                transparent: true,
+                opacity: 0.85,
+                shininess: 60,
+                side: THREE.DoubleSide
             });
-            scene.userData.lights = lights; // Store for manipulation
+            water = new THREE.Mesh(waterGeometry, waterMaterial);
+            water.rotation.x = -Math.PI / 2;
+            water.receiveShadow = true;
+            scene.add(water);
 
-            // Player (Glitchy looking?)
-            const playerGeometry = new THREE.BoxGeometry(0.7, 0.7, 0.7); // Back to cube?
-            const playerMaterial = new THREE.MeshStandardMaterial({
-                color: 0xeeeeee, roughness: 0.2, metalness: 0.8,
-                wireframe: Math.random() < 0.1, // Sometimes start wireframe
-                emissive: 0x111111
-            });
-            player = new THREE.Mesh(playerGeometry, playerMaterial);
-            player.position.y = 0.35;
-            player.position.x = LANES[currentLane];
-            scene.add(player);
+            // Bobber
+            const bobberGeometry = new THREE.SphereGeometry(0.3, 16, 16);
+            const bobberMaterial = new THREE.MeshPhongMaterial({ color: 0xff4500 }); // OrangeRed
+            bobber = new THREE.Mesh(bobberGeometry, bobberMaterial);
+            bobber.castShadow = true;
+            bobber.position.copy(targetBobberPos);
+            scene.add(bobber);
 
-            window.addEventListener('keydown', handleInput);
+            // Fishing Line
+            const lineMaterial = new THREE.LineBasicMaterial({ color: 0x000000, linewidth: 1 }); // Simple black line
+            const points = [];
+            points.push(new THREE.Vector3(0, 15, 8)); // Implied rod tip position (offscreen high)
+            points.push(bobber.position); // Connects to bobber
+            const lineGeometry = new THREE.BufferGeometry().setFromPoints(points);
+            fishingLine = new THREE.Line(lineGeometry, lineMaterial);
+            scene.add(fishingLine);
+
+            // Event Listeners
             window.addEventListener('resize', onWindowResize);
+            window.addEventListener('mousedown', onMouseDown); // Use mousedown for quicker response
+
+            updateInfo();
         }
 
-         // --- Difficulty & Brainrot Calculation ---
-        function calculateDifficultyMultiplier(timeSeconds) {
-            return Math.max(1.0, 1.0 + (timeSeconds / 3600.0)); // Linear x2/hr
+        function onWindowResize() {
+            camera.aspect = window.innerWidth / window.innerHeight;
+            camera.updateProjectionMatrix();
+            renderer.setSize(window.innerWidth, window.innerHeight);
         }
 
-        function calculateBrainrotLevel(timeSeconds) {
-             // Starts at 1, increases potentially faster than speed multiplier, maybe non-linear?
-             // Example: increases towards a max level, faster initially
-             const maxLevel = 10.0; // Arbitrary max level
-             return Math.max(1.0, 1.0 + (maxLevel - 1.0) * (1 - Math.exp(-timeSeconds / (3600 * 1.5)))); // Reaches ~63% of max increase in 1.5 hrs
-            // Simpler linear version: return Math.max(1.0, 1.0 + timeSeconds / 1800.0); // Doubles every 30 mins
+        function updateInfo() {
+            document.getElementById('info').innerText = `Fish Caught: ${fishCaughtCount} | State: ${currentState}`;
         }
 
-        function updateDifficultyAndBrainrot(currentTotalTime) {
-            const multiplier = calculateDifficultyMultiplier(currentTotalTime);
-            currentGameSpeed = BASE_GAME_SPEED * multiplier;
-            currentBrainrotLevel = calculateBrainrotLevel(currentTotalTime);
+        function setState(newState) {
+            currentState = newState;
+            // Clear any pending timers from previous states
+            clearTimeout(biteTimer);
+            clearTimeout(showCatchTimer);
+            clearTimeout(biteWindowTimer);
+            biteTimer = null;
+            showCatchTimer = null;
+            biteWindowTimer = null;
 
-            document.getElementById('difficulty').innerText = multiplier.toFixed(2);
-            document.getElementById('brainrot').innerText = currentBrainrotLevel.toFixed(2);
+            animationProgress = 0; // Reset animation progress for transitions
+            updateInfo();
+        }
 
-            // --- Apply Brainrot Effects ---
-            // Fog changes
-            if (scene.fog) {
-                scene.fog.color.setHSL(Math.random(), 0.8, 0.3); // Random color hue
-                scene.fog.near = 15 - currentBrainrotLevel; // Fog gets closer
-                scene.fog.far = 60 - currentBrainrotLevel * 4; // Fog gets much denser
+        function onMouseDown() {
+            switch (currentState) {
+                case STATE.IDLE:
+                case STATE.SHOWING_CATCH:
+                    cast();
+                    break;
+                case STATE.BITING:
+                    reel();
+                    break;
+                // Ignore clicks during other states like CASTING, REELING, WAITING
+            }
+        }
+
+        function cast() {
+            if (currentState !== STATE.IDLE && currentState !== STATE.SHOWING_CATCH) return;
+
+            // Remove caught fish if it exists
+            if (caughtFish) {
+                scene.remove(caughtFish);
+                caughtFish.geometry.dispose();
+                caughtFish.material.dispose();
+                caughtFish = null;
             }
 
-             // Light intensity/color changes
-             scene.userData.lights?.forEach(light => {
-                if(light.intensity && light.isPointLight) {
-                    light.intensity = (40 + Math.random() * 40) * (1 + (currentBrainrotLevel - 1) * 0.1); // More intense flicker
-                }
-                 if(light.color) {
-                      if(Math.random() < 0.05 * currentBrainrotLevel) light.color.setHSL(Math.random(), 1.0, 0.5); // Chance to change color
+            setState(STATE.CASTING);
+            targetBobberPos.copy(castBobberPos); // Set target for animation
+        }
+
+        function startWaitForBite() {
+            setState(STATE.WAITING);
+            const waitTime = (minWaitTime + Math.random() * (maxWaitTime - minWaitTime)) * 1000;
+            biteTimer = setTimeout(startBiting, waitTime);
+        }
+
+        function startBiting() {
+            setState(STATE.BITING);
+            // Set a timer for how long the player has to react
+            biteWindowTimer = setTimeout(missedBite, biteTime * 1000);
+        }
+
+        function missedBite() {
+             if (currentState !== STATE.BITING) return; // Avoid state conflicts
+            console.log("Missed it!");
+            // Go back to waiting or idle? Let's go back to waiting for more chill repetition
+             targetBobberPos.copy(castBobberPos); // Ensure bobber stays out
+             startWaitForBite();
+            // Or reset completely:
+            // targetBobberPos.copy(idleBobberPos);
+            // setState(STATE.IDLE);
+        }
+
+        function reel() {
+            if (currentState !== STATE.BITING) return;
+            setState(STATE.REELING);
+            targetBobberPos.copy(idleBobberPos); // Set target for animation (back to start)
+
+            // Create the "fish" - Make it appear instantly attached for simplicity
+            caughtFish = createRandomCatch();
+            caughtFish.position.copy(bobber.position).sub(new THREE.Vector3(0, 0.5, 0)); // Attach below bobber
+            scene.add(caughtFish);
+        }
+
+        function showCatch() {
+            setState(STATE.SHOWING_CATCH);
+            fishCaughtCount++;
+            updateInfo(); // Update score immediately
+
+             // Keep fish visible for a short duration
+            showCatchTimer = setTimeout(() => {
+                 // Option 1: Fish disappears, ready to cast again
+                 if (caughtFish) {
+                     scene.remove(caughtFish);
+                     caughtFish.geometry.dispose();
+                     caughtFish.material.dispose();
+                     caughtFish = null;
                  }
-             });
+                 setState(STATE.IDLE);
+                 // Option 2: Fish stays until next cast (handled in cast())
+                 // setState(STATE.IDLE); // Or stay in SHOWING_CATCH until cast? Let's go IDLE.
+            }, showCatchDuration * 1000);
         }
 
+        function createRandomCatch() {
+            const randomValue = Math.random();
+            let geometry;
+            let material = new THREE.MeshPhongMaterial({ color: Math.random() * 0xffffff });
+            let fishMesh;
 
-        // --- Tunnel & Object Management (Modified for Brainrot) ---
-        function createTunnelSegment(positionZ) { /* ... mostly same as before ... */
-            const segmentGroup = new THREE.Group();
-            const floorGeo = new THREE.PlaneGeometry(LANE_WIDTH * 3 + 2, TUNNEL_LENGTH);
-            const floorMat = new THREE.MeshStandardMaterial({
-                color: new THREE.Color().setHSL(Math.random(), 0.8, Math.random() * 0.4 + 0.1),
-                side: THREE.DoubleSide, roughness: 0.9,
-                wireframe: Math.random() < 0.05 * currentBrainrotLevel // Chance of wireframe increases
-            });
-            // ... Walls ... (can add wireframe / emissive changes here too based on brainrotLevel)
-            const wallHeight = 8;
-            const wallGeo = new THREE.PlaneGeometry(TUNNEL_LENGTH, wallHeight);
-            const wallMatLeft = new THREE.MeshStandardMaterial({ color: new THREE.Color().setHSL(Math.random(), 0.9, Math.random() * 0.5 + 0.2), side: THREE.DoubleSide });
-            const wallMatRight = new THREE.MeshStandardMaterial({ color: new THREE.Color().setHSL(Math.random(), 0.9, Math.random() * 0.5 + 0.2), side: THREE.DoubleSide });
-            // ... Add walls to segmentGroup ...
-            const leftWall = new THREE.Mesh(wallGeo, wallMatLeft); leftWall.position.set(-(LANE_WIDTH * 1.5 + 1), wallHeight / 2, 0); leftWall.rotation.y = Math.PI / 2; segmentGroup.add(leftWall);
-            const rightWall = new THREE.Mesh(wallGeo, wallMatRight); rightWall.position.set((LANE_WIDTH * 1.5 + 1), wallHeight / 2, 0); rightWall.rotation.y = -Math.PI / 2; segmentGroup.add(rightWall);
-
-            segmentGroup.position.z = positionZ;
-            scene.add(segmentGroup);
-            tunnelSegments.push({ group: segmentGroup, initialZ: positionZ });
-            return segmentGroup;
-        }
-         function createInitialTunnel() { for (let i = 0; i < VISIBLE_SEGMENTS + 2; i++) createTunnelSegment(-i * TUNNEL_LENGTH); }
-
-        function manageTunnel(deltaTime) {
-             const moveZ = currentGameSpeed * deltaTime * 5;
-             const recycleThreshold = camera.position.z + TUNNEL_LENGTH;
-             const totalTunnelDepth = (VISIBLE_SEGMENTS + 2) * TUNNEL_LENGTH;
-
-            tunnelSegments.forEach(segmentData => {
-                segmentData.group.position.z += moveZ;
-                if (segmentData.group.position.z > recycleThreshold) {
-                    segmentData.group.position.z -= totalTunnelDepth;
-                    // More intense recycling chaos
-                    segmentData.group.children.forEach(child => {
-                        if (child.material) {
-                            if (Math.random() < 0.6 * Math.min(1, currentBrainrotLevel / 5)) { // Higher chance with brainrot
-                                child.material.color?.setHSL(Math.random(), Math.random(), Math.random() * 0.4);
-                                child.material.wireframe = Math.random() < 0.1 * currentBrainrotLevel; // Toggle wireframe more often
-                                if (child.material.emissive && Math.random() < 0.1 * currentBrainrotLevel) { // Toggle emissive
-                                     child.material.emissive.setHex(child.material.emissive.getHex() > 0 ? 0x000000 : Math.random() * 0xFFFFFF);
-                                }
-                            }
-                        }
-                    });
-                    maybeSpawnObjects(segmentData.group.position.z);
-                }
-            });
-        }
-
-        function maybeSpawnObjects(spawnZ) { /* ... cleanup logic ... */
-             obstacles = obstacles.filter(obj => cleanupObject(obj, spawnZ));
-             collectibles = collectibles.filter(obj => cleanupObject(obj, spawnZ));
-
-             let objectsSpawnedInSegment = 0;
-             const probFactor = Math.min(2.5, 1.0 + (currentBrainrotLevel - 1.0) * 0.3); // Spawn rate linked to brainrot now
-             const obstacleSpawnProb = 0.16 * probFactor;
-             const collectibleSpawnProb = 0.07 * probFactor;
-
-            for (let i = 0; i < 3; i++) { /* ... spawn logic ... */
-                if (objectsSpawnedInSegment >= 2) break;
-                const laneX = LANES[i]; const rand = Math.random();
-                if (rand < obstacleSpawnProb) { spawnObstacle(laneX, spawnZ - TUNNEL_LENGTH / 2); objectsSpawnedInSegment++; }
-                else if (rand < obstacleSpawnProb + collectibleSpawnProb) { spawnCollectible(laneX, spawnZ - TUNNEL_LENGTH / 2); objectsSpawnedInSegment++; }
+            if (randomValue < 0.4) { // 40% chance Cube
+                geometry = new THREE.BoxGeometry(0.8, 0.8, 0.8);
+            } else if (randomValue < 0.7) { // 30% chance Torus (Donut)
+                geometry = new THREE.TorusGeometry(0.4, 0.15, 8, 20);
+            } else if (randomValue < 0.9) { // 20% chance Cone
+                 geometry = new THREE.ConeGeometry(0.5, 1, 16);
+            } else { // 10% chance Icosahedron (Shiny Crystal?)
+                 geometry = new THREE.IcosahedronGeometry(0.6, 0);
+                 material = new THREE.MeshStandardMaterial({
+                      color: Math.random() * 0xffffff,
+                      metalness: 0.5,
+                      roughness: 0.2
+                  });
             }
-             if (Math.random() < 0.1 * currentBrainrotLevel) playSound(['DATA_CORRUPT', 'STATIC_BURST', 'SCREAM_LOW'][Math.floor(Math.random()*3)], currentBrainrotLevel);
-        }
-        function cleanupObject(obj, segmentZ) { /* ... same as before ... */
-            if (Math.abs(obj.userData.spawnZ - segmentZ) < 1) { scene.remove(obj); if (obj.geometry) obj.geometry.dispose(); if (obj.material) obj.material.dispose(); return false; } return true;
-        }
-        function spawnObstacle(posX, posZ) { /* ... More chaotic shapes/materials potentially ... */
-            const type = Math.random(); let geometry, material;
-            if (type < 0.4) geometry = new THREE.TorusKnotGeometry(0.4, 0.1, 100, 8); // Knot
-            else if (type < 0.7) geometry = new THREE.PlaneGeometry(LANE_WIDTH, 2); // Wall
-            else geometry = new THREE.SphereGeometry(0.5, 8, 4); // Low poly sphere
-             material = new THREE.MeshStandardMaterial({ color: Math.random() * 0xFFFFFF, roughness: Math.random() * 0.5 + 0.5, wireframe: Math.random() < 0.1 * currentBrainrotLevel });
-            const obstacle = new THREE.Mesh(geometry, material);
-            let posY = 0.5; // Adjust based on geometry...
-            if (geometry.parameters.height) posY = geometry.parameters.height / 2;
-            else if (geometry.parameters.radius) posY = geometry.parameters.radius;
-            if (geometry.type === 'PlaneGeometry') { obstacle.rotation.x = -Math.PI/2; posY = 1; } // If wall
-            obstacle.position.set(posX, posY, posZ);
-            obstacle.rotation.set(Math.random() * Math.PI, Math.random() * Math.PI, Math.random() * Math.PI);
-            obstacle.userData.type = 'obstacle'; obstacle.userData.spawnZ = posZ + TUNNEL_LENGTH / 2;
-            scene.add(obstacle); obstacles.push(obstacle);
-        }
-        function spawnCollectible(posX, posZ) { /* ... glowing/spinning ... */
-             const geometry = new THREE.IcosahedronGeometry(0.3, 0);
-             const material = new THREE.MeshStandardMaterial({ color: 0x00ff00, emissive: 0x55ff55, metalness: 0.1, roughness: 0.3 });
-             const collectible = new THREE.Mesh(geometry, material);
-             collectible.position.set(posX, 0.6, posZ);
-             collectible.userData.type = 'collectible'; collectible.userData.spawnZ = posZ + TUNNEL_LENGTH / 2;
-             scene.add(collectible); collectibles.push(collectible);
-         }
+            // Maybe add a "?" block texture later for peak brainrot
 
-        // --- Game Logic ---
-        function handleInput(event) { /* ... same lane changing logic ... */
-             if (isGameOver || event.target.tagName === 'INPUT' || event.target.tagName === 'TEXTAREA') return; // Ignore game input if typing in chat/p2p
-             let targetLane = currentLane;
-             if (event.key === 'ArrowLeft' || event.key === 'a') targetLane = Math.max(0, currentLane - 1);
-             else if (event.key === 'ArrowRight' || event.key === 'd') targetLane = Math.min(2, currentLane + 1);
-             if (targetLane !== currentLane) { playSound('SWOOSH_GLITCH'); currentLane = targetLane; }
-         }
-        function updateObjects(deltaTime) { /* ... movement + faster rotation based on brainrot ... */
-             const moveZ = currentGameSpeed * deltaTime * 5;
-             obstacles.forEach(o => { o.position.z += moveZ; o.rotation.x += deltaTime * Math.random() * 3 * currentBrainrotLevel; o.rotation.y += deltaTime * Math.random() * 3 * currentBrainrotLevel; });
-             collectibles.forEach(c => { c.position.z += moveZ; c.rotation.x += deltaTime * 4; c.rotation.y += deltaTime * 4; });
-         }
-        function checkCollisions() { /* ... same collision logic ... */
-             if (isGameOver) return; const playerBox = new THREE.Box3().setFromObject(player);
-             for (const o of obstacles) { if (o.position.z > camera.position.z - TUNNEL_LENGTH && o.position.z < player.position.z + 2) { const oBox = new THREE.Box3().setFromObject(o); if (playerBox.intersectsBox(oBox)) { playSound('CRASH_ERROR', 5); triggerGameOver(); return; } } }
-             if (isGameOver) return;
-             for (let i = collectibles.length - 1; i >= 0; i--) { const c = collectibles[i]; if (c.position.z > camera.position.z - TUNNEL_LENGTH && c.position.z < player.position.z + 2) { const cBox = new THREE.Box3().setFromObject(c); if (playerBox.intersectsBox(cBox)) { playSound('COLLECT_DATA', 2); score += 200 * currentBrainrotLevel; updateScoreUI(); scene.remove(c); c.geometry.dispose(); c.material.dispose(); collectibles.splice(i, 1); flashScreen(0x00ff00, 50 / currentBrainrotLevel); } } }
-         }
-        function triggerGameOver() { /* ... save progress, show screen, etc ... */
-            isGameOver = true; saveProgress();
-            player.material.color.set(0xff0000); player.material.emissive.set(0xcc0000); player.material.wireframe = true;
-            document.getElementById('final-score').innerText = Math.floor(score); document.getElementById('game-over').style.display = 'block';
-            document.body.style.animation = 'gameOverPulse 1s infinite';
-            if (peerConnection) { peerConnection.close(); } // Close P2P connection
-         }
-         function updateScoreUI() { document.getElementById('score').innerText = Math.floor(score); }
-         function flashScreen(color = 0xffffff, duration = 100) { /* ... same flash utility ... */
-            const overlay = document.getElementById('flicker-overlay');
-            overlay.style.backgroundColor = new THREE.Color(color).getStyle();
-            overlay.style.animation = `brainrotFlicker ${Math.max(0.05, duration/1000)}s linear`;
-            setTimeout(() => overlay.style.animation = 'none', Math.max(50, duration));
-         }
-         function onWindowResize() { /* ... same resize handler ... */
-            camera.aspect = window.innerWidth / window.innerHeight; camera.updateProjectionMatrix(); renderer.setSize(window.innerWidth, window.innerHeight);
-         }
-
-        // --- P2P Chat Implementation (Manual Signaling) ---
-
-        function setupP2PListeners() {
-            document.getElementById('create-offer-btn').onclick = createOffer;
-            document.getElementById('submit-offer-btn').onclick = handleOfferInput;
-            document.getElementById('submit-answer-btn').onclick = handleAnswerInput;
-            document.getElementById('add-ice-btn').onclick = handleIceInput; // For manual ICE if needed
-            sendButton.onclick = sendMessage;
-            chatInput.onkeydown = (e) => { if (e.key === 'Enter') sendMessage(); };
+            fishMesh = new THREE.Mesh(geometry, material);
+            fishMesh.castShadow = true;
+            fishMesh.rotation.set(Math.random() * Math.PI, Math.random() * Math.PI, Math.random() * Math.PI);
+            return fishMesh;
         }
 
-        function updateP2PStatus(message, isError = false) {
-            p2pStatus.textContent = `Status: ${message}`;
-            p2pStatus.style.color = isError ? '#ff0000' : '#00ff00';
-        }
+        let clock = new THREE.Clock();
+        let time = 0;
 
-        function logMessage(text, type = 'info') { // type: 'info', 'local', 'remote', 'error'
-            const p = document.createElement('p');
-            p.textContent = text;
-            p.className = type;
-            if (type === 'error') p.style.color = '#ff0000';
-             else if (type === 'info') p.style.fontStyle = 'italic'; p.style.color = '#aaa';
+        function animate() {
+            requestAnimationFrame(animate);
+            const delta = clock.getDelta();
+            time += delta;
 
-            chatLog.appendChild(p);
-            chatLog.scrollTop = chatLog.scrollHeight; // Auto-scroll
-        }
+            controls.update(); // Only required if controls.enableDamping = true
 
-        function setupPeerConnection() {
-            if (peerConnection) peerConnection.close(); // Close existing if any
-            peerConnection = new RTCPeerConnection(iceServers);
-            updateP2PStatus('Initializing...');
+            // --- State-based Animations ---
+            let lerpFactor = Math.min(delta * (1 / (currentState === STATE.CASTING ? castTime : reelTime)), 1); // Adjust speed based on action
 
-            // Handle ICE candidates generated locally
-            peerConnection.onicecandidate = event => {
-                if (event.candidate) {
-                    console.log("Generated ICE Candidate:", event.candidate);
-                    logMessage('Generated ICE Candidate. Copy/paste if needed.', 'info');
-                    // For manual signaling, you'd ideally show this to the user to copy/paste.
-                    // This is VERY tedious. Let's just log it for now.
-                    // iceArea.value = JSON.stringify(event.candidate); // Too complex for simple UI
-                }
-            };
+             // Smoothly move bobber towards target position
+             if (currentState === STATE.CASTING || currentState === STATE.REELING) {
+                 animationProgress += delta / (currentState === STATE.CASTING ? castTime : reelTime);
+                 animationProgress = Math.min(animationProgress, 1); // Clamp between 0 and 1
 
-             // Handle ICE connection state changes
-            peerConnection.oniceconnectionstatechange = () => {
-                 updateP2PStatus(`ICE State: ${peerConnection.iceConnectionState}`);
-                 console.log(`ICE State: ${peerConnection.iceConnectionState}`);
-                 if (peerConnection.iceConnectionState === 'failed' || peerConnection.iceConnectionState === 'disconnected' || peerConnection.iceConnectionState === 'closed') {
-                     isPeerConnected = false;
-                     enableChatInput(false);
-                     logMessage('Peer disconnected.', 'error');
-                 } else if (peerConnection.iceConnectionState === 'connected' || peerConnection.iceConnectionState === 'completed') {
-                     // Sometimes 'completed' happens after 'connected'
-                     if(!isPeerConnected) { // Only log connection once
-                         isPeerConnected = true;
-                         logMessage('Peer connected successfully!', 'info');
-                         updateP2PStatus('Connected');
+                 bobber.position.lerpVectors(
+                     currentState === STATE.CASTING ? idleBobberPos : castBobberPos, // Start position
+                     currentState === STATE.CASTING ? castBobberPos : idleBobberPos, // End position
+                     animationProgress // Use eased progress if desired, linear is fine for brainrot
+                 );
+
+
+                 // If animation finished
+                 if (animationProgress >= 1) {
+                     if (currentState === STATE.CASTING) {
+                         startWaitForBite();
+                     } else if (currentState === STATE.REELING) {
+                         showCatch();
                      }
                  }
-            };
-
-            // Handle receiving a data channel (for the peer receiving the offer)
-            peerConnection.ondatachannel = event => {
-                logMessage('Data channel received!', 'info');
-                dataChannel = event.channel;
-                setupDataChannelEvents();
-            };
-        }
-
-        function setupDataChannelEvents() {
-            if (!dataChannel) return;
-            dataChannel.onopen = () => {
-                logMessage('Chat channel OPEN!', 'info');
-                updateP2PStatus('Chat Ready');
-                enableChatInput(true);
-            };
-            dataChannel.onclose = () => {
-                logMessage('Chat channel CLOSED.', 'error');
-                updateP2PStatus('Chat Closed');
-                isPeerConnected = false;
-                enableChatInput(false);
-            };
-            dataChannel.onmessage = event => {
-                logMessage(`Peer: ${event.data}`, 'remote');
-                 flashScreen(0xff8000, 80); // Orange flash on message
-            };
-            dataChannel.onerror = error => {
-                 logMessage(`Data channel error: ${error}`, 'error');
-                 console.error("Data channel error:", error);
-            };
-        }
-
-        function enableChatInput(enabled) {
-            chatInput.disabled = !enabled;
-            sendButton.disabled = !enabled;
-        }
-
-        async function createOffer() {
-            if (peerConnection) { logMessage('Connection already in progress.', 'error'); return; }
-            setupPeerConnection();
-
-            // Create the data channel *before* creating the offer
-            dataChannel = peerConnection.createDataChannel('k8o5Chat');
-            logMessage('Data channel created.', 'info');
-            setupDataChannelEvents(); // Setup handlers for the channel we created
-
-            try {
-                const offer = await peerConnection.createOffer();
-                await peerConnection.setLocalDescription(offer);
-                offerArea.value = JSON.stringify(peerConnection.localDescription);
-                logMessage('Offer created. Copy the text above and send to your peer.', 'info');
-                updateP2PStatus('Offer Created - Send to Peer');
-            } catch (e) {
-                logMessage(`Failed to create offer: ${e}`, 'error');
-                console.error("Create Offer Error:", e);
-                updateP2PStatus('Offer Creation Failed', true);
             }
-        }
 
-        async function handleOfferInput() {
-            if (peerConnection) { logMessage('Connection already in progress.', 'error'); return; }
-             const offerText = offerArea.value.trim();
-            if (!offerText) { logMessage('Paste the offer from your peer first.', 'error'); return; }
-
-            setupPeerConnection(); // Setup PC *before* setting remote description
-
-            try {
-                const offer = JSON.parse(offerText);
-                await peerConnection.setRemoteDescription(new RTCSessionDescription(offer));
-                logMessage('Offer received and processed.', 'info');
-                updateP2PStatus('Offer Set - Creating Answer');
-
-                const answer = await peerConnection.createAnswer();
-                await peerConnection.setLocalDescription(answer);
-
-                answerArea.value = JSON.stringify(peerConnection.localDescription);
-                logMessage('Answer created. Copy the text above and send back to the offering peer.', 'info');
-                updateP2PStatus('Answer Created - Send to Peer');
-
-            } catch (e) {
-                logMessage(`Failed to handle offer or create answer: ${e}`, 'error');
-                console.error("Handle Offer/Answer Error:", e);
-                updateP2PStatus('Offer/Answer Failed', true);
-                peerConnection?.close(); peerConnection = null;
+            // Bobbing animation when waiting or biting
+            if (currentState === STATE.WAITING || currentState === STATE.BITING) {
+                 bobber.position.y = castBobberPos.y + Math.sin(time * 5) * 0.05; // Gentle up/down bob
             }
-        }
-
-         async function handleAnswerInput() {
-             if (!peerConnection || peerConnection.signalingState !== 'have-local-offer') {
-                 logMessage('Cannot accept answer. Create an offer first, or state is wrong.', 'error'); return;
+             // Exaggerated bite animation
+             if (currentState === STATE.BITING) {
+                 bobber.position.y -= Math.abs(Math.sin(time * 20)) * 0.2; // Sharp dips
              }
-             const answerText = answerArea.value.trim();
-             if (!answerText) { logMessage('Paste the answer from your peer first.', 'error'); return; }
 
-             try {
-                 const answer = JSON.parse(answerText);
-                 await peerConnection.setRemoteDescription(new RTCSessionDescription(answer));
-                 logMessage('Answer received and processed.', 'info');
-                 updateP2PStatus('Answer Set - Connecting...');
-                 // Connection should establish automatically via ICE negotiation now
-
-             } catch (e) {
-                 logMessage(`Failed to handle answer: ${e}`, 'error');
-                 console.error("Handle Answer Error:", e);
-                 updateP2PStatus('Answer Failed', true);
+             // Gentle rotation for the caught fish
+             if (currentState === STATE.SHOWING_CATCH && caughtFish) {
+                 caughtFish.rotation.y += delta * 0.5;
+                 caughtFish.rotation.x += delta * 0.3;
              }
-         }
 
-        // Manual ICE candidate handling (less common, but for completeness)
-         async function handleIceInput() {
-            if (!peerConnection || !peerConnection.remoteDescription) {
-                 logMessage('Cannot add ICE candidate yet. Set offer/answer first.', 'error'); return;
-            }
-            const iceText = iceArea.value.trim();
-             if (!iceText) { logMessage('Paste ICE candidate data first.', 'error'); return; }
-             try {
-                 const candidate = JSON.parse(iceText);
-                 await peerConnection.addIceCandidate(new RTCIceCandidate(candidate));
-                 logMessage('Added ICE candidate.', 'info');
-                 iceArea.value = ''; // Clear after adding
-             } catch (e) {
-                 logMessage(`Failed to add ICE candidate: ${e}`, 'error');
-                 console.error("Add ICE Error:", e);
+
+            // --- Update Fishing Line ---
+            const points = fishingLine.geometry.attributes.position.array;
+            // Point 0 (rod tip) remains fixed relative to camera conceptually, or just high up
+             points[0] = 0; // x1
+             points[1] = 15; // y1 (High up, 'offscreen')
+             points[2] = 8; // z1 (Slightly in front of camera)
+            // Point 1 updates to bobber position
+            points[3] = bobber.position.x;
+            points[4] = bobber.position.y;
+            points[5] = bobber.position.z;
+            fishingLine.geometry.attributes.position.needsUpdate = true;
+
+             // Make caught fish follow bobber if reeling
+             if (currentState === STATE.REELING && caughtFish) {
+                 caughtFish.position.copy(bobber.position).sub(new THREE.Vector3(0, 0.5 + Math.sin(time * 10) * 0.1, 0)); // Follow below bobber wobbly
              }
-         }
 
-
-        function sendMessage() {
-            const message = chatInput.value.trim();
-            if (message && dataChannel && dataChannel.readyState === 'open') {
-                try {
-                    dataChannel.send(message);
-                    logMessage(`You: ${message}`, 'local');
-                    chatInput.value = '';
-                } catch (e) {
-                    logMessage(`Failed to send message: ${e}`, 'error');
-                    console.error("Send Message Error:", e);
-                }
-            } else if (!message) {
-                 // Ignore empty message
-            } else {
-                 logMessage('Cannot send message. Chat channel not ready.', 'error');
-            }
-        }
-
-
-        // --- Game Loop ---
-        function animate() {
-            const deltaTime = clock.getDelta();
-            const dt = Math.min(deltaTime, 0.05); // Cap delta time
-
-            requestAnimationFrame(animate);
-
-            if (!isGameOver) {
-                 // --- Update Playtime & Difficulty ---
-                 sessionTimePlayed += dt;
-                 const currentTotalTime = totalTimePlayed + sessionTimePlayed;
-                 updateDifficultyAndBrainrot(currentTotalTime); // Applies speed/brainrot effects
-
-                 // --- Save Progress Periodically ---
-                 lastSaveTime += dt;
-                 if (lastSaveTime > 5.0) { saveProgress(); lastSaveTime = 0; }
-
-                // --- Update Game ---
-                manageTunnel(dt);
-                updateObjects(dt);
-                checkCollisions();
-                score += dt * currentGameSpeed * 2 * currentBrainrotLevel; // Score scales wildly now
-                updateScoreUI();
-
-                 // --- Apply Camera Brainrot ---
-                const time = Date.now() * 0.0015 * currentGameSpeed; // Faster time base
-                const shakeIntensity = Math.min(0.4, 0.08 * currentBrainrotLevel); // Stronger shake
-                camera.position.y = 1.7 + Math.sin(time * 1.8) * shakeIntensity * 0.6;
-                camera.position.x = Math.cos(time * 1.1) * shakeIntensity;
-                camera.rotation.z = Math.sin(time * 2.5) * shakeIntensity * 0.15; // More roll
-
-                 // Lerp player position
-                 const targetX = LANES[currentLane];
-                 player.position.x += (targetX - player.position.x) * 0.3; // Very responsive lerp
-                 player.rotation.y += dt * 5 * currentBrainrotLevel; // Spin faster
-                 player.position.y = 0.35 + Math.sin(Date.now() * 0.02 * currentBrainrotLevel) * 0.1; // Faster bob
-
-                 // Random flicker effect based on brainrot
-                 if (Math.random() < 0.005 * currentBrainrotLevel**2) { // Chance increases quadratically
-                     flashScreen(Math.random() * 0xFFFFFF, 50 / currentBrainrotLevel);
-                 }
-
-            } else {
-                 // Game Over visuals
-                 camera.rotation.z += dt * 0.2; // Slow, ominous spin
-            }
 
             renderer.render(scene, camera);
         }
-
-        // --- Start ---
-        init();
 
     </script>
 </body>
