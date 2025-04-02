@@ -1,0 +1,242 @@
+<!DOCTYPE html>
+<html lang="de">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Book Of Raw</title>
+    <style>
+        :root {
+            --ui-bg-color: rgba(15, 15, 18, 0.7);
+            --ui-border-color: rgba(100, 100, 110, 0.5);
+            --text-color: #e0e0e0;
+            --highlight-color: #4CAF50;
+            --server-msg-color: #ffcc00;
+            --accent-color: #2196F3;
+            /* --giant-color removed */
+        }
+        body { margin: 0; overflow: hidden; background-color: #0a0a0c; color: var(--text-color); font-family: 'Segoe UI', Tahoma, Geneva, Verdana, sans-serif; font-size: 14px; }
+        canvas { display: block; }
+        #ui-container { position: absolute; top: 0; left: 0; width: 100%; height: 100%; pointer-events: none; }
+        #stats-container { position: absolute; top: 10px; left: 10px; background-color: var(--ui-bg-color); padding: 10px 15px; border-radius: 8px; border: 1px solid var(--ui-border-color); box-shadow: 0 2px 10px rgba(0,0,0,0.3); min-width: 200px; pointer-events: auto; }
+        #stats-container h3 { margin: 0 0 8px 0; font-size: 1.1em; color: var(--accent-color); text-align: center; border-bottom: 1px solid var(--ui-border-color); padding-bottom: 5px; }
+        #stats-container p { margin: 4px 0; display: flex; justify-content: space-between; }
+        #stats-container span:first-child { color: #aaa; margin-right: 10px;}
+        #stats-container span:last-child { font-weight: bold; color: #fff; }
+        #chat-container { position: absolute; bottom: 10px; left: 10px; width: 320px; height: 220px; background-color: var(--ui-bg-color); border-radius: 8px; border: 1px solid var(--ui-border-color); padding: 10px; box-sizing: border-box; pointer-events: auto; display: flex; flex-direction: column; box-shadow: 0 2px 10px rgba(0,0,0,0.3); }
+        #chat-messages { flex-grow: 1; overflow-y: auto; margin-bottom: 8px; font-size: 0.95em; scroll-behavior: smooth; }
+        #chat-messages p { margin: 3px 0; padding: 0; line-height: 1.4; word-wrap: break-word; }
+        #chat-messages .bot-message { color: #bbb; }
+        #chat-messages .player-message { color: var(--highlight-color); font-weight: bold; }
+        #chat-messages .server-message { color: var(--server-msg-color); font-style: italic; }
+        #chat-input { background-color: rgba(255, 255, 255, 0.05); border: 1px solid var(--ui-border-color); color: #fff; padding: 8px; width: 100%; box-sizing: border-box; border-radius: 5px; pointer-events: auto; font-size: 0.95em;}
+        #chat-input:focus { border-color: var(--accent-color); outline: none; }
+        #friends-container { position: absolute; bottom: 10px; right: 10px; width: 220px; max-height: 220px; background-color: var(--ui-bg-color); border-radius: 8px; border: 1px solid var(--ui-border-color); padding: 10px; box-sizing: border-box; pointer-events: auto; display: flex; flex-direction: column; box-shadow: 0 2px 10px rgba(0,0,0,0.3); }
+        #friends-container h3 { margin: 0 0 8px 0; font-size: 1.1em; color: var(--accent-color); text-align: center; border-bottom: 1px solid var(--ui-border-color); padding-bottom: 5px;}
+        #friends-list { list-style: none; padding: 0; margin: 0; overflow-y: auto; flex-grow: 1; }
+        #friends-list li { padding: 5px 2px; border-bottom: 1px solid #333; font-size: 0.95em; display: flex; justify-content: space-between; align-items: center; }
+        #friends-list li:last-child { border-bottom: none; }
+        .status-dot { width: 9px; height: 9px; border-radius: 50%; display: inline-block; margin-left: 8px; flex-shrink: 0; }
+        .online { background-color: #4CAF50; box-shadow: 0 0 5px #4CAF50; }
+        .offline { background-color: #777; }
+        .ingame { background-color: #2196F3; box-shadow: 0 0 5px #2196F3; }
+        #leaderboard-container { position: fixed; top: 50%; left: 50%; transform: translate(-50%, -50%); width: 90%; max-width: 450px; max-height: 70vh; background-color: rgba(20, 20, 25, 0.85); backdrop-filter: blur(5px); border-radius: 10px; border: 1px solid rgba(120, 120, 130, 0.6); padding: 15px 20px; box-shadow: 0 5px 20px rgba(0,0,0,0.4); display: none; opacity: 0; transition: opacity 0.3s ease-in-out; pointer-events: auto; flex-direction: column; }
+        #leaderboard-container.visible { display: flex; opacity: 1; }
+        #leaderboard-container h2 { text-align: center; margin: 0 0 15px 0; color: var(--accent-color); font-size: 1.4em; border-bottom: 1px solid var(--ui-border-color); padding-bottom: 10px; }
+        #leaderboard-table-wrapper { overflow-y: auto; flex-grow: 1; }
+        #leaderboard-table { width: 100%; border-collapse: collapse; }
+        #leaderboard-table th, #leaderboard-table td { padding: 8px 5px; text-align: left; border-bottom: 1px solid var(--ui-border-color); }
+        #leaderboard-table th { color: #ccc; font-size: 1em; }
+        #leaderboard-table td { font-size: 0.95em; }
+        #leaderboard-table tr:last-child td { border-bottom: none; }
+        #leaderboard-table .rank { width: 10%; text-align: center; color: #aaa; }
+        #leaderboard-table .name { width: 55%; white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
+        #leaderboard-table .score { width: 35%; text-align: right; font-weight: bold; color: #fff; }
+        #leaderboard-table .player-row { background-color: rgba(76, 175, 80, 0.2); }
+        #leaderboard-table .player-row td { color: var(--highlight-color); font-weight: bold; }
+        /* .giant-row removed */
+        #fullscreen-btn { position: absolute; top: 10px; right: 10px; padding: 8px 12px; background-color: var(--ui-bg-color); border: 1px solid var(--ui-border-color); color: var(--text-color); border-radius: 5px; cursor: pointer; pointer-events: auto; font-size: 0.9em; transition: background-color 0.2s; }
+        #fullscreen-btn:hover { background-color: rgba(40, 40, 45, 0.8); }
+        #tab-info { position: absolute; bottom: 10px; left: 50%; transform: translateX(-50%); color: #aaa; font-size: 0.85em; background-color: rgba(0,0,0,0.4); padding: 3px 8px; border-radius: 3px; }
+    </style>
+</head>
+<body>
+<div id="ui-container">
+    <div id="stats-container">
+        <h3>Player Stats</h3>
+        <p><span>Score:</span> <span id="stat-score">0</span></p>
+        <p><span>Max Score:</span> <span id="stat-max-score">0</span></p>
+        <p><span>Kills:</span> <span id="stat-kills">0</span></p>
+        <p><span>Food Eaten:</span> <span id="stat-food">0</span></p>
+        <p><span>Size (Radius):</span> <span id="stat-radius">0.0</span></p>
+        <p><span>Speed:</span> <span id="stat-speed">0.0</span></p>
+        <p><span>Time Alive:</span> <span id="stat-time">0s</span></p>
+    </div>
+    <div id="chat-container">
+        <div id="chat-messages"> <p class="server-message">Willkommen in der OmegaSphere Arena! Halte TAB gedrückt für Leaderboard.</p> </div>
+        <input type="text" id="chat-input" placeholder="Chatten...">
+    </div>
+    <div id="friends-container"> <h3>Freunde</h3> <ul id="friends-list"> </ul> </div>
+    <button id="fullscreen-btn">Vollbild</button>
+    <div id="tab-info">TAB für Leaderboard</div>
+    <div id="leaderboard-container"> <h2>Leaderboard</h2> <div id="leaderboard-table-wrapper"> <table id="leaderboard-table"> <thead> <tr> <th class="rank">#</th> <th class="name">Name</th> <th class="score">Score</th> </tr> </thead> <tbody id="leaderboard-body"> </tbody> </table> </div> </div>
+</div>
+
+<script type="importmap"> { "imports": { "three": "https://unpkg.com/three@0.160.0/build/three.module.js" } } </script>
+<script type="module">
+    import * as THREE from 'three';
+
+    let scene, camera, renderer, player, gamePlane;
+    const bots = [];
+    const foods = [];
+    const initialPlayerRadius = 10;
+    const initialBotRadius = 8;
+    const foodRadius = 2;
+    const maxBots = 30;
+    const mapBoundary = 2000;
+    const mousePosition = new THREE.Vector2();
+    const raycaster = new THREE.Raycaster();
+    const clock = new THREE.Clock();
+
+    let playerScore = 0; let playerMaxScore = 0; let playerKills = 0; let playerFoodEaten = 0; let startTime = Date.now(); let playerSpeed = 0;
+    let lastSurgeTime = Date.now();
+    let lastSurgedBot = null;
+    const surgeInterval = 300 * 1000; // 5 minutes in milliseconds
+
+    let statsScoreEl, statsMaxScoreEl, statsKillsEl, statsFoodEl, statsRadiusEl, statsSpeedEl, statsTimeEl;
+    let leaderboardContainer, leaderboardBody; let isTabDown = false;
+
+    const namePrefixes = ["[Pro]", "[MVP]", "[Noob]", "[Sir]", "Dr.", "Agent", "Lord", "Lady", "", "", "", "", ""]; const nameAdjectives = ["Quick", "Sly", "Hungry", "Big", "Tiny", "Clever", "Fast", "Brave", "Lazy", "Pixel", "Alpha", "Omega", "Shadow", "Quantum", "Void", "Crimson", "Cyber", "Solar", "Arctic", "Night", "Iron", "Plasma", "Gravity", "Mystic", "Toxic", "Bio", "Silent", "Rapid", ""]; const nameNouns = ["Fox", "Wolf", "Blob", "Dot", "Cell", "Hunter", "Eater", "Ghost", "Ninja", "King", "Queen", "Player", "Striker", "Leap", "Walker", "Fury", "Punisher", "Flare", "Blaze", "Hawk", "Giant", "Well", "Flow", "Spike", "Hazard", "Predator", "Bean", "Machine", "Factor", "Phantom", "Spectre", "Viper", "Titan"]; const nameSuffixes = ["X", "Z", "One", "7", "42", "69", "99", "101", "MKII", "Pro", "YT", "_", "!", "?", "", "", "", "", "", "", ""]; const nameSymbols = ["_", ".", "-", "", "", "", ""];
+    function generateBotName() { const pattern = Math.random(); let name = ""; const prefix = namePrefixes[Math.floor(Math.random() * namePrefixes.length)]; const adj = nameAdjectives[Math.floor(Math.random() * nameAdjectives.length)]; const noun = nameNouns[Math.floor(Math.random() * nameNouns.length)]; const suffix = nameSuffixes[Math.floor(Math.random() * nameSuffixes.length)]; const symbol = nameSymbols[Math.floor(Math.random() * nameSymbols.length)]; const num = Math.random() < 0.4 ? Math.floor(Math.random() * 1000) : ""; if (pattern < 0.1 && prefix) { name = `${prefix}${noun}${num}`; } else if (pattern < 0.4) { name = `${adj}${symbol}${noun}${suffix}`; } else if (pattern < 0.7) { name = `${noun}${num}${suffix}`; } else if (pattern < 0.85) { name = `${adj}${num}`; } else { name = Math.random() < 0.5 ? noun : `${adj}${noun}`; } if (Math.random() < 0.15) name = name.toUpperCase(); else if (Math.random() < 0.1) name = name.toLowerCase(); return name.substring(0, 16); }
+
+    const chatMessages = ["gg", "lol", "nice one!", "wow", "so big!", "watch out", "lag?", "need food", "...", "ez", "close call", "omg", "rekt", ">.<", ":)", ":(", "hunt!", "run!", "feed me", "team?", "mine!", "oops", "!", "?"];
+    const friendList = [ { name: "ZeroCool", status: "online" }, { name: "AcidBurn", status: "ingame" }, { name: "LordNikon", status: "offline" }, { name: "PhantomPhreak", status: "online" }, { name: "CerealKiller", status: "offline" }, { name: "CrashOverride", status: "ingame" }, { name: "Mag_Master", status: "online"}, { name: "DaVinci", status: "offline"}, { name: "HAL9K", status: "ingame"} ];
+
+    function init() {
+        scene = new THREE.Scene(); scene.background = new THREE.Color(0x0a0a0c); scene.fog = new THREE.FogExp2(0x0a0a0c, 0.0008);
+        camera = new THREE.PerspectiveCamera(60, window.innerWidth / window.innerHeight, 1, 15000); camera.position.z = 700;
+        renderer = new THREE.WebGLRenderer({ antialias: true }); renderer.setSize(window.innerWidth, window.innerHeight); renderer.shadowMap.enabled = true; renderer.shadowMap.type = THREE.PCFSoftShadowMap; document.body.appendChild(renderer.domElement);
+        const ambientLight = new THREE.AmbientLight(0x707070, 1.2); scene.add(ambientLight);
+        const directionalLight = new THREE.DirectionalLight(0xffffff, 1.5); directionalLight.position.set(150, 200, 250); directionalLight.castShadow = true; directionalLight.shadow.mapSize.width = 1024; directionalLight.shadow.mapSize.height = 1024; directionalLight.shadow.camera.near = 100; directionalLight.shadow.camera.far = 800; directionalLight.shadow.camera.left = -300; directionalLight.shadow.camera.right = 300; directionalLight.shadow.camera.top = 300; directionalLight.shadow.camera.bottom = -300; scene.add(directionalLight);
+        const planeGeometry = new THREE.PlaneGeometry(mapBoundary * 3, mapBoundary * 3, 50, 50); const gridTexture = createGridTexture(); const planeMaterial = new THREE.MeshPhongMaterial({ color: 0x18181a, map: gridTexture, specular: 0x050505, shininess: 10, dithering: true }); gamePlane = new THREE.Mesh(planeGeometry, planeMaterial); gamePlane.position.z = -15; gamePlane.receiveShadow = true; scene.add(gamePlane);
+        statsScoreEl = document.getElementById('stat-score'); statsMaxScoreEl = document.getElementById('stat-max-score'); statsKillsEl = document.getElementById('stat-kills'); statsFoodEl = document.getElementById('stat-food'); statsRadiusEl = document.getElementById('stat-radius'); statsSpeedEl = document.getElementById('stat-speed'); statsTimeEl = document.getElementById('stat-time'); leaderboardContainer = document.getElementById('leaderboard-container'); leaderboardBody = document.getElementById('leaderboard-body');
+        resetPlayerState(); for (let i = 0; i < maxBots; i++) spawnBot(); for (let i = 0; i < 400; i++) spawnFood();
+        window.addEventListener('mousemove', onMouseMove, false); window.addEventListener('resize', onWindowResize, false); window.addEventListener('keydown', handleKeyDown, false); window.addEventListener('keyup', handleKeyUp, false);
+        document.getElementById('fullscreen-btn').addEventListener('click', toggleFullscreen); document.getElementById('chat-input').addEventListener('keypress', function (e) { if (e.key === 'Enter' && this.value.trim() !== '') { addChatMessage('Player', this.value, 'player-message'); this.value = ''; } });
+        initFriendsList(); setInterval(simulateChat, 4000 + Math.random() * 7000); setInterval(simulateFriendStatus, 8000 + Math.random() * 9000); setInterval(() => { if(foods.length < 450 && scene) spawnFood(); }, 150);
+    }
+
+    function createGridTexture() { const size = 512; const canvas = document.createElement('canvas'); canvas.width = size; canvas.height = size; const context = canvas.getContext('2d'); const gridSize = 32; context.fillStyle = '#121214'; context.fillRect(0, 0, size, size); context.strokeStyle = 'rgba(255, 255, 255, 0.04)'; context.lineWidth = 1; for (let i = 0; i <= size; i += gridSize) { context.beginPath(); context.moveTo(i, 0); context.lineTo(i, size); context.stroke(); context.beginPath(); context.moveTo(0, i); context.lineTo(size, i); context.stroke(); } const texture = new THREE.CanvasTexture(canvas); texture.wrapS = THREE.RepeatWrapping; texture.wrapT = THREE.RepeatWrapping; texture.repeat.set(mapBoundary * 3 / (gridSize * 4), mapBoundary * 3 / (gridSize * 4)); texture.anisotropy = renderer.capabilities.getMaxAnisotropy(); return texture; }
+    function resetPlayerState() { if (player && scene) scene.remove(player); player = createSphere(initialPlayerRadius, 0x3399ff, 'Player'); player.position.set(0, 0, 0); if(scene) scene.add(player); playerScore = 0; playerKills = 0; playerFoodEaten = 0; startTime = Date.now(); lastSurgeTime = Date.now(); lastSurgedBot = null; updateScore(Math.floor(getTargetArea(player))); updateStatsDisplay(); }
+    function createSphere(radius, color, name) { const detail = 32; const geometry = new THREE.SphereGeometry(radius, detail, Math.max(16, detail/2)); const material = new THREE.MeshStandardMaterial({ color: color, metalness: 0.3, roughness: 0.4, flatShading: false, dithering: true }); const sphere = new THREE.Mesh(geometry, material); sphere.castShadow = true; sphere.receiveShadow = false; sphere.userData = { radius: radius, velocity: new THREE.Vector3(0, 0, 0), name: name, isBot: name !== 'Player', targetPosition: new THREE.Vector3().copy(sphere.position), decisionCooldown: Math.random() * 2 }; return sphere; }
+     function spawnBot() {
+        let radius = initialBotRadius * (0.6 + Math.random() * 0.8);
+        radius = Math.min(radius, initialPlayerRadius * 5);
+        const color = getRandomColor();
+        let name = generateBotName();
+        const bot = createSphere(radius, color, name);
+        bot.position.set( (Math.random() - 0.5) * mapBoundary * 1.9, (Math.random() - 0.5) * mapBoundary * 1.9, 0 );
+        bot.userData.targetPosition.copy(bot.position);
+        bots.push(bot);
+        scene.add(bot);
+     }
+    function spawnFood() { const radius = foodRadius * (0.7 + Math.random() * 0.6); const detail = Math.random() < 0.1 ? 4 : 2; const foodGeometry = new THREE.IcosahedronGeometry(radius, detail); const foodMaterial = new THREE.MeshBasicMaterial({ color: getRandomBrightColor() }); const food = new THREE.Mesh(foodGeometry, foodMaterial); const spawnRadius = mapBoundary * (0.2 + Math.random() * 1.8); const angle = Math.random() * Math.PI * 2; food.position.set( Math.cos(angle) * spawnRadius, Math.sin(angle) * spawnRadius, 0 ); food.userData = { radius: radius }; foods.push(food); scene.add(food); }
+    function onMouseMove(event) { mousePosition.x = (event.clientX / window.innerWidth) * 2 - 1; mousePosition.y = -(event.clientY / window.innerHeight) * 2 + 1; }
+    function onWindowResize() { camera.aspect = window.innerWidth / window.innerHeight; camera.updateProjectionMatrix(); renderer.setSize(window.innerWidth, window.innerHeight); }
+    function handleKeyDown(event) { if (event.key === 'Tab' && !isTabDown) { event.preventDefault(); isTabDown = true; updateLeaderboard(); leaderboardContainer.classList.add('visible'); } else if (event.key === 'Tab' && document.activeElement === document.getElementById('chat-input')) { event.preventDefault(); } }
+    function handleKeyUp(event) { if (event.key === 'Tab') { isTabDown = false; leaderboardContainer.classList.remove('visible'); } }
+    function toggleFullscreen() { if (!document.fullscreenElement) { document.documentElement.requestFullscreen().catch(err => { console.error(`Error: ${err.message} (${err.name})`); }); } else { if (document.exitFullscreen) { document.exitFullscreen(); } } }
+    function getRandomColor() { const h = Math.random(); const s = 0.5 + Math.random() * 0.4; const l = 0.4 + Math.random() * 0.3; return new THREE.Color().setHSL(h, s, l); }
+    function getRandomBrightColor() { const h = Math.random(); const s = 0.8 + Math.random() * 0.2; const l = 0.6 + Math.random() * 0.1; return new THREE.Color().setHSL(h, s, l); }
+    function formatTime(seconds) { const s = Math.floor(seconds % 60); const m = Math.floor(seconds / 60); return `${m}m ${s}s`; }
+    function updateScore(newScore) { playerScore = newScore; playerMaxScore = Math.max(playerMaxScore, playerScore); }
+    function updateStatsDisplay() { if (!player || !player.userData) return; const currentRadius = player.userData.radius; statsScoreEl.textContent = playerScore; statsMaxScoreEl.textContent = playerMaxScore; statsKillsEl.textContent = playerKills; statsFoodEl.textContent = playerFoodEaten; statsRadiusEl.textContent = currentRadius.toFixed(1); statsSpeedEl.textContent = currentRadius.toFixed(1); const elapsedTime = (Date.now() - startTime) / 1000; statsTimeEl.textContent = formatTime(elapsedTime); }
+    function addChatMessage(sender, message, className) { const chatMessagesDiv = document.getElementById('chat-messages'); const p = document.createElement('p'); p.className = className; const safeMessage = message.replace(/</g, "<").replace(/>/g, ">"); p.innerHTML = `<span style="color:${getSenderColor(sender)}; font-weight: ${className === 'player-message' ? 'bold' : 'normal'}; opacity: 0.8;">${sender}:</span> ${safeMessage}`; chatMessagesDiv.appendChild(p); if (chatMessagesDiv.scrollHeight - chatMessagesDiv.scrollTop <= chatMessagesDiv.clientHeight + 50) { chatMessagesDiv.scrollTop = chatMessagesDiv.scrollHeight; } if (chatMessagesDiv.childElementCount > 60) { chatMessagesDiv.removeChild(chatMessagesDiv.firstChild); } }
+    function getSenderColor(sender) { if (sender === 'Player') return '#33dd33'; let hash = 0; for (let i = 0; i < sender.length; i++) { hash = sender.charCodeAt(i) + ((hash << 5) - hash); hash = hash & hash; } const h = (hash % 360) / 360; const s = 0.6 + (Math.abs(hash) % 40) / 100; const l = 0.6 + (Math.abs(hash >> 8) % 20) / 100; return new THREE.Color().setHSL(h, s, l).getStyle(); }
+    function simulateChat() { const sender = botNames[Math.floor(Math.random() * botNames.length)]; const message = chatMessages[Math.floor(Math.random() * chatMessages.length)]; addChatMessage(sender, message, 'bot-message'); }
+    function initFriendsList() { const friendsListUl = document.getElementById('friends-list'); friendsListUl.innerHTML = ''; friendList.sort((a, b) => { const statusOrder = { online: 0, ingame: 1, offline: 2 }; return statusOrder[a.status] - statusOrder[b.status]; }); friendList.forEach(friend => { const li = document.createElement('li'); li.dataset.name = friend.name; li.innerHTML = `<span>${friend.name}</span> <span class="status-dot ${friend.status}"></span>`; friendsListUl.appendChild(li); }); }
+    function simulateFriendStatus() { const randomIndex = Math.floor(Math.random() * friendList.length); const friend = friendList[randomIndex]; const statuses = ['online', 'offline', 'ingame']; let newStatus; do { newStatus = statuses[Math.floor(Math.random() * statuses.length)]; } while (newStatus === friend.status); friend.status = newStatus; initFriendsList(); }
+    function updateLeaderboard() { leaderboardBody.innerHTML = ''; if (!player && bots.length === 0) return; const allCells = player ? [player, ...bots] : [...bots]; allCells.sort((a, b) => getTargetArea(b) - getTargetArea(a)); const topN = Math.min(allCells.length, 15); for(let i = 0; i < topN; i++) { const cell = allCells[i]; if (!cell || !cell.userData) continue; const rank = i + 1; const name = cell.userData.name; const score = Math.floor(getTargetArea(cell)); const tr = document.createElement('tr'); if (cell === player) { tr.classList.add('player-row'); } const tdRank = document.createElement('td'); tdRank.className = 'rank'; tdRank.textContent = rank; const tdName = document.createElement('td'); tdName.className = 'name'; tdName.textContent = name; tdName.title = name; const tdScore = document.createElement('td'); tdScore.className = 'score'; tdScore.textContent = score.toLocaleString(); tr.appendChild(tdRank); tr.appendChild(tdName); tr.appendChild(tdScore); leaderboardBody.appendChild(tr); } }
+    function getTargetArea(cell) { if (cell && cell.userData) { return Math.PI * cell.userData.radius * cell.userData.radius; } return 0; }
+    function updateSphereScale(cell) { if (!cell || !cell.userData || !cell.geometry || !cell.geometry.parameters) return; const targetScale = cell.userData.radius / cell.geometry.parameters.radius; cell.scale.lerp(new THREE.Vector3(targetScale, targetScale, targetScale), 0.15); }
+
+    function handleEating(eater, eaten) { if (!eater || !eater.userData || !eaten || !eaten.userData) { console.error("Invalid eater/eaten"); return; } const eatenArea = getTargetArea(eaten); const eaterArea = getTargetArea(eater); eater.userData.radius = Math.sqrt((eaterArea + eatenArea * 0.9) / Math.PI); const eatenIsBot = eaten.userData.isBot === true; if (eater === player) { if (eatenIsBot) { playerKills++; } else { playerFoodEaten++; } updateScore(Math.floor(getTargetArea(player))); } scene.remove(eaten); if (eaten === player) { console.log("Game Over!"); addChatMessage('Server', 'Du wurdest gefressen! Spiel wird neu gestartet...', 'server-message'); player = null; setTimeout(() => { bots.forEach(b => scene.remove(b)); foods.forEach(f => scene.remove(f)); bots.length = 0; foods.length = 0; resetPlayerState(); for (let i = 0; i < maxBots; i++) spawnBot(); for (let i = 0; i < 400; i++) spawnFood(); }, 2500); } else if (eatenIsBot) { const botIndex = bots.indexOf(eaten); if (botIndex > -1) { bots.splice(botIndex, 1); setTimeout(spawnBot, 3000 + Math.random() * 4000); } } else { const foodIndex = foods.indexOf(eaten); if (foodIndex > -1) { foods.splice(foodIndex, 1); } } }
+
+    function applyWrapAround(object, boundary) {
+        if (object.position.x > boundary) object.position.x = -boundary + (object.position.x - boundary);
+        else if (object.position.x < -boundary) object.position.x = boundary + (object.position.x + boundary);
+        if (object.position.y > boundary) object.position.y = -boundary + (object.position.y - boundary);
+        else if (object.position.y < -boundary) object.position.y = boundary + (object.position.y + boundary);
+    }
+
+    function updateAI(bot, delta, allCells) {
+        if (!bot || !bot.userData) return;
+        bot.userData.decisionCooldown -= delta;
+        if (bot.userData.decisionCooldown <= 0) {
+            bot.userData.decisionCooldown = 0.8 + Math.random() * 1.5; let bestTargetFood = null; let bestTargetPrey = null; let nearestThreat = null; let minDistToFood = bot.userData.radius * 10; let minDistToPrey = bot.userData.radius * 7; let minDistToThreat = bot.userData.radius * 6;
+            foods.forEach(food => { if (!food) return; const dist = bot.position.distanceTo(food.position); if (dist < minDistToFood) { minDistToFood = dist; bestTargetFood = food; } });
+            allCells.forEach(cell => { if (!cell || cell === bot || !cell.userData) return; const dist = bot.position.distanceTo(cell.position); const radiusRatio = bot.userData.radius / cell.userData.radius; if (radiusRatio > 1.2 && dist < minDistToPrey) { minDistToPrey = dist; bestTargetPrey = cell; } else if (radiusRatio < 0.8 && dist < minDistToThreat) { minDistToThreat = dist; nearestThreat = cell; } });
+            if (nearestThreat && minDistToThreat < bot.userData.radius * 5) { const fleeDirection = bot.position.clone().sub(nearestThreat.position).normalize(); if (Math.random() < 0.3) fleeDirection.applyAxisAngle(new THREE.Vector3(0,0,1), (Math.random() - 0.5) * 0.5); bot.userData.targetPosition = bot.position.clone().add(fleeDirection.multiplyScalar(150)); }
+            else if (bestTargetPrey) { bot.userData.targetPosition.copy(bestTargetPrey.position); } else if (bestTargetFood) { bot.userData.targetPosition.copy(bestTargetFood.position); } else { bot.userData.targetPosition = new THREE.Vector3( bot.position.x + (Math.random() - 0.5) * 300, bot.position.y + (Math.random() - 0.5) * 300, 0 ); }
+            bot.userData.targetPosition.x = Math.max(-mapBoundary, Math.min(mapBoundary, bot.userData.targetPosition.x));
+            bot.userData.targetPosition.y = Math.max(-mapBoundary, Math.min(mapBoundary, bot.userData.targetPosition.y));
+        }
+         const direction = bot.userData.targetPosition.clone().sub(bot.position); const distanceToTarget = direction.length();
+         if (distanceToTarget > 1) { direction.normalize(); const speed = Math.max(1.5, 35 / bot.userData.radius + 1); bot.userData.velocity.lerp(direction.multiplyScalar(speed), 0.08); }
+         else { bot.userData.velocity.multiplyScalar(0.92); }
+        bot.position.add(bot.userData.velocity.clone().multiplyScalar(delta * 5));
+        applyWrapAround(bot, mapBoundary);
+    }
+
+
+    function animate() {
+        requestAnimationFrame(animate); const delta = clock.getDelta();
+        const now = Date.now();
+
+        if (player) {
+            raycaster.setFromCamera(mousePosition, camera); const intersects = raycaster.intersectObject(gamePlane);
+            if (intersects.length > 0) {
+                const targetPosition = intersects[0].point; targetPosition.z = 0; const direction = targetPosition.sub(player.position); const distance = direction.length();
+                if (distance > player.userData.radius * 0.1) { direction.normalize(); playerSpeed = player.userData.radius; const targetVelocity = direction.multiplyScalar(playerSpeed); player.userData.velocity.lerp(targetVelocity, 0.08); }
+                else { player.userData.velocity.multiplyScalar(0.9); }
+                player.position.add(player.userData.velocity.clone().multiplyScalar(delta * 5));
+            } else { player.userData.velocity.multiplyScalar(0.95); player.position.add(player.userData.velocity.clone().multiplyScalar(delta * 5)); }
+            applyWrapAround(player, mapBoundary);
+            updateSphereScale(player);
+
+            if (now - lastSurgeTime > surgeInterval) {
+                 const eligibleBots = bots.filter(bot => bot !== lastSurgedBot);
+                 if (eligibleBots.length > 0) {
+                     const randomBotIndex = Math.floor(Math.random() * eligibleBots.length);
+                     const surgeBot = eligibleBots[randomBotIndex];
+                     const targetRadius = player.userData.radius + 10;
+
+                     if (surgeBot.userData.radius < targetRadius) {
+                         console.log(`Bot ${surgeBot.userData.name} surging to radius ${targetRadius}`);
+                         addChatMessage('Server', `${surgeBot.userData.name} spürt einen Wachstumsschub!`, 'server-message');
+                         surgeBot.userData.radius = targetRadius;
+                         lastSurgedBot = surgeBot;
+                         lastSurgeTime = now;
+                     } else {
+                         console.log(`Skipping surge for ${surgeBot.userData.name}, already large enough.`);
+                         lastSurgeTime = now; // Reset timer even if skipped to avoid constant checks
+                     }
+                 } else {
+                      console.log("No eligible bot found for surge, resetting timer.");
+                      lastSurgeTime = now; // Reset timer if no bots available
+                 }
+            }
+
+        } else { playerSpeed = 0; }
+
+        const allCellsForAI = player ? [player, ...bots] : [...bots];
+        bots.forEach(bot => { updateAI(bot, delta, allCellsForAI); updateSphereScale(bot); });
+
+         if (player || bots.length > 0) { const activeCells = player ? [player, ...bots] : [...bots]; const cellsToRemove = new Set(); for (let i = foods.length - 1; i >= 0; i--) { const food = foods[i]; if (!food) continue; let eatenThisLoop = false; for (let j = 0; j < activeCells.length; j++) { const cell = activeCells[j]; if (!cell || cellsToRemove.has(cell) || !cell.userData) continue; const distSq = cell.position.distanceToSquared(food.position); const eatDistSq = cell.userData.radius * cell.userData.radius; if (distSq < eatDistSq) { handleEating(cell, food); eatenThisLoop = true; if (!player && activeCells.includes(player)) { cellsToRemove.add(cell); break; } break; } } if (eatenThisLoop && !player && activeCells.includes(player)) break; } if(player || bots.length > 0) { for (let i = 0; i < activeCells.length; i++) { const cellA = activeCells[i]; if (!cellA || cellsToRemove.has(cellA) || !cellA.userData) continue; for (let j = i + 1; j < activeCells.length; j++) { const cellB = activeCells[j]; if (!cellB || cellsToRemove.has(cellB) || !cellB.userData) continue; const radiusA = cellA.userData.radius; const radiusB = cellB.userData.radius; if (isNaN(radiusA) || isNaN(radiusB)) continue; const dist = cellA.position.distanceTo(cellB.position); let eater = null; let eaten = null; const eatThreshold = 1.15; const overlapFactor = 0.4; if (radiusA > radiusB * eatThreshold && dist < radiusA - radiusB * overlapFactor) { eater = cellA; eaten = cellB; } else if (radiusB > radiusA * eatThreshold && dist < radiusB - radiusA * overlapFactor) { eater = cellB; eaten = cellA; } if (eater && eaten) { handleEating(eater, eaten); cellsToRemove.add(eaten); if (!player && eaten === player) { i = activeCells.length; break; } if (!player && eater === player) { i = activeCells.length; break; } if(eaten === cellA){ break; } } } if (!player && activeCells.includes(player)) break; } } }
+
+        if (player) { const targetCamPos = new THREE.Vector3( player.position.x, player.position.y, Math.max(500, 400 + player.userData.radius * 7) ); camera.position.lerp(targetCamPos, 0.03); camera.lookAt(player.position); } else { const targetCamPos = new THREE.Vector3(0, 0, 1200); camera.position.lerp(targetCamPos, 0.015); camera.lookAt(scene.position); }
+        if (clock.elapsedTime % 0.2 < delta) { updateStatsDisplay(); } if (isTabDown && (clock.elapsedTime % 0.5 < delta)) { updateLeaderboard(); } renderer.render(scene, camera);
+    }
+    init(); animate();
+</script>
+</body>
+</html>
