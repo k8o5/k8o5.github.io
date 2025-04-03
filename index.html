@@ -3,331 +3,250 @@
 <head>
     <meta charset="UTF-8">
     <meta name="viewport" content="width=device-width, initial-scale=1.0, user-scalable=no">
-    <title>k8o5</title>
+    <title>Minimalistisches 3D Horror Spiel</title>
     <style>
-        body { margin: 0; overflow: hidden; background-color: #1a1a2a; color: white; font-family: monospace; touch-action: none; }
-        canvas { display: block; touch-action: none; }
-        #info { position: absolute; top: 15px; left: 15px; z-index: 100; display:block; font-size: 22px; text-shadow: 1px 1px 2px black; }
-        #game-over { position: absolute; top: 50%; left: 50%; transform: translate(-50%, -50%); z-index: 101; display: none; color: #ff4444; background-color: rgba(0, 0, 0, 0.8); padding: 25px 35px; border-radius: 15px; font-size: 32px; text-align: center; border: 3px solid #ff4444; box-shadow: 0 0 15px rgba(255, 68, 68, 0.7); }
-        #game-over span { display: block; margin-bottom: 15px; font-size: 26px; }
-        #game-over button { margin-top: 20px; padding: 15px 30px; font-size: 20px; cursor: pointer; background-color: #ff6666; color: white; border: none; border-radius: 8px; transition: background-color 0.2s; }
-        #game-over button:hover { background-color: #ff4444; }
-        #start-button { position: absolute; top: 50%; left: 50%; transform: translate(-50%, -50%); z-index: 102; padding: 25px 50px; font-size: 28px; cursor: pointer; background-color: #4CAF50; color: white; border: none; border-radius: 10px; box-shadow: 0 0 15px rgba(76, 175, 80, 0.5); transition: background-color 0.2s; }
-        #start-button:hover { background-color: #45a049; }
-        #achievement-popup { position: absolute; bottom: 30px; left: 50%; transform: translateX(-50%); background-color: rgba(0, 220, 0, 0.85); color: white; padding: 12px 25px; border-radius: 8px; font-size: 18px; z-index: 105; display: none; transition: opacity 0.5s ease-out, bottom 0.5s ease-out; box-shadow: 0 0 10px rgba(0, 220, 0, 0.6); }
-        #game-container { position: absolute; top: 0; left: 0; width: 100%; height: 100%; touch-action: none; }
+        body, html { margin: 0; padding: 0; overflow: hidden; height: 100%; background-color: #000; }
+        canvas { display: block; background-color: #111; }
+        #controls {
+            position: absolute;
+            bottom: 0;
+            left: 0;
+            width: 100%;
+            height: 100px; /* Höhe der Kontrollzone */
+            display: flex;
+            opacity: 0.5; /* Leicht transparent */
+            z-index: 10;
+             touch-action: none; /* Verhindert Scrollen etc. auf Mobilgeräten */
+             -webkit-touch-callout: none; /* iOS */
+             -webkit-user-select: none;   /* Safari */
+             -khtml-user-select: none;    /* Konqueror HTML */
+             -moz-user-select: none;      /* Old Firefox */
+             -ms-user-select: none;       /* Internet Explorer/Edge */
+             user-select: none;           /* Non-prefixed version */
+        }
+        .control-zone {
+            flex-grow: 1;
+            border: 1px solid rgba(255,255,255,0.3);
+            display: flex;
+            justify-content: center;
+            align-items: center;
+            color: white;
+            font-size: 20px;
+            font-family: sans-serif;
+        }
     </style>
 </head>
 <body>
-    <button id="start-button">Spiel Starten</button>
-    <div id="info">Punkte: 0</div>
-    <div id="game-over">
-        Game Over!<br>
-        <span id="final-score"></span>
-        <button id="restart-button">Neustart</button>
+    <canvas id="gameCanvas"></canvas>
+    <div id="controls">
+        <div class="control-zone" id="zone-left">⬅️</div>
+        <div class="control-zone" id="zone-forward">⬆️</div>
+        <div class="control-zone" id="zone-backward">⬇️</div>
+        <div class="control-zone" id="zone-right">➡️</div>
     </div>
-    <div id="achievement-popup">Achievement Unlocked!</div>
-    <div id="game-container"></div>
 
-    <script type="importmap">
-        {
-            "imports": {
-                "three": "https://unpkg.com/three@0.160.0/build/three.module.js"
+    <script>
+        const canvas = document.getElementById('gameCanvas');
+        const ctx = canvas.getContext('2d');
+
+        let screenWidth = window.innerWidth;
+        let screenHeight = window.innerHeight;
+        canvas.width = screenWidth;
+        canvas.height = screenHeight;
+
+        const mapWidth = 16;
+        const mapHeight = 16;
+        const map = [
+            1,1,1,1,1,1,1,1,1,1,1,1,1,1,1,1,
+            1,0,0,0,0,0,0,0,0,0,0,0,0,0,0,1,
+            1,0,1,1,0,1,0,1,1,1,1,0,1,1,0,1,
+            1,0,1,0,0,1,0,1,0,0,1,0,0,1,0,1,
+            1,0,0,0,0,0,0,0,0,0,1,0,0,0,0,1,
+            1,0,1,0,0,0,0,1,0,0,0,0,1,1,0,1,
+            1,0,1,1,1,1,0,1,1,1,1,0,0,1,0,1,
+            1,0,0,0,0,1,0,0,0,0,1,0,0,1,0,1,
+            1,1,1,1,0,1,1,1,1,0,1,1,1,1,0,1,
+            1,0,0,0,0,0,0,1,0,0,0,0,0,0,0,1,
+            1,0,1,1,1,1,0,1,1,1,1,1,1,1,0,1,
+            1,0,0,0,1,0,0,0,0,0,1,0,0,0,0,1,
+            1,0,1,0,1,1,1,1,1,0,1,0,1,1,0,1,
+            1,0,1,0,0,0,0,0,1,0,0,0,1,0,0,1,
+            1,0,1,1,1,1,1,1,1,1,1,1,1,0,1,1,
+            1,1,1,1,1,1,1,1,1,1,1,1,1,1,1,1,
+        ];
+
+        let playerX = 8.5;
+        let playerY = 8.5;
+        let playerAngle = Math.PI / 4;
+        const fov = Math.PI / 3;
+        const moveSpeed = 0.05;
+        const turnSpeed = 0.03;
+
+        const keys = {};
+        const touchState = { left: false, right: false, forward: false, backward: false };
+
+        document.addEventListener('keydown', (e) => keys[e.key.toLowerCase()] = true);
+        document.addEventListener('keyup', (e) => keys[e.key.toLowerCase()] = false);
+
+        function getMapValue(x, y) {
+            const mapX = Math.floor(x);
+            const mapY = Math.floor(y);
+            if (mapX < 0 || mapX >= mapWidth || mapY < 0 || mapY >= mapHeight) {
+                return 1;
             }
-        }
-    </script>
-
-    <script type="module">
-        import * as THREE from 'three';
-
-        const LANE_WIDTH = 5; const NUM_LANES = 3; const TRACK_WIDTH = LANE_WIDTH * NUM_LANES;
-        const PLAYER_CAPSULE_RADIUS = 0.8; const PLAYER_CAPSULE_HEIGHT = 1.0;
-        const PLAYER_SIZE_Y = PLAYER_CAPSULE_RADIUS * 2 + PLAYER_CAPSULE_HEIGHT;
-        const PLAYER_SPEED_X = 18; const PLAYER_TARGET_LERP_FACTOR = 0.15;
-        const GRAVITY = 25.0; const JUMP_FORCE = 11.0;
-        const GROUND_Y = PLAYER_CAPSULE_RADIUS - 0.5;
-        const OBSTACLE_START_Z = -120;
-        const OBSTACLE_BASE_SPEED = 0.6; const OBSTACLE_MAX_SPEED = 2.5;
-        const OBSTACLE_SPEED_INCREASE_PER_SCORE = 0.00008;
-        const OBSTACLE_SPAWN_RATE_BASE = 0.018; const OBSTACLE_SPAWN_RATE_MAX = 0.06;
-        const OBSTACLE_SPAWN_RATE_INCREASE_PER_SCORE = 0.000005;
-        const OBSTACLE_WIDTH = LANE_WIDTH * 0.8; const OBSTACLE_DEPTH = 1.5;
-        const OBSTACLE_NORMAL_HEIGHT = PLAYER_SIZE_Y * 1.5;
-        const OBSTACLE_TALL_HEIGHT = PLAYER_SIZE_Y * 0.8;
-        const TALL_OBSTACLE_CHANCE = 0.4;
-        const SCORE_MULTIPLIER = 15;
-        const CONFETTI_COUNT = 800; const CONFETTI_SPREAD = 10; const CONFETTI_INITIAL_SPEED = 18;
-        const CONFETTI_DURATION_MS = 4500; const CONFETTI_FADE_START_RATIO = 0.5; const CONFETTI_AIR_RESISTANCE = 0.97;
-        const BASE_TEMPO_BPM = 110; const NOTE_DURATION_SEC = 60.0 / (BASE_TEMPO_BPM * 2);
-        const LOOKAHEAD_TIME_SEC = 0.1; const SCHEDULE_INTERVAL_MS = 25;
-        const MAX_TEMPO_MULTIPLIER = 2.5;
-        const SCALE_MIDI_NOTES = [60, 63, 65, 67, 70, 72, 75, 77, 79, 82, 84];
-        const BASS_MIDI_NOTES = [36, 39, 41, 43, 46, 48];
-        const MIN_SWIPE_DISTANCE_X = 40; const MAX_SWIPE_DISTANCE_Y_FOR_X = 80;
-        const MIN_SWIPE_DISTANCE_Y_UP = -40; const MAX_SWIPE_DISTANCE_X_FOR_Y = 80;
-
-        let scene, camera, renderer; let player, playerTargetX = 0;
-        let playerVelocityY = 0; let isPlayerOnGround = true; let obstacles = [];
-        let score = 0; let isGameOver = false; let isGameRunning = false;
-        let animationFrameId = null; let currentObstacleSpeed = OBSTACLE_BASE_SPEED;
-        let currentSpawnRate = OBSTACLE_SPAWN_RATE_BASE;
-        let clock = new THREE.Clock();
-        let activeConfettiExplosion = null; let confettiData = [];
-        let audioCtx; let nextNoteTime = 0.0; let currentMelodyNoteIndex = 0;
-        let currentBassNoteIndex = 0; let schedulerIntervalId = null; let masterGain;
-        let tempoMultiplier = 1.0;
-        const achievements = [ { score: 200, name: "Warmup", unlocked: false }, { score: 1000, name: "Sprinter", unlocked: false }, { score: 2500, name: "Marathon", unlocked: false }, { score: 5000, name: "Übermenschlich", unlocked: false }, { score: 10000, name: "Lichtgeschwindigkeit", unlocked: false } ];
-        let achievementPopupTimeout = null;
-        const infoElement = document.getElementById('info'); const gameOverElement = document.getElementById('game-over');
-        const finalScoreElement = document.getElementById('final-score'); const restartButton = document.getElementById('restart-button');
-        const container = document.getElementById('game-container'); const startButton = document.getElementById('start-button');
-        const achievementPopupElement = document.getElementById('achievement-popup');
-        let touchStartX = 0; let touchStartY = 0;
-
-        const dummy = new THREE.Object3D(); const tempColor = new THREE.Color();
-        const tempMatrix = new THREE.Matrix4(); const tempQuaternion = new THREE.Quaternion();
-        const tempVector3 = new THREE.Vector3();
-
-        function initGameGraphics() {
-            scene = new THREE.Scene(); scene.background = new THREE.Color(0x1a1a2a); scene.fog = new THREE.Fog(0x1a1a2a, 60, 160);
-            camera = new THREE.PerspectiveCamera(75, window.innerWidth / window.innerHeight, 0.1, 200); camera.position.set(0, 6, 16); camera.lookAt(0, 2, 0);
-            renderer = new THREE.WebGLRenderer({ antialias: true }); renderer.setSize(window.innerWidth, window.innerHeight); renderer.shadowMap.enabled = true; renderer.shadowMap.type = THREE.PCFSoftShadowMap;
-            container.appendChild(renderer.domElement);
-            const hemiLight = new THREE.HemisphereLight( 0xccccff, 0x444488, 0.6 ); hemiLight.position.set( 0, 50, 0 ); scene.add( hemiLight );
-            const directionalLight = new THREE.DirectionalLight(0xffffff, 0.9); directionalLight.position.set(8, 15, 10); directionalLight.castShadow = true; directionalLight.shadow.mapSize.width = 2048; directionalLight.shadow.mapSize.height = 2048; directionalLight.shadow.camera.near = 0.5; directionalLight.shadow.camera.far = 50; directionalLight.shadow.camera.left = -TRACK_WIDTH; directionalLight.shadow.camera.right = TRACK_WIDTH; directionalLight.shadow.camera.top = 15; directionalLight.shadow.camera.bottom = -15; scene.add(directionalLight);
-            const groundGeometry = new THREE.PlaneGeometry(TRACK_WIDTH * 2, 250); const groundMaterial = new THREE.MeshStandardMaterial({ color: 0x555577, roughness: 0.9, metalness: 0.1 }); const ground = new THREE.Mesh(groundGeometry, groundMaterial); ground.rotation.x = -Math.PI / 2; ground.position.y = -0.5; ground.receiveShadow = true; scene.add(ground);
-            const playerGeometry = new THREE.CapsuleGeometry(PLAYER_CAPSULE_RADIUS, PLAYER_CAPSULE_HEIGHT, 4, 16); const playerMaterial = new THREE.MeshStandardMaterial({ color: 0x00ddff, roughness: 0.4, metalness: 0.2 }); player = new THREE.Mesh(playerGeometry, playerMaterial); player.position.set(0, GROUND_Y, 5); player.castShadow = true; player.visible = true; scene.add(player);
-            obstacles = [];
+            return map[mapY * mapWidth + mapX];
         }
 
-        function resetGameState() {
-            isGameOver = false; score = 0; playerTargetX = 0; playerVelocityY = 0; isPlayerOnGround = true;
-            currentObstacleSpeed = OBSTACLE_BASE_SPEED; currentSpawnRate = OBSTACLE_SPAWN_RATE_BASE; tempoMultiplier = 1.0;
-            gameOverElement.style.display = 'none'; achievements.forEach(ach => ach.unlocked = false); hideAchievementPopup();
-            obstacles.forEach(obstacle => { if(obstacle.parent) scene.remove(obstacle); if(obstacle.geometry) obstacle.geometry.dispose(); if(obstacle.material) obstacle.material.dispose(); }); obstacles = [];
+        function handleTouch(event) {
+             event.preventDefault();
+             const touches = event.changedTouches;
+             touchState.left = false;
+             touchState.right = false;
+             touchState.forward = false;
+             touchState.backward = false;
 
-            if (activeConfettiExplosion) {
-                scene.remove(activeConfettiExplosion);
-                if(activeConfettiExplosion.geometry) activeConfettiExplosion.geometry.dispose();
-                if(activeConfettiExplosion.material) activeConfettiExplosion.material.dispose();
-                activeConfettiExplosion = null;
-                confettiData = [];
-            }
+             for (let i = 0; i < touches.length; i++) {
+                 const touch = touches[i];
+                 const element = document.elementFromPoint(touch.clientX, touch.clientY);
+                 if (!element) continue;
 
-            if (player) { player.position.set(0, GROUND_Y, 5); player.visible = true; }
-            infoElement.textContent = `Punkte: 0`;
-        }
-
-        function setupAudio() { if (!audioCtx) { try { audioCtx = new (window.AudioContext || window.webkitAudioContext)(); masterGain = audioCtx.createGain(); masterGain.gain.setValueAtTime(0.35, audioCtx.currentTime); masterGain.connect(audioCtx.destination); } catch (e) { console.error("Web Audio API nicht unterstützt", e); alert("Web Audio API nicht unterstützt."); return false; } } if (audioCtx.state === 'suspended') { audioCtx.resume(); } return true; }
-        function midiNoteToFrequency(n) { return Math.pow(2, (n - 69) / 12) * 440; }
-        function scheduleNote(type, note, time, dur, vol = 0.8) { if (!audioCtx) return; const o = audioCtx.createOscillator(), g = audioCtx.createGain(); o.connect(g); g.connect(masterGain); o.type = (type === 'melody') ? 'sawtooth' : 'sine'; o.frequency.setValueAtTime(midiNoteToFrequency(note), time); g.gain.setValueAtTime(0, time); g.gain.linearRampToValueAtTime(vol, time + dur * 0.1); g.gain.linearRampToValueAtTime(0, time + dur); o.start(time); o.stop(time + dur + 0.05); }
-        function generateNextMelodyNoteIndex(c) { const r=Math.random(), m=SCALE_MIDI_NOTES.length-1; if (r<0.2) return c; if (r<0.5) return THREE.MathUtils.clamp(c+(Math.random()<0.5?-1:1),0,m); if (r<0.8) return THREE.MathUtils.clamp(c+(Math.random()<0.5?-2:2),0,m); return Math.floor(Math.random()*(m+1)); }
-        function generateNextBassNoteIndex(c) { const r=Math.random(), m=BASS_MIDI_NOTES.length-1; if (r<0.5) return c; if (r<0.8) return THREE.MathUtils.clamp(c+(Math.random()<0.5?-1:1),0,m); return Math.floor(Math.random()*(m+1)); }
-        function scheduler() { if (!isGameRunning || isGameOver || !audioCtx) return; const dur=NOTE_DURATION_SEC/tempoMultiplier; while (nextNoteTime < audioCtx.currentTime + LOOKAHEAD_TIME_SEC) { if (Math.random() < 0.85) { currentMelodyNoteIndex=generateNextMelodyNoteIndex(currentMelodyNoteIndex); scheduleNote('melody', SCALE_MIDI_NOTES[currentMelodyNoteIndex], nextNoteTime, dur * 0.9, 0.6); } const b=(nextNoteTime/(NOTE_DURATION_SEC*2/tempoMultiplier)); if (b%1<0.1) { currentBassNoteIndex=generateNextBassNoteIndex(currentBassNoteIndex); scheduleNote('bass', BASS_MIDI_NOTES[currentBassNoteIndex], nextNoteTime, dur * 1.8, 0.4); } nextNoteTime += dur; } }
-        function startMusicLoop() { if (!setupAudio()) return; if (schedulerIntervalId) clearInterval(schedulerIntervalId); nextNoteTime=audioCtx.currentTime+0.1; currentMelodyNoteIndex=Math.floor(SCALE_MIDI_NOTES.length/2); currentBassNoteIndex=0; schedulerIntervalId=setInterval(scheduler, SCHEDULE_INTERVAL_MS); }
-        function stopMusicLoop() { if (schedulerIntervalId) { clearInterval(schedulerIntervalId); schedulerIntervalId=null; if(audioCtx && masterGain) { masterGain.gain.cancelScheduledValues(audioCtx.currentTime); masterGain.gain.linearRampToValueAtTime(0, audioCtx.currentTime + 0.5); setTimeout(() => { if(masterGain) masterGain.gain.setValueAtTime(0.35, audioCtx.currentTime); }, 550); } } }
-
-        function playSound(type, freq, duration, volume, attack = 0.01, decay = 0.1) {
-            if (!audioCtx || !isGameRunning) return;
-            const osc = audioCtx.createOscillator(); const gain = audioCtx.createGain(); const now = audioCtx.currentTime;
-            osc.connect(gain); gain.connect(masterGain); osc.type = type; osc.frequency.setValueAtTime(freq, now);
-            gain.gain.setValueAtTime(0, now); gain.gain.linearRampToValueAtTime(volume, now + attack); gain.gain.exponentialRampToValueAtTime(volume * 0.1, now + attack + decay); gain.gain.linearRampToValueAtTime(0.0001, now + duration);
-            osc.start(now); osc.stop(now + duration);
-        }
-        function playJumpSound() { playSound('triangle', 880, 0.15, 0.2, 0.01, 0.1); playSound('sine', 440, 0.15, 0.15, 0.01, 0.12); }
-        function playLandSound() { playSound('square', 100, 0.1, 0.3, 0.005, 0.08); }
-        function playMoveSound() { playSound('sawtooth', 1200, 0.05, 0.1, 0.005, 0.04); }
-
-        function createObstacle() {
-            if (!isGameRunning || isGameOver) return;
-            const isTall = Math.random() < TALL_OBSTACLE_CHANCE;
-            const height = isTall ? OBSTACLE_TALL_HEIGHT : OBSTACLE_NORMAL_HEIGHT;
-            const color = isTall ? 0xffff00 : 0xff4444;
-            const obstacleY = height / 2 - 0.5;
-
-            const g = new THREE.BoxGeometry(OBSTACLE_WIDTH, height, OBSTACLE_DEPTH);
-            const m = new THREE.MeshStandardMaterial({ color: color, roughness: 0.6, metalness: 0.1 });
-            const o = new THREE.Mesh(g, m);
-
-            const lane = Math.floor(Math.random() * NUM_LANES) - Math.floor(NUM_LANES / 2);
-            const x = lane * LANE_WIDTH;
-            o.position.set(x, obstacleY, OBSTACLE_START_Z);
-            o.castShadow = true; o.receiveShadow = true;
-            o.userData = { boundingBox: new THREE.Box3().setFromObject(o), isTall: isTall };
-            obstacles.push(o); scene.add(o);
-        }
-
-        function checkAchievements() { for (const a of achievements) { if (!a.unlocked && score >= a.score) { a.unlocked = true; showAchievementPopup(a.name); } } }
-        function showAchievementPopup(n) { if (achievementPopupTimeout) clearTimeout(achievementPopupTimeout); achievementPopupElement.textContent = `Errungenschaft: ${n}!`; achievementPopupElement.style.display = 'block'; requestAnimationFrame(() => { achievementPopupElement.style.opacity = '1'; achievementPopupElement.style.bottom = '30px'; }); achievementPopupTimeout = setTimeout(hideAchievementPopup, 3000); }
-        function hideAchievementPopup(){ achievementPopupElement.style.opacity = '0'; achievementPopupElement.style.bottom = '10px'; if (achievementPopupTimeout) clearTimeout(achievementPopupTimeout); achievementPopupTimeout = setTimeout(() => { achievementPopupElement.style.display = 'none'; achievementPopupTimeout = null; }, 500); }
-
-        function createConfettiExplosion(position) {
-            if (activeConfettiExplosion) return;
-            const confettiGeometry = new THREE.PlaneGeometry(0.4, 0.4);
-            const confettiMaterial = new THREE.MeshBasicMaterial({ side: THREE.DoubleSide, vertexColors: true, transparent: true, opacity: 0.9, depthWrite: false });
-            activeConfettiExplosion = new THREE.InstancedMesh(confettiGeometry, confettiMaterial, CONFETTI_COUNT);
-            activeConfettiExplosion.position.copy(position);
-            const brightColors = [0xff0000, 0x00ff00, 0x00aaff, 0xffff00, 0x00ffff, 0xff00ff, 0xffa500, 0xff1493, 0x00fa9a, 0xffd700];
-            confettiData = [];
-            for (let i = 0; i < CONFETTI_COUNT; i++) {
-                const life = (CONFETTI_DURATION_MS / 1000.0) * (0.7 + Math.random() * 0.6);
-                const initialPosition = new THREE.Vector3( (Math.random() - 0.5) * CONFETTI_SPREAD * 0.1, (Math.random() - 0.5) * CONFETTI_SPREAD * 0.1, (Math.random() - 0.5) * CONFETTI_SPREAD * 0.1 );
-                const velocity = new THREE.Vector3( (Math.random() - 0.5), Math.random() * 0.7 + 0.3, (Math.random() - 0.5) ).normalize().multiplyScalar(CONFETTI_INITIAL_SPEED * (0.6 + Math.random() * 0.8));
-                const rotationAxis = new THREE.Vector3(Math.random() * 2 - 1, Math.random() * 2 - 1, Math.random() * 2 - 1).normalize();
-                const rotationSpeed = Math.random() * Math.PI * 5;
-                confettiData.push({ position: initialPosition, quaternion: new THREE.Quaternion().setFromAxisAngle(rotationAxis, Math.random() * Math.PI * 2), velocity: velocity, rotationAxis: rotationAxis, rotationSpeed: rotationSpeed, initialLife: life, life: life, baseColor: new THREE.Color(brightColors[Math.floor(Math.random() * brightColors.length)]) });
-                dummy.position.copy(initialPosition); dummy.setRotationFromQuaternion(confettiData[i].quaternion); dummy.updateMatrix();
-                activeConfettiExplosion.setMatrixAt(i, dummy.matrix); activeConfettiExplosion.setColorAt(i, confettiData[i].baseColor);
-            }
-            activeConfettiExplosion.instanceMatrix.needsUpdate = true; activeConfettiExplosion.instanceColor.needsUpdate = true;
-            scene.add(activeConfettiExplosion);
-            setTimeout(() => { if (activeConfettiExplosion && activeConfettiExplosion.parent) { scene.remove(activeConfettiExplosion); activeConfettiExplosion.geometry.dispose(); activeConfettiExplosion.material.dispose(); activeConfettiExplosion = null; confettiData = []; } }, CONFETTI_DURATION_MS + 500);
-        }
-        function updateConfettiExplosion(delta) {
-            if (!activeConfettiExplosion || confettiData.length === 0) return;
-            let needsMatrixUpdate = false; let needsColorUpdate = false; let activeCount = 0;
-            for (let i = 0; i < CONFETTI_COUNT; i++) {
-                const data = confettiData[i]; if (data.life <= 0) continue; data.life -= delta; activeCount++;
-                if (data.life <= 0) { tempMatrix.identity().scale(tempVector3.set(0,0,0)); activeConfettiExplosion.setMatrixAt(i, tempMatrix); needsMatrixUpdate = true; continue; }
-                data.velocity.y -= GRAVITY * delta * 0.8; data.velocity.multiplyScalar(CONFETTI_AIR_RESISTANCE); data.position.addScaledVector(data.velocity, delta);
-                tempQuaternion.setFromAxisAngle(data.rotationAxis, data.rotationSpeed * delta); data.quaternion.premultiply(tempQuaternion);
-                dummy.position.copy(data.position); dummy.setRotationFromQuaternion(data.quaternion); dummy.updateMatrix(); activeConfettiExplosion.setMatrixAt(i, dummy.matrix); needsMatrixUpdate = true;
-                const lifeRatio = data.life / data.initialLife;
-                if (lifeRatio < CONFETTI_FADE_START_RATIO) { const fadeRatio = Math.max(0, lifeRatio / CONFETTI_FADE_START_RATIO); tempColor.copy(data.baseColor).lerp(new THREE.Color(0x1a1a2a), 1.0 - fadeRatio); activeConfettiExplosion.setColorAt(i, tempColor); needsColorUpdate = true; activeConfettiExplosion.material.opacity = fadeRatio * 0.9; }
-                else if (activeConfettiExplosion.instanceColor) { activeConfettiExplosion.setColorAt(i, data.baseColor); needsColorUpdate = true; activeConfettiExplosion.material.opacity = 0.9;}
-            }
-            if (needsMatrixUpdate) activeConfettiExplosion.instanceMatrix.needsUpdate = true; if (needsColorUpdate) activeConfettiExplosion.instanceColor.needsUpdate = true;
-        }
-
-        function playDeepBoomSound() {
-            if (!audioCtx) return; const duration = 1.8; const now = audioCtx.currentTime; const fundamental = 35;
-            const thumpOsc = audioCtx.createOscillator(); thumpOsc.type = 'sine'; thumpOsc.frequency.setValueAtTime(fundamental * 1.8, now); thumpOsc.frequency.exponentialRampToValueAtTime(fundamental, now + duration * 0.5); const thumpGain = audioCtx.createGain(); thumpGain.gain.setValueAtTime(0, now); thumpGain.gain.linearRampToValueAtTime(0.9, now + 0.03); thumpGain.gain.exponentialRampToValueAtTime(0.2, now + duration * 0.7); thumpGain.gain.linearRampToValueAtTime(0.001, now + duration); thumpOsc.connect(thumpGain); thumpGain.connect(masterGain); thumpOsc.start(now); thumpOsc.stop(now + duration);
-            const subOsc = audioCtx.createOscillator(); subOsc.type = 'sine'; subOsc.frequency.setValueAtTime(fundamental * 0.95, now); subOsc.frequency.linearRampToValueAtTime(fundamental * 0.8, now + duration); const subGain = audioCtx.createGain(); subGain.gain.setValueAtTime(0, now); subGain.gain.linearRampToValueAtTime(0.7, now + 0.1); subGain.gain.exponentialRampToValueAtTime(0.01, now + duration); subOsc.connect(subGain); subGain.connect(masterGain); subOsc.start(now); subOsc.stop(now + duration);
-            const noiseDuration = 0.4; const bufferSize = audioCtx.sampleRate * noiseDuration; const noiseBuffer = audioCtx.createBuffer(1, bufferSize, audioCtx.sampleRate); const output = noiseBuffer.getChannelData(0); for (let i = 0; i < bufferSize; i++) { output[i] = (Math.random() * 2 - 1) * Math.pow(1 - i / bufferSize, 2); } const noiseSource = audioCtx.createBufferSource(); noiseSource.buffer = noiseBuffer; const noiseFilter = audioCtx.createBiquadFilter(); noiseFilter.type = 'lowpass'; noiseFilter.frequency.setValueAtTime(600, now); noiseFilter.frequency.exponentialRampToValueAtTime(100, now + noiseDuration * 0.8); const noiseGain = audioCtx.createGain(); noiseGain.gain.setValueAtTime(0.6, now); noiseGain.gain.exponentialRampToValueAtTime(0.001, now + noiseDuration); noiseSource.connect(noiseFilter); noiseFilter.connect(noiseGain); noiseGain.connect(masterGain); noiseSource.start(now); noiseSource.stop(now + noiseDuration);
-        }
-
-        function animate() {
-            animationFrameId = requestAnimationFrame(animate);
-            const delta = clock.running ? clock.getDelta() : 0;
-            const cappedDelta = Math.min(delta, 0.05);
-
-            if (activeConfettiExplosion) { updateConfettiExplosion(cappedDelta); }
-            if (!isGameRunning || isGameOver) { renderer.render(scene, camera); return; }
-
-            player.position.x = THREE.MathUtils.lerp(player.position.x, playerTargetX, PLAYER_TARGET_LERP_FACTOR);
-            const halfTrack = TRACK_WIDTH / 2 - PLAYER_CAPSULE_RADIUS; player.position.x = THREE.MathUtils.clamp(player.position.x, -halfTrack, halfTrack);
-
-            const wasOnGround = isPlayerOnGround;
-            if (!isPlayerOnGround) { playerVelocityY -= GRAVITY * cappedDelta; player.position.y += playerVelocityY * cappedDelta; if (player.position.y <= GROUND_Y) { player.position.y = GROUND_Y; playerVelocityY = 0; isPlayerOnGround = true; if(!wasOnGround) playLandSound(); } }
-
-            currentObstacleSpeed = OBSTACLE_BASE_SPEED + score * OBSTACLE_SPEED_INCREASE_PER_SCORE;
-            currentObstacleSpeed = Math.min(currentObstacleSpeed, OBSTACLE_MAX_SPEED);
-            currentSpawnRate = OBSTACLE_SPAWN_RATE_BASE + score * OBSTACLE_SPAWN_RATE_INCREASE_PER_SCORE;
-            currentSpawnRate = Math.min(currentSpawnRate, OBSTACLE_SPAWN_RATE_MAX);
-            tempoMultiplier = 1.0 + (currentObstacleSpeed - OBSTACLE_BASE_SPEED) / (OBSTACLE_MAX_SPEED - OBSTACLE_BASE_SPEED) * (MAX_TEMPO_MULTIPLIER - 1.0);
-            tempoMultiplier = Math.min(tempoMultiplier, MAX_TEMPO_MULTIPLIER);
-
-            if (Math.random() < currentSpawnRate * cappedDelta * 60) { createObstacle(); }
-
-            const playerBox = new THREE.Box3().setFromObject(player);
-            playerBox.min.y += 0.1; playerBox.max.y -= 0.1; playerBox.min.x += 0.1; playerBox.max.x -= 0.1;
-
-            for (let i = obstacles.length - 1; i >= 0; i--) {
-                const o = obstacles[i];
-                o.position.z += currentObstacleSpeed;
-                if (o.position.z > camera.position.z + 20) {
-                    scene.remove(o); obstacles.splice(i, 1); continue;
-                }
-                o.userData.boundingBox.setFromObject(o);
-                if (playerBox.intersectsBox(o.userData.boundingBox)) {
-                    triggerGameOver(); return;
-                }
-            }
-
-            score += cappedDelta * SCORE_MULTIPLIER * (currentObstacleSpeed / OBSTACLE_BASE_SPEED);
-            infoElement.textContent = `Punkte: ${Math.floor(score)}`;
-            checkAchievements();
-            renderer.render(scene, camera);
-        }
-
-        function triggerGameOver() {
-            if (isGameOver) return; isGameOver = true; isGameRunning = false; clock.stop(); stopMusicLoop();
-            if(player) player.visible = false;
-            const explosionPos = player ? player.position.clone() : new THREE.Vector3(0, GROUND_Y, 5);
-            explosionPos.y = Math.max(explosionPos.y, GROUND_Y + 1.0);
-            createConfettiExplosion(explosionPos);
-            playDeepBoomSound();
-            finalScoreElement.textContent = `Endpunktzahl: ${Math.floor(score)}`; gameOverElement.style.display = 'block';
-        }
-
-        function startGame() { startButton.style.display = 'none'; if (!setupAudio()) return; resetGameState(); isGameRunning = true; isGameOver = false; if (!clock.running) { clock.start(); } else { clock.getDelta(); } startMusicLoop(); if (animationFrameId === null) { animate(); } }
-        function restartGame() { gameOverElement.style.display = 'none'; startGame(); }
-
-        function onWindowResize() {
-            const width = container.clientWidth; const height = container.clientHeight;
-            if (!camera || !renderer) return;
-            camera.aspect = width / height; camera.updateProjectionMatrix(); renderer.setSize(width, height);
-        }
-
-        function handleMove(direction) {
-             if (!isGameRunning || isGameOver) return;
-             const maxLaneOffset = Math.floor(NUM_LANES / 2) * LANE_WIDTH;
-             if (direction === 'left') {
-                 playerTargetX = Math.max(-maxLaneOffset, playerTargetX - LANE_WIDTH);
-             } else if (direction === 'right') {
-                 playerTargetX = Math.min(maxLaneOffset, playerTargetX + LANE_WIDTH);
+                 if (element.id === 'zone-left') touchState.left = true;
+                 else if (element.id === 'zone-right') touchState.right = true;
+                 else if (element.id === 'zone-forward') touchState.forward = true;
+                 else if (element.id === 'zone-backward') touchState.backward = true;
              }
-             playMoveSound();
         }
 
-        function handleJump() {
-            if (!isGameRunning || isGameOver) return;
-            if (isPlayerOnGround) {
-                playerVelocityY = JUMP_FORCE;
-                isPlayerOnGround = false;
-                playJumpSound();
+        const controlsDiv = document.getElementById('controls');
+        controlsDiv.addEventListener('touchstart', handleTouch, { passive: false });
+        controlsDiv.addEventListener('touchmove', handleTouch, { passive: false });
+        controlsDiv.addEventListener('touchend', (event) => {
+            event.preventDefault();
+            touchState.left = false;
+            touchState.right = false;
+            touchState.forward = false;
+            touchState.backward = false;
+
+             // Optional: Check if touches remain over zones after one is lifted
+             if (event.touches.length > 0) {
+                 handleTouch({ changedTouches: event.touches, preventDefault: () => {} });
+             }
+        }, { passive: false });
+
+
+        function updatePlayer() {
+            const moveForward = keys['w'] || keys['arrowup'] || touchState.forward;
+            const moveBackward = keys['s'] || keys['arrowdown'] || touchState.backward;
+            const turnLeft = keys['a'] || keys['arrowleft'] || touchState.left;
+            const turnRight = keys['d'] || keys['arrowright'] || touchState.right;
+
+            if (turnLeft) playerAngle -= turnSpeed;
+            if (turnRight) playerAngle += turnSpeed;
+
+            let moveX = 0;
+            let moveY = 0;
+
+            if (moveForward) {
+                moveX += Math.cos(playerAngle) * moveSpeed;
+                moveY += Math.sin(playerAngle) * moveSpeed;
+            }
+            if (moveBackward) {
+                moveX -= Math.cos(playerAngle) * moveSpeed;
+                moveY -= Math.sin(playerAngle) * moveSpeed;
+            }
+
+            const nextPlayerX = playerX + moveX;
+            const nextPlayerY = playerY + moveY;
+
+            if (getMapValue(nextPlayerX, playerY) === 0) {
+                playerX = nextPlayerX;
+            }
+            if (getMapValue(playerX, nextPlayerY) === 0) {
+                playerY = nextPlayerY;
+            }
+
+            playerAngle = (playerAngle + Math.PI * 2) % (Math.PI * 2);
+        }
+
+
+        function render() {
+            ctx.fillStyle = '#222';
+            ctx.fillRect(0, 0, screenWidth, screenHeight / 2);
+            ctx.fillStyle = '#444';
+            ctx.fillRect(0, screenHeight / 2, screenWidth, screenHeight / 2);
+
+            for (let x = 0; x < screenWidth; x++) {
+                const rayAngle = (playerAngle - fov / 2) + (x / screenWidth) * fov;
+                let distanceToWall = 0;
+                let hitWall = false;
+                let hitBoundary = false;
+
+                const eyeX = Math.cos(rayAngle);
+                const eyeY = Math.sin(rayAngle);
+
+                while (!hitWall && distanceToWall < 20) {
+                    distanceToWall += 0.05;
+                    const testX = playerX + eyeX * distanceToWall;
+                    const testY = playerY + eyeY * distanceToWall;
+
+                    if (testX < 0 || testX >= mapWidth || testY < 0 || testY >= mapHeight) {
+                        hitWall = true;
+                        distanceToWall = 20;
+                    } else {
+                        if (getMapValue(testX, testY) === 1) {
+                            hitWall = true;
+
+                             const p = [];
+                             for (let tx = 0; tx < 2; tx++) {
+                                for (let ty = 0; ty < 2; ty++) {
+                                    const vx = Math.floor(testX) + tx;
+                                    const vy = Math.floor(testY) + ty;
+                                    const dx = vx - playerX;
+                                    const dy = vy - playerY;
+                                    const d = Math.sqrt(dx*dx + dy*dy);
+                                    p.push({d: d, x: vx, y: vy});
+                                }
+                            }
+                             p.sort((a, b) => a.d - b.d);
+
+                             const bound = 0.01;
+                             if (Math.acos((p[0].x - playerX) * eyeX + (p[0].y - playerY) * eyeY / p[0].d) < bound) hitBoundary = true;
+                             if (Math.acos((p[1].x - playerX) * eyeX + (p[1].y - playerY) * eyeY / p[1].d) < bound) hitBoundary = true;
+                           // if (Math.acos((p[2].x - playerX) * eyeX + (p[2].y - playerY) * eyeY / p[2].d) < bound) hitBoundary = true;
+
+                        }
+                    }
+                }
+
+                const ceiling = screenHeight / 2 - screenHeight / (distanceToWall * Math.cos(rayAngle - playerAngle));
+                const floor = screenHeight - ceiling;
+                const wallHeight = floor - ceiling;
+
+                let wallShade = Math.max(0.1, 1.0 - distanceToWall / 8.0);
+                if (hitBoundary) wallShade *= 0.7;
+
+                ctx.fillStyle = `rgb(${Math.floor(100 * wallShade)}, ${Math.floor(10 * wallShade)}, ${Math.floor(10 * wallShade)})`;
+                ctx.fillRect(x, ceiling, 1, wallHeight);
             }
         }
 
-        function onKeyDown(e) {
-            if (e.key === 'ArrowLeft' || e.key.toLowerCase() === 'a') { handleMove('left'); }
-            else if (e.key === 'ArrowRight' || e.key.toLowerCase() === 'd') { handleMove('right'); }
-            else if (e.key === ' ' || e.key === 'ArrowUp' || e.key.toLowerCase() === 'w') { handleJump(); }
+        function gameLoop() {
+            updatePlayer();
+            render();
+            requestAnimationFrame(gameLoop);
         }
 
-        function handleTouchStart(event) { event.preventDefault(); if (!isGameRunning || isGameOver || event.touches.length === 0) return; touchStartX = event.touches[0].clientX; touchStartY = event.touches[0].clientY; }
-
-        function handleTouchEnd(event) {
-            event.preventDefault(); if (!isGameRunning || isGameOver || event.changedTouches.length === 0) return;
-            const touchEndX = event.changedTouches[0].clientX; const touchEndY = event.changedTouches[0].clientY;
-            const deltaX = touchEndX - touchStartX; const deltaY = touchEndY - touchStartY;
-
-            if (Math.abs(deltaX) > Math.abs(deltaY)) {
-                if (Math.abs(deltaX) > MIN_SWIPE_DISTANCE_X) {
-                    handleMove(deltaX < 0 ? 'left' : 'right');
-                }
-            } else {
-                if (deltaY < MIN_SWIPE_DISTANCE_Y_UP) {
-                    handleJump();
-                }
-            }
-            touchStartX = 0; touchStartY = 0;
+        function resizeCanvas() {
+            screenWidth = window.innerWidth;
+            screenHeight = window.innerHeight;
+            canvas.width = screenWidth;
+            canvas.height = screenHeight;
+            controlsDiv.style.height = `${Math.min(150, screenHeight * 0.2)}px`; // Anpassung der Kontrollhöhe
         }
 
-        initGameGraphics();
-        window.addEventListener('resize', onWindowResize, false);
-        document.addEventListener('keydown', onKeyDown, false);
-        container.addEventListener('touchstart', handleTouchStart, { passive: false });
-        container.addEventListener('touchend', handleTouchEnd, { passive: false });
-        restartButton.addEventListener('click', restartGame, false);
-        startButton.addEventListener('click', startGame, false);
-
-        onWindowResize();
-        if (!isGameRunning) {
-             renderer.render(scene, camera);
-        } else {
-             animate();
-        }
+        window.addEventListener('resize', resizeCanvas);
+        resizeCanvas();
+        gameLoop();
 
     </script>
 </body>
