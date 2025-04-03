@@ -1,0 +1,383 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>DAS - 3D Arena Ball Game v4 (Boost & Fixes)</title>
+    <style>
+        body { margin: 0; overflow: hidden; background-color: #AAAAAA; }
+        canvas { display: block; }
+        #info {
+            position: absolute;
+            top: 10px; width: 100%; text-align: center;
+            color: white; font-family: sans-serif; font-size: 16px; /* Adjusted size */
+            z-index: 10; text-shadow: 1px 1px 3px black;
+        }
+         #score {
+            position: absolute;
+            top: 30px; width: 100%; text-align: center; /* Moved score up slightly */
+            color: white; font-family: sans-serif; font-size: 22px; font-weight: bold; /* Adjusted size */
+            z-index: 10; text-shadow: 1px 1px 3px black;
+        }
+        #boost-meter {
+             position: absolute;
+             bottom: 20px; left: 20px;
+             width: 150px; height: 20px;
+             border: 1px solid white;
+             background-color: rgba(0, 0, 0, 0.3);
+             z-index: 10;
+        }
+         #boost-bar {
+            width: 100%; height: 100%;
+            background-color: cyan;
+            transition: width 0.1s linear; /* Smooth transition */
+         }
+         #boost-text {
+            position: absolute;
+            bottom: 45px; left: 20px; /* Label above meter */
+            color: white; font-family: sans-serif; font-size: 14px;
+            text-shadow: 1px 1px 2px black;
+             z-index: 10;
+         }
+
+    </style>
+</head>
+<body>
+    <div id="info">W/S/A/D or Arrows: Move/Turn | Shift: Boost | First to 3 wins!</div>
+    <div id="score">Player: 0 - AI: 0</div>
+    <div id="boost-text">Boost</div>
+    <div id="boost-meter">
+        <div id="boost-bar"></div>
+    </div>
+
+    <script type="importmap">
+      {
+        "imports": {
+          "three": "https://unpkg.com/three@0.160.0/build/three.module.js",
+           "three/addons/": "https://unpkg.com/three@0.160.0/examples/jsm/"
+        }
+      }
+    </script>
+
+    <script type="module">
+        import * as THREE from 'three';
+
+        // --- Core Three.js Setup ---
+        let scene, camera, renderer;
+        let playerCar, aiCar, ballMesh, ground;
+        const clock = new THREE.Clock();
+        const walls = [];
+
+        // --- Arena Dimensions ---
+        const arenaWidth = 80; const arenaDepth = 50;
+        const wallHeight = 5; const wallThickness = 1;
+        const goalWidth = 20; const goalMinZ = -goalWidth / 2;
+        const goalMaxZ = goalWidth / 2; const goalLineLeft = -arenaWidth / 2;
+        const goalLineRight = arenaWidth / 2;
+
+        // --- Game State ---
+        let playerScore = 0; let aiScore = 0;
+        let scoreElement, boostBarElement;
+        const winningScore = 3; let gameOver = false;
+
+        // --- Object Properties ---
+        const carWidth = 2.5; const carDepth = 4.5; const carHeight = 1.0;
+        const carYPosition = carHeight / 2; const ballRadius = carWidth / 1.5;
+        const ballYPosition = ballRadius;
+
+        // --- Physics Properties ---
+        const friction = 0.98; const ballWallRestitution = 0.85;
+        const carBallRestitution = 0.9; const carVelocityTransfer = 0.6;
+        const maxBallSpeed = 28;
+
+        // --- Player Car State ---
+        const playerState = {
+            mesh: null, speed: 0, acceleration: 7.0, deceleration: 6.0,
+            maxSpeed: 14.0, turnSpeed: 3.0, steering: 0,
+            width: carWidth, depth: carDepth,
+            // Boost properties
+            isBoosting: false,
+            boostAmount: 100,
+            maxBoost: 100,
+            boostForce: 10.0, // Additional acceleration force when boosting
+            boostConsumptionRate: 35, // Units per second
+            boostRechargeRate: 15 // Units per second
+        };
+
+        // --- AI Car State ---
+        const aiState = {
+             mesh: null, speed: 0, acceleration: 5.5, deceleration: 5.0,
+            maxSpeed: 11.0, turnSpeed: 2.2, steering: 0,
+            width: carWidth, depth: carDepth, targetPos: new THREE.Vector3()
+        };
+
+        // --- Ball State ---
+        const ballState = { mesh: null, radius: ballRadius, vx: 0, vy: 0, vz: 0 };
+
+        // --- Input Handling ---
+        const keysPressed = {};
+        document.addEventListener('keydown', (event) => { keysPressed[event.key.toLowerCase()] = true; keysPressed[event.code] = true; });
+        document.addEventListener('keyup', (event) => { keysPressed[event.key.toLowerCase()] = false; keysPressed[event.code] = false; });
+
+        function init() {
+            scoreElement = document.getElementById('score');
+            boostBarElement = document.getElementById('boost-bar');
+
+            scene = new THREE.Scene();
+            scene.background = new THREE.Color(0x87CEEB);
+            scene.fog = new THREE.Fog(0x87CEEB, 70, 200);
+            camera = new THREE.PerspectiveCamera(75, window.innerWidth / window.innerHeight, 0.1, 1000);
+            renderer = new THREE.WebGLRenderer({ antialias: true });
+            renderer.setSize(window.innerWidth, window.innerHeight);
+            renderer.shadowMap.enabled = true;
+            renderer.shadowMap.type = THREE.PCFSoftShadowMap;
+            document.body.appendChild(renderer.domElement);
+
+            const ambientLight = new THREE.AmbientLight(0xffffff, 0.7); scene.add(ambientLight);
+            const directionalLight = new THREE.DirectionalLight(0xffffff, 1.0);
+            directionalLight.position.set(40, 60, 30); directionalLight.castShadow = true;
+            directionalLight.shadow.mapSize.width = 2048; directionalLight.shadow.mapSize.height = 2048;
+            directionalLight.shadow.camera.left = -arenaWidth / 1.5; directionalLight.shadow.camera.right = arenaWidth / 1.5;
+            directionalLight.shadow.camera.top = arenaDepth / 1.5; directionalLight.shadow.camera.bottom = -arenaDepth / 1.5;
+            directionalLight.shadow.camera.near = 1; directionalLight.shadow.camera.far = 150;
+            scene.add(directionalLight);
+
+            const groundGeometry = new THREE.PlaneGeometry(arenaWidth + wallThickness * 4, arenaDepth + wallThickness * 4);
+            const groundMaterial = new THREE.MeshStandardMaterial({ color: 0x337733, side: THREE.DoubleSide });
+            ground = new THREE.Mesh(groundGeometry, groundMaterial);
+            ground.rotation.x = -Math.PI / 2; ground.receiveShadow = true; scene.add(ground);
+
+            createArenaWalls();
+
+            const carGeometry = new THREE.BoxGeometry(carWidth, carHeight, carDepth);
+            const playerMaterial = new THREE.MeshStandardMaterial({ color: 0xdd0000, roughness: 0.4, metalness: 0.1 });
+            playerCar = new THREE.Mesh(carGeometry, playerMaterial);
+            playerCar.castShadow = true; playerCar.receiveShadow = false; playerState.mesh = playerCar; scene.add(playerCar);
+
+            const aiMaterial = new THREE.MeshStandardMaterial({ color: 0x0000dd, roughness: 0.4, metalness: 0.1 });
+            aiCar = new THREE.Mesh(carGeometry.clone(), aiMaterial);
+            aiCar.castShadow = true; aiCar.receiveShadow = false; aiState.mesh = aiCar; scene.add(aiCar);
+
+            const ballGeometry = new THREE.SphereGeometry(ballRadius, 32, 16);
+            const ballMaterial = new THREE.MeshStandardMaterial({ color: 0xffffff, roughness: 0.5, metalness: 0.0 });
+            ballMesh = new THREE.Mesh(ballGeometry, ballMaterial);
+            ballMesh.castShadow = true; ballMesh.receiveShadow = true; ballState.mesh = ballMesh; scene.add(ballMesh);
+
+            window.addEventListener('resize', onWindowResize, false);
+            resetRound();
+            animate();
+        }
+
+        function createArenaWalls() { /* ... Identical to previous version ... */
+            const wallMaterial = new THREE.MeshStandardMaterial({ color: 0xAAAAAA, roughness: 0.8, metalness: 0.2 });
+            const halfArenaW = arenaWidth / 2; const halfArenaD = arenaDepth / 2; const halfWallH = wallHeight / 2; const halfGoalW = goalWidth / 2; const sideWallLength = (arenaDepth - goalWidth) / 2;
+            const wallProps = { castShadow: true, receiveShadow: true };
+            const topWallGeo = new THREE.BoxGeometry(arenaWidth + wallThickness*2, wallHeight, wallThickness); const topWall = new THREE.Mesh(topWallGeo, wallMaterial); topWall.position.set(0, halfWallH, halfArenaD + wallThickness / 2); Object.assign(topWall, wallProps); scene.add(topWall);
+            const bottomWallGeo = new THREE.BoxGeometry(arenaWidth + wallThickness*2, wallHeight, wallThickness); const bottomWall = new THREE.Mesh(bottomWallGeo, wallMaterial); bottomWall.position.set(0, halfWallH, -halfArenaD - wallThickness / 2); Object.assign(bottomWall, wallProps); scene.add(bottomWall);
+            const sideWallSegGeo = new THREE.BoxGeometry(wallThickness, wallHeight, sideWallLength); const leftWallTopSeg = new THREE.Mesh(sideWallSegGeo, wallMaterial); leftWallTopSeg.position.set(-halfArenaW - wallThickness / 2, halfWallH, halfGoalW + sideWallLength / 2); Object.assign(leftWallTopSeg, wallProps); scene.add(leftWallTopSeg); const leftWallBottomSeg = new THREE.Mesh(sideWallSegGeo, wallMaterial); leftWallBottomSeg.position.set(-halfArenaW - wallThickness / 2, halfWallH, -halfGoalW - sideWallLength / 2); Object.assign(leftWallBottomSeg, wallProps); scene.add(leftWallBottomSeg); const rightWallTopSeg = new THREE.Mesh(sideWallSegGeo, wallMaterial); rightWallTopSeg.position.set(halfArenaW + wallThickness / 2, halfWallH, halfGoalW + sideWallLength / 2); Object.assign(rightWallTopSeg, wallProps); scene.add(rightWallTopSeg); const rightWallBottomSeg = new THREE.Mesh(sideWallSegGeo, wallMaterial); rightWallBottomSeg.position.set(halfArenaW + wallThickness / 2, halfWallH, -halfGoalW - sideWallLength / 2); Object.assign(rightWallBottomSeg, wallProps); scene.add(rightWallBottomSeg);
+         }
+
+        function onWindowResize() { /* ... Identical to previous version ... */
+             camera.aspect = window.innerWidth / window.innerHeight; camera.updateProjectionMatrix(); renderer.setSize(window.innerWidth, window.innerHeight);
+        }
+        function updateScoreDisplay() { /* ... Identical to previous version ... */
+             if (gameOver) return; scoreElement.textContent = `Player: ${playerScore} - AI: ${aiScore}`;
+        }
+         function showGameOver(winner) { /* ... Identical to previous version ... */
+             gameOver = true; scoreElement.textContent = `${winner} Wins! (${playerScore} - ${aiScore})`; scoreElement.style.color = (winner === 'Player') ? 'lightgreen' : 'tomato'; document.getElementById('info').textContent = "Refresh page (F5) to play again.";
+         }
+         function updateBoostUI() {
+             const boostPercent = (playerState.boostAmount / playerState.maxBoost) * 100;
+             boostBarElement.style.width = `${boostPercent}%`;
+         }
+
+
+        function resetRound() {
+            if (gameOver) return;
+
+            // Player Reset (Right side, facing 90 deg right)
+            playerState.speed = 0; playerState.steering = 0;
+            playerState.boostAmount = playerState.maxBoost; // Reset boost
+            playerState.isBoosting = false;
+            playerCar.position.set(goalLineRight / 2, carYPosition, 0);
+            // --- MODIFICATION: Player starting rotation (90 deg right) ---
+            playerCar.rotation.y = -Math.PI / 2; // Face towards +Z
+            playerCar.quaternion.setFromEuler(playerCar.rotation);
+
+            // AI Reset (Left side, facing Right)
+            aiState.speed = 0; aiState.steering = 0;
+            aiCar.position.set(goalLineLeft / 2, carYPosition, 0);
+            aiCar.rotation.y = 0; // Face towards +X
+            aiCar.quaternion.setFromEuler(aiCar.rotation);
+
+            // Ball Reset (Center)
+            ballState.vx = 0; ballState.vy = 0; ballState.vz = 0;
+            ballMesh.position.set(0, ballYPosition, 0);
+
+            updateScoreDisplay();
+            updateBoostUI(); // Update boost UI on reset
+        }
+
+        // --- Physics & Collision ---
+
+        function updateBall(deltaTime) { /* ... Identical to previous version (with increased ground bounce) ... */
+            if (gameOver) { ballState.vx=0; ballState.vy=0; ballState.vz=0; return; }
+            ballMesh.position.x += ballState.vx * deltaTime; ballMesh.position.y += ballState.vy * deltaTime; ballMesh.position.z += ballState.vz * deltaTime;
+            ballState.vx *= friction; ballState.vz *= friction; ballState.vy *= friction;
+            if (ballMesh.position.y - ballState.radius < 0 && ballState.vy < 0) { ballMesh.position.y = ballState.radius; ballState.vy *= -0.6; ballState.vx *= 0.95; ballState.vz *= 0.95; } // Increased bounce
+            const currentSpeedSq = ballState.vx**2 + ballState.vy**2 + ballState.vz**2;
+            if (currentSpeedSq > maxBallSpeed**2) { const currentSpeed = Math.sqrt(currentSpeedSq); const scale = maxBallSpeed / currentSpeed; ballState.vx *= scale; ballState.vy *= scale; ballState.vz *= scale; }
+         }
+
+        function handleBallWallCollision() {
+            const pos = ballMesh.position; const rad = ballState.radius;
+            const arenaMinX = -arenaWidth / 2; const arenaMaxX = arenaWidth / 2;
+            const arenaMinZ = -arenaDepth / 2; const arenaMaxZ = arenaDepth / 2;
+            const pushOutFactor = 1.01; // --- BUG FIX FACTOR ---
+
+             if (pos.x - rad < arenaMinX) {
+                if (!(pos.z > goalMinZ && pos.z < goalMaxZ)) {
+                     pos.x = arenaMinX + rad * pushOutFactor; ballState.vx *= -ballWallRestitution; // Added pushOutFactor
+                }
+            } else if (pos.x + rad > arenaMaxX) {
+                 if (!(pos.z > goalMinZ && pos.z < goalMaxZ)) {
+                     pos.x = arenaMaxX - rad * pushOutFactor; ballState.vx *= -ballWallRestitution; // Added pushOutFactor
+                 }
+            }
+
+             if (pos.z - rad < arenaMinZ) {
+                pos.z = arenaMinZ + rad * pushOutFactor; ballState.vz *= -ballWallRestitution; // Added pushOutFactor
+            } else if (pos.z + rad > arenaMaxZ) {
+                pos.z = arenaMaxZ - rad * pushOutFactor; ballState.vz *= -ballWallRestitution; // Added pushOutFactor
+            }
+        }
+
+        function handleCarBallCollision(carMesh, carState, ballMesh, ballState) { /* ... Identical to previous version (uses updated restitution values) ... */
+            const carPos = carMesh.position; const ballPos = ballMesh.position; const distSq = carPos.distanceToSquared(ballPos);
+            const carEffectiveRadius = (carState.width + carState.depth) / 4; const combinedRadius = carEffectiveRadius + ballState.radius;
+            if (distSq < combinedRadius**2) {
+                const distance = Math.sqrt(distSq); const overlap = combinedRadius - distance; const normal = new THREE.Vector3().subVectors(ballPos, carPos); normal.y = 0;
+                if (normal.lengthSq() < 0.0001) { normal.set( (Math.random() - 0.5) * 2, 0, (Math.random() - 0.5) * 2).normalize(); } else { normal.normalize(); }
+                ballMesh.position.addScaledVector(normal, overlap * 1.01);
+                const carForward = new THREE.Vector3(0, 0, -1).applyQuaternion(carMesh.quaternion); const carVelocityApprox = carForward.multiplyScalar(carState.speed); const ballVelocity = new THREE.Vector3(ballState.vx, ballState.vy, ballState.vz);
+                const carVelInNormalDir = carVelocityApprox.dot(normal); const relativeVelDotNormal = (ballVelocity.dot(normal) - carVelInNormalDir); const impulseScale = -(1 + carBallRestitution) * relativeVelDotNormal; ballVelocity.addScaledVector(normal, impulseScale);
+                const basePush = 3.0; ballVelocity.addScaledVector(normal, basePush * carBallRestitution);
+                ballState.vx = ballVelocity.x; ballState.vy = ballVelocity.y; ballState.vz = ballVelocity.z;
+            }
+         }
+
+         function checkGoals() { /* ... Identical to previous version ... */
+            if (gameOver) return; const pos = ballMesh.position; const rad = ballState.radius; let goalScored = false;
+            if (pos.x - rad < goalLineLeft && pos.z > goalMinZ && pos.z < goalMaxZ) { aiScore++; goalScored = true; console.log("AI Score!"); } else if (pos.x + rad > goalLineRight && pos.z > goalMinZ && pos.z < goalMaxZ) { playerScore++; goalScored = true; console.log("Player Score!"); }
+            if (goalScored) { if (playerScore >= winningScore) showGameOver("Player"); else if (aiScore >= winningScore) showGameOver("AI"); else resetRound(); }
+         }
+
+         function handleCarWallCollision(carObj, state, potentialPos) { /* ... Identical to previous version ... */
+            const halfCarWidth = state.width / 2; const halfCarDepth = state.depth / 2; const arenaMinX = -arenaWidth / 2; const arenaMaxX = arenaWidth / 2; const arenaMinZ = -arenaDepth / 2; const arenaMaxZ = arenaDepth / 2; let clamped = false;
+            if (potentialPos.x - halfCarWidth < arenaMinX || potentialPos.x + halfCarWidth > arenaMaxX) { potentialPos.x = THREE.MathUtils.clamp(potentialPos.x, arenaMinX + halfCarWidth, arenaMaxX - halfCarWidth); clamped = true; }
+            if (potentialPos.z - halfCarDepth < arenaMinZ || potentialPos.z + halfCarDepth > arenaMaxZ) { potentialPos.z = THREE.MathUtils.clamp(potentialPos.z, arenaMinZ + halfCarDepth, arenaMaxZ - halfCarDepth); clamped = true; }
+            carObj.position.copy(potentialPos); if (clamped) { state.speed *= 0.5; } return clamped;
+         }
+
+        function updatePlayerCar(deltaTime) {
+             if (gameOver) { playerState.speed = 0; playerState.isBoosting = false; return; }
+
+            let moveForward = keysPressed['w'] || keysPressed['ArrowUp'];
+            let moveBackward = keysPressed['s'] || keysPressed['ArrowDown'];
+            let turnLeft = keysPressed['a'] || keysPressed['ArrowLeft'];
+            let turnRight = keysPressed['d'] || keysPressed['ArrowRight'];
+            let boostPressed = keysPressed['shift'];
+
+            // --- Boost Logic ---
+            playerState.isBoosting = boostPressed && playerState.boostAmount > 0 && moveForward; // Boost only when moving forward
+
+            if (playerState.isBoosting) {
+                playerState.boostAmount -= playerState.boostConsumptionRate * deltaTime;
+                playerState.boostAmount = Math.max(0, playerState.boostAmount); // Clamp to 0
+            } else if (playerState.boostAmount < playerState.maxBoost) {
+                playerState.boostAmount += playerState.boostRechargeRate * deltaTime;
+                playerState.boostAmount = Math.min(playerState.maxBoost, playerState.boostAmount); // Clamp to max
+            }
+            updateBoostUI(); // Update visual meter
+
+
+             // --- Steering ---
+             playerState.steering = 0;
+            if (turnLeft) playerState.steering = 1; if (turnRight) playerState.steering = -1;
+            if (Math.abs(playerState.speed) > 0.01 || playerState.isBoosting) { // Allow turning while boosting even if speed is low
+                 const speedFactor = 1.0 - Math.min(1, Math.abs(playerState.speed) / (playerState.maxSpeed * 1.5));
+                 const actualTurnSpeed = playerState.turnSpeed * speedFactor;
+                 playerCar.rotateY(playerState.steering * actualTurnSpeed * deltaTime);
+                 playerCar.quaternion.setFromEuler(playerCar.rotation);
+             }
+
+             // --- Acceleration/Deceleration ---
+             let currentAcceleration = playerState.acceleration;
+             if (playerState.isBoosting && moveForward) { // Apply boost force as extra acceleration
+                 currentAcceleration += playerState.boostForce;
+             }
+
+             if (moveForward) {
+                 playerState.speed += currentAcceleration * deltaTime;
+             } else if (moveBackward) {
+                 // No boost when reversing
+                 playerState.speed -= playerState.acceleration * deltaTime; // Use normal acceleration for braking/reverse
+             } else {
+                 // Apply deceleration when no forward/backward input
+                 playerState.speed = Math.sign(playerState.speed) * Math.max(0, Math.abs(playerState.speed) - playerState.deceleration * deltaTime);
+             }
+
+             // Clamp speed (consider slightly higher max speed when boosting?)
+             const currentMaxSpeed = playerState.isBoosting ? playerState.maxSpeed * 1.3 : playerState.maxSpeed; // Example: 30% faster max speed when boosting
+             playerState.speed = Math.max(-playerState.maxSpeed / 2, Math.min(currentMaxSpeed, playerState.speed));
+
+             // --- Movement & Wall Collision ---
+             const forward = new THREE.Vector3(0, 0, -1).applyQuaternion(playerCar.quaternion);
+             const velocity = forward.multiplyScalar(playerState.speed * deltaTime);
+             const potentialPosition = playerCar.position.clone().add(velocity);
+             handleCarWallCollision(playerCar, playerState, potentialPosition);
+        }
+
+         function updateAiCar(deltaTime) { /* ... Identical to previous version ... */
+             if (gameOver) { aiState.speed = 0; return; }
+             const ballPos = ballMesh.position; const aiPos = aiCar.position; const aiGoalPos = new THREE.Vector3(goalLineLeft + carDepth, carYPosition, 0); const playerGoalPos = new THREE.Vector3(goalLineRight - carDepth, carYPosition, 0); const ballToAiGoalDistSq = ballPos.distanceToSquared(aiGoalPos); const aiToGoalDistSq = aiPos.distanceToSquared(aiGoalPos); const ballInDefensiveHalf = ballPos.x < 0; const ballMovingTowardsAiGoal = ballState.vx < -1.0;
+             if (ballInDefensiveHalf && (ballMovingTowardsAiGoal || ballToAiGoalDistSq < 400)) { aiState.targetPos.lerpVectors(aiGoalPos, ballPos, 0.4); } else { aiState.targetPos.copy(ballPos); const timeToIntercept = aiPos.distanceTo(ballPos) / (aiState.maxSpeed * 0.8 + 0.1); aiState.targetPos.addScaledVector(new THREE.Vector3(ballState.vx, 0, ballState.vz), timeToIntercept * 0.5); }
+             const targetDirection = new THREE.Vector3().subVectors(aiState.targetPos, aiPos); targetDirection.y = 0; targetDirection.normalize(); const aiForward = new THREE.Vector3(0, 0, -1).applyQuaternion(aiCar.quaternion); const angleToTarget = Math.atan2(targetDirection.x, targetDirection.z); const currentAngle = Math.atan2(aiForward.x, aiForward.z); let angleDifference = angleToTarget - currentAngle; while (angleDifference > Math.PI) angleDifference -= Math.PI * 2; while (angleDifference < -Math.PI) angleDifference += Math.PI * 2;
+             const steeringThreshold = 0.1; if (angleDifference > steeringThreshold) aiState.steering = 1; else if (angleDifference < -steeringThreshold) aiState.steering = -1; else aiState.steering = 0;
+             aiCar.rotateY(aiState.steering * aiState.turnSpeed * deltaTime); aiCar.quaternion.setFromEuler(aiCar.rotation);
+             const dotProd = aiForward.dot(targetDirection); if (dotProd > 0.1) { aiState.speed += aiState.acceleration * deltaTime; } else if (dotProd < -0.5 && aiState.speed > 1.0){ aiState.speed -= aiState.acceleration * deltaTime * 0.5; } else { aiState.speed = Math.sign(aiState.speed) * Math.max(0, Math.abs(aiState.speed) - aiState.deceleration * deltaTime); } aiState.speed = Math.min(aiState.maxSpeed, aiState.speed); aiState.speed = Math.max(0, aiState.speed);
+             const aiVelocityVec = aiForward.multiplyScalar(aiState.speed * deltaTime); const aiPotentialPosition = aiPos.clone().add(aiVelocityVec); handleCarWallCollision(aiCar, aiState, aiPotentialPosition);
+        }
+
+
+        function updateCamera() { /* ... Identical to previous version ... */
+            const cameraOffset = new THREE.Vector3(0, 13, 23); const worldOffset = cameraOffset.applyQuaternion(playerCar.quaternion); const desiredCameraPosition = playerCar.position.clone().add(worldOffset); camera.position.lerp(desiredCameraPosition, 0.07);
+            const lookAtTarget = new THREE.Vector3(0, 1.0, -6); lookAtTarget.applyQuaternion(playerCar.quaternion); lookAtTarget.add(playerCar.position); camera.lookAt(lookAtTarget);
+        }
+
+        function animate() {
+            requestAnimationFrame(animate);
+            const deltaTime = Math.min(clock.getDelta(), 0.05);
+
+            if (!gameOver) {
+                updatePlayerCar(deltaTime);
+                updateAiCar(deltaTime);
+                updateBall(deltaTime);
+
+                handleBallWallCollision();
+                handleCarBallCollision(playerCar, playerState, ballMesh, ballState);
+                handleCarBallCollision(aiCar, aiState, ballMesh, ballState);
+
+                checkGoals();
+            }
+
+            updateCamera();
+            renderer.render(scene, camera);
+        }
+
+        // --- Start ---
+        init();
+
+    </script>
+</body>
+</html>
