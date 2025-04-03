@@ -1,241 +1,489 @@
 <!DOCTYPE html>
-<html lang="en">
+<html>
 <head>
-    <meta charset="UTF-8">
-    <meta name="viewport" content="width=device-width, initial-scale=1.0">
-    <title>DAS - 3D Arena Ball Game v6 (Free Cam Focus)</title>
-    <style>
-        body { margin: 0; overflow: hidden; background-color: #AAAAAA; }
-        canvas { display: block; cursor: crosshair; }
-        #info {
-            position: absolute; top: 10px; width: 100%; text-align: center;
-            color: white; font-family: sans-serif; font-size: 16px;
-            z-index: 10; text-shadow: 1px 1px 3px black;
-        }
-         #score {
-            position: absolute; top: 30px; width: 100%; text-align: center;
-            color: white; font-family: sans-serif; font-size: 22px; font-weight: bold;
-            z-index: 10; text-shadow: 1px 1px 3px black;
-        }
-        #boost-meter { /* ... same ... */
-             position: absolute; bottom: 20px; left: 20px; width: 150px; height: 20px;
-             border: 1px solid white; background-color: rgba(0, 0, 0, 0.3); z-index: 10;
-        }
-         #boost-bar { /* ... same ... */
-            width: 100%; height: 100%; background-color: cyan; transition: width 0.1s linear;
-         }
-         #boost-text { /* ... same ... */
-            position: absolute; bottom: 45px; left: 20px; color: white; font-family: sans-serif; font-size: 14px; text-shadow: 1px 1px 2px black; z-index: 10;
-         }
-         /* audio { display: none; } */
-    </style>
+<title>k8o5</title>
+<meta charset="utf-8">
+<style>
+    body {
+        font-family: sans-serif;
+        display: flex;
+        flex-direction: column;
+        align-items: center;
+        margin: 0;
+        background-color: #f0f0f0;
+    }
+    canvas {
+        border: 1px solid black;
+        background-color: #ddd; /* Neutral background */
+        cursor: pointer;
+        margin-top: 10px;
+    }
+    #controls {
+        margin-top: 10px;
+        font-size: 0.9em;
+    }
+    #message {
+        margin-top: 5px;
+        font-weight: bold;
+        min-height: 1.2em;
+    }
+</style>
 </head>
 <body>
-    <div id="info">Click Screen to Lock Mouse | W/S/A/D: Move/Turn | Mouse: Look | Shift: Boost | Esc: Unlock Mouse | First to 3 wins!</div>
-    <div id="score">Player: 0 - AI: 0</div>
-    <div id="boost-text">Boost</div>
-    <div id="boost-meter">
-        <div id="boost-bar"></div>
-    </div>
 
-    <audio id="background-music" loop>
-        <!-- IMPORTANT: Replace with your actual audio file path/URL -->
-        <source src="path/to/your/royalty-free-beat.mp3" type="audio/mpeg">
-        Your browser does not support the audio element.
-    </audio>
+<h1>Mini Territorial Clone</h1>
+<canvas id="gameCanvas" width="600" height="400"></canvas>
+<div id="controls">
+    Click your territory, then click an adjacent neutral or enemy territory to attack (sends 75% troops).
+    <br> Select Percentage:
+    <button onclick="setAttackPercentage(0.25)">25%</button>
+    <button onclick="setAttackPercentage(0.50)">50%</button>
+    <button onclick="setAttackPercentage(0.75)">75%</button>
+    <button onclick="setAttackPercentage(1.00)">100%</button>
+    <span id="currentPercentage">Current: 75%</span>
+</div>
+<div id="message">Game Started! You are Blue.</div>
 
-    <script type="importmap">
-      {
-        "imports": {
-          "three": "https://unpkg.com/three@0.160.0/build/three.module.js",
-           "three/addons/": "https://unpkg.com/three@0.160.0/examples/jsm/"
-        }
-      }
-    </script>
+<script>
+    const canvas = document.getElementById('gameCanvas');
+    const ctx = canvas.getContext('2d');
+    const messageEl = document.getElementById('message');
+    const percentageEl = document.getElementById('currentPercentage');
 
-    <script type="module">
-        import * as THREE from 'three';
+    // --- Game Configuration ---
+    const GRID_WIDTH = 30;
+    const GRID_HEIGHT = 20;
+    const CELL_SIZE = canvas.width / GRID_WIDTH;
+    const PLAYER_ID = 1;
+    const AI_ID = 2;
+    const NEUTRAL_ID = 0;
+    const MAX_TROOPS_PER_CELL = 9999;
+    const STARTING_TROOPS = 10;
+    const GROWTH_RATE = 0.05; // Troops per second per owned cell
+    const GROWTH_INTERVAL = 100; // Milliseconds between growth ticks
+    const AI_THINK_INTERVAL = 500; // Milliseconds between AI decisions
+    const ATTACK_SPEED = 0.5; // Cells per second
+    const ATTACK_COST_FACTOR = 0; // Cost to launch an attack (e.g., 1 troop)
 
-        // --- Core Setup, Arena, Game State, Props, Physics ---
-        // ... (Most sections identical to v5) ...
-        let scene, camera, renderer; let playerCar, aiCar, ballMesh, ground, gameCanvas; const clock = new THREE.Clock();
-        const arenaWidth = 80; const arenaDepth = 50; const wallHeight = 5; const wallThickness = 1; const goalWidth = 20; const goalMinZ = -goalWidth / 2; const goalMaxZ = goalWidth / 2; const goalLineLeft = -arenaWidth / 2; const goalLineRight = arenaWidth / 2;
-        let playerScore = 0; let aiScore = 0; let scoreElement, boostBarElement, musicElement; const winningScore = 3; let gameOver = false;
-        const carWidth = 2.5; const carDepth = 4.5; const carHeight = 1.0; const carYPosition = carHeight / 2; const ballRadius = carWidth / 1.5; const ballYPosition = ballRadius;
-        const friction = 0.98; const ballWallRestitution = 0.85; const carBallRestitution = 0.9; const carVelocityTransfer = 0.6; const maxBallSpeed = 28;
+    // --- Player Colors ---
+    const COLORS = {
+        [NEUTRAL_ID]: '#cccccc', // Neutral
+        [PLAYER_ID]: '#007bff',  // Blue (Human)
+        [AI_ID]: '#dc3545',    // Red (AI)
+        'selected': '#ffff00aa', // Yellow highlight
+        'attack': '#000000' // Black for attack lines/dots
+    };
 
-        // --- Player & AI States --- (Identical to v5)
-        const playerState = { mesh: null, speed: 0, acceleration: 7.0, deceleration: 6.0, maxSpeed: 14.0, turnSpeed: 3.0, steering: 0, width: carWidth, depth: carDepth, isBoosting: false, boostAmount: 100, maxBoost: 100, boostForce: 10.0, boostConsumptionRate: 35, boostRechargeRate: 15 };
-        const aiState = { mesh: null, speed: 0, acceleration: 5.5, deceleration: 5.0, maxSpeed: 11.0, turnSpeed: 2.2, steering: 0, width: carWidth, depth: carDepth, targetPos: new THREE.Vector3() };
-        const ballState = { mesh: null, radius: ballRadius, vx: 0, vy: 0, vz: 0 };
+    // --- Game State ---
+    let grid = [];
+    let attacks = [];
+    let selectedCell = null;
+    let gameOver = false;
+    let winner = null;
+    let growthTimer = 0;
+    let aiThinkTimer = 0;
+    let lastTimestamp = 0;
+    let attackPercentage = 0.75; // Default attack percentage
 
-        // --- Input Handling --- (Identical key handling)
-        const keysPressed = {};
-        document.addEventListener('keydown', (event) => { keysPressed[event.key.toLowerCase()] = true; keysPressed[event.code] = true; });
-        document.addEventListener('keyup', (event) => { keysPressed[event.key.toLowerCase()] = false; keysPressed[event.code] = false; });
-
-        // --- Mouse Camera Control State ---
-        let isPointerLocked = false;
-        let cameraHorizontalAngle = Math.PI; // Yaw (around Y axis) - Start behind default car orientation
-        let cameraVerticalAngle = 0.35;      // Pitch (up/down) - Start looking slightly down
-        const mouseSensitivity = 0.002;
-        const cameraDistance = 20;          // How far camera is from car
-        const verticalAngleMin = 0.05;      // Limit looking straight down
-        const verticalAngleMax = Math.PI / 2 - 0.05; // Limit looking straight up
-
-        function init() {
-            scoreElement = document.getElementById('score');
-            boostBarElement = document.getElementById('boost-bar');
-            musicElement = document.getElementById('background-music');
-            musicElement.volume = 0.25;
-
-            scene = new THREE.Scene();
-            scene.background = new THREE.Color(0x87CEEB);
-            scene.fog = new THREE.Fog(0x87CEEB, 70, 200);
-            camera = new THREE.PerspectiveCamera(75, window.innerWidth / window.innerHeight, 0.1, 1000);
-            renderer = new THREE.WebGLRenderer({ antialias: true });
-            renderer.setSize(window.innerWidth, window.innerHeight);
-            renderer.shadowMap.enabled = true;
-            renderer.shadowMap.type = THREE.PCFSoftShadowMap;
-            document.body.appendChild(renderer.domElement);
-            gameCanvas = renderer.domElement;
-
-            // ... (Lighting, Ground, Walls, Cars, Ball creation - Identical) ...
-            const ambientLight = new THREE.AmbientLight(0xffffff, 0.7); scene.add(ambientLight); const directionalLight = new THREE.DirectionalLight(0xffffff, 1.0); directionalLight.position.set(40, 60, 30); directionalLight.castShadow = true; directionalLight.shadow.mapSize.width = 2048; directionalLight.shadow.mapSize.height = 2048; directionalLight.shadow.camera.left = -arenaWidth / 1.5; directionalLight.shadow.camera.right = arenaWidth / 1.5; directionalLight.shadow.camera.top = arenaDepth / 1.5; directionalLight.shadow.camera.bottom = -arenaDepth / 1.5; directionalLight.shadow.camera.near = 1; directionalLight.shadow.camera.far = 150; scene.add(directionalLight);
-            const groundGeometry = new THREE.PlaneGeometry(arenaWidth + wallThickness * 4, arenaDepth + wallThickness * 4); const groundMaterial = new THREE.MeshStandardMaterial({ color: 0x337733, side: THREE.DoubleSide }); ground = new THREE.Mesh(groundGeometry, groundMaterial); ground.rotation.x = -Math.PI / 2; ground.receiveShadow = true; scene.add(ground);
-            createArenaWalls();
-            const carGeometry = new THREE.BoxGeometry(carWidth, carHeight, carDepth); const playerMaterial = new THREE.MeshStandardMaterial({ color: 0xdd0000, roughness: 0.4, metalness: 0.1 }); playerCar = new THREE.Mesh(carGeometry, playerMaterial); playerCar.castShadow = true; playerCar.receiveShadow = false; playerState.mesh = playerCar; scene.add(playerCar); const aiMaterial = new THREE.MeshStandardMaterial({ color: 0x0000dd, roughness: 0.4, metalness: 0.1 }); aiCar = new THREE.Mesh(carGeometry.clone(), aiMaterial); aiCar.castShadow = true; aiCar.receiveShadow = false; aiState.mesh = aiCar; scene.add(aiCar);
-            const ballGeometry = new THREE.SphereGeometry(ballRadius, 32, 16); const ballMaterial = new THREE.MeshStandardMaterial({ color: 0xffffff, roughness: 0.5, metalness: 0.0 }); ballMesh = new THREE.Mesh(ballGeometry, ballMaterial); ballMesh.castShadow = true; ballMesh.receiveShadow = true; ballState.mesh = ballMesh; scene.add(ballMesh);
-
-
-            // --- Event Listeners --- (Identical to v5)
-            gameCanvas.addEventListener('click', () => { if (!isPointerLocked) { gameCanvas.requestPointerLock(); if (musicElement.paused) { musicElement.play().catch(e => console.error("Audio autoplay failed:", e)); } } });
-            document.addEventListener('pointerlockchange', lockChangeAlert, false);
-            document.addEventListener('mousemove', updateCameraAngle, false); // This now controls pitch & yaw
-            window.addEventListener('resize', onWindowResize, false);
-
-            resetRound();
-            animate();
-        }
-
-        function createArenaWalls() { /* ... Identical ... */
-            const wallMaterial = new THREE.MeshStandardMaterial({ color: 0xAAAAAA, roughness: 0.8, metalness: 0.2 }); const halfArenaW = arenaWidth / 2; const halfArenaD = arenaDepth / 2; const halfWallH = wallHeight / 2; const halfGoalW = goalWidth / 2; const sideWallLength = (arenaDepth - goalWidth) / 2; const wallProps = { castShadow: true, receiveShadow: true }; const topWallGeo = new THREE.BoxGeometry(arenaWidth + wallThickness*2, wallHeight, wallThickness); const topWall = new THREE.Mesh(topWallGeo, wallMaterial); topWall.position.set(0, halfWallH, halfArenaD + wallThickness / 2); Object.assign(topWall, wallProps); scene.add(topWall); const bottomWallGeo = new THREE.BoxGeometry(arenaWidth + wallThickness*2, wallHeight, wallThickness); const bottomWall = new THREE.Mesh(bottomWallGeo, wallMaterial); bottomWall.position.set(0, halfWallH, -halfArenaD - wallThickness / 2); Object.assign(bottomWall, wallProps); scene.add(bottomWall); const sideWallSegGeo = new THREE.BoxGeometry(wallThickness, wallHeight, sideWallLength); const leftWallTopSeg = new THREE.Mesh(sideWallSegGeo, wallMaterial); leftWallTopSeg.position.set(-halfArenaW - wallThickness / 2, halfWallH, halfGoalW + sideWallLength / 2); Object.assign(leftWallTopSeg, wallProps); scene.add(leftWallTopSeg); const leftWallBottomSeg = new THREE.Mesh(sideWallSegGeo, wallMaterial); leftWallBottomSeg.position.set(-halfArenaW - wallThickness / 2, halfWallH, -halfGoalW - sideWallLength / 2); Object.assign(leftWallBottomSeg, wallProps); scene.add(leftWallBottomSeg); const rightWallTopSeg = new THREE.Mesh(sideWallSegGeo, wallMaterial); rightWallTopSeg.position.set(halfArenaW + wallThickness / 2, halfWallH, halfGoalW + sideWallLength / 2); Object.assign(rightWallTopSeg, wallProps); scene.add(rightWallTopSeg); const rightWallBottomSeg = new THREE.Mesh(sideWallSegGeo, wallMaterial); rightWallBottomSeg.position.set(halfArenaW + wallThickness / 2, halfWallH, -halfGoalW - sideWallLength / 2); Object.assign(rightWallBottomSeg, wallProps); scene.add(rightWallBottomSeg);
-         }
-
-        function lockChangeAlert() { /* ... Identical ... */
-             if (document.pointerLockElement === gameCanvas) { console.log('Pointer Locked'); isPointerLocked = true; } else { console.log('Pointer Unlocked'); isPointerLocked = false; }
-        }
-
-        // MODIFIED: Update both horizontal and vertical angles
-        function updateCameraAngle(event) {
-            if (isPointerLocked) {
-                cameraHorizontalAngle -= event.movementX * mouseSensitivity;
-                cameraVerticalAngle -= event.movementY * mouseSensitivity; // Add vertical control
-
-                // Clamp vertical angle
-                cameraVerticalAngle = Math.max(verticalAngleMin, Math.min(verticalAngleMax, cameraVerticalAngle));
+    // --- Initialization ---
+    function initGame() {
+        grid = [];
+        for (let y = 0; y < GRID_HEIGHT; y++) {
+            grid[y] = [];
+            for (let x = 0; x < GRID_WIDTH; x++) {
+                grid[y][x] = {
+                    owner: NEUTRAL_ID,
+                    troops: Math.floor(Math.random() * 5) + 1 // Start neutral with few troops
+                };
             }
         }
 
-        function onWindowResize() { /* ... Identical ... */
-             camera.aspect = window.innerWidth / window.innerHeight; camera.updateProjectionMatrix(); renderer.setSize(window.innerWidth, window.innerHeight);
+        // Place Player and AI
+        const playerX = Math.floor(Math.random() * GRID_WIDTH / 4);
+        const playerY = Math.floor(Math.random() * GRID_HEIGHT);
+        grid[playerY][playerX] = { owner: PLAYER_ID, troops: STARTING_TROOPS };
+
+        let aiX, aiY;
+        do {
+            aiX = Math.floor(Math.random() * GRID_WIDTH / 4) + Math.floor(GRID_WIDTH * 3 / 4);
+            aiY = Math.floor(Math.random() * GRID_HEIGHT);
+        } while (aiX === playerX && aiY === playerY); // Ensure not same spot
+        grid[aiY][aiX] = { owner: AI_ID, troops: STARTING_TROOPS };
+
+        attacks = [];
+        selectedCell = null;
+        gameOver = false;
+        winner = null;
+        growthTimer = 0;
+        aiThinkTimer = 0;
+        lastTimestamp = performance.now();
+        messageEl.textContent = "Game Started! You are Blue.";
+        setAttackPercentage(0.75); // Reset percentage display
+        requestAnimationFrame(gameLoop);
+    }
+
+    // --- Game Loop ---
+    function gameLoop(timestamp) {
+        if (gameOver) return;
+
+        const deltaTime = (timestamp - lastTimestamp) / 1000; // Delta time in seconds
+        lastTimestamp = timestamp;
+
+        updateGame(deltaTime);
+        drawGame();
+
+        requestAnimationFrame(gameLoop);
+    }
+
+    // --- Update Logic ---
+    function updateGame(deltaTime) {
+        // Troop Growth
+        growthTimer += deltaTime * 1000; // Accumulate time in ms
+        if (growthTimer >= GROWTH_INTERVAL) {
+            const numIntervals = Math.floor(growthTimer / GROWTH_INTERVAL);
+            growTroops(numIntervals);
+            growthTimer %= GROWTH_INTERVAL; // Keep remainder for next frame
         }
-        function updateScoreDisplay() { /* ... Identical ... */
-             if (gameOver) return; scoreElement.textContent = `Player: ${playerScore} - AI: ${aiScore}`;
-        }
-         function showGameOver(winner) { /* ... Identical ... */
-             gameOver = true; scoreElement.textContent = `${winner} Wins! (${playerScore} - ${aiScore})`; scoreElement.style.color = (winner === 'Player') ? 'lightgreen' : 'tomato'; document.getElementById('info').textContent = "Refresh page (F5) to play again."; if (document.pointerLockElement === gameCanvas) { document.exitPointerLock(); }
-         }
-         function updateBoostUI() { /* ... Identical ... */
-             const boostPercent = (playerState.boostAmount / playerState.maxBoost) * 100; boostBarElement.style.width = `${boostPercent}%`;
-         }
 
-        // MODIFIED: Reset camera angles correctly for initial view
-        function resetRound() {
-            if (gameOver) return;
+        // Update Attacks
+        updateAttacks(deltaTime);
 
-            playerState.speed = 0; playerState.steering = 0; playerState.boostAmount = playerState.maxBoost; playerState.isBoosting = false;
-            playerCar.position.set(goalLineRight / 2, carYPosition, 0);
-            playerCar.rotation.y = -Math.PI / 2; // Start facing +Z (right)
-            playerCar.quaternion.setFromEuler(playerCar.rotation);
-
-            aiState.speed = 0; aiState.steering = 0;
-            aiCar.position.set(goalLineLeft / 2, carYPosition, 0);
-            aiCar.rotation.y = 0; aiCar.quaternion.setFromEuler(aiCar.rotation);
-
-            ballState.vx = 0; ballState.vy = 0; ballState.vz = 0;
-            ballMesh.position.set(0, ballYPosition, 0);
-
-            // Reset camera angles to look from behind the car's starting orientation
-            cameraHorizontalAngle = playerCar.rotation.y; // Align with car's back
-            cameraVerticalAngle = 0.35; // Reset pitch
-
-            updateScoreDisplay();
-            updateBoostUI();
+        // AI Thinking
+        aiThinkTimer += deltaTime * 1000;
+        if (aiThinkTimer >= AI_THINK_INTERVAL) {
+            aiTurn();
+            aiThinkTimer = 0;
         }
 
-        // --- Physics & Collision --- (All Identical to v5)
-        function updateBall(deltaTime) { /* ... Identical ... */ if (gameOver) { ballState.vx=0; ballState.vy=0; ballState.vz=0; return; } ballMesh.position.x += ballState.vx * deltaTime; ballMesh.position.y += ballState.vy * deltaTime; ballMesh.position.z += ballState.vz * deltaTime; ballState.vx *= friction; ballState.vz *= friction; ballState.vy *= friction; if (ballMesh.position.y - ballState.radius < 0 && ballState.vy < 0) { ballMesh.position.y = ballState.radius; ballState.vy *= -0.6; ballState.vx *= 0.95; ballState.vz *= 0.95; } const currentSpeedSq = ballState.vx**2 + ballState.vy**2 + ballState.vz**2; if (currentSpeedSq > maxBallSpeed**2) { const currentSpeed = Math.sqrt(currentSpeedSq); const scale = maxBallSpeed / currentSpeed; ballState.vx *= scale; ballState.vy *= scale; ballState.vz *= scale; } }
-        function handleBallWallCollision() { /* ... Identical ... */ const pos = ballMesh.position; const rad = ballState.radius; const arenaMinX = -arenaWidth / 2; const arenaMaxX = arenaWidth / 2; const arenaMinZ = -arenaDepth / 2; const arenaMaxZ = arenaDepth / 2; const pushOutFactor = 1.01; if (pos.x - rad < arenaMinX) { if (!(pos.z > goalMinZ && pos.z < goalMaxZ)) { pos.x = arenaMinX + rad * pushOutFactor; ballState.vx *= -ballWallRestitution; } } else if (pos.x + rad > arenaMaxX) { if (!(pos.z > goalMinZ && pos.z < goalMaxZ)) { pos.x = arenaMaxX - rad * pushOutFactor; ballState.vx *= -ballWallRestitution; } } if (pos.z - rad < arenaMinZ) { pos.z = arenaMinZ + rad * pushOutFactor; ballState.vz *= -ballWallRestitution; } else if (pos.z + rad > arenaMaxZ) { pos.z = arenaMaxZ - rad * pushOutFactor; ballState.vz *= -ballWallRestitution; } }
-        function handleCarBallCollision(carMesh, carState, ballMesh, ballState) { /* ... Identical ... */ const carPos = carMesh.position; const ballPos = ballMesh.position; const distSq = carPos.distanceToSquared(ballPos); const carEffectiveRadius = (carState.width + carState.depth) / 4; const combinedRadius = carEffectiveRadius + ballState.radius; if (distSq < combinedRadius**2) { const distance = Math.sqrt(distSq); const overlap = combinedRadius - distance; const normal = new THREE.Vector3().subVectors(ballPos, carPos); normal.y = 0; if (normal.lengthSq() < 0.0001) { normal.set( (Math.random() - 0.5) * 2, 0, (Math.random() - 0.5) * 2).normalize(); } else { normal.normalize(); } ballMesh.position.addScaledVector(normal, overlap * 1.01); const carForward = new THREE.Vector3(0, 0, -1).applyQuaternion(carMesh.quaternion); const carVelocityApprox = carForward.multiplyScalar(carState.speed); const ballVelocity = new THREE.Vector3(ballState.vx, ballState.vy, ballState.vz); const carVelInNormalDir = carVelocityApprox.dot(normal); const relativeVelDotNormal = (ballVelocity.dot(normal) - carVelInNormalDir); const impulseScale = -(1 + carBallRestitution) * relativeVelDotNormal; ballVelocity.addScaledVector(normal, impulseScale); const basePush = 3.0; ballVelocity.addScaledVector(normal, basePush * carBallRestitution); ballState.vx = ballVelocity.x; ballState.vy = ballVelocity.y; ballState.vz = ballVelocity.z; } }
-         function checkGoals() { /* ... Identical ... */ if (gameOver) return; const pos = ballMesh.position; const rad = ballState.radius; let goalScored = false; if (pos.x - rad < goalLineLeft && pos.z > goalMinZ && pos.z < goalMaxZ) { aiScore++; goalScored = true; console.log("AI Score!"); } else if (pos.x + rad > goalLineRight && pos.z > goalMinZ && pos.z < goalMaxZ) { playerScore++; goalScored = true; console.log("Player Score!"); } if (goalScored) { if (playerScore >= winningScore) showGameOver("Player"); else if (aiScore >= winningScore) showGameOver("AI"); else resetRound(); } }
-         function handleCarWallCollision(carObj, state, potentialPos) { /* ... Identical ... */ const halfCarWidth = state.width / 2; const halfCarDepth = state.depth / 2; const arenaMinX = -arenaWidth / 2; const arenaMaxX = arenaWidth / 2; const arenaMinZ = -arenaDepth / 2; const arenaMaxZ = arenaDepth / 2; let clamped = false; if (potentialPos.x - halfCarWidth < arenaMinX || potentialPos.x + halfCarWidth > arenaMaxX) { potentialPos.x = THREE.MathUtils.clamp(potentialPos.x, arenaMinX + halfCarWidth, arenaMaxX - halfCarWidth); clamped = true; } if (potentialPos.z - halfCarDepth < arenaMinZ || potentialPos.z + halfCarDepth > arenaMaxZ) { potentialPos.z = THREE.MathUtils.clamp(potentialPos.z, arenaMinZ + halfCarDepth, arenaMaxZ - halfCarDepth); clamped = true; } carObj.position.copy(potentialPos); if (clamped) { state.speed *= 0.5; } return clamped; }
+        // Check Game Over
+        checkGameOver();
+    }
 
-        // --- Car Updates --- (Identical to v5)
-        function updatePlayerCar(deltaTime) { /* ... Identical ... */ if (gameOver) { playerState.speed = 0; playerState.isBoosting = false; return; } let moveForward = keysPressed['w'] || keysPressed['ArrowUp']; let moveBackward = keysPressed['s'] || keysPressed['ArrowDown']; let turnLeft = keysPressed['a'] || keysPressed['ArrowLeft']; let turnRight = keysPressed['d'] || keysPressed['ArrowRight']; let boostPressed = keysPressed['shift']; playerState.isBoosting = boostPressed && playerState.boostAmount > 0 && moveForward; if (playerState.isBoosting) { playerState.boostAmount -= playerState.boostConsumptionRate * deltaTime; playerState.boostAmount = Math.max(0, playerState.boostAmount); } else if (playerState.boostAmount < playerState.maxBoost) { playerState.boostAmount += playerState.boostRechargeRate * deltaTime; playerState.boostAmount = Math.min(playerState.maxBoost, playerState.boostAmount); } updateBoostUI(); playerState.steering = 0; if (turnLeft) playerState.steering = 1; if (turnRight) playerState.steering = -1; if (Math.abs(playerState.speed) > 0.01 || playerState.isBoosting) { const speedFactor = 1.0 - Math.min(1, Math.abs(playerState.speed) / (playerState.maxSpeed * 1.5)); const actualTurnSpeed = playerState.turnSpeed * speedFactor; playerCar.rotateY(playerState.steering * actualTurnSpeed * deltaTime); playerCar.quaternion.setFromEuler(playerCar.rotation); } let currentAcceleration = playerState.acceleration; if (playerState.isBoosting && moveForward) { currentAcceleration += playerState.boostForce; } if (moveForward) { playerState.speed += currentAcceleration * deltaTime; } else if (moveBackward) { playerState.speed -= playerState.acceleration * deltaTime; } else { playerState.speed = Math.sign(playerState.speed) * Math.max(0, Math.abs(playerState.speed) - playerState.deceleration * deltaTime); } const currentMaxSpeed = playerState.isBoosting ? playerState.maxSpeed * 1.3 : playerState.maxSpeed; playerState.speed = Math.max(-playerState.maxSpeed / 2, Math.min(currentMaxSpeed, playerState.speed)); const forward = new THREE.Vector3(0, 0, -1).applyQuaternion(playerCar.quaternion); const velocity = forward.multiplyScalar(playerState.speed * deltaTime); const potentialPosition = playerCar.position.clone().add(velocity); handleCarWallCollision(playerCar, playerState, potentialPosition); }
-        function updateAiCar(deltaTime) { /* ... Identical ... */ if (gameOver) { aiState.speed = 0; return; } const ballPos = ballMesh.position; const aiPos = aiCar.position; const aiGoalPos = new THREE.Vector3(goalLineLeft + carDepth, carYPosition, 0); const playerGoalPos = new THREE.Vector3(goalLineRight - carDepth, carYPosition, 0); const ballToAiGoalDistSq = ballPos.distanceToSquared(aiGoalPos); const aiToGoalDistSq = aiPos.distanceToSquared(aiGoalPos); const ballInDefensiveHalf = ballPos.x < 0; const ballMovingTowardsAiGoal = ballState.vx < -1.0; if (ballInDefensiveHalf && (ballMovingTowardsAiGoal || ballToAiGoalDistSq < 400)) { aiState.targetPos.lerpVectors(aiGoalPos, ballPos, 0.4); } else { aiState.targetPos.copy(ballPos); const timeToIntercept = aiPos.distanceTo(ballPos) / (aiState.maxSpeed * 0.8 + 0.1); aiState.targetPos.addScaledVector(new THREE.Vector3(ballState.vx, 0, ballState.vz), timeToIntercept * 0.5); } const targetDirection = new THREE.Vector3().subVectors(aiState.targetPos, aiPos); targetDirection.y = 0; targetDirection.normalize(); const aiForward = new THREE.Vector3(0, 0, -1).applyQuaternion(aiCar.quaternion); const angleToTarget = Math.atan2(targetDirection.x, targetDirection.z); const currentAngle = Math.atan2(aiForward.x, aiForward.z); let angleDifference = angleToTarget - currentAngle; while (angleDifference > Math.PI) angleDifference -= Math.PI * 2; while (angleDifference < -Math.PI) angleDifference += Math.PI * 2; const steeringThreshold = 0.1; if (angleDifference > steeringThreshold) aiState.steering = 1; else if (angleDifference < -steeringThreshold) aiState.steering = -1; else aiState.steering = 0; aiCar.rotateY(aiState.steering * aiState.turnSpeed * deltaTime); aiCar.quaternion.setFromEuler(aiCar.rotation); const dotProd = aiForward.dot(targetDirection); if (dotProd > 0.1) { aiState.speed += aiState.acceleration * deltaTime; } else if (dotProd < -0.5 && aiState.speed > 1.0){ aiState.speed -= aiState.acceleration * deltaTime * 0.5; } else { aiState.speed = Math.sign(aiState.speed) * Math.max(0, Math.abs(aiState.speed) - aiState.deceleration * deltaTime); } aiState.speed = Math.min(aiState.maxSpeed, aiState.speed); aiState.speed = Math.max(0, aiState.speed); const aiVelocityVec = aiForward.multiplyScalar(aiState.speed * deltaTime); const aiPotentialPosition = aiPos.clone().add(aiVelocityVec); handleCarWallCollision(aiCar, aiState, aiPotentialPosition); }
+    function growTroops(numIntervals) {
+        for (let y = 0; y < GRID_HEIGHT; y++) {
+            for (let x = 0; x < GRID_WIDTH; x++) {
+                if (grid[y][x].owner !== NEUTRAL_ID) {
+                    const growthAmount = GROWTH_RATE * (GROWTH_INTERVAL / 1000) * numIntervals;
+                    grid[y][x].troops = Math.min(MAX_TROOPS_PER_CELL, grid[y][x].troops + growthAmount);
+                }
+            }
+        }
+    }
 
-        // --- Camera Update Logic --- (MODIFIED for Free Look Focus) ---
-        function updateCamera(deltaTime) {
-            if (!playerCar) return; // Ensure car exists
+    function updateAttacks(deltaTime) {
+        for (let i = attacks.length - 1; i >= 0; i--) {
+            const attack = attacks[i];
+            const dx = attack.targetX - attack.sourceX;
+            const dy = attack.targetY - attack.sourceY;
+            const dist = Math.sqrt(dx * dx + dy * dy);
 
-            // Calculate camera position based on spherical coordinates around the car
-            const carPos = playerCar.position;
+            if (dist === 0) { // Should not happen but safety check
+                 attacks.splice(i, 1);
+                 continue;
+            }
 
-            // Offset based on angles and distance
-            const horizontalDist = Math.cos(cameraVerticalAngle) * cameraDistance;
-            const offsetX = Math.sin(cameraHorizontalAngle) * horizontalDist;
-            const offsetZ = Math.cos(cameraHorizontalAngle) * horizontalDist;
-            const offsetY = Math.sin(cameraVerticalAngle) * cameraDistance;
+            const moveDist = ATTACK_SPEED * deltaTime;
+            attack.progress += moveDist / dist; // Progress as fraction of total distance
 
-            // Target position for the camera
-            const desiredPosition = new THREE.Vector3(
-                carPos.x + offsetX,
-                carPos.y + offsetY,
-                carPos.z + offsetZ
+            if (attack.progress >= 1) {
+                // Attack arrives
+                resolveAttack(attack);
+                attacks.splice(i, 1);
+            }
+        }
+    }
+
+     function resolveAttack(attack) {
+        const targetCell = grid[attack.targetY][attack.targetX];
+        const attackerTroops = attack.troops;
+
+        if (targetCell.owner === attack.attackerId) {
+            // Reinforcing own cell
+            targetCell.troops = Math.min(MAX_TROOPS_PER_CELL, targetCell.troops + attackerTroops);
+        } else {
+            // Attacking enemy or neutral
+            if (attackerTroops > targetCell.troops) {
+                // Capture success
+                targetCell.owner = attack.attackerId;
+                targetCell.troops = attackerTroops - targetCell.troops;
+            } else {
+                // Capture failed / Defense holds
+                targetCell.troops -= attackerTroops;
+            }
+            // Ensure troops don't go negative (shouldn't happen with > check, but safety)
+            targetCell.troops = Math.max(0, targetCell.troops);
+        }
+    }
+
+    function checkGameOver() {
+        let playerCells = 0;
+        let aiCells = 0;
+        for (let y = 0; y < GRID_HEIGHT; y++) {
+            for (let x = 0; x < GRID_WIDTH; x++) {
+                if (grid[y][x].owner === PLAYER_ID) playerCells++;
+                if (grid[y][x].owner === AI_ID) aiCells++;
+            }
+        }
+
+        if (playerCells > 0 && aiCells === 0) {
+            gameOver = true;
+            winner = PLAYER_ID;
+            messageEl.textContent = "You Win!";
+        } else if (aiCells > 0 && playerCells === 0) {
+            gameOver = true;
+            winner = AI_ID;
+            messageEl.textContent = "AI Wins!";
+        } else if (playerCells === 0 && aiCells === 0) {
+            // This might happen if both eliminate each other simultaneously? Draw?
+             gameOver = true;
+             winner = NEUTRAL_ID; // Or null
+             messageEl.textContent = "Draw / Mutual Destruction?";
+        }
+    }
+
+
+    // --- Drawing ---
+    function drawGame() {
+        ctx.clearRect(0, 0, canvas.width, canvas.height);
+
+        // Draw Grid Cells
+        for (let y = 0; y < GRID_HEIGHT; y++) {
+            for (let x = 0; x < GRID_WIDTH; x++) {
+                const cell = grid[y][x];
+                ctx.fillStyle = COLORS[cell.owner];
+                ctx.fillRect(x * CELL_SIZE, y * CELL_SIZE, CELL_SIZE, CELL_SIZE);
+                ctx.strokeStyle = '#888';
+                ctx.strokeRect(x * CELL_SIZE, y * CELL_SIZE, CELL_SIZE, CELL_SIZE);
+
+                // Draw Troop Count (only if > 0)
+                if (cell.troops >= 1) {
+                    ctx.fillStyle = '#000';
+                    ctx.textAlign = 'center';
+                    ctx.textBaseline = 'middle';
+                    ctx.font = `${Math.min(CELL_SIZE * 0.6, 12)}px sans-serif`; // Adjust font size dynamically
+                     // Round down for display, keep fractional part for growth
+                    ctx.fillText(Math.floor(cell.troops), x * CELL_SIZE + CELL_SIZE / 2, y * CELL_SIZE + CELL_SIZE / 2);
+                }
+            }
+        }
+
+        // Highlight Selected Cell
+        if (selectedCell) {
+            ctx.fillStyle = COLORS.selected;
+            ctx.fillRect(selectedCell.x * CELL_SIZE, selectedCell.y * CELL_SIZE, CELL_SIZE, CELL_SIZE);
+            // Redraw troop count on top of highlight
+             const cell = grid[selectedCell.y][selectedCell.x];
+             if (cell.troops >= 1) {
+                 ctx.fillStyle = '#000';
+                 ctx.textAlign = 'center';
+                 ctx.textBaseline = 'middle';
+                  ctx.font = `${Math.min(CELL_SIZE * 0.6, 12)}px sans-serif`;
+                 ctx.fillText(Math.floor(cell.troops), selectedCell.x * CELL_SIZE + CELL_SIZE / 2, selectedCell.y * CELL_SIZE + CELL_SIZE / 2);
+             }
+        }
+
+        // Draw Attacks (as simple dots for now)
+        ctx.fillStyle = COLORS.attack;
+        attacks.forEach(attack => {
+            const currentX = attack.sourceX + (attack.targetX - attack.sourceX) * attack.progress;
+            const currentY = attack.sourceY + (attack.targetY - attack.sourceY) * attack.progress;
+            ctx.beginPath();
+            ctx.arc(
+                currentX * CELL_SIZE + CELL_SIZE / 2,
+                currentY * CELL_SIZE + CELL_SIZE / 2,
+                CELL_SIZE * 0.15, // Dot size relative to cell size
+                0, 2 * Math.PI
             );
+            ctx.fill();
+        });
+    }
 
-            // Smoothly interpolate camera position
-            camera.position.lerp(desiredPosition, 0.1); // Adjust lerp factor (0.05-0.2)
+    // --- Input Handling ---
+    canvas.addEventListener('click', handleMouseClick);
 
-            // Always look at the car (or slightly above it)
-             const lookAtTarget = new THREE.Vector3(carPos.x, carPos.y + 0.5, carPos.z); // Look slightly above car center
-             camera.lookAt(lookAtTarget);
-        }
+    function handleMouseClick(event) {
+        if (gameOver) return;
 
-        function animate() {
-            requestAnimationFrame(animate);
-            const deltaTime = Math.min(clock.getDelta(), 0.05);
+        const rect = canvas.getBoundingClientRect();
+        const clickX = event.clientX - rect.left;
+        const clickY = event.clientY - rect.top;
 
-            if (!gameOver) {
-                updatePlayerCar(deltaTime);
-                updateAiCar(deltaTime);
-                updateBall(deltaTime);
+        const gridX = Math.floor(clickX / CELL_SIZE);
+        const gridY = Math.floor(clickY / CELL_SIZE);
 
-                handleBallWallCollision();
-                handleCarBallCollision(playerCar, playerState, ballMesh, ballState);
-                handleCarBallCollision(aiCar, aiState, ballMesh, ballState);
+        if (gridX < 0 || gridX >= GRID_WIDTH || gridY < 0 || gridY >= GRID_HEIGHT) return; // Click outside grid
 
-                checkGoals();
+        const clickedCell = grid[gridY][gridX];
+
+        if (selectedCell) {
+            // Target cell selected
+            const sourceCell = grid[selectedCell.y][selectedCell.x];
+            if (gridX === selectedCell.x && gridY === selectedCell.y) {
+                // Clicked selected cell again - deselect
+                selectedCell = null;
+            } else if (areAdjacent(selectedCell.x, selectedCell.y, gridX, gridY)) {
+                // Clicked adjacent cell - try to attack
+                if (clickedCell.owner !== PLAYER_ID) { // Can attack neutral or enemy
+                     if (sourceCell.troops > 1) { // Need more than 1 troop to attack
+                        launchAttack(selectedCell.x, selectedCell.y, gridX, gridY, PLAYER_ID, attackPercentage);
+                        selectedCell = null; // Deselect after launching attack
+                     } else {
+                         // Maybe provide feedback: "Not enough troops"
+                         selectedCell = null; // Deselect if attack fails
+                     }
+                } else {
+                    // Clicked another owned cell - select it instead
+                     if(clickedCell.owner === PLAYER_ID) {
+                         selectedCell = { x: gridX, y: gridY };
+                     } else {
+                        selectedCell = null; // Clicked non-adjacent or invalid target
+                     }
+                }
+            } else {
+                 // Clicked non-adjacent cell - select if owned, otherwise deselect
+                 if (clickedCell.owner === PLAYER_ID) {
+                     selectedCell = { x: gridX, y: gridY };
+                 } else {
+                     selectedCell = null;
+                 }
             }
+        } else {
+            // No cell selected yet - select if it's a player cell
+            if (clickedCell.owner === PLAYER_ID) {
+                selectedCell = { x: gridX, y: gridY };
+            }
+        }
+    }
 
-            updateCamera(deltaTime);
-            renderer.render(scene, camera);
+    function launchAttack(sx, sy, tx, ty, attackerId, percentage) {
+        const sourceCell = grid[sy][sx];
+        const troopsToSend = Math.floor(sourceCell.troops * percentage);
+
+        if (troopsToSend < 1) return; // Don't send 0 troops
+
+        const effectiveTroopsToSend = Math.max(0, troopsToSend - ATTACK_COST_FACTOR); // Apply cost
+         if (effectiveTroopsToSend < 1) return; // Don't attack if cost makes it zero
+
+        sourceCell.troops -= troopsToSend; // Deduct the full percentage amount *before* cost
+
+        attacks.push({
+            sourceX: sx, sourceY: sy,
+            targetX: tx, targetY: ty,
+            attackerId: attackerId,
+            troops: effectiveTroopsToSend,
+            progress: 0 // Starts at 0, goes to 1
+        });
+    }
+
+    function setAttackPercentage(perc) {
+        attackPercentage = perc;
+        percentageEl.textContent = `Current: ${Math.round(perc * 100)}%`;
+    }
+
+    // --- Helper Functions ---
+    function areAdjacent(x1, y1, x2, y2) {
+        const dx = Math.abs(x1 - x2);
+        const dy = Math.abs(y1 - y2);
+        // Allow orthogonal and diagonal adjacency
+        return dx <= 1 && dy <= 1 && !(dx === 0 && dy === 0);
+    }
+
+    function getNeighbors(x, y) {
+        const neighbors = [];
+        for (let dy = -1; dy <= 1; dy++) {
+            for (let dx = -1; dx <= 1; dx++) {
+                if (dx === 0 && dy === 0) continue; // Skip self
+                const nx = x + dx;
+                const ny = y + dy;
+                if (nx >= 0 && nx < GRID_WIDTH && ny >= 0 && ny < GRID_HEIGHT) {
+                    neighbors.push({ x: nx, y: ny });
+                }
+            }
+        }
+        return neighbors;
+    }
+
+    // --- Basic AI Logic ---
+    function aiTurn() {
+        const possibleAttacks = [];
+        const ownedCells = [];
+
+        // Find all AI cells and potential targets
+        for (let y = 0; y < GRID_HEIGHT; y++) {
+            for (let x = 0; x < GRID_WIDTH; x++) {
+                if (grid[y][x].owner === AI_ID) {
+                    const aiCell = grid[y][x];
+                    ownedCells.push({x, y, cell: aiCell});
+
+                    if (aiCell.troops > 10) { // Only consider attacking from cells with enough troops
+                        const neighbors = getNeighbors(x, y);
+                        neighbors.forEach(nPos => {
+                            const targetCell = grid[nPos.y][nPos.x];
+                            if (targetCell.owner !== AI_ID) { // Target neutral or player
+                                // Simple heuristic: attack if stronger, prioritize weaker targets
+                                const strengthDiff = aiCell.troops * 0.75 - targetCell.troops;
+                                if (strengthDiff > 5) { // Must have a decent advantage
+                                    possibleAttacks.push({
+                                        sx: x, sy: y,
+                                        tx: nPos.x, ty: nPos.y,
+                                        sourceTroops: aiCell.troops,
+                                        targetTroops: targetCell.troops,
+                                        targetOwner: targetCell.owner,
+                                        score: strengthDiff - (targetCell.owner === PLAYER_ID ? 0 : 10) // Prioritize player targets slightly less than easy neutral? Or more? Tunable. Let's prioritize weaker targets. Lower score is better? No, higher score (strengthDiff) is better. Penalize distance?
+                                        // Let's just use strengthDiff for now. Higher is better. Add bonus for player target.
+                                        score: strengthDiff + (targetCell.owner === PLAYER_ID ? 15 : 0) + (targetCell.owner === NEUTRAL_ID ? 5 : 0)
+                                    });
+                                }
+                            }
+                        });
+                    }
+                }
+            }
         }
 
-        // --- Start ---
-        init();
+        if (possibleAttacks.length > 0) {
+            // Sort attacks: highest score first (best targets)
+            possibleAttacks.sort((a, b) => b.score - a.score);
 
-    </script>
+            // Try to launch the best attack
+            const bestAttack = possibleAttacks[0];
+            // Check if source cell still has enough troops (could have been used in another calc)
+            if (grid[bestAttack.sy][bestAttack.sx].troops > 10) {
+                 // Use a slightly randomized attack percentage for AI
+                 const aiAttackPerc = 0.6 + Math.random() * 0.3; // Attack with 60% to 90%
+                launchAttack(bestAttack.sx, bestAttack.sy, bestAttack.tx, bestAttack.ty, AI_ID, aiAttackPerc);
+            }
+        }
+        // Simple Defensive/Consolidation Idea (Optional - can make AI passive)
+        /*
+        else if (ownedCells.length > 1) {
+             // If no good attacks, maybe consolidate? Find weakest owned cell adjacent to strongest.
+             ownedCells.sort((a,b) => b.cell.troops - a.cell.troops); // Strongest first
+             const strongest = ownedCells[0];
+             if (strongest.cell.troops > 50) { // Only consolidate from very strong cells
+                const neighbors = getNeighbors(strongest.x, strongest.y);
+                let weakestOwnedNeighbor = null;
+                let minTroops = Infinity;
+                neighbors.forEach(nPos => {
+                    const neighborCell = grid[nPos.y][nPos.x];
+                    if (neighborCell.owner === AI_ID && neighborCell.troops < minTroops) {
+                         minTroops = neighborCell.troops;
+                         weakestOwnedNeighbor = nPos;
+                    }
+                });
+                if (weakestOwnedNeighbor) {
+                     // Send 50% troops to reinforce weakest neighbor
+                     launchAttack(strongest.x, strongest.y, weakestOwnedNeighbor.x, weakestOwnedNeighbor.y, AI_ID, 0.5);
+                }
+             }
+        }
+        */
+    }
+
+    // --- Start Game ---
+    initGame();
+
+</script>
+
 </body>
 </html>
