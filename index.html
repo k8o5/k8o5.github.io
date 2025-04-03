@@ -2,14 +2,27 @@
 <html lang="de">
 <head>
     <meta charset="UTF-8">
-    <meta name="viewport" content="width=device-width, initial-scale=1.0">
-    <title>k8o5</title>
+    <!-- Crucial for mobile responsiveness and preventing zoom -->
+    <meta name="viewport" content="width=device-width, initial-scale=1.0, user-scalable=no">
+    <title>k8o5 - Mobile</title>
     <style>
-        body { margin: 0; overflow: hidden; background-color: #222; color: white; font-family: monospace;}
-        canvas { display: block; }
-        #info { position: absolute; top: 10px; width: 100%; text-align: center; z-index: 100; display:block; font-size: 24px; }
-        #game-over { position: absolute; top: 50%; left: 50%; transform: translate(-50%, -50%); z-index: 101; display: none; color: red; background-color: rgba(0, 0, 0, 0.7); padding: 20px; border-radius: 10px; font-size: 36px; text-align: center; border: 2px solid red;}
-        #game-over button { margin-top: 15px; padding: 10px 20px; font-size: 20px; cursor: pointer; }
+        body {
+            margin: 0;
+            overflow: hidden; /* Prevent scrolling */
+            background-color: #222;
+            color: white;
+            font-family: monospace;
+            /* Prevent default touch actions like scrolling/zooming on the game area */
+            touch-action: none;
+        }
+        canvas {
+            display: block;
+            /* Ensure canvas also prevents default touch actions */
+            touch-action: none;
+        }
+        #info { position: absolute; top: 10px; width: 100%; text-align: center; z-index: 100; display:block; font-size: 20px; /* Slightly smaller for mobile */ }
+        #game-over { position: absolute; top: 50%; left: 50%; transform: translate(-50%, -50%); z-index: 101; display: none; color: red; background-color: rgba(0, 0, 0, 0.7); padding: 20px; border-radius: 10px; font-size: 28px; /* Slightly smaller */ text-align: center; border: 2px solid red;}
+        #game-over button { margin-top: 15px; padding: 12px 25px; font-size: 18px; cursor: pointer; }
         #start-button {
             position: absolute;
             top: 50%;
@@ -17,7 +30,7 @@
             transform: translate(-50%, -50%);
             z-index: 102;
             padding: 20px 40px;
-            font-size: 30px;
+            font-size: 24px; /* Slightly smaller */
             cursor: pointer;
             background-color: #4CAF50;
             color: white;
@@ -33,10 +46,19 @@
             color: white;
             padding: 10px 20px;
             border-radius: 5px;
-            font-size: 18px;
+            font-size: 16px; /* Slightly smaller */
             z-index: 105;
             display: none;
             transition: opacity 0.5s ease-out;
+        }
+        #game-container {
+             /* Ensure container takes full space and handles touch */
+            position: absolute;
+            top: 0;
+            left: 0;
+            width: 100%;
+            height: 100%;
+            touch-action: none; /* Redundant with body, but safe */
         }
     </style>
 </head>
@@ -49,6 +71,7 @@
         <button id="restart-button">Neustart</button>
     </div>
     <div id="achievement-popup">Achievement Unlocked!</div>
+    <!-- Container for the canvas -->
     <div id="game-container"></div>
 
     <script type="importmap">
@@ -66,21 +89,20 @@
         // Spiel
         const LANE_WIDTH = 5; const NUM_LANES = 3; const TRACK_WIDTH = LANE_WIDTH * NUM_LANES;
         const PLAYER_SPEED_X = 15; const OBSTACLE_START_Z = -100; const OBSTACLE_BASE_SPEED = 0.3;
-        const OBSTACLE_SPAWN_RATE = 0.01; const SCORE_MULTIPLIER = 10; const GRAVITY = 18.0; // Angepasste Gravitation für Konfetti
+        const OBSTACLE_SPAWN_RATE = 0.01; const SCORE_MULTIPLIER = 10; const GRAVITY = 18.0;
         const JUMP_FORCE = 10.0; const PLAYER_SIZE = 1.5; const GROUND_Y = (PLAYER_SIZE / 2) - 0.5;
         // Explosion
-        const CONFETTI_COUNT = 500; // Anzahl Konfetti-Stücke
-        const CONFETTI_SPREAD = 8;  // Wie weit sich Konfetti initial verteilt
-        const CONFETTI_INITIAL_SPEED = 15; // Anfangsgeschwindigkeit
-        const CONFETTI_DURATION_MS = 4000; // Dauer der Konfetti-Animation
-        const CONFETTI_FADE_START_RATIO = 0.6; // Ab wann das Ausblenden beginnt (60% der Lebenszeit)
-        const CONFETTI_AIR_RESISTANCE = 0.98; // Faktor zur Verlangsamung
-
+        const CONFETTI_COUNT = 500; const CONFETTI_SPREAD = 8; const CONFETTI_INITIAL_SPEED = 15;
+        const CONFETTI_DURATION_MS = 4000; const CONFETTI_FADE_START_RATIO = 0.6; const CONFETTI_AIR_RESISTANCE = 0.98;
         // Audio
         const BASE_TEMPO_BPM = 100; const NOTE_DURATION_SEC = 60.0 / (BASE_TEMPO_BPM * 2);
         const LOOKAHEAD_TIME_SEC = 0.1; const SCHEDULE_INTERVAL_MS = 25;
         const SCALE_MIDI_NOTES = [60, 63, 65, 67, 70, 72, 75, 77, 79, 82];
         const BASS_MIDI_NOTES = [36, 39, 41, 43, 46];
+        // Touch Controls
+        const MIN_SWIPE_DISTANCE_X = 50; // Minimum horizontal pixels for a swipe
+        const MAX_SWIPE_DISTANCE_Y = 70; // Maximum vertical pixels for a horizontal swipe
+        const MAX_TAP_DISTANCE = 20;     // Maximum distance for a tap
 
         // --- Variablen ---
         // Spiel
@@ -89,37 +111,35 @@
         let score = 0; let isGameOver = false; let isGameRunning = false;
         let animationFrameId = null; let currentObstacleSpeed = OBSTACLE_BASE_SPEED;
         let clock = new THREE.Clock();
-        let activeConfettiExplosion = null; // Referenz auf InstancedMesh
-        let confettiData = []; // Array zum Speichern von Zustand pro Konfetti-Stück
-
+        let activeConfettiExplosion = null; let confettiData = [];
         // Audio
         let audioCtx; let nextNoteTime = 0.0; let currentMelodyNoteIndex = 0;
         let currentBassNoteIndex = 0; let schedulerIntervalId = null; let masterGain;
         let tempoMultiplier = 1.0;
-
         // Achievements
         const achievements = [ { score: 100, name: "Anfänger", unlocked: false }, { score: 500, name: "Läufer", unlocked: false }, { score: 1000, name: "Download the HTML", unlocked: false }, { score: 2000, name: "Meister", unlocked: false }, { score: 5000, name: "Legende", unlocked: false } ];
         let achievementPopupTimeout = null;
-
         // DOM
         const infoElement = document.getElementById('info'); const gameOverElement = document.getElementById('game-over');
         const finalScoreElement = document.getElementById('final-score'); const restartButton = document.getElementById('restart-button');
         const container = document.getElementById('game-container'); const startButton = document.getElementById('start-button');
         const achievementPopupElement = document.getElementById('achievement-popup');
+        // Touch State
+        let touchStartX = 0;
+        let touchStartY = 0;
 
         // --- Hilfsobjekte (einmal erstellen) ---
-        const dummy = new THREE.Object3D(); // Für Matrix-Updates bei InstancedMesh
-        const tempColor = new THREE.Color(); // Wiederverwendbares Farbobjekt
-        const tempMatrix = new THREE.Matrix4(); // Wiederverwendbare Matrix
-        const tempQuaternion = new THREE.Quaternion(); // Wiederverwendbares Quaternion
-        const tempVector3 = new THREE.Vector3(); // Wiederverwendbarer Vektor
+        const dummy = new THREE.Object3D(); const tempColor = new THREE.Color();
+        const tempMatrix = new THREE.Matrix4(); const tempQuaternion = new THREE.Quaternion();
+        const tempVector3 = new THREE.Vector3();
 
         // --- Initialisierung (Grafik) ---
         function initGameGraphics() {
-            // Szene, Kamera, Renderer, Licht, Boden, Spieler (wie zuvor)
             scene = new THREE.Scene(); scene.background = new THREE.Color(0x222244); scene.fog = new THREE.Fog(0x222244, 50, 150);
             camera = new THREE.PerspectiveCamera(75, window.innerWidth / window.innerHeight, 0.1, 200); camera.position.set(0, 5, 15); camera.lookAt(0, 0, 0);
-            renderer = new THREE.WebGLRenderer({ antialias: true }); renderer.setSize(window.innerWidth, window.innerHeight); renderer.shadowMap.enabled = true; container.appendChild(renderer.domElement);
+            renderer = new THREE.WebGLRenderer({ antialias: true }); renderer.setSize(window.innerWidth, window.innerHeight); renderer.shadowMap.enabled = true;
+            // Append renderer's canvas to the container
+            container.appendChild(renderer.domElement);
             const ambientLight = new THREE.AmbientLight(0x606060); scene.add(ambientLight);
             const directionalLight = new THREE.DirectionalLight(0xffffff, 0.8); directionalLight.position.set(5, 10, 7.5); directionalLight.castShadow = true; directionalLight.shadow.mapSize.width = 1024; directionalLight.shadow.mapSize.height = 1024; directionalLight.shadow.camera.near = 0.5; directionalLight.shadow.camera.far = 50; directionalLight.shadow.camera.left = -TRACK_WIDTH; directionalLight.shadow.camera.right = TRACK_WIDTH; directionalLight.shadow.camera.top = 10; directionalLight.shadow.camera.bottom = -10; scene.add(directionalLight);
             const groundGeometry = new THREE.PlaneGeometry(TRACK_WIDTH * 1.5, 200); const groundMaterial = new THREE.MeshStandardMaterial({ color: 0x444444, side: THREE.DoubleSide }); const ground = new THREE.Mesh(groundGeometry, groundMaterial); ground.rotation.x = -Math.PI / 2; ground.position.y = -0.5; ground.receiveShadow = true; scene.add(ground);
@@ -135,14 +155,12 @@
             gameOverElement.style.display = 'none'; achievements.forEach(ach => ach.unlocked = false); hideAchievementPopup();
             obstacles.forEach(obstacle => scene.remove(obstacle)); obstacles = [];
 
-            // Alte Konfetti-Explosion aufräumen
             if (activeConfettiExplosion) {
                 scene.remove(activeConfettiExplosion);
                 activeConfettiExplosion.geometry.dispose();
-                // Material nur disposen, wenn es nicht wiederverwendet wird (hier sicher)
                 if(activeConfettiExplosion.material) activeConfettiExplosion.material.dispose();
                 activeConfettiExplosion = null;
-                confettiData = []; // Daten leeren
+                confettiData = [];
             }
 
             if (player) { player.position.set(0, GROUND_Y, 5); player.visible = true; }
@@ -168,248 +186,81 @@
         function showAchievementPopup(n) { if (achievementPopupTimeout) clearTimeout(achievementPopupTimeout); achievementPopupElement.textContent = `Errungenschaft: ${n}!`; achievementPopupElement.style.display = 'block'; achievementPopupElement.style.opacity = '1'; achievementPopupTimeout = setTimeout(hideAchievementPopup, 3000); }
         function hideAchievementPopup(){ achievementPopupElement.style.opacity = '0'; if (achievementPopupTimeout) clearTimeout(achievementPopupTimeout); achievementPopupTimeout = setTimeout(() => { achievementPopupElement.style.display = 'none'; achievementPopupTimeout = null; }, 500); }
 
-        // --- Konfetti-Explosionsfunktionen ---
+        // --- Konfetti-Explosionsfunktionen (identisch) ---
         function createConfettiExplosion(position) {
-            if (activeConfettiExplosion) return; // Nur eine Explosion
-
-            const confettiGeometry = new THREE.PlaneGeometry(0.3, 0.3); // Kleine Quadrate für Konfetti
-            const confettiMaterial = new THREE.MeshBasicMaterial({
-                side: THREE.DoubleSide,
-                vertexColors: true, // Farben pro Instanz setzen
-                transparent: true,
-                depthWrite: false // Wichtig für korrekte Darstellung übereinander
-            });
-
+            if (activeConfettiExplosion) return;
+            const confettiGeometry = new THREE.PlaneGeometry(0.3, 0.3);
+            const confettiMaterial = new THREE.MeshBasicMaterial({ side: THREE.DoubleSide, vertexColors: true, transparent: true, depthWrite: false });
             activeConfettiExplosion = new THREE.InstancedMesh(confettiGeometry, confettiMaterial, CONFETTI_COUNT);
-            activeConfettiExplosion.position.copy(position); // Explosion am Spielerort zentrieren
-
+            activeConfettiExplosion.position.copy(position);
             const brightColors = [0xff0000, 0x00ff00, 0x0000ff, 0xffff00, 0x00ffff, 0xff00ff, 0xffa500, 0xff1493];
-            confettiData = []; // Reset data array
-
+            confettiData = [];
             for (let i = 0; i < CONFETTI_COUNT; i++) {
-                // Initialisiere Daten für jedes Konfetti-Stück
-                const life = CONFETTI_DURATION_MS / 1000.0; // Lebensdauer in Sekunden
-                const initialPosition = new THREE.Vector3(
-                    (Math.random() - 0.5) * CONFETTI_SPREAD * 0.2, // Starte näher am Zentrum
-                    (Math.random() - 0.5) * CONFETTI_SPREAD * 0.2,
-                    (Math.random() - 0.5) * CONFETTI_SPREAD * 0.2
-                );
-
-                // Zufällige Ausbreitungsrichtung
-                const velocity = new THREE.Vector3(
-                    (Math.random() - 0.5),
-                    Math.random() * 0.8 + 0.2, // Eher nach oben gerichtet
-                    (Math.random() - 0.5)
-                ).normalize().multiplyScalar(CONFETTI_INITIAL_SPEED * (0.5 + Math.random() * 0.5)); // Varianz in Geschwindigkeit
-
-                // Zufällige Rotationsachse und -geschwindigkeit
+                const life = CONFETTI_DURATION_MS / 1000.0;
+                const initialPosition = new THREE.Vector3( (Math.random() - 0.5) * CONFETTI_SPREAD * 0.2, (Math.random() - 0.5) * CONFETTI_SPREAD * 0.2, (Math.random() - 0.5) * CONFETTI_SPREAD * 0.2 );
+                const velocity = new THREE.Vector3( (Math.random() - 0.5), Math.random() * 0.8 + 0.2, (Math.random() - 0.5) ).normalize().multiplyScalar(CONFETTI_INITIAL_SPEED * (0.5 + Math.random() * 0.5));
                 const rotationAxis = new THREE.Vector3(Math.random() * 2 - 1, Math.random() * 2 - 1, Math.random() * 2 - 1).normalize();
-                const rotationSpeed = Math.random() * Math.PI * 4; // Bis zu 2 Umdrehungen pro Sekunde
-
-                // Daten speichern
-                confettiData.push({
-                    position: initialPosition,
-                    quaternion: new THREE.Quaternion().setFromAxisAngle(rotationAxis, Math.random() * Math.PI * 2), // Startrotation
-                    velocity: velocity,
-                    rotationAxis: rotationAxis,
-                    rotationSpeed: rotationSpeed,
-                    initialLife: life,
-                    life: life,
-                    baseColor: new THREE.Color(brightColors[Math.floor(Math.random() * brightColors.length)])
-                });
-
-                // Initialisiere Matrix und Farbe der Instanz (wird im Update überschrieben)
-                dummy.position.copy(initialPosition);
-                dummy.setRotationFromQuaternion(confettiData[i].quaternion);
-                dummy.updateMatrix();
-                activeConfettiExplosion.setMatrixAt(i, dummy.matrix);
-                activeConfettiExplosion.setColorAt(i, confettiData[i].baseColor);
+                const rotationSpeed = Math.random() * Math.PI * 4;
+                confettiData.push({ position: initialPosition, quaternion: new THREE.Quaternion().setFromAxisAngle(rotationAxis, Math.random() * Math.PI * 2), velocity: velocity, rotationAxis: rotationAxis, rotationSpeed: rotationSpeed, initialLife: life, life: life, baseColor: new THREE.Color(brightColors[Math.floor(Math.random() * brightColors.length)]) });
+                dummy.position.copy(initialPosition); dummy.setRotationFromQuaternion(confettiData[i].quaternion); dummy.updateMatrix();
+                activeConfettiExplosion.setMatrixAt(i, dummy.matrix); activeConfettiExplosion.setColorAt(i, confettiData[i].baseColor);
             }
-            activeConfettiExplosion.instanceMatrix.needsUpdate = true;
-            activeConfettiExplosion.instanceColor.needsUpdate = true;
-
-            scene.add(activeConfettiExplosion);
-            console.log("Konfetti-Explosion erstellt.");
-
-            // Geplantes Aufräumen
-            setTimeout(() => {
-                if (activeConfettiExplosion) {
-                    scene.remove(activeConfettiExplosion);
-                    activeConfettiExplosion.geometry.dispose();
-                    activeConfettiExplosion.material.dispose();
-                    activeConfettiExplosion = null;
-                    confettiData = [];
-                    console.log("Konfetti aufgeräumt.");
-                }
-            }, CONFETTI_DURATION_MS);
+            activeConfettiExplosion.instanceMatrix.needsUpdate = true; activeConfettiExplosion.instanceColor.needsUpdate = true;
+            scene.add(activeConfettiExplosion); console.log("Konfetti-Explosion erstellt.");
+            setTimeout(() => { if (activeConfettiExplosion) { scene.remove(activeConfettiExplosion); activeConfettiExplosion.geometry.dispose(); activeConfettiExplosion.material.dispose(); activeConfettiExplosion = null; confettiData = []; console.log("Konfetti aufgeräumt."); } }, CONFETTI_DURATION_MS);
         }
-
         function updateConfettiExplosion(delta) {
             if (!activeConfettiExplosion || confettiData.length === 0) return;
-
-            let needsMatrixUpdate = false;
-            let needsColorUpdate = false;
-
+            let needsMatrixUpdate = false; let needsColorUpdate = false;
             for (let i = 0; i < CONFETTI_COUNT; i++) {
-                const data = confettiData[i];
-                if (data.life <= 0) continue; // Überspringe tote Partikel
-
-                // Lebenszeit reduzieren
-                data.life -= delta;
-                if (data.life <= 0) { // Partikel ist "gestorben"
-                    // Optional: Matrix auf Skalierung 0 setzen, um es verschwinden zu lassen
-                    tempMatrix.identity().scale(tempVector3.set(0,0,0)); // Skaliere auf 0
-                    activeConfettiExplosion.setMatrixAt(i, tempMatrix);
-                    needsMatrixUpdate = true;
-                    continue; // Nächstes Partikel
-                }
-
-                // Physik anwenden
-                data.velocity.y -= GRAVITY * delta; // Schwerkraft
-                data.velocity.multiplyScalar(CONFETTI_AIR_RESISTANCE); // Luftwiderstand
-                data.position.addScaledVector(data.velocity, delta); // Position aktualisieren
-
-                // Rotation anwenden
-                 tempQuaternion.setFromAxisAngle(data.rotationAxis, data.rotationSpeed * delta);
-                 data.quaternion.premultiply(tempQuaternion); // Aktuelle Rotation mit neuer Rotation multiplizieren
-
-                // Matrix für diese Instanz setzen
-                 dummy.position.copy(data.position);
-                 dummy.setRotationFromQuaternion(data.quaternion);
-                 // Optional: Skalierung ändern, z.B. zum Schrumpfen
-                 // dummy.scale.set(scale, scale, scale);
-                 dummy.updateMatrix();
-                 activeConfettiExplosion.setMatrixAt(i, dummy.matrix);
-                 needsMatrixUpdate = true;
-
-                // Farbe/Deckkraft basierend auf Lebenszeit anpassen (Ausblenden)
+                const data = confettiData[i]; if (data.life <= 0) continue; data.life -= delta;
+                if (data.life <= 0) { tempMatrix.identity().scale(tempVector3.set(0,0,0)); activeConfettiExplosion.setMatrixAt(i, tempMatrix); needsMatrixUpdate = true; continue; }
+                data.velocity.y -= GRAVITY * delta; data.velocity.multiplyScalar(CONFETTI_AIR_RESISTANCE); data.position.addScaledVector(data.velocity, delta);
+                tempQuaternion.setFromAxisAngle(data.rotationAxis, data.rotationSpeed * delta); data.quaternion.premultiply(tempQuaternion);
+                dummy.position.copy(data.position); dummy.setRotationFromQuaternion(data.quaternion); dummy.updateMatrix(); activeConfettiExplosion.setMatrixAt(i, dummy.matrix); needsMatrixUpdate = true;
                 const lifeRatio = data.life / data.initialLife;
-                if (lifeRatio < CONFETTI_FADE_START_RATIO) {
-                    const fadeRatio = lifeRatio / CONFETTI_FADE_START_RATIO;
-                    tempColor.copy(data.baseColor); // Arbeite mit Kopie der Basisfarbe
-                    // Setze Deckkraft direkt (Material muss transparent sein)
-                    // Die Farbe selbst ändern wir hier nicht, nur die Deckkraft im Material
-                    // Für InstancedMesh muss die Deckkraft über die Farbe gesteuert werden, wenn Material.opacity = 1 ist
-                    // Hier ist es einfacher, die Farbe mit Alpha zu setzen, wenn das Material das unterstützt oder wenn wir Shader nutzen.
-                    // Alternative: Wir manipulieren die Farbe, um sie dunkler/grauer werden zu lassen.
-                    tempColor.lerp(new THREE.Color(0x333333), 1.0 - fadeRatio); // Blende zu grau aus
-                    activeConfettiExplosion.setColorAt(i, tempColor);
-                    needsColorUpdate = true;
-                }
-                 // Stelle sicher, dass die Farbe gesetzt ist, auch wenn nicht gefadet wird (falls vorher auf 0 gesetzt)
-                 else if (activeConfettiExplosion.instanceColor) {
-                     activeConfettiExplosion.setColorAt(i, data.baseColor); // Setze normale Farbe
-                     needsColorUpdate = true; // Falls vorher gefadet
-                 }
-
+                if (lifeRatio < CONFETTI_FADE_START_RATIO) { const fadeRatio = lifeRatio / CONFETTI_FADE_START_RATIO; tempColor.copy(data.baseColor); tempColor.lerp(new THREE.Color(0x333333), 1.0 - fadeRatio); activeConfettiExplosion.setColorAt(i, tempColor); needsColorUpdate = true; }
+                else if (activeConfettiExplosion.instanceColor) { activeConfettiExplosion.setColorAt(i, data.baseColor); needsColorUpdate = true; }
             }
-
-            // Updates an Three.js melden, wenn nötig
-            if (needsMatrixUpdate) activeConfettiExplosion.instanceMatrix.needsUpdate = true;
-            if (needsColorUpdate) activeConfettiExplosion.instanceColor.needsUpdate = true;
+            if (needsMatrixUpdate) activeConfettiExplosion.instanceMatrix.needsUpdate = true; if (needsColorUpdate) activeConfettiExplosion.instanceColor.needsUpdate = true;
         }
 
-
-        // --- Tiefer Boom Sound ---
+        // --- Tiefer Boom Sound (identisch) ---
         function playDeepBoomSound() {
-            if (!audioCtx) return;
-
-            const duration = 1.5; // Längere Dauer für mehr "Boom"
-            const now = audioCtx.currentTime;
-
-            // 1. Haupt-Thump (tiefer, länger)
-            const thumpOsc = audioCtx.createOscillator();
-            thumpOsc.type = 'square'; // Kräftiger als Sinus
-            // Frequenz tief starten und tief fallen lassen
-            thumpOsc.frequency.setValueAtTime(80, now); // Tiefer Start
-            thumpOsc.frequency.exponentialRampToValueAtTime(25, now + duration * 0.6); // Sehr tiefer Ausklang
-
-            const thumpGain = audioCtx.createGain();
-            // Scharfer Attack, längerer Decay
-            thumpGain.gain.setValueAtTime(0, now);
-            thumpGain.gain.linearRampToValueAtTime(0.9, now + 0.02); // Sehr schneller Attack
-            thumpGain.gain.exponentialRampToValueAtTime(0.1, now + duration * 0.8); // Längerer Ausklang
-            thumpGain.gain.linearRampToValueAtTime(0.001, now + duration); // Zum Ende hin leise
-
-            thumpOsc.connect(thumpGain);
-            thumpGain.connect(masterGain);
-            thumpOsc.start(now);
-            thumpOsc.stop(now + duration);
-
-            // 2. Sub-Bass Rumble (optional, für mehr Tiefe)
-            const subOsc = audioCtx.createOscillator();
-            subOsc.type = 'sine';
-            subOsc.frequency.setValueAtTime(40, now); // Konstante tiefe Frequenz
-            subOsc.frequency.linearRampToValueAtTime(30, now + duration); // Leichter Pitch Drop
-
-            const subGain = audioCtx.createGain();
-            subGain.gain.setValueAtTime(0, now);
-            subGain.gain.linearRampToValueAtTime(0.5, now + 0.1); // Langsamerer Attack als Thump
-            subGain.gain.exponentialRampToValueAtTime(0.01, now + duration); // Klingt lange aus
-
-            subOsc.connect(subGain);
-            subGain.connect(masterGain);
-            subOsc.start(now);
-            subOsc.stop(now + duration);
-
-             // 3. Noise Burst (kurz, für den "Crack")
-             const noiseDuration = 0.2;
-             const bufferSize = audioCtx.sampleRate * noiseDuration;
-             const noiseBuffer = audioCtx.createBuffer(1, bufferSize, audioCtx.sampleRate);
-             const output = noiseBuffer.getChannelData(0);
-             for (let i = 0; i < bufferSize; i++) { output[i] = Math.random() * 2 - 1; }
-             const noiseSource = audioCtx.createBufferSource(); noiseSource.buffer = noiseBuffer;
-             const noiseGain = audioCtx.createGain();
-             // Sehr kurzer, lauter Burst
-             noiseGain.gain.setValueAtTime(0.6, now);
-             noiseGain.gain.exponentialRampToValueAtTime(0.001, now + noiseDuration * 0.8);
-             noiseSource.connect(noiseGain); noiseGain.connect(masterGain);
-             noiseSource.start(now); noiseSource.stop(now + noiseDuration); // Stoppt schnell
-
-             console.log("Tiefes Boom-Geräusch abgespielt.");
+            if (!audioCtx) return; const duration = 1.5; const now = audioCtx.currentTime;
+            const thumpOsc = audioCtx.createOscillator(); thumpOsc.type = 'square'; thumpOsc.frequency.setValueAtTime(80, now); thumpOsc.frequency.exponentialRampToValueAtTime(25, now + duration * 0.6); const thumpGain = audioCtx.createGain(); thumpGain.gain.setValueAtTime(0, now); thumpGain.gain.linearRampToValueAtTime(0.9, now + 0.02); thumpGain.gain.exponentialRampToValueAtTime(0.1, now + duration * 0.8); thumpGain.gain.linearRampToValueAtTime(0.001, now + duration); thumpOsc.connect(thumpGain); thumpGain.connect(masterGain); thumpOsc.start(now); thumpOsc.stop(now + duration);
+            const subOsc = audioCtx.createOscillator(); subOsc.type = 'sine'; subOsc.frequency.setValueAtTime(40, now); subOsc.frequency.linearRampToValueAtTime(30, now + duration); const subGain = audioCtx.createGain(); subGain.gain.setValueAtTime(0, now); subGain.gain.linearRampToValueAtTime(0.5, now + 0.1); subGain.gain.exponentialRampToValueAtTime(0.01, now + duration); subOsc.connect(subGain); subGain.connect(masterGain); subOsc.start(now); subOsc.stop(now + duration);
+            const noiseDuration = 0.2; const bufferSize = audioCtx.sampleRate * noiseDuration; const noiseBuffer = audioCtx.createBuffer(1, bufferSize, audioCtx.sampleRate); const output = noiseBuffer.getChannelData(0); for (let i = 0; i < bufferSize; i++) { output[i] = Math.random() * 2 - 1; } const noiseSource = audioCtx.createBufferSource(); noiseSource.buffer = noiseBuffer; const noiseGain = audioCtx.createGain(); noiseGain.gain.setValueAtTime(0.6, now); noiseGain.gain.exponentialRampToValueAtTime(0.001, now + noiseDuration * 0.8); noiseSource.connect(noiseGain); noiseGain.connect(masterGain); noiseSource.start(now); noiseSource.stop(now + noiseDuration);
+            console.log("Tiefes Boom-Geräusch abgespielt.");
         }
 
-
-        // --- Game Loop ---
+        // --- Game Loop (identisch) ---
         function animate() {
             animationFrameId = requestAnimationFrame(animate);
             const delta = clock.running ? clock.getDelta() : 0;
 
-            // Konfetti-Explosion immer aktualisieren
-            if (activeConfettiExplosion) {
-                updateConfettiExplosion(delta);
-            }
+            if (activeConfettiExplosion) { updateConfettiExplosion(delta); }
+            if (!isGameRunning || isGameOver) { renderer.render(scene, camera); return; }
 
-            // Kern-Spiellogik nur wenn aktiv
-            if (!isGameRunning || isGameOver) {
-                 renderer.render(scene, camera); // Szene trotzdem rendern
-                 return;
-            }
-
-            // Spielerbewegung horizontal & vertikal (wie zuvor)
             const moveX = PLAYER_SPEED_X * delta; player.position.x = THREE.MathUtils.lerp(player.position.x, playerTargetX, moveX);
             const halfT = TRACK_WIDTH / 2 - PLAYER_SIZE / 2; player.position.x = THREE.MathUtils.clamp(player.position.x, -halfT, halfT);
             if (!isPlayerOnGround) { playerVelocityY -= GRAVITY * delta; player.position.y += playerVelocityY * delta; if (player.position.y <= GROUND_Y) { player.position.y = GROUND_Y; playerVelocityY = 0; isPlayerOnGround = true; } }
 
-            // Hindernisse (Spawn, Bewegung, Kollision) (wie zuvor)
             if (Math.random() < OBSTACLE_SPAWN_RATE) { createObstacle(); }
             currentObstacleSpeed += delta * 0.01; tempoMultiplier = 1.0 + (currentObstacleSpeed - OBSTACLE_BASE_SPEED) * 0.5; tempoMultiplier = Math.min(tempoMultiplier, 2.0);
             const pBox = new THREE.Box3().setFromObject(player);
             for (let i = obstacles.length - 1; i >= 0; i--) { const o = obstacles[i]; o.position.z += currentObstacleSpeed; o.userData.boundingBox.setFromObject(o); if (pBox.intersectsBox(o.userData.boundingBox)) { triggerGameOver(); return; } if (o.position.z > camera.position.z + 10) { scene.remove(o); obstacles.splice(i, 1); } }
 
-            // Score & Achievements (wie zuvor)
             score += delta * SCORE_MULTIPLIER; infoElement.textContent = `Punkte: ${Math.floor(score)}`; checkAchievements();
-
-            // Rendern
             renderer.render(scene, camera);
         }
 
-        // --- Game Over ---
+        // --- Game Over (identisch) ---
         function triggerGameOver() {
             if (isGameOver) return; console.log("Game Over!"); isGameOver = true; isGameRunning = false; clock.stop(); stopMusicLoop();
-            if(player) player.visible = false; // Spieler ausblenden
-            createConfettiExplosion(player.position.clone()); // NEUE Explosion
-            playDeepBoomSound(); // NEUER Sound
+            if(player) player.visible = false;
+            createConfettiExplosion(player.position.clone());
+            playDeepBoomSound();
             finalScoreElement.textContent = `Endpunktzahl: ${Math.floor(score)}`; gameOverElement.style.display = 'block';
         }
 
@@ -417,18 +268,107 @@
         function startGame() { startButton.style.display = 'none'; if (!setupAudio()) return; resetGameState(); isGameRunning = true; isGameOver = false; if (!clock.running) { clock.start(); } else { clock.getDelta(); } startMusicLoop(); if (animationFrameId === null) { console.log("Animations-Loop gestartet."); animate(); } console.log("Spiel gestartet!"); }
         function restartGame() { gameOverElement.style.display = 'none'; startGame(); }
 
-        // --- Event-Handler (identisch) ---
-        function onWindowResize() { if (!c||!r) return; c.aspect = window.innerWidth / window.innerHeight; c.updateProjectionMatrix(); r.setSize(window.innerWidth, window.innerHeight); }
-        function onKeyDown(e) { if (!isGameRunning || isGameOver) return; const m=Math.floor(NUM_LANES/2); if(e.key==='ArrowLeft'||e.key.toLowerCase()==='a'){playerTargetX=Math.max(-m*LANE_WIDTH,playerTargetX-LANE_WIDTH);} else if(e.key==='ArrowRight'||e.key.toLowerCase()==='d'){playerTargetX=Math.min(m*LANE_WIDTH,playerTargetX+LANE_WIDTH);} if((e.key===' '||e.key==='ArrowUp'||e.key.toLowerCase()==='w')&&isPlayerOnGround){playerVelocityY=JUMP_FORCE;isPlayerOnGround=false;} }
+        // --- Event-Handler ---
+        function onWindowResize() {
+            // Use container dimensions for aspect ratio if renderer is inside container
+            const width = container.clientWidth;
+            const height = container.clientHeight;
+            if (!camera || !renderer) return;
+            camera.aspect = width / height;
+            camera.updateProjectionMatrix();
+            renderer.setSize(width, height);
+            console.log("Resized to:", width, height);
+        }
+
+        // Keyboard Controls (unchanged)
+        function onKeyDown(e) {
+            if (!isGameRunning || isGameOver) return;
+            const maxLaneOffset = Math.floor(NUM_LANES / 2) * LANE_WIDTH;
+            if (e.key === 'ArrowLeft' || e.key.toLowerCase() === 'a') {
+                playerTargetX = Math.max(-maxLaneOffset, playerTargetX - LANE_WIDTH);
+            } else if (e.key === 'ArrowRight' || e.key.toLowerCase() === 'd') {
+                playerTargetX = Math.min(maxLaneOffset, playerTargetX + LANE_WIDTH);
+            }
+            if ((e.key === ' ' || e.key === 'ArrowUp' || e.key.toLowerCase() === 'w') && isPlayerOnGround) {
+                playerVelocityY = JUMP_FORCE;
+                isPlayerOnGround = false;
+            }
+        }
+
+        // --- Touch Controls ---
+        function handleTouchStart(event) {
+            // Prevent browser default touch behaviors like scrolling
+            event.preventDefault();
+            if (!isGameRunning || isGameOver || event.touches.length === 0) return;
+
+            // Record start position of the first touch
+            touchStartX = event.touches[0].clientX;
+            touchStartY = event.touches[0].clientY;
+            // console.log("Touch Start:", touchStartX, touchStartY); // Debug
+        }
+
+        function handleTouchEnd(event) {
+            // Prevent browser default touch behaviors
+            event.preventDefault();
+            if (!isGameRunning || isGameOver || event.changedTouches.length === 0) return;
+
+            // Get the end position of the touch that ended
+            const touchEndX = event.changedTouches[0].clientX;
+            const touchEndY = event.changedTouches[0].clientY;
+            // console.log("Touch End:", touchEndX, touchEndY); // Debug
+
+            const deltaX = touchEndX - touchStartX;
+            const deltaY = touchEndY - touchStartY;
+            // console.log("Delta:", deltaX, deltaY); // Debug
+
+            const maxLaneOffset = Math.floor(NUM_LANES / 2) * LANE_WIDTH;
+
+            // Check for Horizontal Swipe
+            if (Math.abs(deltaX) > MIN_SWIPE_DISTANCE_X && Math.abs(deltaY) < MAX_SWIPE_DISTANCE_Y) {
+                if (deltaX < 0) {
+                    // Swipe Left
+                    playerTargetX = Math.max(-maxLaneOffset, playerTargetX - LANE_WIDTH);
+                    console.log("Swipe Left -> Target X:", playerTargetX);
+                } else {
+                    // Swipe Right
+                    playerTargetX = Math.min(maxLaneOffset, playerTargetX + LANE_WIDTH);
+                    console.log("Swipe Right -> Target X:", playerTargetX);
+                }
+            }
+            // Check for Tap (minimal movement)
+            else if (Math.abs(deltaX) < MAX_TAP_DISTANCE && Math.abs(deltaY) < MAX_TAP_DISTANCE) {
+                if (isPlayerOnGround) {
+                    playerVelocityY = JUMP_FORCE;
+                    isPlayerOnGround = false;
+                    console.log("Tap -> Jump!");
+                }
+            }
+
+            // Reset touch start coordinates (optional, but good practice)
+            touchStartX = 0;
+            touchStartY = 0;
+        }
+
 
         // --- Initialer Setup-Aufruf ---
         initGameGraphics();
         window.addEventListener('resize', onWindowResize, false);
-        document.addEventListener('keydown', onKeyDown, false);
+        document.addEventListener('keydown', onKeyDown, false); // Keep keyboard controls
+
+        // Add Touch Event Listeners to the game container
+        container.addEventListener('touchstart', handleTouchStart, { passive: false }); // Use passive: false to allow preventDefault
+        container.addEventListener('touchend', handleTouchEnd, { passive: false });
+        // Optional: Add touchmove if needed, e.g., for continuous control (not needed here)
+        // container.addEventListener('touchmove', handleTouchMove, { passive: false });
+
         restartButton.addEventListener('click', restartGame, false);
         startButton.addEventListener('click', startGame, false);
-        console.log("Spiel initialisiert. Drücke 'Spiel Starten'. Bewegen/Springen wie gehabt.");
-        animate(); // Render-Loop starten
+        console.log("Spiel initialisiert. Drücke 'Spiel Starten'.");
+        console.log("Steuerung: Pfeiltasten/WASD + Leertaste (Desktop) ODER Swipe Links/Rechts + Tap (Mobile)");
+
+        // Initial render and start animation loop
+        onWindowResize(); // Call once initially to set size
+        animate();
 
     </script>
 </body>
