@@ -1,0 +1,712 @@
+<!DOCTYPE html>
+<html lang="de">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>2D Dead by Daylight Clone</title>
+    <style>
+        body {
+            display: flex;
+            flex-direction: column;
+            align-items: center;
+            justify-content: center;
+            height: 100vh;
+            margin: 0;
+            background-color: #333;
+            color: white;
+            font-family: sans-serif;
+        }
+        canvas {
+            border: 1px solid white;
+            background-color: #555; /* Dunkler Boden */
+        }
+        #ui {
+            margin-top: 10px;
+            font-size: 1.2em;
+        }
+        #message {
+            position: absolute;
+            top: 50%;
+            left: 50%;
+            transform: translate(-50%, -50%);
+            font-size: 3em;
+            color: yellow;
+            background-color: rgba(0, 0, 0, 0.7);
+            padding: 20px;
+            border-radius: 10px;
+            display: none; /* Standardmäßig ausgeblendet */
+            text-align: center;
+        }
+    </style>
+</head>
+<body>
+    <h1>Mini Dead by Daylight (2D)</h1>
+    <canvas id="gameCanvas" width="800" height="600"></canvas>
+    <div id="ui">
+        <span>Generatoren repariert: <span id="genCount">0</span> / 2</span> |
+        <span>Status: <span id="healthStatus">Gesund</span></span> |
+        <span>Haken Timer: <span id="hookTimerDisplay">-</span></span>
+    </div>
+    <div id="message">Spiel vorbei!</div>
+
+    <script>
+        const canvas = document.getElementById('gameCanvas');
+        const ctx = canvas.getContext('2d');
+        const genCountElement = document.getElementById('genCount');
+        const healthStatusElement = document.getElementById('healthStatus');
+        const hookTimerDisplayElement = document.getElementById('hookTimerDisplay');
+        const messageElement = document.getElementById('message');
+
+        // --- Spiel-Konstanten ---
+        const PLAYER_SIZE = 20;
+        const KILLER_SIZE = 25;
+        const GEN_SIZE = 30;
+        const HOOK_SIZE = 15;
+        const GATE_SIZE = 40;
+        const WALL_THICKNESS = 20;
+
+        const PLAYER_SPEED = 2.5;
+        const PLAYER_SPEED_INJURED = 1.8;
+        const KILLER_SPEED = 2.2;
+        const KILLER_CARRY_SPEED = 1.5;
+
+        const INTERACTION_RANGE = 40; // Wie nah man zum Interagieren sein muss
+        const KILLER_VIEW_RANGE = 200;
+        const KILLER_ATTACK_RANGE = 35;
+        const KILLER_ATTACK_COOLDOWN = 1500; // ms
+        const REPAIR_SPEED = 0.5; // % pro Frame
+        const GATE_OPEN_SPEED = 0.4; // % pro Frame
+        const HOOK_TIME = 20000; // ms (20 Sekunden)
+        const NUM_GENERATORS_TO_COMPLETE = 2;
+
+        const CANVAS_WIDTH = canvas.width;
+        const CANVAS_HEIGHT = canvas.height;
+
+        // --- Spielzustand ---
+        let player = {
+            x: 100, y: 100, width: PLAYER_SIZE, height: PLAYER_SIZE,
+            health: 'healthy', // 'healthy', 'injured', 'down', 'hooked', 'carried'
+            isInteracting: false,
+            interactionTarget: null,
+            speed: PLAYER_SPEED,
+            hookTimer: HOOK_TIME
+        };
+
+        let killer = {
+            x: CANVAS_WIDTH - 150, y: CANVAS_HEIGHT - 150, width: KILLER_SIZE, height: KILLER_SIZE,
+            state: 'PATROLLING', // 'PATROLLING', 'CHASING', 'ATTACKING', 'CARRYING', 'HOOKING'
+            target: null, // Kann Spieler oder Objekt sein
+            moveTargetX: 0, moveTargetY: 0,
+            attackCooldownTimer: 0,
+            speed: KILLER_SPEED
+        };
+
+        let generators = [];
+        let walls = [];
+        let hooks = [];
+        let exitGates = [];
+        let keysPressed = {};
+        let generatorsCompleted = 0;
+        let gatesPowered = false;
+        let gameRunning = true;
+        let carriedPlayerOffset = { x: 0, y: - (KILLER_SIZE / 2 + PLAYER_SIZE / 2) };
+
+        // --- Hilfsfunktionen ---
+        function checkCollision(rect1, rect2) {
+            if (!rect1 || !rect2) return false;
+            return (
+                rect1.x < rect2.x + rect2.width &&
+                rect1.x + rect1.width > rect2.x &&
+                rect1.y < rect2.y + rect2.height &&
+                rect1.y + rect1.height > rect2.y
+            );
+        }
+
+        function getDistance(obj1, obj2) {
+            const dx = obj1.x + obj1.width / 2 - (obj2.x + obj2.width / 2);
+            const dy = obj1.y + obj1.height / 2 - (obj2.y + obj2.height / 2);
+            return Math.sqrt(dx * dx + dy * dy);
+        }
+
+        function getRandomInt(min, max) {
+          min = Math.ceil(min);
+          max = Math.floor(max);
+          return Math.floor(Math.random() * (max - min + 1)) + min;
+        }
+
+        // --- Initialisierung ---
+        function setupGame() {
+            gameRunning = true;
+            messageElement.style.display = 'none';
+            generatorsCompleted = 0;
+            gatesPowered = false;
+
+            player = {
+                x: 100, y: 100, width: PLAYER_SIZE, height: PLAYER_SIZE,
+                health: 'healthy', isInteracting: false, interactionTarget: null,
+                speed: PLAYER_SPEED, hookTimer: HOOK_TIME
+            };
+
+            killer = {
+                x: CANVAS_WIDTH - 150, y: CANVAS_HEIGHT - 150, width: KILLER_SIZE, height: KILLER_SIZE,
+                state: 'PATROLLING', target: null, moveTargetX: 0, moveTargetY: 0,
+                attackCooldownTimer: 0, speed: KILLER_SPEED
+            };
+
+            // Wände (Rahmen und ein paar Hindernisse)
+            walls = [
+                // Außenwände
+                { x: 0, y: 0, width: CANVAS_WIDTH, height: WALL_THICKNESS },
+                { x: 0, y: CANVAS_HEIGHT - WALL_THICKNESS, width: CANVAS_WIDTH, height: WALL_THICKNESS },
+                { x: 0, y: 0, width: WALL_THICKNESS, height: CANVAS_HEIGHT },
+                { x: CANVAS_WIDTH - WALL_THICKNESS, y: 0, width: WALL_THICKNESS, height: CANVAS_HEIGHT },
+                // Innenwände
+                { x: 200, y: 150, width: WALL_THICKNESS * 2, height: 200 },
+                { x: 500, y: 300, width: 150, height: WALL_THICKNESS * 2},
+                { x: 350, y: CANVAS_HEIGHT - 200, width: 200, height: WALL_THICKNESS },
+            ];
+
+            // Generatoren
+            generators = [
+                { x: 150, y: 250, width: GEN_SIZE, height: GEN_SIZE, progress: 0, isCompleted: false },
+                { x: 600, y: 100, width: GEN_SIZE, height: GEN_SIZE, progress: 0, isCompleted: false },
+                { x: 400, y: 450, width: GEN_SIZE, height: GEN_SIZE, progress: 0, isCompleted: false },
+                // Füge mehr hinzu, wenn NUM_GENERATORS_TO_COMPLETE höher ist
+            ].slice(0, NUM_GENERATORS_TO_COMPLETE + 1); // Nimm einen mehr als nötig, falls einer schwer erreichbar ist
+
+             // Haken
+            hooks = [
+                { x: CANVAS_WIDTH / 2 - 50, y: 100, width: HOOK_SIZE, height: HOOK_SIZE, isOccupied: false },
+                { x: CANVAS_WIDTH / 2 + 50, y: CANVAS_HEIGHT - 100, width: HOOK_SIZE, height: HOOK_SIZE, isOccupied: false },
+                 { x: 100, y: CANVAS_HEIGHT - 100, width: HOOK_SIZE, height: HOOK_SIZE, isOccupied: false },
+                 { x: CANVAS_WIDTH - 100, y: 100, width: HOOK_SIZE, height: HOOK_SIZE, isOccupied: false },
+            ];
+
+             // Ausgangstore
+            exitGates = [
+                { x: CANVAS_WIDTH / 2 - GATE_SIZE / 2, y: WALL_THICKNESS, width: GATE_SIZE, height: GATE_SIZE/2, progress: 0, isOpen: false },
+                // { x: CANVAS_WIDTH / 2 - GATE_SIZE / 2, y: CANVAS_HEIGHT - WALL_THICKNESS - GATE_SIZE/2, width: GATE_SIZE, height: GATE_SIZE/2, progress: 0, isOpen: false } // Zweites Tor optional
+            ];
+
+
+            // Event Listener für Tasten
+            keysPressed = {}; // Reset keys
+            window.addEventListener('keydown', handleKeyDown);
+            window.addEventListener('keyup', handleKeyUp);
+
+            // Spiel-Loop starten
+            requestAnimationFrame(gameLoop);
+        }
+
+        function handleKeyDown(e) {
+            keysPressed[e.key] = true;
+            // Interaktion starten (gedrückt halten)
+            if (e.key === ' ' || e.key === 'Spacebar') {
+                 if (player.health !== 'down' && player.health !== 'hooked' && player.health !== 'carried') {
+                    player.isInteracting = true;
+                 }
+            }
+        }
+        function handleKeyUp(e) {
+            keysPressed[e.key] = false;
+             // Interaktion stoppen
+            if (e.key === ' ' || e.key === 'Spacebar') {
+                player.isInteracting = false;
+                player.interactionTarget = null; // Reset target when key is released
+            }
+        }
+
+        // --- Kollisions-Handling (vereinfacht) ---
+        function handleWallCollisions(entity) {
+            let collided = false;
+            walls.forEach(wall => {
+                if (checkCollision(entity, wall)) {
+                    collided = true;
+                    // Sehr einfache Kollisionsauflösung: Bewegung stoppen
+                    // Eine bessere Lösung würde den Spieler entlang der Wand gleiten lassen
+                    // Hier versuchen wir, den Spieler aus der Wand zu schieben
+                    const overlapX = (entity.x + entity.width / 2) - (wall.x + wall.width / 2);
+                    const overlapY = (entity.y + entity.height / 2) - (wall.y + wall.height / 2);
+                    const combinedHalfWidths = entity.width / 2 + wall.width / 2;
+                    const combinedHalfHeights = entity.height / 2 + wall.height / 2;
+
+                    if (Math.abs(overlapX) < combinedHalfWidths && Math.abs(overlapY) < combinedHalfHeights) {
+                         const penetrationX = combinedHalfWidths - Math.abs(overlapX);
+                         const penetrationY = combinedHalfHeights - Math.abs(overlapY);
+
+                         if (penetrationX < penetrationY) {
+                             if (overlapX > 0) entity.x += penetrationX;
+                             else entity.x -= penetrationX;
+                         } else {
+                             if (overlapY > 0) entity.y += penetrationY;
+                             else entity.y -= penetrationY;
+                         }
+                    }
+                }
+            });
+            return collided;
+        }
+
+
+        // --- Spieler Update ---
+        function updatePlayer(deltaTime) {
+            if (!gameRunning || player.health === 'hooked' || player.health === 'down' || player.health === 'carried') {
+                if(player.health === 'hooked') {
+                    player.hookTimer -= deltaTime;
+                    hookTimerDisplayElement.textContent = (player.hookTimer / 1000).toFixed(1) + 's';
+                    if (player.hookTimer <= 0) {
+                        endGame(false, "Du wurdest geopfert!");
+                    }
+                }
+                if(player.health !== 'hooked'){
+                     hookTimerDisplayElement.textContent = '-';
+                }
+                // Keine Bewegung wenn am Boden, getragen oder am Haken
+                return;
+            }
+
+             hookTimerDisplayElement.textContent = '-';
+
+            let dx = 0;
+            let dy = 0;
+            if (keysPressed['ArrowUp'] || keysPressed['w']) dy -= 1;
+            if (keysPressed['ArrowDown'] || keysPressed['s']) dy += 1;
+            if (keysPressed['ArrowLeft'] || keysPressed['a']) dx -= 1;
+            if (keysPressed['ArrowRight'] || keysPressed['d']) dx += 1;
+
+            // Normalisieren (um diagonale Bewegung nicht schneller zu machen)
+            const len = Math.sqrt(dx * dx + dy * dy);
+            if (len > 0) {
+                dx = (dx / len);
+                dy = (dy / len);
+            }
+
+            const currentSpeed = player.speed;
+            const moveX = dx * currentSpeed;
+            const moveY = dy * currentSpeed;
+
+            const originalX = player.x;
+            const originalY = player.y;
+
+            player.x += moveX;
+            // Kollision auf X-Achse prüfen und ggf. korrigieren
+            if (handleWallCollisions(player)) {
+                player.x = originalX; // Bei Kollision X-Bewegung rückgängig machen
+            }
+
+            player.y += moveY;
+            // Kollision auf Y-Achse prüfen und ggf. korrigieren
+             if (handleWallCollisions(player)) {
+                player.y = originalY; // Bei Kollision Y-Bewegung rückgängig machen
+             }
+
+
+            // Interaktion
+            player.interactionTarget = null; // Reset interaction target each frame unless interacting
+            if (player.isInteracting) {
+                let interactedThisFrame = false;
+                // Mit Generatoren interagieren
+                generators.forEach(gen => {
+                    if (!gen.isCompleted && getDistance(player, gen) < INTERACTION_RANGE) {
+                        player.interactionTarget = gen;
+                        gen.progress += REPAIR_SPEED;
+                        interactedThisFrame = true;
+                        if (gen.progress >= 100) {
+                            gen.progress = 100;
+                            if (!gen.isCompleted) { // Nur einmal zählen
+                                gen.isCompleted = true;
+                                generatorsCompleted++;
+                                genCountElement.textContent = generatorsCompleted;
+                                if (generatorsCompleted >= NUM_GENERATORS_TO_COMPLETE) {
+                                    gatesPowered = true;
+                                    // Optional: Nachricht oder Sound
+                                }
+                            }
+                        }
+                    }
+                });
+
+                // Mit Ausgangstoren interagieren (wenn alle Gens fertig)
+                if (gatesPowered && !interactedThisFrame) {
+                    exitGates.forEach(gate => {
+                        if (!gate.isOpen && getDistance(player, gate) < INTERACTION_RANGE) {
+                            player.interactionTarget = gate;
+                            gate.progress += GATE_OPEN_SPEED;
+                            interactedThisFrame = true;
+                             if (gate.progress >= 100) {
+                                gate.progress = 100;
+                                gate.isOpen = true;
+                                // Optional: Nachricht oder Sound
+                             }
+                        }
+                    });
+                }
+                // Wenn keine Interaktion stattfand, Flag zurücksetzen
+                 if (!interactedThisFrame) {
+                    // player.isInteracting = false; // Keep isInteracting true while holding space, but reset target
+                    player.interactionTarget = null;
+                 }
+
+            } else {
+                 player.interactionTarget = null;
+            }
+
+            // Entkommen prüfen
+            exitGates.forEach(gate => {
+                if (gate.isOpen) {
+                    // Prüfen, ob Spieler den Ausgangsbereich erreicht (Rand der Karte am Tor)
+                    if ( (gate.y < WALL_THICKNESS + 5 && player.y < WALL_THICKNESS + player.height) || // Oben
+                         (gate.y > CANVAS_HEIGHT - WALL_THICKNESS - GATE_SIZE && player.y > CANVAS_HEIGHT - WALL_THICKNESS - player.height) // Unten
+                       ) {
+                         // Zusätzliche Prüfung, ob Spieler horizontal in der Nähe des Tors ist
+                         if (player.x + player.width > gate.x && player.x < gate.x + gate.width) {
+                              endGame(true, "Du bist entkommen!");
+                         }
+                    }
+                }
+            });
+        }
+
+        // --- Killer KI Update (Sehr einfach) ---
+        function updateKillerAI(deltaTime) {
+            if (!gameRunning) return;
+
+            // Cooldown aktualisieren
+            if (killer.attackCooldownTimer > 0) {
+                killer.attackCooldownTimer -= deltaTime;
+            }
+
+            // Spielerposition aktualisieren, wenn getragen
+             if (killer.state === 'CARRYING' && player.health === 'carried') {
+                player.x = killer.x + carriedPlayerOffset.x;
+                player.y = killer.y + carriedPlayerOffset.y;
+            }
+
+
+            // Sichtprüfung
+            const distToPlayer = getDistance(killer, player);
+            let canSeePlayer = distToPlayer < KILLER_VIEW_RANGE && player.health !== 'hooked' && player.health !== 'carried'; // Killer ignoriert getragene/gehookte Spieler für die Jagd
+
+            // Einfache State Machine
+            switch (killer.state) {
+                case 'PATROLLING':
+                    killer.speed = KILLER_SPEED;
+                    // Wenn kein Ziel oder Ziel erreicht, neues Ziel (ungemachter Generator) suchen
+                    if (!killer.target || (Math.abs(killer.x - killer.moveTargetX) < 5 && Math.abs(killer.y - killer.moveTargetY) < 5)) {
+                        const availableGens = generators.filter(g => !g.isCompleted);
+                        if (availableGens.length > 0) {
+                            killer.target = availableGens[getRandomInt(0, availableGens.length - 1)];
+                            killer.moveTargetX = killer.target.x + killer.target.width / 2 - killer.width / 2;
+                            killer.moveTargetY = killer.target.y + killer.target.height / 2 - killer.height / 2;
+                        } else {
+                            // Alle Gens fertig, patrouilliere Tore oder zufällig
+                            if(exitGates.length > 0) {
+                                killer.target = exitGates[getRandomInt(0, exitGates.length - 1)];
+                                killer.moveTargetX = killer.target.x + killer.target.width / 2 - killer.width / 2;
+                                killer.moveTargetY = killer.target.y + killer.target.height / 2 - killer.height / 2;
+                            } else {
+                                killer.moveTargetX = getRandomInt(WALL_THICKNESS, CANVAS_WIDTH - WALL_THICKNESS - killer.width);
+                                killer.moveTargetY = getRandomInt(WALL_THICKNESS, CANVAS_HEIGHT - WALL_THICKNESS - killer.height);
+                                killer.target = null; // Kein spezifisches Objektziel
+                            }
+                        }
+                    }
+                    // Wenn Spieler gesehen wird, jagen
+                    if (canSeePlayer) {
+                        killer.state = 'CHASING';
+                        killer.target = player; // Ziel ist jetzt der Spieler
+                    }
+                    break;
+
+                case 'CHASING':
+                     killer.speed = KILLER_SPEED;
+                     // Spieler verfolgen
+                     killer.target = player; // Sicherstellen, dass Ziel der Spieler ist
+                     killer.moveTargetX = player.x + player.width / 2 - killer.width / 2;
+                     killer.moveTargetY = player.y + player.height / 2 - killer.height / 2;
+
+                    // Wenn nah genug und Cooldown vorbei -> angreifen
+                    if (distToPlayer < KILLER_ATTACK_RANGE && killer.attackCooldownTimer <= 0) {
+                        killer.state = 'ATTACKING';
+                    }
+                    // Wenn Spieler außer Sichtweite gerät (vereinfacht, keine echte Sichtlinie)
+                    else if (!canSeePlayer) {
+                         // Kurz warten oder direkt zurück zum Patrouillieren? Machen wir's einfach:
+                        killer.state = 'PATROLLING';
+                        killer.target = null; // Ziel zurücksetzen
+                    }
+                     // Wenn Spieler am Boden liegt -> aufheben
+                    else if (player.health === 'down' && distToPlayer < INTERACTION_RANGE) {
+                        killer.state = 'CARRYING';
+                        player.health = 'carried'; // Spieler wird getragen
+                        killer.target = null; // Kein Bewegungsziel mehr, Spieler ist Zielobjekt
+                        killer.speed = KILLER_CARRY_SPEED; // Langsamer beim Tragen
+                        updateHealthStatusUI();
+                    }
+                    break;
+
+                case 'ATTACKING':
+                    // Angriff ausführen (passiert sofort in diesem Frame)
+                    if (distToPlayer < KILLER_ATTACK_RANGE) { // Erneute Prüfung
+                       if (player.health === 'healthy') {
+                            player.health = 'injured';
+                            player.speed = PLAYER_SPEED_INJURED;
+                            updateHealthStatusUI();
+                        } else if (player.health === 'injured') {
+                            player.health = 'down';
+                            player.speed = 0; // Oder sehr langsam
+                             updateHealthStatusUI();
+                        }
+                    }
+                    killer.attackCooldownTimer = KILLER_ATTACK_COOLDOWN;
+                    // Nach Angriff zurück zum Jagen (oder Patrouillieren, wenn Spieler nicht mehr da)
+                    killer.state = canSeePlayer ? 'CHASING' : 'PATROLLING';
+                     if (!canSeePlayer) killer.target = null;
+                     else killer.target = player; // Weiter jagen
+                    break;
+
+                case 'CARRYING':
+                     killer.speed = KILLER_CARRY_SPEED;
+                     // Nächsten freien Haken finden
+                     let closestHook = null;
+                     let minDist = Infinity;
+                     hooks.forEach(hook => {
+                        if (!hook.isOccupied) {
+                            const d = getDistance(killer, hook);
+                            if (d < minDist) {
+                                minDist = d;
+                                closestHook = hook;
+                            }
+                        }
+                     });
+
+                     if (closestHook) {
+                         killer.target = closestHook; // Ziel ist der Haken
+                         killer.moveTargetX = closestHook.x + closestHook.width / 2 - killer.width / 2;
+                         killer.moveTargetY = closestHook.y + closestHook.height / 2 - killer.height / 2;
+
+                         // Wenn am Haken angekommen
+                         if (getDistance(killer, closestHook) < INTERACTION_RANGE) {
+                             killer.state = 'HOOKING';
+                         }
+                     } else {
+                         // Keine freien Haken? (Sollte nicht passieren bei genügend Haken)
+                         // Zurück zum Patrouillieren, Spieler fallen lassen? Hier lassen wir ihn einfach tragen.
+                         killer.state = 'PATROLLING';
+                         player.health = 'down'; // Spieler wird fallengelassen (theoretisch)
+                         updateHealthStatusUI();
+                     }
+                     break;
+
+                case 'HOOKING':
+                     // Spieler am Haken platzieren
+                    if (killer.target && player.health === 'carried') { // Sicherstellen, dass wir einen Haken als Ziel haben
+                         const hook = killer.target;
+                         if (hook && !hook.isOccupied) { // Prüfen ob Haken noch frei ist
+                            player.health = 'hooked';
+                            player.x = hook.x + hook.width / 2 - player.width / 2; // Spieler am Haken zentrieren
+                            player.y = hook.y + hook.height / 2 - player.height / 2;
+                            player.hookTimer = HOOK_TIME; // Timer starten
+                            hook.isOccupied = true;
+                             updateHealthStatusUI();
+                         }
+                    }
+                    // Nach dem Haken wieder patrouillieren
+                    killer.state = 'PATROLLING';
+                    killer.target = null;
+                    killer.speed = KILLER_SPEED;
+                    break;
+            }
+
+            // Killer bewegen (außer beim Angreifen/Haken in diesem Frame)
+            if (killer.state !== 'ATTACKING' && killer.state !== 'HOOKING') {
+                const targetX = killer.moveTargetX;
+                const targetY = killer.moveTargetY;
+                const currentSpeed = killer.speed;
+
+                let dx = targetX - killer.x;
+                let dy = targetY - killer.y;
+                const dist = Math.sqrt(dx * dx + dy * dy);
+
+                if (dist > currentSpeed) {
+                    dx = (dx / dist) * currentSpeed;
+                    dy = (dy / dist) * currentSpeed;
+                } else {
+                    // Ziel fast erreicht, direkt setzen um Zittern zu vermeiden
+                    dx = targetX - killer.x;
+                    dy = targetY - killer.y;
+                     // Wenn Ziel ein Objekt war und erreicht wurde, Zustand ggf. anpassen
+                     if (killer.state === 'PATROLLING' && killer.target && dist < 5) {
+                         killer.target = null; // Ziel erreicht, neu suchen im nächsten Frame
+                     }
+                }
+
+                 const originalX = killer.x;
+                 const originalY = killer.y;
+
+                 killer.x += dx;
+                 if (handleWallCollisions(killer)) {
+                     killer.x = originalX;
+                 }
+
+                 killer.y += dy;
+                 if (handleWallCollisions(killer)) {
+                     killer.y = originalY;
+                 }
+            }
+        }
+
+        // --- UI Update ---
+        function updateHealthStatusUI() {
+            let statusText = player.health.charAt(0).toUpperCase() + player.health.slice(1);
+             switch(player.health) {
+                case 'healthy': statusText = 'Gesund'; break;
+                case 'injured': statusText = 'Verletzt'; break;
+                case 'down': statusText = 'Am Boden'; break;
+                case 'hooked': statusText = 'Am Haken!'; break;
+                case 'carried': statusText = 'Wird getragen'; break;
+            }
+            healthStatusElement.textContent = statusText;
+        }
+
+         // --- Spielende ---
+         function endGame(isWin, msg) {
+            gameRunning = false;
+            messageElement.textContent = msg;
+            messageElement.style.display = 'block';
+            // Remove event listeners to prevent further input
+            window.removeEventListener('keydown', handleKeyDown);
+            window.removeEventListener('keyup', handleKeyUp);
+
+            // Optional: Nach kurzer Zeit Neustart anbieten oder Seite neu laden
+            setTimeout(() => {
+                 messageElement.innerHTML += "<br><small>(Seite neu laden zum Neustarten)</small>";
+             }, 2000);
+        }
+
+
+        // --- Zeichnen ---
+        function draw() {
+            if (!ctx) return; // Sicherstellen, dass Context existiert
+
+            // Canvas leeren
+            ctx.clearRect(0, 0, CANVAS_WIDTH, CANVAS_HEIGHT);
+
+            // Hintergrund (optional dunkler)
+            ctx.fillStyle = '#444';
+            ctx.fillRect(0, 0, CANVAS_WIDTH, CANVAS_HEIGHT);
+
+
+            // Wände zeichnen
+            ctx.fillStyle = '#8B4513'; // Braun
+            walls.forEach(wall => {
+                ctx.fillRect(wall.x, wall.y, wall.width, wall.height);
+            });
+
+            // Generatoren zeichnen
+            generators.forEach(gen => {
+                ctx.fillStyle = gen.isCompleted ? '#FFFF00' : '#0000FF'; // Gelb wenn fertig, sonst Blau
+                ctx.fillRect(gen.x, gen.y, gen.width, gen.height);
+                // Fortschrittsbalken (optional)
+                if (!gen.isCompleted) {
+                    ctx.fillStyle = 'rgba(255, 255, 255, 0.5)';
+                    ctx.fillRect(gen.x, gen.y - 10, gen.width, 5); // Hintergrund
+                    ctx.fillStyle = '#FFFFFF'; // Weißer Fortschritt
+                    ctx.fillRect(gen.x, gen.y - 10, gen.width * (gen.progress / 100), 5);
+                }
+                // Markieren, wenn Spieler interagiert
+                 if (player.interactionTarget === gen) {
+                    ctx.strokeStyle = 'lime';
+                    ctx.lineWidth = 2;
+                    ctx.strokeRect(gen.x - 2, gen.y - 2, gen.width + 4, gen.height + 4);
+                 }
+            });
+
+            // Haken zeichnen
+            hooks.forEach(hook => {
+                ctx.fillStyle = hook.isOccupied ? '#FFA500' : '#808080'; // Orange wenn besetzt, sonst Grau
+                ctx.fillRect(hook.x, hook.y, hook.width, hook.height);
+            });
+
+            // Ausgangstore zeichnen
+            exitGates.forEach(gate => {
+                ctx.fillStyle = gate.isOpen ? '#00FF00' : (gatesPowered ? '#90EE90' : '#FF0000'); // Grün wenn offen, Hellgrün wenn bereit, Rot wenn blockiert
+                ctx.fillRect(gate.x, gate.y, gate.width, gate.height);
+                 // Fortschrittsbalken (optional)
+                if (gatesPowered && !gate.isOpen) {
+                     ctx.fillStyle = 'rgba(255, 255, 255, 0.5)';
+                     ctx.fillRect(gate.x, gate.y - 10, gate.width, 5); // Hintergrund
+                     ctx.fillStyle = '#FFFFFF'; // Weißer Fortschritt
+                     ctx.fillRect(gate.x, gate.y - 10, gate.width * (gate.progress / 100), 5);
+                }
+                 // Markieren, wenn Spieler interagiert
+                 if (player.interactionTarget === gate) {
+                    ctx.strokeStyle = 'lime';
+                    ctx.lineWidth = 2;
+                    ctx.strokeRect(gate.x - 2, gate.y - 2, gate.width + 4, gate.height + 4);
+                 }
+            });
+
+             // Killer zeichnen
+            ctx.fillStyle = '#FF0000'; // Rot
+            ctx.fillRect(killer.x, killer.y, killer.width, killer.height);
+             // Killer Sichtradius (Debug)
+            // ctx.strokeStyle = 'rgba(255, 0, 0, 0.3)';
+            // ctx.beginPath();
+            // ctx.arc(killer.x + killer.width/2, killer.y + killer.height/2, KILLER_VIEW_RANGE, 0, Math.PI * 2);
+            // ctx.stroke();
+             // Killer Angriffsradius (Debug)
+            // ctx.strokeStyle = 'rgba(255, 100, 0, 0.5)';
+            // ctx.beginPath();
+            // ctx.arc(killer.x + killer.width/2, killer.y + killer.height/2, KILLER_ATTACK_RANGE, 0, Math.PI * 2);
+            // ctx.stroke();
+
+
+            // Spieler zeichnen (Farbe je nach Status)
+             switch (player.health) {
+                case 'healthy': ctx.fillStyle = '#00FF00'; break; // Grün
+                case 'injured': ctx.fillStyle = '#FFFF00'; break; // Gelb
+                case 'down': ctx.fillStyle = '#FFA500'; break; // Orange
+                case 'hooked': ctx.fillStyle = '#808080'; break; // Grau
+                case 'carried': ctx.fillStyle = '#FFFF00'; break; // Gelb (während getragen)
+                default: ctx.fillStyle = '#FFFFFF'; // Weiß (Fallback)
+            }
+            ctx.fillRect(player.x, player.y, player.width, player.height);
+
+        }
+
+        // --- Haupt-Spiel-Loop ---
+        let lastTime = 0;
+        function gameLoop(timestamp) {
+            if (!gameRunning) {
+                 // Zeichne noch einmal, um die Endnachricht anzuzeigen
+                 draw();
+                return;
+            }
+
+            const deltaTime = timestamp - lastTime;
+            lastTime = timestamp;
+
+            if (deltaTime > 0) { // Verhindert NaN bei erstem Frame oder Tab-Wechsel
+                 // 1. Spieler Update (Bewegung, Interaktion, Status)
+                 updatePlayer(deltaTime);
+
+                 // 2. Killer KI Update
+                 updateKillerAI(deltaTime);
+
+                 // 3. Kollisionen etc. sind meist in den Update-Funktionen integriert
+
+                 // 4. Zeichnen
+                 draw();
+            }
+
+            // Nächsten Frame anfordern
+            requestAnimationFrame(gameLoop);
+        }
+
+        // Spiel starten, wenn die Seite geladen ist
+        window.onload = setupGame;
+
+    </script>
+</body>
+</html>
