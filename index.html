@@ -1,1809 +1,370 @@
 <!DOCTYPE html>
-<html lang="en">
+<html lang="de">
 <head>
     <meta charset="UTF-8">
     <meta name="viewport" content="width=device-width, initial-scale=1.0">
-    <title>k8o5</title>
+    <title>Blackjack Basisstrategie Rechner</title>
     <style>
-        /* --- Global & Design --- */
-        @import url('https://fonts.googleapis.com/css2?family=Montserrat:wght@400;500;700&display=swap');
-
-        :root {
-            --bg-deep-space: #0d1117;
-            --bg-mid-space: #161b22;
-            --bg-station-panel: #21262d;
-            --border-standard: #30363d;
-            --border-highlight: #4d5a6a;
-            --text-primary: #c9d1d9;
-            --text-secondary: #8b949e;
-            --accent-gold: #f1e05a;
-            --accent-gold-darker: #d4af37;
-            --accent-positive: #3fb950;
-            --accent-negative: #f85149;
-            --card-background: #f0f0f0;
-            --card-border: #aaa;
-            --wizard-color-fg: #9c27b0;
-            --wizard-color-bg: #e1bee7;
-            --jester-color-fg: #4caf50;
-            --jester-color-bg: #c8e6c9;
-            --color-red-bg: #e53935; --color-red-fg: #fff;
-            --color-yellow-bg: #fdd835; --color-yellow-fg: #333;
-            --color-green-bg: #43a047; --color-green-fg: #fff;
-            --color-blue-bg: #1e88e5; --color-blue-fg: #fff;
-            --dark-text-color: #212121;
-            --font-family: 'Montserrat', sans-serif;
-            --base-font-size: 16px;
-            --border-radius-medium: 8px;
-            --border-radius-small: 4px;
-            --shadow-medium: 0 4px 15px rgba(0, 0, 0, 0.3);
-            --shadow-inner: inset 0 1px 3px rgba(0, 0, 0, 0.2);
-            --transition-fast: 0.2s ease-out;
-        }
-
-        html, body { height: 100%; margin: 0; overflow: hidden; }
-
         body {
-            font-family: var(--font-family); background-color: var(--bg-deep-space);
-            color: var(--text-primary); display: flex; justify-content: center;
-            align-items: center; font-size: var(--base-font-size); position: relative;
+            font-family: sans-serif;
+            line-height: 1.6;
+            padding: 20px;
+            max-width: 600px;
+            margin: 20px auto;
+            background-color: #f4f4f4;
+            border: 1px solid #ccc;
+            border-radius: 8px;
+            box-shadow: 2px 2px 10px rgba(0,0,0,0.1);
         }
-
-        #main-content { width: 100%; height: 100%; display: flex; justify-content: center; align-items: center; }
-
-        /* --- Setup / Lobby Screen --- */
-        #setup-section {
-            background-color: var(--bg-station-panel); padding: 30px 40px;
-            border-radius: var(--border-radius-medium); border: 1px solid var(--border-standard);
-            box-shadow: var(--shadow-medium); text-align: center; max-width: 500px;
+        h1, h2 {
+            text-align: center;
+            color: #333;
         }
-        #setup-section h1 { color: var(--accent-gold); margin-top: 0; margin-bottom: 25px; }
-        #setup-section label { display: block; margin-bottom: 8px; color: var(--text-secondary); font-weight: 500; text-align: left; }
-        #setup-section input[type="text"] {
-            width: 100%; padding: 12px; margin-bottom: 15px; border-radius: var(--border-radius-small);
-            border: 1px solid var(--border-highlight); background-color: var(--bg-mid-space);
-            color: var(--text-primary); box-shadow: var(--shadow-inner); box-sizing: border-box; font-size: 1em;
+        .input-section, .result-section, .legend-section {
+            background-color: #fff;
+            padding: 15px;
+            margin-bottom: 15px;
+            border-radius: 5px;
+            border: 1px solid #ddd;
         }
-        #setup-section input[type="text"]:focus { outline: none; border-color: var(--accent-gold); box-shadow: var(--shadow-inner), 0 0 8px var(--accent-gold); }
-        #setup-section button {
-            padding: 12px 20px; font-size: 1em; font-weight: 700; border: 1px solid var(--accent-gold-darker);
-            border-radius: var(--border-radius-small); background: linear-gradient(to bottom, var(--accent-gold), #e6ce4a);
-            color: var(--bg-deep-space); cursor: pointer; transition: background var(--transition-fast), box-shadow var(--transition-fast), transform var(--transition-fast);
-            box-shadow: 0 2px 4px rgba(0,0,0,0.2); text-transform: uppercase; letter-spacing: 0.5px; margin: 10px 5px; min-width: 150px;
+        label {
+            display: inline-block;
+            width: 150px;
+            margin-bottom: 5px;
+            font-weight: bold;
         }
-        #setup-section button:hover:not(:disabled) { background: linear-gradient(to bottom, #f8e97f, var(--accent-gold)); box-shadow: 0 4px 8px rgba(0,0,0,0.25); transform: translateY(-1px); }
-        #setup-section button:disabled { background: #555; border-color: #444; color: #999; cursor: not-allowed; }
-        #setup-section hr { border: none; border-top: 1px solid var(--border-standard); margin: 25px 0; }
-        #status, #error { margin-top: 15px; font-size: 0.9em; min-height: 1.2em; }
-        #status { color: var(--text-secondary); font-style: italic;}
-        #error { color: var(--accent-negative); font-weight: 500;}
-        #room-link-area { margin-top: 20px; }
-        #room-link-area p { margin-bottom: 5px; color: var(--text-secondary); }
-        #shareable-link { font-weight: bold; background-color: var(--bg-mid-space); padding: 8px 15px; border-radius: var(--border-radius-small); user-select: all; cursor: pointer; border: 1px solid var(--border-highlight); display: inline-block; word-break: break-all; }
-
-        /* --- Game Screen --- */
-        #game-container {
-            display: none; /* Initially hidden */
-            grid-template-areas: "top-player top-player top-player" "left-player table right-player" "left-player table right-player" "info human-player controls";
-            grid-template-columns: 220px 1fr 220px; grid-template-rows: 160px 1fr 160px 190px;
-            width: 95vw; max-width: 1300px; height: 90vh; max-height: 850px;
-            background: linear-gradient(145deg, var(--bg-mid-space), var(--bg-deep-space));
-            border-radius: var(--border-radius-medium); box-shadow: var(--shadow-medium), 0 0 50px rgba(241, 224, 90, 0.1);
-            border: 1px solid var(--border-standard); padding: 25px; box-sizing: border-box; position: relative;
+        input[type="text"] {
+            padding: 8px;
+            margin-bottom: 10px;
+            border: 1px solid #ccc;
+            border-radius: 4px;
+            width: 60px;
+            text-align: center;
+            text-transform: uppercase; /* Sorgt für Großbuchstaben */
         }
-
-        /* --- Player Areas --- */
-        .player-area {
-            background-color: var(--bg-station-panel); border-radius: var(--border-radius-medium); border: 1px solid var(--border-standard);
-            padding: 15px; box-sizing: border-box; display: flex; flex-direction: column; align-items: center; justify-content: space-between;
-            box-shadow: var(--shadow-inner); position: relative; overflow: hidden; transition: border-color var(--transition-fast), box-shadow var(--transition-fast);
+        button {
+            display: block;
+            width: 100%;
+            padding: 12px;
+            background-color: #007bff;
+            color: white;
+            border: none;
+            border-radius: 5px;
+            font-size: 16px;
+            cursor: pointer;
+            margin-top: 10px;
+            transition: background-color 0.2s ease;
         }
-         .player-info { text-align: center; font-size: 0.95em; width: 100%; line-height: 1.4; margin-bottom: 10px; }
-         .player-info .name { font-weight: 700; font-size: 1.05em; color: var(--text-primary); margin-bottom: 5px; display: flex; align-items: center; justify-content: center; gap: 8px; min-height: 1.5em; }
-         .player-info .score { font-weight: 700; color: var(--accent-gold); font-size: 1.1em; display: block; margin-bottom: 5px; }
-         .player-info .bid-taken { font-size: 0.9em; color: var(--text-secondary); min-height: 1.2em; }
-         .dealer-badge { background-color: var(--accent-gold); color: var(--bg-deep-space); font-size: 0.75em; padding: 2px 6px; border-radius: var(--border-radius-small); font-weight: 700; line-height: 1; vertical-align: middle; margin-left: 5px; }
-        .player-hand { display: flex; justify-content: center; flex-wrap: wrap; gap: 3px; min-height: 70px; width: 100%; align-items: flex-end; }
-        #human-player-area { grid-area: human-player; justify-content: center; }
-        #other-player-0-area { grid-area: left-player; }  /* Relative West */
-        #other-player-1-area { grid-area: top-player; }   /* Relative North */
-        #other-player-2-area { grid-area: right-player; } /* Relative East */
-         /* Add styles for 4, 5, 6 players if needed, maybe overlap top/bottom */
-
-        /* Non-Human Hand Cards */
-        .other-player .player-hand .card { width: 22px; height: 33px; font-size: 0.6em; background: linear-gradient(135deg, #444, #2a2a2a); color: transparent; border: 1px solid #555; margin-top: 10px; border-radius: 3px; }
-        .other-player .player-hand .card .rank, .other-player .player-hand .card .suit { display: none; }
-
-        /* Score Change Indicator */
-        .score-change { position: absolute; top: 5px; left: 50%; transform: translateX(-50%); font-size: 1.1em; font-weight: 700; padding: 4px 10px; border-radius: var(--border-radius-small); color: white; z-index: 50; animation: score-popup 1.8s ease-out forwards; opacity: 0; white-space: nowrap; }
-        .score-change.positive { background-color: var(--accent-positive); }
-        .score-change.negative { background-color: var(--accent-negative); }
-        @keyframes score-popup { 0% { opacity: 0; transform: translate(-50%, 15px); } 20% { opacity: 1; transform: translate(-50%, -5px); } 80% { opacity: 1; transform: translate(-50%, -5px); } 100% { opacity: 0; transform: translate(-50%, -20px); } }
-
-        /* Active Player Highlight */
-        .player-area.active { border-color: var(--accent-gold); box-shadow: var(--shadow-inner), 0 0 15px var(--accent-gold); }
-
-        /* --- Cards --- */
-        .card { width: 45px; height: 65px; background-color: var(--card-background); border: 1px solid var(--card-border); border-radius: var(--border-radius-small); display: inline-flex; flex-direction: column; justify-content: space-between; align-items: center; font-size: 0.9em; font-weight: bold; color: var(--dark-text-color); position: relative; cursor: default; transition: transform var(--transition-fast), box-shadow var(--transition-fast); box-shadow: 0 2px 5px rgba(0,0,0,0.25); user-select: none; overflow: hidden; padding: 2px; box-sizing: border-box; }
-        .card.color-RED { background-color: var(--color-red-bg); color: var(--color-red-fg); border-color: rgba(0,0,0,0.2); }
-        .card.color-YELLOW { background-color: var(--color-yellow-bg); color: var(--color-yellow-fg); border-color: rgba(0,0,0,0.2); }
-        .card.color-GREEN { background-color: var(--color-green-bg); color: var(--color-green-fg); border-color: rgba(0,0,0,0.2); }
-        .card.color-BLUE { background-color: var(--color-blue-bg); color: var(--color-blue-fg); border-color: rgba(0,0,0,0.2); }
-        .card.wizard { background-color: var(--wizard-color-bg); color: var(--wizard-color-fg); border-color: var(--wizard-color-fg); }
-        .card.jester { background-color: var(--jester-color-bg); color: var(--jester-color-fg); border-color: var(--jester-color-fg); }
-        .card::before, .card::after { position: absolute; font-size: 0.8em; line-height: 1; color: inherit; }
-        .card::before { top: 3px; left: 3px; content: attr(data-rank); }
-        .card::after { bottom: 3px; right: 3px; content: attr(data-rank); transform: rotate(180deg); }
-        .card .rank { position: absolute; top: 50%; left: 50%; transform: translate(-50%, -50%); font-size: 1.8em; opacity: 0.4; color: inherit; }
-        .card.wizard .rank, .card.jester .rank { font-size: 2.5em; opacity: 0.6; }
-
-        /* Human Hand Interactivity */
-        #human-player-area .player-hand { gap: 5px; }
-        #human-player-area .card { cursor: pointer; }
-        #human-player-area .card:not(.playable) { opacity: 0.6; cursor: not-allowed; box-shadow: none; }
-        #human-player-area .card.playable { border-color: var(--accent-gold); box-shadow: 0 0 12px var(--accent-gold), 0 3px 8px rgba(0,0,0,0.3); }
-        #human-player-area .card.playable:hover { transform: translateY(-12px) scale(1.08); z-index: 10; }
-
-        /* --- Table Area --- */
-        #table-area { grid-area: table; display: flex; flex-direction: column; justify-content: center; align-items: center; padding: 20px; gap: 30px; position: relative; } /* Added position relative */
-        #trump-area { text-align: center; min-height: 90px; }
-        #trump-area-label { display: block; margin-bottom: 8px; font-size: 0.9em; color: var(--text-secondary); font-weight: 500; text-transform: uppercase; letter-spacing: 0.5px; }
-        #trump-card-display { width: 45px; height: 65px; margin: 0 auto; position: relative; }
-        #trump-card-display .card-placeholder { display: block; width: 100%; height: 100%; border: 2px dashed var(--border-standard); border-radius: var(--border-radius-small); background: rgba(0,0,0,0.1); }
-        #trump-card-display .no-trump-indicator,
-        #trump-card-display .chosen-trump-indicator { width: 45px; height: 65px; border-radius: var(--border-radius-small); display: flex; justify-content: center; align-items: center; font-weight: 700; font-size: 1.5em; border: 1px solid var(--border-standard); }
-        #trump-card-display .no-trump-indicator { background-color: var(--bg-station-panel); color: var(--text-secondary); }
-        #trump-card-display .chosen-trump-indicator { color: white; text-shadow: 1px 1px 2px rgba(0,0,0,0.5); font-size: 2.5em; }
-
-        #current-trick-area { display: flex; gap: 15px; justify-content: center; align-items: center; width: 100%; min-height: 75px; position: relative; padding: 10px; background: rgba(0,0,0,0.1); border-radius: var(--border-radius-medium); }
-        .played-card-container { position: relative; /* For positioning player name */ }
-        .played-card-container .player-tag { position: absolute; bottom: -18px; left: 50%; transform: translateX(-50%); font-size: 0.75em; color: var(--text-secondary); background-color: rgba(13, 17, 23, 0.7); padding: 1px 4px; border-radius: 3px; white-space: nowrap; }
-        .played-card-container .card { animation: card-play-anim 0.4s cubic-bezier(0.175, 0.885, 0.32, 1.275); }
-        @keyframes card-play-anim { from { opacity: 0; transform: scale(0.7) translateY(15px); } to { opacity: 1; transform: scale(1) translateY(0); } }
-        .trick-winner-card { animation: pulse-winner 1s ease-in-out 1; }
-        @keyframes pulse-winner { 0%, 100% { box-shadow: 0 0 12px var(--accent-gold), 0 3px 8px rgba(0,0,0,0.3); transform: scale(1); } 50% { box-shadow: 0 0 25px var(--accent-gold), 0 5px 12px rgba(0,0,0,0.4); transform: scale(1.08); } }
-
-        /* Lobby Info in Table Area */
-        #lobby-info {
-            position: absolute; top: 0; left: 0; width: 100%; height: 100%;
-            background-color: rgba(13, 17, 23, 0.85); backdrop-filter: blur(3px);
-            display: flex; flex-direction: column; justify-content: center; align-items: center;
-            text-align: center; border-radius: var(--border-radius-medium); z-index: 20;
-            padding: 20px; box-sizing: border-box;
+        button:hover {
+            background-color: #0056b3;
         }
-        #lobby-info h2 { color: var(--accent-gold); margin-bottom: 15px; }
-        #lobby-info p { margin: 8px 0; color: var(--text-secondary); }
-        #lobby-room-id { font-weight: bold; background-color: var(--bg-mid-space); padding: 8px 15px; border-radius: var(--border-radius-small); user-select: all; cursor: pointer; border: 1px solid var(--border-highlight); margin-bottom: 15px; }
-        #lobby-player-list { list-style: none; padding: 0; margin: 10px 0 20px 0; max-height: 150px; overflow-y: auto; width: 80%; max-width: 300px; background-color: var(--bg-station-panel); border-radius: var(--border-radius-small); border: 1px solid var(--border-standard); }
-        #lobby-player-list li { padding: 8px 12px; border-bottom: 1px solid var(--border-standard); color: var(--text-primary); }
-        #lobby-player-list li:last-child { border-bottom: none; }
-        #lobby-player-list li strong { color: var(--accent-gold); } /* Highlight host */
-        #lobby-player-list li span { font-size: 0.85em; color: var(--text-secondary); margin-left: 5px; }
-
-        /* --- Info & Controls --- */
-        #game-info-area { grid-area: info; background-color: var(--bg-station-panel); border-radius: var(--border-radius-medium); border: 1px solid var(--border-standard); padding: 15px; font-size: 0.9em; text-align: center; display: flex; flex-direction: column; justify-content: center; box-shadow: var(--shadow-inner); gap: 8px; }
-        #round-info, #dealer-info { color: var(--text-secondary); font-weight: 500; }
-        #dealer-info .dealer-badge { vertical-align: baseline; }
-        #game-status { font-weight: 700; font-size: 1.1em; margin-top: 5px; min-height: 45px; color: var(--accent-gold); line-height: 1.3; }
-        #controls-area { grid-area: controls; display: flex; flex-direction: column; justify-content: center; align-items: center; gap: 15px; padding: 15px; }
-
-        /* Containers for button groups - Stacked */
-        #bid-controls, #play-controls, #next-round-controls, #end-game-controls, #lobby-controls { display: flex; flex-direction: column; gap: 10px; align-items: center; width: 100%; justify-content: center; }
-        #bid-controls { gap: 8px; }
-        #bid-controls label { font-size: 1em; margin-right: 0; margin-bottom: 4px; color: var(--text-secondary); font-weight: 500; white-space: nowrap; }
-        #bid-input { width: 60px; padding: 10px; border-radius: var(--border-radius-small); border: 1px solid var(--border-highlight); text-align: center; font-size: 1.1em; font-weight: 700; background-color: var(--bg-mid-space); color: var(--text-primary); box-shadow: var(--shadow-inner); }
-        #bid-input:focus { outline: none; border-color: var(--accent-gold); box-shadow: var(--shadow-inner), 0 0 8px var(--accent-gold); }
-        #bid-error { color: var(--accent-negative); font-size: 0.85em; min-height: 1em; margin-top: 2px;}
-
-
-        /* General Control Button Styling - Stacked */
-        .control-button { width: 80%; max-width: 200px; box-sizing: border-box; text-align: center; padding: 10px 15px; font-size: 1em; font-weight: 700; border: 1px solid var(--accent-gold-darker); border-radius: var(--border-radius-small); background: linear-gradient(to bottom, var(--accent-gold), #e6ce4a); color: var(--bg-deep-space); cursor: pointer; transition: background var(--transition-fast), box-shadow var(--transition-fast), transform var(--transition-fast); box-shadow: 0 2px 4px rgba(0,0,0,0.2); text-transform: uppercase; letter-spacing: 0.5px; }
-        .control-button:hover:not(:disabled) { background: linear-gradient(to bottom, #f8e97f, var(--accent-gold)); box-shadow: 0 4px 8px rgba(0,0,0,0.25); transform: translateY(-1px); }
-        .control-button:active:not(:disabled) { background: linear-gradient(to top, var(--accent-gold), #e6ce4a); transform: translateY(0px); box-shadow: 0 1px 2px rgba(0,0,0,0.2); }
-        .control-button:disabled { background: #555; border-color: #444; color: #999; cursor: not-allowed; box-shadow: none; transform: none; width: 80%; max-width: 200px; }
-        #lobby-controls .control-button { width: 60%; max-width: 180px; }
-
-
-        /* Play Controls Text */
-        #play-controls span { font-size: 1em; color: var(--text-secondary); text-align: center; font-weight: 500; }
-        .hidden { display: none !important; }
-
-        /* --- Scoreboard Overlay --- */
-        #scoreboard-overlay { position: fixed; top: 0; left: 0; width: 100%; height: 100%; background-color: rgba(13, 17, 23, 0.9); backdrop-filter: blur(5px); display: flex; justify-content: center; align-items: center; z-index: 100; opacity: 0; visibility: hidden; transition: opacity 0.4s ease, visibility 0s linear 0.4s; }
-        #scoreboard-overlay.visible { opacity: 1; visibility: visible; transition-delay: 0s; }
-        #scoreboard { background-color: var(--bg-station-panel); padding: 30px 40px; border-radius: var(--border-radius-medium); box-shadow: var(--shadow-medium); border: 1px solid var(--border-standard); width: 80%; max-width: 700px; max-height: 85vh; overflow-y: auto; color: var(--text-primary); }
-        #scoreboard h2 { text-align: center; margin-top: 0; color: var(--accent-gold); font-weight: 700; margin-bottom: 25px; }
-        #scoreboard table { width: 100%; border-collapse: collapse; margin-top: 20px; }
-        #scoreboard th, #scoreboard td { border: 1px solid var(--border-standard); padding: 10px 8px; text-align: center; }
-        #scoreboard th { background-color: var(--bg-mid-space); font-weight: 700; color: var(--text-primary); white-space: nowrap; }
-        #scoreboard td { font-size: 0.9em; }
-        #scoreboard td span { display: block; }
-        #scoreboard td .score-points { font-size: 1.15em; font-weight: 700; }
-        #scoreboard td .score-bidtaken { font-size: 0.85em; color: var(--text-secondary); margin-bottom: 4px; }
-        #scoreboard td .score-cumulative { font-weight: 500; margin-top: 3px; color: var(--text-primary); }
-        #scoreboard td.bid-made .score-points { color: var(--accent-positive); }
-        #scoreboard td.bid-missed .score-points { color: var(--accent-negative); }
-        #scoreboard tfoot td { font-weight: 700; background-color: var(--bg-mid-space); color: var(--accent-gold); font-size: 1.1em !important; padding: 12px 8px; }
-        #scoreboard-controls { text-align: center; margin-top: 30px; display: flex; flex-direction: column; align-items: center; gap: 10px; }
-        #scoreboard-controls .control-button { margin: 0; }
-
+        #resultArea {
+            margin-top: 15px;
+            padding: 15px;
+            border: 1px dashed #ccc;
+            background-color: #e9ecef;
+            border-radius: 5px;
+            min-height: 100px; /* Platzhalter für Ergebnisse */
+        }
+        #resultText {
+            font-weight: bold;
+            font-size: 1.4em; /* Größere Schrift für die Aktion */
+            color: #d9534f; /* Rote Farbe für die Aktion */
+            text-align: center;
+            margin-bottom: 10px;
+        }
+        .details {
+             font-size: 0.9em;
+             color: #555;
+             text-align: center;
+             margin-bottom: 10px;
+        }
+        .error {
+            color: red;
+            font-weight: bold;
+            text-align: center;
+        }
+        .legend-section ul {
+            list-style-type: none;
+            padding: 0;
+        }
+        .legend-section li {
+            margin-bottom: 5px;
+        }
+        .hint {
+            font-size: 0.85em;
+            font-style: italic;
+            color: #666;
+            margin-top: 10px;
+            text-align: center;
+        }
     </style>
-    <script src="https://unpkg.com/peerjs@1.4.7/dist/peerjs.min.js"></script>
 </head>
 <body>
-    <div id="main-content">
-        <!-- Setup Section (Initially Visible) -->
-        <section id="setup-section">
-            <h1>Wizard P2P</h1>
-            <label for="playerNameInput">Your Name:</label>
-            <input type="text" id="playerNameInput" placeholder="Enter your display name">
 
-            <button id="createRoomBtn">Create New Room</button>
-             <hr>
-             <label for="roomIdToJoinInput">Room ID to Join:</label>
-             <input type="text" id="roomIdToJoinInput" placeholder="Enter Room ID from Host">
-             <button id="joinRoomBtn">Join Room</button>
+    <h1>Blackjack Basisstrategie Rechner</h1>
+    <p style="text-align: center; font-size: 0.9em; color: #555;">
+        Basierend auf Standardregeln (4+ Decks, Dealer steht auf Soft 17, Verdoppeln nach Teilen erlaubt).
+    </p>
 
-             <div id="room-link-area" class="hidden">
-                 <p>Share this Room ID / Link:</p>
-                 <span id="shareable-link"></span>
-             </div>
+    <div class="input-section">
+        <h2>Eingabe</h2>
+        <label for="playerCard1">Deine erste Karte:</label>
+        <input type="text" id="playerCard1" placeholder="z.B. A, K, 7" maxlength="2"><br>
 
-             <div id="status">Connecting to Peer Network...</div>
-             <div id="error"></div>
-        </section>
+        <label for="playerCard2">Deine zweite Karte:</label>
+        <input type="text" id="playerCard2" placeholder="z.B. 10, J, 3" maxlength="2"><br>
 
-        <!-- Game Container (Initially Hidden) -->
-        <div id="game-container">
-            <!-- Player Areas -->
-            <div id="other-player-1-area" class="player-area other-player"> <!-- Top -->
-                <div class="player-info"> <span class="name">Waiting...</span> <span class="score">Score: 0</span> <span class="bid-taken">Bid: - / Tricks: 0</span> </div>
-                <div class="player-hand"></div>
-            </div>
-            <div id="other-player-0-area" class="player-area other-player"> <!-- Left -->
-                 <div class="player-info"> <span class="name">Waiting...</span> <span class="score">Score: 0</span> <span class="bid-taken">Bid: - / Tricks: 0</span> </div>
-                 <div class="player-hand"></div>
-            </div>
-            <div id="other-player-2-area" class="player-area other-player"> <!-- Right -->
-                 <div class="player-info"> <span class="name">Waiting...</span> <span class="score">Score: 0</span> <span class="bid-taken">Bid: - / Tricks: 0</span> </div>
-                 <div class="player-hand"></div>
-            </div>
-            <div id="human-player-area" class="player-area human-player">
-                 <div class="player-info"> <span class="name">You</span> <span class="score">Score: 0</span> <span class="bid-taken">Bid: - / Tricks: 0</span> </div>
-                 <div class="player-hand" id="human-hand"></div>
-            </div>
+        <label for="dealerCard">Dealer Up-Card:</label>
+        <input type="text" id="dealerCard" placeholder="z.B. Q, 9, A" maxlength="2"><br>
 
-            <!-- Table Center -->
-            <div id="table-area">
-                 <!-- Lobby Info Overlay -->
-                 <div id="lobby-info">
-                     <h2>Lobby</h2>
-                     <p>Room ID: <strong id="lobby-room-id"></strong></p>
-                     <p>Waiting for players... (Min: <span id="min-players-lobby">3</span>, Max: <span id="max-players-lobby">6</span>)</p>
-                     <ul id="lobby-player-list"></ul>
-                     <p id="lobby-status">Waiting for Host to start...</p>
-                 </div>
+        <button id="calculateButton">Strategie berechnen</button>
+    </div>
 
-                 <!-- Actual Game Table Elements -->
-                <div id="trump-area">
-                    <span id="trump-area-label">Trump</span>
-                    <div id="trump-card-display"><span class="card-placeholder"></span></div>
-                </div>
-                <div id="current-trick-area"></div>
-            </div>
-
-            <!-- Game Information -->
-            <div id="game-info-area">
-                <div id="round-info">Round: 0 / 0</div>
-                <div id="dealer-info">Dealer: -</div>
-                <div id="game-status">Waiting for game start...</div>
-            </div>
-
-            <!-- Controls -->
-            <div id="controls-area">
-                <div id="lobby-controls">
-                     <button id="startGameBtn" class="control-button hidden">Start Game</button>
-                     <button id="leaveRoomBtn" class="control-button">Leave Room</button>
-                </div>
-                <div id="bid-controls" class="hidden">
-                    <label for="bid-input">Your Bid:</label>
-                    <input type="number" id="bid-input" min="0" max="1" value="0">
-                    <span id="bid-error"></span>
-                    <button id="submit-bid-button" class="control-button">Submit Bid</button>
-                </div>
-                <div id="play-controls" class="hidden"><span>Waiting for turn...</span></div>
-                 <div id="next-round-controls" class="hidden">
-                     <button id="next-round-button" class="control-button">Next Round</button> <!-- Host only -->
-                     <button id="show-scoreboard-button" class="control-button">Scoreboard</button>
-                 </div>
-                 <div id="end-game-controls" class="hidden">
-                     <button id="show-final-scoreboard-button" class="control-button">Show Final Score</button>
-                     <button id="restart-game-button" class="control-button">New Game (Host Only)</button>
-                 </div>
-            </div>
-        </div>
-    </div> <!-- End #main-content -->
-
-    <!-- Scoreboard Overlay -->
-    <div id="scoreboard-overlay">
-        <div id="scoreboard">
-            <h2>Scoreboard</h2>
-            <table>
-                <thead> <tr id="scoreboard-header"> <th>Round</th> </tr> </thead>
-                <tbody id="scoreboard-body"></tbody>
-                <tfoot id="scoreboard-footer"></tfoot>
-            </table>
-            <div id="scoreboard-controls">
-                <button id="close-scoreboard-button" class="control-button">Close</button>
-                <button id="restart-game-from-scoreboard-button" class="control-button hidden">New Game (Host Only)</button>
-            </div>
+    <div class="result-section">
+        <h2>Empfehlung</h2>
+        <div id="resultArea">
+            <p style="text-align: center; color: #888;">Bitte Karten eingeben und berechnen.</p>
         </div>
     </div>
 
+     <div class="legend-section">
+        <h2>Legende</h2>
+        <ul>
+            <li><strong>H</strong> = Hit (Karte ziehen)</li>
+            <li><strong>S</strong> = Stand (Stehen bleiben)</li>
+            <li><strong>D</strong> = Double Down (Verdoppeln, wenn erlaubt)</li>
+            <li><strong>P</strong> = Split (Teilen, wenn erlaubt)</li>
+        </ul>
+    </div>
+
     <script>
-        // --- Constants ---
-        const MIN_PLAYERS = 3;
-        const MAX_PLAYERS = 6;
-        const SUITS = ['RED', 'YELLOW', 'GREEN', 'BLUE'];
-        const COLOR_NAMES = { "RED": "Red", "YELLOW": "Yellow", "GREEN": "Green", "BLUE": "Blue", null: "Special"};
-        const RANKS = ['2', '3', '4', '5', '6', '7', '8', '9', '10', 'J', 'Q', 'K', 'A'];
-        const WIZARD = 'W';
-        const JESTER = 'J';
-        const HUMAN_PLAYER_INDEX_LOCAL = 0; // Always refers to the user running this instance
+        // --- Hilfsfunktionen ---
+        function getCardValue(cardStr) {
+            const card = cardStr.toUpperCase().trim();
+            if (['J', 'Q', 'K', '10'].includes(card)) {
+                return { value: 10, isAce: false, display: card };
+            } else if (card === 'A') {
+                return { value: 11, isAce: true, display: 'A' };
+            } else {
+                const num = parseInt(card);
+                if (!isNaN(num) && num >= 2 && num <= 9) {
+                    return { value: num, isAce: false, display: card };
+                }
+            }
+            // Wenn hier angekommen, ist die Eingabe ungültig
+            throw new Error(`Ungültige Karte: "${cardStr}"`);
+        }
 
-        // --- PeerJS and Lobby Variables ---
-        let peer = null;
-        let myPeerId = null;
-        let myPlayerName = '';
-        let currentRoomId = null;
-        let isHost = false;
-        let connections = {}; // { peerId: DataConnection }
-        let playerNames = {}; // { peerId: playerName } - Updated via gameState in game
-        let playerPeerIds = []; // List of connected peerIds in the lobby
+        function calculateHandValue(cardDataArray) {
+            let total = 0;
+            let aceCount = 0;
+            let values = [];
+            let displayCards = [];
 
-        // --- Game State Variables ---
-        let gameState = {
-            phase: 'lobby', // lobby, bidding, playing, scoring, gameOver
-            players: {}, // { peerId: { name: string, score: number, bid: number|null, tricksTaken: number, hand?: string[] (host only) } }
-            playerOrder: [], // Array of peerIds in playing order for the round
-            roundNumber: 0,
-            maxRounds: 0,
-            dealerPeerId: null,
-            currentTurnPeerId: null,
-            trumpSuit: null, // 'RED', 'YELLOW', 'GREEN', 'BLUE', or 'N' (No Trump)
-            trumpCard: null, // The card revealed { suit, rank, id } or null
-            trickCards: [], // Array of { peerId: string, card: { suit, rank, id } } in the current trick
-            trickLeaderPeerId: null,
-            lastTrickWinnerPeerId: null,
-            bids: {}, // { peerId: number }
-            deck: [], // Host only
-            isGameStarted: false,
-            totalBids: 0, // Host only
-            scoreboardData: [] // Shared scoreboard history
+            for (const cardData of cardDataArray) {
+                total += cardData.value;
+                values.push(cardData.value);
+                displayCards.push(cardData.display);
+                if (cardData.isAce) {
+                    aceCount++;
+                }
+            }
+
+            // Asse als 1 zählen, falls nötig
+            while (total > 21 && aceCount > 0) {
+                total -= 10;
+                aceCount--;
+            }
+
+            const isSoft = aceCount > 0 && total <= 21; // Ein Ass zählt noch als 11
+            const isPair = cardDataArray.length === 2 && cardDataArray[0].display === cardDataArray[1].display;
+            // Wichtiger Fix für Paar-Wert: Benutze den numerischen Wert, nicht den String. A,A -> pairValue 11
+            const pairValue = isPair ? (cardDataArray[0].isAce ? 11 : cardDataArray[0].value) : null;
+
+
+            return {
+                total: total,
+                isSoft: isSoft,
+                isPair: isPair,
+                pairValue: pairValue, // Der Wert einer Karte des Paares (A=11)
+                display: displayCards.join(', ')
+            };
+        }
+
+        // --- Basisstrategie-Tabellen (wie im Python-Code) ---
+        // Dealer Key: Ass = 11, Zahlen 2-10
+        const pairStrategy = {
+            11: { 2: 'P', 3: 'P', 4: 'P', 5: 'P', 6: 'P', 7: 'P', 8: 'P', 9: 'P', 10: 'P', 11: 'P' }, // Asse
+            10: { 2: 'S', 3: 'S', 4: 'S', 5: 'S', 6: 'S', 7: 'S', 8: 'S', 9: 'S', 10: 'S', 11: 'S' }, // 10er (behandle wie Hard 20)
+            9:  { 2: 'P', 3: 'P', 4: 'P', 5: 'P', 6: 'P', 7: 'S', 8: 'P', 9: 'P', 10: 'S', 11: 'S' }, // 9er
+            8:  { 2: 'P', 3: 'P', 4: 'P', 5: 'P', 6: 'P', 7: 'P', 8: 'P', 9: 'P', 10: 'P', 11: 'P' }, // 8er
+            7:  { 2: 'P', 3: 'P', 4: 'P', 5: 'P', 6: 'P', 7: 'P', 8: 'H', 9: 'H', 10: 'H', 11: 'H' }, // 7er
+            6:  { 2: 'P', 3: 'P', 4: 'P', 5: 'P', 6: 'P', 7: 'H', 8: 'H', 9: 'H', 10: 'H', 11: 'H' }, // 6er
+            5:  { 2: 'D', 3: 'D', 4: 'D', 5: 'D', 6: 'D', 7: 'D', 8: 'D', 9: 'D', 10: 'H', 11: 'H' }, // 5er (behandle wie Hard 10)
+            4:  { 2: 'H', 3: 'H', 4: 'H', 5: 'P', 6: 'P', 7: 'H', 8: 'H', 9: 'H', 10: 'H', 11: 'H' }, // 4er
+            3:  { 2: 'P', 3: 'P', 4: 'P', 5: 'P', 6: 'P', 7: 'P', 8: 'H', 9: 'H', 10: 'H', 11: 'H' }, // 3er
+            2:  { 2: 'P', 3: 'P', 4: 'P', 5: 'P', 6: 'P', 7: 'P', 8: 'H', 9: 'H', 10: 'H', 11: 'H' }  // 2er
         };
-        let myHand = []; // Client's local hand { suit, rank, id }
 
-        // --- DOM Elements ---
-        let mainContent, setupSection, gameContainer;
-        let playerNameInput, createRoomBtn, roomIdToJoinInput, joinRoomBtn, roomLinkArea, shareableLink;
-        let statusDiv, errorDiv;
-        // Game screen elements
-        let humanHandElement, gameStatusElement, roundInfoElement, dealerInfoElement, trumpCardDisplayElement, trumpAreaLabel, currentTrickAreaElement;
-        let bidControlsElement, bidInputElement, submitBidButton, bidErrorElement;
-        let playControlsElement, nextRoundControlsElement, nextRoundButton, showScoreboardButton, endGameControlsElement, showFinalScoreboardButton, restartGameButton;
-        // Lobby elements inside game screen
-        let lobbyInfoDiv, lobbyRoomIdDisplay, lobbyPlayerListUl, lobbyStatusP, minPlayersSpan, maxPlayersSpan;
-        let startGameBtn, leaveRoomBtn;
-        // Scoreboard elements
-        let scoreboardOverlay, scoreboardBody, scoreboardHeader, scoreboardFooter, closeScoreboardButton, restartGameFromScoreboardButton;
-        // Player area elements map
-        const playerAreaElements = {}; // Populated in getDomElements
+        const softStrategy = { // Spieler Total (Ass = 11)
+            21: { 2: 'S', 3: 'S', 4: 'S', 5: 'S', 6: 'S', 7: 'S', 8: 'S', 9: 'S', 10: 'S', 11: 'S' }, // BJ
+            20: { 2: 'S', 3: 'S', 4: 'S', 5: 'S', 6: 'S', 7: 'S', 8: 'S', 9: 'S', 10: 'S', 11: 'S' }, // A,9
+            19: { 2: 'S', 3: 'S', 4: 'S', 5: 'S', 6: 'S', 7: 'S', 8: 'S', 9: 'S', 10: 'S', 11: 'S' }, // A,8 (manchmal D vs 6)
+            18: { 2: 'S', 3: 'D', 4: 'D', 5: 'D', 6: 'D', 7: 'S', 8: 'S', 9: 'H', 10: 'H', 11: 'H' }, // A,7
+            17: { 2: 'H', 3: 'D', 4: 'D', 5: 'D', 6: 'D', 7: 'H', 8: 'H', 9: 'H', 10: 'H', 11: 'H' }, // A,6
+            16: { 2: 'H', 3: 'H', 4: 'D', 5: 'D', 6: 'D', 7: 'H', 8: 'H', 9: 'H', 10: 'H', 11: 'H' }, // A,5
+            15: { 2: 'H', 3: 'H', 4: 'D', 5: 'D', 6: 'D', 7: 'H', 8: 'H', 9: 'H', 10: 'H', 11: 'H' }, // A,4
+            14: { 2: 'H', 3: 'H', 4: 'H', 5: 'D', 6: 'D', 7: 'H', 8: 'H', 9: 'H', 10: 'H', 11: 'H' }, // A,3
+            13: { 2: 'H', 3: 'H', 4: 'H', 5: 'D', 6: 'D', 7: 'H', 8: 'H', 9: 'H', 10: 'H', 11: 'H' }  // A,2
+        };
 
+        const hardStrategy = { // Spieler Total (kein Ass als 11)
+            17: { 2: 'S', 3: 'S', 4: 'S', 5: 'S', 6: 'S', 7: 'S', 8: 'S', 9: 'S', 10: 'S', 11: 'S' }, // 17+
+            16: { 2: 'S', 3: 'S', 4: 'S', 5: 'S', 6: 'S', 7: 'H', 8: 'H', 9: 'H', 10: 'H', 11: 'H' },
+            15: { 2: 'S', 3: 'S', 4: 'S', 5: 'S', 6: 'S', 7: 'H', 8: 'H', 9: 'H', 10: 'H', 11: 'H' },
+            14: { 2: 'S', 3: 'S', 4: 'S', 5: 'S', 6: 'S', 7: 'H', 8: 'H', 9: 'H', 10: 'H', 11: 'H' },
+            13: { 2: 'S', 3: 'S', 4: 'S', 5: 'S', 6: 'S', 7: 'H', 8: 'H', 9: 'H', 10: 'H', 11: 'H' },
+            12: { 2: 'H', 3: 'H', 4: 'S', 5: 'S', 6: 'S', 7: 'H', 8: 'H', 9: 'H', 10: 'H', 11: 'H' },
+            11: { 2: 'D', 3: 'D', 4: 'D', 5: 'D', 6: 'D', 7: 'D', 8: 'D', 9: 'D', 10: 'D', 11: 'D' },
+            10: { 2: 'D', 3: 'D', 4: 'D', 5: 'D', 6: 'D', 7: 'D', 8: 'D', 9: 'D', 10: 'H', 11: 'H' },
+            9:  { 2: 'H', 3: 'D', 4: 'D', 5: 'D', 6: 'D', 7: 'H', 8: 'H', 9: 'H', 10: 'H', 11: 'H' },
+            8:  { 2: 'H', 3: 'H', 4: 'H', 5: 'H', 6: 'H', 7: 'H', 8: 'H', 9: 'H', 10: 'H', 11: 'H' } // 8 oder weniger
+        };
 
-        // --- Utility Functions ---
-        function getDomElements() {
-            mainContent = document.getElementById('main-content');
-            setupSection = document.getElementById('setup-section');
-            gameContainer = document.getElementById('game-container');
-            playerNameInput = document.getElementById('playerNameInput');
-            createRoomBtn = document.getElementById('createRoomBtn');
-            roomIdToJoinInput = document.getElementById('roomIdToJoinInput');
-            joinRoomBtn = document.getElementById('joinRoomBtn');
-            roomLinkArea = document.getElementById('room-link-area');
-            shareableLink = document.getElementById('shareable-link');
-            statusDiv = document.getElementById('status');
-            errorDiv = document.getElementById('error');
+        // --- Hauptlogik ---
+        function getBestAction(playerHandData, dealerCardData) {
+            const { total: playerTotal, isSoft, isPair, pairValue } = playerHandData;
+            const dealerValue = dealerCardData.value; // Ass ist hier bereits 11
+            const dealerLookupValue = dealerValue; // Direkte Verwendung des Wertes (A=11)
 
-            humanHandElement = document.getElementById('human-hand');
-            gameStatusElement = document.getElementById('game-status');
-            roundInfoElement = document.getElementById('round-info');
-            dealerInfoElement = document.getElementById('dealer-info');
-            trumpCardDisplayElement = document.getElementById('trump-card-display');
-            trumpAreaLabel = document.getElementById('trump-area-label');
-            currentTrickAreaElement = document.getElementById('current-trick-area');
-            bidControlsElement = document.getElementById('bid-controls');
-            bidInputElement = document.getElementById('bid-input');
-            submitBidButton = document.getElementById('submit-bid-button');
-            bidErrorElement = document.getElementById('bid-error');
-            playControlsElement = document.getElementById('play-controls');
-            nextRoundControlsElement = document.getElementById('next-round-controls');
-            nextRoundButton = document.getElementById('next-round-button');
-            showScoreboardButton = document.getElementById('show-scoreboard-button');
-            endGameControlsElement = document.getElementById('end-game-controls');
-            showFinalScoreboardButton = document.getElementById('show-final-scoreboard-button');
-            restartGameButton = document.getElementById('restart-game-button');
-
-            lobbyInfoDiv = document.getElementById('lobby-info');
-            lobbyRoomIdDisplay = document.getElementById('lobby-room-id');
-            lobbyPlayerListUl = document.getElementById('lobby-player-list');
-            lobbyStatusP = document.getElementById('lobby-status');
-            minPlayersSpan = document.getElementById('min-players-lobby');
-            maxPlayersSpan = document.getElementById('max-players-lobby');
-            startGameBtn = document.getElementById('startGameBtn');
-            leaveRoomBtn = document.getElementById('leaveRoomBtn');
-
-            scoreboardOverlay = document.getElementById('scoreboard-overlay');
-            scoreboardBody = document.getElementById('scoreboard-body');
-            scoreboardHeader = document.getElementById('scoreboard-header');
-            scoreboardFooter = document.getElementById('scoreboard-footer');
-            closeScoreboardButton = document.getElementById('close-scoreboard-button');
-            restartGameFromScoreboardButton = document.getElementById('restart-game-from-scoreboard-button');
-
-            // Map player area elements (adjust indices if needed for > 4 players)
-            playerAreaElements['human'] = document.getElementById('human-player-area');
-            playerAreaElements['other-0'] = document.getElementById('other-player-0-area'); // West
-            playerAreaElements['other-1'] = document.getElementById('other-player-1-area'); // North
-            playerAreaElements['other-2'] = document.getElementById('other-player-2-area'); // East
-            // Add more for other-3 (South-West?), other-4 (South-East?) if supporting > 4
-        }
-
-        function setStatus(message, isLobbyStatus = false) {
-             if (isLobbyStatus && lobbyStatusP) { lobbyStatusP.textContent = message; }
-             else if (statusDiv) { statusDiv.textContent = message; }
-             console.log("Status:", message);
-        }
-        function setError(message) { if (errorDiv) errorDiv.textContent = message; console.error("Error:", message); }
-        function logMessage(message) { console.log("Log:", message); /* Could add to a visual log later */ }
-
-        function createCard(suit, rank, id) { return { suit, rank, id }; }
-        function createDeck() {
-            const deck = []; let idCounter = 0;
-            SUITS.forEach(suit => RANKS.forEach(rank => deck.push(createCard(suit, rank, `card-${idCounter++}`))));
-            for (let i = 0; i < 4; i++) deck.push(createCard(null, WIZARD, `card-${idCounter++}`));
-            for (let i = 0; i < 4; i++) deck.push(createCard(null, JESTER, `card-${idCounter++}`));
-            return deck;
-        }
-        function shuffleDeck(deck) { for (let i = deck.length - 1; i > 0; i--) { const j = Math.floor(Math.random() * (i + 1)); [deck[i], deck[j]] = [deck[j], deck[i]]; } }
-
-        function getCardSuit(card) { return card ? card.suit : null; } // Already handles null suit for W/J
-        function getCardValue(card) {
-            if (!card) return -1; if (card.rank === WIZARD) return 15; if (card.rank === JESTER) return 0;
-            const value = RANKS.indexOf(card.rank); return value !== -1 ? value + 2 : 0;
-        }
-        function sortHand(hand) {
-             const suitOrder = { 'RED': 1, 'YELLOW': 2, 'GREEN': 3, 'BLUE': 4, null: 0 }; // null for W/J first
-             hand.sort((a, b) => {
-                 const rankAVal = getCardValue(a); const rankBVal = getCardValue(b);
-                 if (a.rank === WIZARD && b.rank !== WIZARD) return 1; if (b.rank === WIZARD && a.rank !== WIZARD) return -1;
-                 if (a.rank === JESTER && b.rank !== JESTER) return -1; if (b.rank === JESTER && a.rank !== JESTER) return 1;
-                 const suitAOrder = suitOrder[a.suit]; const suitBOrder = suitOrder[b.suit];
-                 if (suitAOrder !== suitBOrder) return suitAOrder - suitBOrder;
-                 return rankAVal - rankBVal; // Sort by value within the same suit
-             });
-        }
-        function renderCard(card, isPlayable = false) {
-            const cardElement = document.createElement('div');
-            cardElement.className = 'card';
-            cardElement.dataset.cardId = card.id; cardElement.dataset.rank = card.rank;
-            if (card.suit) cardElement.classList.add(`color-${card.suit}`);
-            else if (card.rank === WIZARD) cardElement.classList.add('wizard');
-            else if (card.rank === JESTER) cardElement.classList.add('jester');
-            if (isPlayable) cardElement.classList.add('playable');
-            const rankElement = document.createElement('span'); rankElement.className = 'rank';
-            rankElement.textContent = card.rank; // W or J or numeric/face
-            cardElement.appendChild(rankElement);
-            return cardElement;
-        }
-         function getColorName(suit) { return COLOR_NAMES[suit] || 'Special'; }
-         function getPlayerNameById(peerId) { 
-            if (!peerId) return 'Unknown Player';
-            return gameState.players[peerId]?.name || peerId.substring(0,6) + '...'; 
-        }
-
-        // --- UI Update Functions ---
-        function showScreen(screenName) {
-            setupSection.style.display = (screenName === 'setup') ? 'block' : 'none';
-            gameContainer.style.display = (screenName === 'game') ? 'grid' : 'none';
-        }
-
-        function updateLobbyView() {
-             if (!lobbyInfoDiv || !gameContainer) return;
-             const inLobbyPhase = gameState.phase === 'lobby' && !gameState.isGameStarted;
-             lobbyInfoDiv.classList.toggle('hidden', !inLobbyPhase);
-             lobbyRoomIdDisplay.textContent = currentRoomId || 'N/A';
-
-             lobbyPlayerListUl.innerHTML = '';
-             let playerIndex = 0;
-             const combinedPlayers = isHost ? [myPeerId, ...Object.keys(connections)] : [currentRoomId, myPeerId, ...Object.keys(connections).filter(id => id !== currentRoomId)];
-
-             combinedPlayers.forEach(peerId => {
-                 const name = playerNames[peerId] || (peerId === myPeerId ? myPlayerName : 'Connecting...');
-                 const li = document.createElement('li');
-                 let suffix = '';
-                 if (peerId === myPeerId) suffix += ' (You)';
-                 if (isHost && peerId === myPeerId) suffix += ' <strong>[Host]</strong>';
-                 else if (!isHost && peerId === currentRoomId) suffix += ' <strong>[Host]</strong>';
-
-                 li.innerHTML = `${name}${suffix}`;
-                 lobbyPlayerListUl.appendChild(li);
-                 playerIndex++;
-             });
-
-             minPlayersSpan.textContent = MIN_PLAYERS;
-             maxPlayersSpan.textContent = MAX_PLAYERS;
-
-             const playerCount = Object.keys(playerNames).length; // Use playerNames as source of truth for count
-             if (isHost) {
-                startGameBtn.classList.remove('hidden');
-                startGameBtn.disabled = playerCount < MIN_PLAYERS || playerCount > MAX_PLAYERS;
-                if (playerCount < MIN_PLAYERS) setStatus(`Waiting for more players... (${playerCount}/${MIN_PLAYERS})`, true);
-                else if (playerCount > MAX_PLAYERS) setStatus(`Too many players! (${playerCount}/${MAX_PLAYERS})`, true);
-                else setStatus(`Ready to start with ${playerCount} players.`, true);
-             } else {
-                 startGameBtn.classList.add('hidden');
-                 setStatus(`Waiting for Host (${getPlayerNameById(currentRoomId)}) to start... (${playerCount} players)`, true);
-             }
-             leaveRoomBtn.classList.remove('hidden'); // Always show leave button in lobby/game
-        }
-
-        function renderAllPlayerAreas() {
-            if (!gameState.isGameStarted) {
-                // Hide all player areas except potentially human stub in lobby phase? Or hide all. Let's hide.
-                Object.values(playerAreaElements).forEach(area => area.classList.add('hidden'));
-                return;
+            // 1. Blackjack? (Wird hier nicht speziell geprüft, da S21/H21 sowieso Stand ist)
+            if (playerTotal === 21) {
+                // Unterscheidung für Anzeige: Blackjack vs. erreicht 21
+                 if (playerHandData.display.split(',').length === 2 && !isPair) return { action: "S", detail: "Blackjack!" };
+                 else return { action: "S", detail: "" };
             }
 
-             // Make sure all are potentially visible first
-            Object.values(playerAreaElements).forEach(area => area.classList.remove('hidden'));
-            document.querySelectorAll('.score-change').forEach(el => el.remove()); // Clear old score popups
 
-
-            const myIndexInOrder = gameState.playerOrder.indexOf(myPeerId);
-            if (myIndexInOrder === -1) { console.error("Error: Self not found in playerOrder!"); return; }
-
-             const numPlayers = gameState.playerOrder.length;
-
-            gameState.playerOrder.forEach((peerId, orderIndex) => {
-                const player = gameState.players[peerId];
-                if (!player) return; // Skip if player data not yet available
-
-                 // Calculate relative position (0=human, 1=left, 2=top, 3=right etc.)
-                 const relativeIndex = (orderIndex - myIndexInOrder + numPlayers) % numPlayers;
-                 let areaId;
-                 let areaElement;
-
-                 if (relativeIndex === 0) { // This is the human player
-                     areaId = 'human';
-                     areaElement = playerAreaElements[areaId];
-                     renderHumanHand(player.hand || myHand); // Render actual hand
+            // 2. Paar?
+            if (isPair) {
+                // Sonderfälle 5,5 und 10,10 werden nicht als Paare geteilt (siehe pairStrategy)
+                 if (pairStrategy[pairValue] && pairStrategy[pairValue][dealerLookupValue]) {
+                      // Spezielle Behandlung für 5er und 10er Paare für die Detailanzeige
+                      if (pairValue === 5) return { action: pairStrategy[pairValue][dealerLookupValue], detail: "(wie Hard 10)" };
+                      if (pairValue === 10) return { action: pairStrategy[pairValue][dealerLookupValue], detail: "(wie Hard 20)" };
+                      return { action: pairStrategy[pairValue][dealerLookupValue], detail: "" };
                  } else {
-                     // Map relative index to area names (e.g., 1->other-0 (left), 2->other-1 (top), 3->other-2 (right))
-                     // This needs adjustment for > 4 players
-                     if (relativeIndex > 0 && relativeIndex < numPlayers) {
-                          // Simple mapping for up to 4 players
-                         const otherPlayerIndex = relativeIndex - 1; // 0, 1, 2 for West, North, East
-                         if (otherPlayerIndex < 3) { // Check if we have a defined area
-                            areaId = `other-${otherPlayerIndex}`;
-                            areaElement = playerAreaElements[areaId];
-                            // Render other player's card backs (based on hand size from gameState)
-                             const handElement = areaElement?.querySelector('.player-hand');
-                             if (handElement) {
-                                 handElement.innerHTML = '';
-                                 const handSize = player.handSize || 0; // Expect handSize from host state update
-                                 for (let i = 0; i < handSize; i++) {
-                                     const cardBack = document.createElement('div'); cardBack.className = 'card'; handElement.appendChild(cardBack);
-                                 }
-                             }
-                         } else {
-                             // Handle 5+ players - where do they go visually? Need more areas or overlap.
-                             console.warn(`Visual slot for relative player index ${relativeIndex} not defined.`);
-                             areaElement = null;
-                         }
-                     } else {
-                        areaElement = null; // Should not happen
-                     }
+                     console.error("Fehler im Paar-Lookup:", pairValue, dealerLookupValue);
+                     return { action: "Fehler", detail: "Strategie nicht gefunden" };
                  }
+            }
 
-                 if (!areaElement) {
-                     console.error(`Could not find player area for peer ${peerId} (relative index ${relativeIndex})`);
-                     return; // Skip rendering if area not found
+            // 3. Soft Hand?
+            if (isSoft) {
+                 if (softStrategy[playerTotal] && softStrategy[playerTotal][dealerLookupValue]) {
+                     return { action: softStrategy[playerTotal][dealerLookupValue], detail: "(Soft Hand)" };
+                 } else {
+                      console.error("Fehler im Soft-Lookup:", playerTotal, dealerLookupValue);
+                      return { action: "Fehler", detail: "Strategie nicht gefunden" };
                  }
+            }
 
+            // 4. Hard Hand?
+            let hardLookupTotal = playerTotal;
+            if (playerTotal >= 17) hardLookupTotal = 17; // Alle >= 17 sind gleich
+            if (playerTotal <= 8) hardLookupTotal = 8;   // Alle <= 8 sind gleich
 
-                 // Update Common Info (Name, Score, Bid/Taken, Active, Dealer)
-                 areaElement.classList.toggle('active', peerId === gameState.currentTurnPeerId && ['bidding', 'playing'].includes(gameState.phase));
-                 areaElement.classList.toggle('other-player', relativeIndex !== 0);
-                 areaElement.classList.toggle('human-player', relativeIndex === 0);
-
-                 const nameElement = areaElement.querySelector('.name');
-                 const scoreElement = areaElement.querySelector('.score');
-                 const bidTakenElement = areaElement.querySelector('.bid-taken');
-
-                 if (nameElement) {
-                     const existingBadge = nameElement.querySelector('.dealer-badge'); if (existingBadge) existingBadge.remove();
-                     nameElement.textContent = player.name;
-                     if (peerId === gameState.dealerPeerId) {
-                         const badge = document.createElement('span'); badge.className = 'dealer-badge'; badge.textContent = 'D'; nameElement.appendChild(badge);
-                     }
-                 }
-                 if (scoreElement) scoreElement.textContent = `Score: ${player.score}`;
-                 if (bidTakenElement) {
-                     const bidText = player.bid !== null ? player.bid : '-';
-                     const takenText = player.tricksTaken !== null ? player.tricksTaken : '0';
-                     bidTakenElement.textContent = `Bid: ${bidText} / Tricks: ${takenText}`;
-                 }
-
-                 // Show Score Change Indicator
-                 if (gameState.phase === 'scoring' && gameState.roundScoreDetails && gameState.roundScoreDetails[peerId]) {
-                     const scoreChangeData = gameState.roundScoreDetails[peerId];
-                     const scoreIndicator = document.createElement('span');
-                     scoreIndicator.className = `score-change ${scoreChangeData.points >= 0 ? 'positive' : 'negative'}`;
-                     scoreIndicator.textContent = `${scoreChangeData.points > 0 ? '+' : ''}${scoreChangeData.points} pts`;
-                     areaElement.appendChild(scoreIndicator);
-                 }
-            });
-
-             // Hide unused player areas if fewer than max players
-             const maxOtherAreas = Object.keys(playerAreaElements).length - 1; // Exclude human area
-             for (let i = numPlayers - 1; i < maxOtherAreas; i++) {
-                const unusedAreaId = `other-${i}`;
-                 if (playerAreaElements[unusedAreaId]) {
-                    playerAreaElements[unusedAreaId].classList.add('hidden');
-                 }
-             }
-        }
-
-        function renderHumanHand(handCards) {
-            humanHandElement.innerHTML = '';
-            if (!handCards) return;
-            sortHand(handCards);
-            const isMyTurn = gameState.currentTurnPeerId === myPeerId && gameState.phase === 'playing';
-            let validMoves = [];
-            if (isMyTurn) { validMoves = getValidMoves(handCards, gameState.trickCards.length > 0 ? getCardSuit(gameState.trickCards[0].card) : null); }
-
-            handCards.forEach(card => {
-                const isPlayable = isMyTurn && validMoves.some(validCard => validCard.id === card.id);
-                const cardElement = renderCard(card, isPlayable);
-                 if (isPlayable) {
-                    cardElement.addEventListener('click', handleCardClick);
-                 } else if (isMyTurn) {
-                     // Card exists, but not playable
-                     cardElement.classList.add('disabled'); // Add visual disabled state if needed by CSS
-                 }
-                humanHandElement.appendChild(cardElement);
-            });
-        }
-
-        function renderTrumpCard() {
-            trumpCardDisplayElement.innerHTML = '';
-            trumpAreaLabel.textContent = "Trump";
-
-            if (gameState.trumpSuit === null && gameState.trumpCard === null && gameState.phase !== 'lobby' && gameState.phase !== 'INIT') {
-                trumpCardDisplayElement.innerHTML = '<span class="card-placeholder"></span>';
-            } else if (gameState.trumpSuit === 'N') {
-                const indicator = document.createElement('div'); indicator.className = 'no-trump-indicator'; indicator.textContent = 'N'; trumpCardDisplayElement.appendChild(indicator);
-                trumpAreaLabel.textContent = "Trump: None";
-            } else if (gameState.trumpCard && gameState.trumpCard.rank !== WIZARD) { // Normal Card or Jester revealed
-                const cardElement = renderCard(gameState.trumpCard); trumpCardDisplayElement.appendChild(cardElement);
-                trumpAreaLabel.textContent = `Trump: ${getColorName(gameState.trumpSuit)}`;
-            } else if (gameState.trumpSuit && gameState.trumpSuit !== 'N') { // Trump Chosen (Wizard drawn)
-                const indicator = document.createElement('div'); indicator.className = 'chosen-trump-indicator';
-                const colorVarBg = `--color-${gameState.trumpSuit.toLowerCase()}-bg`; const colorVarFg = `--color-${gameState.trumpSuit.toLowerCase()}-fg`;
-                indicator.style.backgroundColor = `var(${colorVarBg})`; indicator.style.color = `var(${colorVarFg})`;
-                indicator.textContent = gameState.trumpSuit.charAt(0); trumpCardDisplayElement.appendChild(indicator);
-                trumpAreaLabel.textContent = `Trump (Chosen): ${getColorName(gameState.trumpSuit)}`;
+            if (hardStrategy[hardLookupTotal] && hardStrategy[hardLookupTotal][dealerLookupValue]) {
+                 return { action: hardStrategy[hardLookupTotal][dealerLookupValue], detail: "(Hard Hand)" };
             } else {
-                trumpCardDisplayElement.innerHTML = '<span class="card-placeholder"></span>'; // Initial or unknown state
+                console.error("Fehler im Hard-Lookup:", hardLookupTotal, dealerLookupValue);
+                 return { action: "Fehler", detail: "Strategie nicht gefunden" };
             }
         }
 
-        function renderCurrentTrick() {
-            currentTrickAreaElement.innerHTML = '';
-            gameState.trickCards.forEach(played => {
-                const cardElement = renderCard(played.card);
-                const container = document.createElement('div'); container.className = 'played-card-container'; container.dataset.playerPeerId = played.peerId;
-                const playerTag = document.createElement('span'); playerTag.className = 'player-tag';
-                playerTag.textContent = getPlayerNameById(played.peerId).substring(0, 8); // Short name tag
-                container.appendChild(cardElement); container.appendChild(playerTag);
-                currentTrickAreaElement.appendChild(container);
-            });
-        }
-        function highlightTrickWinner(winningCardId) {
-             currentTrickAreaElement.querySelectorAll('.card').forEach(el => {
-                el.classList.remove('trick-winner-card');
-                if (el.dataset.cardId === winningCardId) el.classList.add('trick-winner-card');
-             });
-        }
-        function renderGameInfo() {
-            if (!gameState.isGameStarted) {
-                 roundInfoElement.textContent = "Lobby";
-                 dealerInfoElement.textContent = "";
-                 gameStatusElement.textContent = "Waiting for players...";
-                 return;
-            }
-            roundInfoElement.textContent = `Round: ${gameState.roundNumber} / ${gameState.maxRounds}`;
-            const dealerName = gameState.dealerPeerId ? getPlayerNameById(gameState.dealerPeerId) : 'None';
-            dealerInfoElement.textContent = `Dealer: ${dealerName}`;
-            // Status set elsewhere based on phase/turn
-        }
+        // --- Event Listener für den Button ---
+        document.getElementById('calculateButton').addEventListener('click', function() {
+            const resultArea = document.getElementById('resultArea');
+            resultArea.innerHTML = ''; // Vorheriges Ergebnis löschen
 
-        function updateControls() {
-            // Hide all specific control groups first
-            lobbyControls.classList.add('hidden');
-            bidControlsElement.classList.add('hidden');
-            playControlsElement.classList.add('hidden');
-            nextRoundControlsElement.classList.add('hidden');
-            endGameControlsElement.classList.add('hidden');
-            bidErrorElement.textContent = ''; // Clear bid error
+            try {
+                // 1. Eingaben holen und validieren
+                const playerCard1Str = document.getElementById('playerCard1').value;
+                const playerCard2Str = document.getElementById('playerCard2').value;
+                const dealerCardStr = document.getElementById('dealerCard').value;
 
-            if (!myPeerId) return; // Not connected yet
-
-            // Lobby Phase Controls
-             if (gameState.phase === 'lobby' || !gameState.isGameStarted) {
-                 lobbyControls.classList.remove('hidden');
-                 // Start game button logic handled in updateLobbyView based on player count
-                 leaveRoomBtn.classList.remove('hidden');
-                 return; // Nothing else to show in lobby phase
-             }
-
-            // In-Game Controls
-            leaveRoomBtn.classList.add('hidden'); // Hide generic leave button during game phases
-            const playControlsSpan = playControlsElement.querySelector('span');
-            playControlsSpan.textContent = ''; // Clear default text
-
-            switch(gameState.phase) {
-                 case 'bidding':
-                    if (gameState.currentTurnPeerId === myPeerId) {
-                        bidControlsElement.classList.remove('hidden');
-                        bidInputElement.max = gameState.roundNumber;
-                        let currentVal = parseInt(bidInputElement.value) || 0;
-                        bidInputElement.value = Math.min(Math.max(currentVal, 0), gameState.roundNumber);
-                        validateBidInput(); // Sets button disabled state and error message
-                    } else {
-                        playControlsElement.classList.remove('hidden');
-                        if(playControlsSpan) playControlsSpan.textContent = `Waiting for ${getPlayerNameById(gameState.currentTurnPeerId)} to bid...`;
-                    }
-                    break;
-                case 'playing':
-                    playControlsElement.classList.remove('hidden');
-                    if (gameState.currentTurnPeerId === myPeerId) {
-                        if(playControlsSpan) playControlsSpan.textContent = "Your turn to play.";
-                    } else {
-                        if(playControlsSpan) playControlsSpan.textContent = `Waiting for ${getPlayerNameById(gameState.currentTurnPeerId)} to play...`;
-                    }
-                    break;
-                case 'scoring': // Show scoreboard button, next round button for host
-                     nextRoundControlsElement.classList.remove('hidden');
-                     showScoreboardButton.classList.remove('hidden');
-                     nextRoundButton.classList.toggle('hidden', !isHost);
-                     nextRoundButton.disabled = false; // Enable if shown
-                    break;
-                case 'gameOver':
-                    endGameControlsElement.classList.remove('hidden');
-                    showFinalScoreboardButton.classList.remove('hidden');
-                    restartGameButton.classList.toggle('hidden', !isHost); // Only host can restart
-                     leaveRoomBtn.classList.remove('hidden'); // Allow leaving after game over
-                    break;
-            }
-        }
-        function validateBidInput() {
-             if (gameState.phase !== 'bidding' || gameState.currentTurnPeerId !== myPeerId) return;
-             const bidValue = parseInt(bidInputElement.value);
-             const maxBid = gameState.roundNumber;
-             let isValid = true; let errorMsg = '';
-
-             if (isNaN(bidValue) || bidValue < 0 || bidValue > maxBid) {
-                 isValid = false; errorMsg = `Bid must be between 0 and ${maxBid}.`;
-             } else {
-                // Check last bidder rule
-                 const numPlayers = gameState.playerOrder.length;
-                 const bidsMadeCount = Object.keys(gameState.bids).length;
-                 const isLastBidder = bidsMadeCount === numPlayers - 1; // Am I the last one to bid?
-
-                 if (isLastBidder) {
-                     const currentBidSum = Object.values(gameState.bids).reduce((sum, b) => sum + b, 0);
-                     if ((currentBidSum + bidValue) === gameState.roundNumber) {
-                         isValid = false;
-                         errorMsg = `Last bid invalid. Sum of bids cannot be ${gameState.roundNumber}.`;
-                     }
-                 }
-             }
-             submitBidButton.disabled = !isValid;
-             bidErrorElement.textContent = errorMsg;
-        }
-
-        // --- P2P Communication ---
-        function sendMessage(targetPeerId, data) {
-            if (connections[targetPeerId] && connections[targetPeerId].open) {
-                try { connections[targetPeerId].send(data); }
-                catch (err) { console.error(`Error sending to ${targetPeerId}:`, err); }
-            } else { console.warn(`Attempted to send to disconnected peer ${targetPeerId}`, data); }
-        }
-        function broadcastMessage(data, excludePeerId = null) {
-            logMessage(`Broadcasting: ${JSON.stringify(data)}`);
-            for (const peerId in connections) {
-                if (peerId !== excludePeerId && connections.hasOwnProperty(peerId) && connections[peerId].open) {
-                    sendMessage(peerId, data);
+                if (!playerCard1Str || !playerCard2Str || !dealerCardStr) {
+                   throw new Error("Bitte alle drei Karten eingeben.");
                 }
-            }
-        }
-        function handleReceivedData(peerId, data) {
-            logMessage(`Received from ${getPlayerNameById(peerId) || peerId}: ${JSON.stringify(data)}`);
 
-             // Messages handled by both Host and Client
-             switch (data.type) {
-                case 'player_update': // Sent by host to update lobby/player list
-                    if (!isHost) {
-                        playerNames = data.players; // Update local list of names/ids
-                        // Update gameState players if game hasn't started? Or just rely on game_start_info?
-                        if (!gameState.isGameStarted) {
-                            gameState.players = {}; // Reset if in lobby
-                            Object.entries(playerNames).forEach(([pid, pname]) => {
-                                gameState.players[pid] = { name: pname, score: 0, bid: null, tricksTaken: 0 };
-                            });
-                        }
-                        updateLobbyView(); // Update visual list
-                    }
-                    return;
-                 case 'chat_message': // Example if chat added
-                     // displayChatMessage(data.senderName, data.message);
-                     return;
-                case 'error_message': // Generic error from host/peer
-                     setError(data.message);
-                     return;
-             }
-
-             // --- Host-Only Message Handling ---
-             if (isHost) {
-                 switch (data.type) {
-                     case 'set_name': // Client announces name on connect
-                         playerNames[peerId] = data.name;
-                         if (!gameState.players[peerId]) {
-                            gameState.players[peerId] = { name: data.name, score: 0, bid: null, tricksTaken: 0 };
-                         } else {
-                            gameState.players[peerId].name = data.name;
-                         }
-                         logMessage(`${data.name} (${peerId}) joined.`);
-                         // Send updated player list to everyone
-                         broadcastMessage({ type: 'player_update', players: playerNames });
-                         updateLobbyView(); // Update host's lobby view
-                         break;
-                     case 'request_game_start': // Client (shouldn't happen, only host starts) - ignore or error?
-                         console.warn("Received game start request from client - ignoring.");
-                         break;
-                     case 'submit_bid':
-                         if (gameState.isGameStarted && gameState.phase === 'bidding' && peerId === gameState.currentTurnPeerId) {
-                             processBid(peerId, data.bid);
-                         } else { console.warn("Invalid bid received (wrong turn/phase/not started)."); }
-                         break;
-                     case 'play_card':
-                          if (gameState.isGameStarted && gameState.phase === 'playing' && peerId === gameState.currentTurnPeerId) {
-                             // Find the card object from the ID
-                             const cardToPlay = findCardInGameState(peerId, data.cardId);
-                             if (cardToPlay) {
-                                processPlayedCard(peerId, cardToPlay);
-                             } else {
-                                 console.error(`Host Error: Client ${peerId} tried to play card ID ${data.cardId} which host cannot find!`);
-                                 // Request again? Or handle error?
-                                 sendMessage(peerId, {type: 'error_message', message: 'Server error: Card not found.'});
-                                 // Maybe force next turn or end game? Risky.
-                             }
-                         } else { console.warn("Invalid card received (wrong turn/phase/not started)."); }
-                         break;
-                     // Handle other client->host messages
-                 }
-             }
-             // --- Client-Only Message Handling ---
-             else { // (!isHost)
-                 switch (data.type) {
-                    case 'game_start_info': // Host initiated game start
-                        gameState.isGameStarted = true;
-                        gameState.phase = 'initial_deal'; // Transition state
-                        gameState.players = data.players; // Get initial player list/scores/order
-                        gameState.playerOrder = data.playerOrder;
-                        gameState.maxRounds = data.maxRounds;
-                        gameState.scoreboardData = data.scoreboardData || []; // Sync scoreboard history
-                        playerNames = {}; // Rebuild names from game state
-                        Object.entries(gameState.players).forEach(([pid, pdata]) => playerNames[pid] = pdata.name);
-                        updateLobbyView(); // Update player list based on game state
-                        lobbyInfoDiv.classList.add('hidden'); // Hide lobby overlay
-                        logMessage("Game started by host!");
-                        renderAllPlayerAreas();
-                        renderGameInfo();
-                        updateControls();
-                        break;
-                    case 'deal_hand': // Host dealt cards to this client
-                        myHand = data.hand; // Store { suit, rank, id } objects
-                        gameState.roundNumber = data.roundNumber; // Sync round number
-                        logMessage(`Round ${data.roundNumber}: Received ${myHand.length} cards.`);
-                        renderHumanHand(myHand);
-                        renderGameInfo(); // Update round display
-                        break;
-                    case 'update_game_state': // Authoritative state update from host
-                        // Selective merge to avoid overwriting things client manages (like input focus?)
-                        // Client should generally trust the host's state completely for game logic.
-                        Object.assign(gameState, data.newState);
-                         // Update local hand size info for rendering other players (Host doesn't send full hands)
-                         if (data.newState.players) {
-                             Object.entries(data.newState.players).forEach(([pid, pdata]) => {
-                                 if (gameState.players[pid] && pdata.handSize !== undefined) {
-                                     gameState.players[pid].handSize = pdata.handSize;
-                                 }
-                                  // Update names just in case they changed (unlikely mid-game)
-                                 if (gameState.players[pid] && pdata.name) {
-                                      gameState.players[pid].name = pdata.name;
-                                      playerNames[pid] = pdata.name; // Keep local name map synced
-                                  }
-                             });
-                         }
-
-                        // Re-render everything based on new state
-                        renderAllPlayerAreas(); // Updates scores, bids, tricks, active player, dealer, hand backs
-                        renderTrumpCard();
-                        renderCurrentTrick();
-                        renderGameInfo();
-                         if (gameState.currentTurnPeerId === myPeerId && gameState.phase === 'playing') {
-                             renderHumanHand(myHand); // Re-render hand to update playable status
-                         }
-                        updateControls(); // Update buttons/input visibility/state
-                         gameStatusElement.textContent = data.newState.statusMessage || generateStatusMessage(); // Use host message or generate local
-
-                         // Trigger score popups if scoring phase just ended
-                         if (gameState.phase === 'scoring' && gameState.roundScoreDetails) {
-                            renderAllPlayerAreas(); // Render again specifically to show score popups
-                         }
-                        break;
-                    case 'request_bid': // Host asking this client for bid
-                        gameState.phase = 'bidding';
-                        gameState.currentTurnPeerId = myPeerId;
-                        gameState.roundNumber = data.roundNumber;
-                        gameState.bids = data.bids; // Get current bids for last bidder rule check
-                        updateControls();
-                        gameStatusElement.textContent = "Your turn to bid.";
-                         renderAllPlayerAreas(); // Highlight active player
-                        bidInputElement.focus();
-                        break;
-                    case 'request_play': // Host asking this client to play
-                        gameState.phase = 'playing';
-                        gameState.currentTurnPeerId = myPeerId;
-                        // Trick cards should be updated via `update_game_state`
-                        renderHumanHand(myHand); // Update playable cards
-                        updateControls();
-                        gameStatusElement.textContent = "Your turn to play.";
-                         renderAllPlayerAreas(); // Highlight active player
-                        break;
-                    case 'trick_winner_info': // Host announces winner (optional, could be part of state update)
-                        highlightTrickWinner(data.winningCardId);
-                        logMessage(`${getPlayerNameById(data.winnerPeerId)} won the trick with ${data.winningCardId}.`);
-                        break;
-                    case 'round_over_info': // Host finished scoring
-                         gameState.phase = 'scoring'; // Update local phase
-                         gameState.players = data.players; // Update scores
-                         gameState.scoreboardData = data.scoreboardData; // Update history
-                         gameState.roundScoreDetails = data.roundScoreDetails; // Get details for popups
-                         renderAllPlayerAreas(); // Show score popups
-                         renderScoreboard(); // Update scoreboard data
-                         updateControls(); // Show next round/scoreboard buttons
-                         gameStatusElement.textContent = `Round ${gameState.roundNumber} ended. Scores updated.`;
-                         // Host will transition to ROUND_END phase later
-                        break;
-                    case 'game_over':
-                        gameState.phase = 'gameOver';
-                        gameState.players = data.finalScores; // Get final scores
-                         const winner = Object.values(gameState.players).sort((a, b) => b.score - a.score)[0];
-                        gameStatusElement.textContent = `Game Over! ${winner.name} wins with ${winner.score} points!`;
-                        updateControls();
-                        renderAllPlayerAreas(); // Update final scores visually
-                        logMessage("Game over!");
-                        showScoreboard(true); // Auto-show final scoreboard
-                        break;
-                     // Handle other host->client messages
-                 }
-             }
-        }
-        function setupConnectionEventHandlers(conn) {
-             conn.on('data', (data) => { handleReceivedData(conn.peer, data); });
-             conn.on('close', () => { handlePeerDisconnect(conn.peer); });
-             conn.on('error', (err) => {
-                 setError(`Connection error with ${getPlayerNameById(conn.peer) || conn.peer}: ${err}`);
-                 handlePeerDisconnect(conn.peer); // Treat error as disconnect for cleanup
-             });
-        }
-        function handlePeerDisconnect(disconnectedPeerId) {
-             const name = playerNames[disconnectedPeerId] || disconnectedPeerId.substring(0,6)+'...';
-             logMessage(`${name} disconnected.`);
-             delete connections[disconnectedPeerId];
-             delete playerNames[disconnectedPeerId]; // Remove from lobby list source
-
-             if (isHost) {
-                  delete gameState.players[disconnectedPeerId]; // Remove from game state
-                  // Inform remaining players
-                  broadcastMessage({ type: 'player_update', players: playerNames });
-                  // If game is running, handle game logic consequences
-                  if (gameState.isGameStarted && gameState.phase !== 'gameOver') {
-                      handlePlayerDisconnectDuringGame(disconnectedPeerId);
-                  } else {
-                       updateLobbyView(); // Update host lobby view
-                  }
-             } else { // Client disconnected
-                 delete gameState.players[disconnectedPeerId]; // Remove locally
-                 // If the HOST disconnected, the game ends for this client
-                 if (disconnectedPeerId === currentRoomId) {
-                     setError("Host disconnected. Game over.");
-                     alert("Host disconnected. The game cannot continue.");
-                     showScreen('setup'); // Go back to setup screen
-                     cleanup();
-                     initializePeerJS(); // Re-init peerjs
-                 } else {
-                     // Just another client disconnected, update view
-                     updateLobbyView();
-                      if(gameState.isGameStarted) renderAllPlayerAreas(); // Update game view if started
-                 }
-             }
-        }
-
-        // --- PeerJS Initialization and Lobby Logic ---
-        function initializePeerJS() {
-            setError(''); setStatus('Connecting to Peer Network...');
-            if (peer && !peer.destroyed) { peer.destroy(); } peer = null;
-
-            peer = new Peer(undefined, { debug: 1 }); // Use undefined ID, debug level 1
-
-            peer.on('open', (id) => {
-                myPeerId = id; setStatus(`Network Ready. Your ID: ${myPeerId}`);
-                console.log('My PeerJS ID: ' + myPeerId);
-                // Enable setup buttons
-                playerNameInput.disabled = false; createRoomBtn.disabled = false;
-                roomIdToJoinInput.disabled = false; joinRoomBtn.disabled = false;
-
-                 // Check URL hash for joining automatically
-                 const hash = window.location.hash;
-                  if (hash && hash.length > 1) {
-                      const roomIdFromUrl = hash.substring(1);
-                      roomIdToJoinInput.value = roomIdFromUrl;
-                      setStatus(`Ready to join Room ${roomIdFromUrl} from link. Enter name and click Join.`);
-                  }
-            });
-            peer.on('connection', (conn) => {
-                if (!isHost) { console.warn("Incoming connection ignored (not host)."); conn.close(); return; }
-                const newPeerId = conn.peer;
-                if (Object.keys(connections).length + 1 >= MAX_PLAYERS) {
-                     logMessage(`Max players reached. Rejecting connection from ${newPeerId}`);
-                     // Ideally send a rejection message before closing
-                     setTimeout(() => conn.close(), 500); // Give time for potential message
-                     return;
-                 }
-                 logMessage(`Incoming connection from ${newPeerId}...`);
-                 connections[newPeerId] = conn;
-                 setupConnectionEventHandlers(conn);
-                 conn.on('open', () => {
-                    logMessage(`Connection with ${newPeerId} opened.`);
-                    // Wait for client to send 'set_name'
-                 });
-            });
-            peer.on('disconnected', () => { setError('Lost connection to PeerJS server. Please refresh.'); cleanup(); });
-            peer.on('close', () => { setError('Peer connection closed. Please refresh.'); cleanup(); });
-            peer.on('error', (err) => {
-                setError(`PeerJS Error: ${err.type}. ${err.message || ''}`);
-                if (err.type === 'peer-unavailable') { setStatus(`Error: Room/Peer ${roomIdToJoinInput.value} not found.`); }
-                // Consider cleanup() on critical errors
-            });
-        }
-        function cleanup() {
-            Object.values(connections).forEach(conn => conn.close()); connections = {};
-            if (peer && !peer.destroyed) { peer.destroy(); } peer = null;
-            gameState = { phase: 'lobby', players: {}, playerOrder: [], roundNumber: 0, maxRounds: 0, dealerPeerId: null, currentTurnPeerId: null, trumpSuit: null, trumpCard: null, trickCards: [], trickLeaderPeerId: null, lastTrickWinnerPeerId: null, bids: {}, deck: [], isGameStarted: false, totalBids: 0, scoreboardData: [] };
-            myHand = []; playerNames = {}; playerPeerIds = [];
-            isHost = false; currentRoomId = null; myPeerId = null;
-            showScreen('setup'); // Go back to setup screen
-            roomLinkArea.classList.add('hidden'); shareableLink.textContent = '';
-            setError(''); setStatus('Cleanup complete. Re-initialize PeerJS or refresh.');
-        }
-        function joinRoom(roomId) {
-            if (!peer || peer.disconnected) { setError("Not connected to PeerJS. Wait or refresh."); return; }
-            if (!roomId) { setError("Please enter a Room ID."); return; }
-            if (!myPlayerName) { setError("Please enter your name first."); return; }
-            if (roomId === myPeerId) { setError("You cannot join your own room ID."); return; }
-
-            setStatus(`Attempting to join room ${roomId}...`); setError('');
-            currentRoomId = roomId; isHost = false;
-
-            const conn = peer.connect(roomId, { reliable: true, metadata: { playerName: myPlayerName } });
-
-            conn.on('open', () => {
-                setStatus(`Connected to Host ${roomId}. Waiting for game...`);
-                logMessage(`Connected. Sending name ${myPlayerName} to host.`);
-                connections = { [roomId]: conn }; // Store connection TO host
-                setupConnectionEventHandlers(conn);
-                sendMessage(roomId, { type: 'set_name', name: myPlayerName });
-                showScreen('game'); // Switch to game screen (lobby view)
-                 playerNames = { [myPeerId]: myPlayerName }; // Add self initially
-                 // Host will send the full player list
-                 updateLobbyView();
-                 lobbyInfoDiv.classList.remove('hidden'); // Show lobby overlay
-            });
-            conn.on('error', (err) => { setError(`Failed to connect to room ${roomId}: ${err}. Check ID or host status.`); cleanup(); initializePeerJS(); });
-            conn.on('close', () => { // This handles host disconnecting AFTER connection was established
-                if (!gameState.isGameStarted) { // Host left before game start
-                     setError("Host closed the room before starting."); alert("Host left the lobby.");
-                     cleanup(); initializePeerJS(); showScreen('setup');
-                } // If game started, handled by general disconnect logic
-            });
-        }
-        function createRoom() {
-            if (!peer || peer.disconnected) { setError("Not connected to PeerJS. Wait or refresh."); return; }
-            if (!myPlayerName) { setError("Please enter your name first."); return; }
-
-            setStatus(`Creating room with your ID: ${myPeerId}...`); setError('');
-            isHost = true; currentRoomId = myPeerId; connections = {}; // Host has no outgoing connections initially
-
-             // Set self in player list
-             playerNames = { [myPeerId]: myPlayerName };
-             gameState.players = { [myPeerId]: { name: myPlayerName, score: 0, bid: null, tricksTaken: 0 } };
-             playerPeerIds = [myPeerId]; // Keep track for lobby display order maybe
-
-            showScreen('game'); // Switch to game screen (lobby view)
-             updateLobbyView(); // Show self in lobby list
-             lobbyInfoDiv.classList.remove('hidden'); // Show lobby overlay
-
-             // Display shareable link/ID
-             const url = window.location.origin + window.location.pathname + '#' + currentRoomId;
-             shareableLink.textContent = currentRoomId; // Just show the ID, easier to copy
-             // shareableLink.href = url; // Link might not work well with file://
-             roomLinkArea.classList.remove('hidden');
-             setStatus(`Room ${currentRoomId} created. Waiting for players...`);
-        }
-        function leaveRoom() {
-             logMessage("Leaving room...");
-             if (isHost) {
-                 // Inform clients host is leaving
-                 broadcastMessage({ type: 'error_message', message: 'Host left the room.' });
-             } else if (connections[currentRoomId]) {
-                 // Inform host client is leaving (optional, close handles it too)
-                 // sendMessage(currentRoomId, { type: 'client_leaving' });
-             }
-             cleanup();
-             initializePeerJS(); // Re-initialize for potential new connection
-             setStatus("Left room. Ready to create or join.");
-        }
-
-
-        // --- Game Logic Functions (Mostly Host-Side) ---
-        function findCardInGameState(peerId, cardId) {
-             const player = gameState.players[peerId];
-             if (!player || !player.hand) { // Host needs the hand info
-                 console.error(`Host: Cannot find hand for player ${peerId}`);
-                 return null;
-             }
-             return player.hand.find(c => c.id === cardId);
-        }
-        function startGameRequest() { // Called by Host button click
-            if (!isHost) return;
-            const playerCount = Object.keys(playerNames).length;
-            if (playerCount < MIN_PLAYERS || playerCount > MAX_PLAYERS) {
-                setError(`Cannot start: Need ${MIN_PLAYERS}-${MAX_PLAYERS} players, have ${playerCount}.`); return;
-            }
-
-            logMessage("Host initiating game start sequence...");
-            gameState.isGameStarted = true;
-            gameState.phase = 'initial_deal';
-            gameState.maxRounds = Math.floor(60 / playerCount);
-            gameState.roundNumber = 0; // Will be incremented by startNewRound
-            gameState.scoreboardData = []; // Reset scoreboard history
-
-            // Finalize player order (use current connected peers)
-             gameState.playerOrder = [myPeerId, ...Object.keys(connections)]; // Host first, then others in connection order (could shuffle)
-            // Ensure gameState.players has entries for everyone in playerOrder
-             gameState.playerOrder.forEach(pid => {
-                 if (!gameState.players[pid]) {
-                     gameState.players[pid] = { name: playerNames[pid] || 'Unknown', score: 0, bid: null, tricksTaken: 0 };
-                 } else { // Reset scores/bids/tricks for new game
-                     gameState.players[pid].score = 0; gameState.players[pid].bid = null; gameState.players[pid].tricksTaken = 0;
-                 }
-             });
-
-            // Inform clients game is starting with initial state
-            const initialPlayersState = {};
-            Object.entries(gameState.players).forEach(([pid, pdata]) => {
-                 initialPlayersState[pid] = { name: pdata.name, score: pdata.score, bid: null, tricksTaken: 0 }; // Don't send hand
-            });
-
-             broadcastMessage({
-                 type: 'game_start_info',
-                 players: initialPlayersState,
-                 playerOrder: gameState.playerOrder,
-                 maxRounds: gameState.maxRounds,
-                 scoreboardData: gameState.scoreboardData
-             });
-
-             lobbyInfoDiv.classList.add('hidden'); // Hide lobby overlay
-             logMessage(`Game starting with ${playerCount} players. Max rounds: ${gameState.maxRounds}.`);
-             renderAllPlayerAreas(); // Show player areas based on order
-             renderGameInfo();
-             updateControls(); // Hide lobby controls, maybe show initial game status
-
-             // Delay slightly before starting the first round
-             setTimeout(startNewRound, 500);
-        }
-        function startNewRound() { // Host only
-            if (!isHost) return;
-            gameState.roundNumber++;
-            if (gameState.roundNumber > gameState.maxRounds) { gameOver(); return; }
-
-            logMessage(`===== Host: Starting Round ${gameState.roundNumber} =====`);
-            gameState.phase = 'bidding';
-            gameState.bids = {}; gameState.totalBids = 0; gameState.trickCards = []; gameState.lastTrickWinnerPeerId = null; gameState.roundScoreDetails = {};
-            Object.values(gameState.players).forEach(p => { p.tricksTaken = 0; p.bid = null; });
-
-            // Rotate dealer
-             const dealerIndex = (gameState.roundNumber - 1) % gameState.playerOrder.length;
-             gameState.dealerPeerId = gameState.playerOrder[dealerIndex];
-             logMessage(`Host: Dealer is ${getPlayerNameById(gameState.dealerPeerId)}`);
-
-             // Shuffle and Deal
-             gameState.deck = createDeck(); shuffleDeck(gameState.deck);
-             Object.values(gameState.players).forEach(p => p.hand = []); // Clear hands on host state
-             const handsToSend = {}; // { peerId: hand[] }
-
-             for (let i = 0; i < gameState.roundNumber; i++) {
-                 for (const peerId of gameState.playerOrder) {
-                     if (gameState.deck.length > 0) {
-                         const card = gameState.deck.pop();
-                         gameState.players[peerId].hand.push(card);
-                         if (!handsToSend[peerId]) handsToSend[peerId] = [];
-                         handsToSend[peerId].push(card);
-                     }
-                 }
-             }
-             Object.values(gameState.players).forEach(p => sortHand(p.hand)); // Sort host's copies
-
-             // Send hands privately
-             for (const peerId in handsToSend) {
-                  sendMessage(peerId, { type: 'deal_hand', hand: handsToSend[peerId], roundNumber: gameState.roundNumber });
-                  if(peerId === myPeerId) myHand = handsToSend[peerId]; // Update host's local hand too
-             }
-
-             // Determine Trump
-             if (gameState.deck.length > 0) {
-                 gameState.trumpCard = gameState.deck.pop();
-                 const revealedSuit = getCardSuit(gameState.trumpCard);
-                 if (gameState.trumpCard.rank === WIZARD) {
-                     // Host chooses trump - Simplification: Random choice for now
-                     gameState.trumpSuit = SUITS[Math.floor(Math.random() * SUITS.length)];
-                     logMessage(`Host: Wizard revealed, randomly chose Trump: ${getColorName(gameState.trumpSuit)}`);
-                     gameState.trumpCard = null; // Don't show wizard as trump card
-                 } else if (gameState.trumpCard.rank === JESTER) {
-                     gameState.trumpSuit = 'N'; logMessage("Host: Jester revealed - No Trump.");
-                 } else {
-                     gameState.trumpSuit = revealedSuit; logMessage(`Host: Trump card ${gameState.trumpCard.rank}${gameState.trumpCard.suit}, Suit: ${getColorName(gameState.trumpSuit)}`);
-                 }
-             } else {
-                 gameState.trumpSuit = 'N'; gameState.trumpCard = null; logMessage("Host: Deck empty, No Trump.");
-             }
-
-             // Determine first bidder (left of dealer)
-             const firstBidderIndex = (dealerIndex + 1) % gameState.playerOrder.length;
-             gameState.currentTurnPeerId = gameState.playerOrder[firstBidderIndex];
-
-             logMessage(`Host: Broadcasting round start state. ${getPlayerNameById(gameState.currentTurnPeerId)} to bid.`);
-             broadcastGameState(`Waiting for ${getPlayerNameById(gameState.currentTurnPeerId)} to bid...`);
-        }
-        function processBid(bidderPeerId, bid) { // Host only
-            if (!isHost || gameState.phase !== 'bidding' || bidderPeerId !== gameState.currentTurnPeerId) return;
-            const numericBid = parseInt(bid, 10);
-            let errorMsg = ''; let isValid = true;
-
-            if (isNaN(numericBid) || numericBid < 0 || numericBid > gameState.roundNumber) {
-                 isValid = false; errorMsg = `Invalid bid (${bid}) from ${getPlayerNameById(bidderPeerId)}. Re-requesting.`;
-            } else {
-                // Last bidder validation
-                 const numPlayers = gameState.playerOrder.length;
-                 const bidsMadeCount = Object.keys(gameState.bids).length;
-                 const isLastBidder = bidsMadeCount === numPlayers - 1;
-                 if (isLastBidder && (gameState.totalBids + numericBid) === gameState.roundNumber) {
-                     isValid = false; errorMsg = `Invalid last bid (${numericBid}) from ${getPlayerNameById(bidderPeerId)}. Sum cannot be ${gameState.roundNumber}. Re-requesting.`;
-                 }
-            }
-
-            if (!isValid) {
-                 logMessage(`Host: ${errorMsg}`);
-                 sendMessage(bidderPeerId, { type: 'request_bid', roundNumber: gameState.roundNumber, bids: gameState.bids }); // Ask again
-                 // Send updated state maybe? Or just the request? Just request for now.
-                 // broadcastGameState(errorMsg); // Let others know of the delay/issue?
-                 return;
-            }
-
-             // Bid is valid
-             logMessage(`Host: ${getPlayerNameById(bidderPeerId)} bids ${numericBid}.`);
-             gameState.bids[bidderPeerId] = numericBid;
-             gameState.players[bidderPeerId].bid = numericBid;
-             gameState.totalBids += numericBid;
-
-             // Determine next bidder
-             const currentBidderIndex = gameState.playerOrder.indexOf(bidderPeerId);
-             const nextBidderIndex = (currentBidderIndex + 1) % gameState.playerOrder.length;
-             gameState.currentTurnPeerId = gameState.playerOrder[nextBidderIndex];
-
-             // Check if bidding is complete
-             const nextPlayerName = getPlayerNameById(gameState.currentTurnPeerId);
-             if (Object.keys(gameState.bids).length === gameState.playerOrder.length) {
-                 logMessage("Host: Bidding complete. Starting play.");
-                 gameState.phase = 'playing';
-                 // First player to lead is left of the dealer
-                 const dealerIndex = gameState.playerOrder.indexOf(gameState.dealerPeerId);
-                 const firstPlayerIndex = (dealerIndex + 1) % gameState.playerOrder.length;
-                 gameState.trickLeaderPeerId = gameState.playerOrder[firstPlayerIndex];
-                 gameState.currentTurnPeerId = gameState.trickLeaderPeerId;
-                 gameState.lastTrickWinnerPeerId = null; // Reset for first trick
-                 logMessage(`Host: ${getPlayerNameById(gameState.currentTurnPeerId)} leads first trick.`);
-                 broadcastGameState(`Play starts. ${getPlayerNameById(gameState.currentTurnPeerId)}'s turn.`);
-             } else {
-                 logMessage(`Host: Waiting for ${nextPlayerName} to bid...`);
-                 broadcastGameState(`Waiting for ${nextPlayerName} to bid...`);
-             }
-        }
-        function processPlayedCard(playerPeerId, card) { // Host only
-            if (!isHost || gameState.phase !== 'playing' || playerPeerId !== gameState.currentTurnPeerId) return;
-
-             // --- Host-Side Validation ---
-             const playerHand = gameState.players[playerPeerId].hand;
-             if (!playerHand || !playerHand.some(c => c.id === card.id)) {
-                 console.error(`HOST ERROR: Player ${getPlayerNameById(playerPeerId)} tried card ${card.id} not in host's hand state!`);
-                 sendMessage(playerPeerId, { type: 'error_message', message: 'Invalid card played (not in hand according to server). Please try again.' });
-                 sendMessage(playerPeerId, { type: 'request_play' }); // Ask again
-                 return;
-             }
-
-             const ledSuit = gameState.trickCards.length > 0 ? getCardSuit(gameState.trickCards[0].card) : null;
-             const validMoves = getValidMoves(playerHand, ledSuit);
-             const isMoveValid = validMoves.some(validCard => validCard.id === card.id);
-
-             if (!isMoveValid) {
-                 console.error(`HOST ERROR: Player ${getPlayerNameById(playerPeerId)} played invalid card ${card.id} against rules! Led: ${ledSuit}, Hand: ${playerHand.map(c=>c.id).join(',')}`);
-                 sendMessage(playerPeerId, { type: 'error_message', message: 'Invalid card played (rule violation). Please play a valid card.' });
-                 sendMessage(playerPeerId, { type: 'request_play' }); // Ask again
-                 return;
-             }
-
-             // Card is valid and legally played
-             logMessage(`Host: ${getPlayerNameById(playerPeerId)} plays ${card.rank}${getCardSuit(card) || ''}.`);
-             gameState.players[playerPeerId].hand = playerHand.filter(c => c.id !== card.id); // Remove from host state
-             gameState.trickCards.push({ peerId: playerPeerId, card: card });
-
-             // Determine next player
-             const currentPlayerIndex = gameState.playerOrder.indexOf(playerPeerId);
-             const nextPlayerIndex = (currentPlayerIndex + 1) % gameState.playerOrder.length;
-             gameState.currentTurnPeerId = gameState.playerOrder[nextPlayerIndex];
-
-             // Check if trick is complete
-             const nextPlayerName = getPlayerNameById(gameState.currentTurnPeerId);
-             if (gameState.trickCards.length === gameState.playerOrder.length) {
-                 logMessage(`Host: Trick complete. Evaluating winner...`);
-                 broadcastGameState(`Trick complete. Evaluating...`); // Show final card played
-                 setTimeout(determineTrickWinner, 1200); // Delay evaluation slightly
-             } else {
-                 logMessage(`Host: Waiting for ${nextPlayerName} to play...`);
-                 broadcastGameState(`Waiting for ${nextPlayerName} to play...`);
-             }
-        }
-        function determineTrickWinner() { // Host only
-            if (!isHost) return;
-            const trick = gameState.trickCards;
-            const trump = gameState.trumpSuit; // 'RED', 'YELLOW', 'GREEN', 'BLUE', or 'N'
-            const ledCard = trick[0].card;
-            const ledSuit = (ledCard.rank === WIZARD || ledCard.rank === JESTER) ? null : getCardSuit(ledCard); // Suit led, null if W/J led
-
-             let winningEntry = trick[0]; // Assume first card wins initially
-             let winningValue = getCardValueForComparison(winningEntry.card, trump, ledSuit);
-
-            logMessage(`Host: Evaluating Trick: ${trick.map(p=>p.card.rank + (getCardSuit(p.card) || '')).join(', ')}. Trump: ${trump}. Led Suit: ${ledSuit}`);
-
-             for (let i = 1; i < trick.length; i++) {
-                 const currentEntry = trick[i];
-                 const currentValue = getCardValueForComparison(currentEntry.card, trump, ledSuit);
-                 if (currentValue > winningValue) {
-                     winningValue = currentValue;
-                     winningEntry = currentEntry;
-                 }
-             }
-
-             // Handle all-Jester case specifically (first Jester wins)
-             const allJesters = trick.every(p => p.card.rank === JESTER);
-             if (allJesters) {
-                 winningEntry = trick[0];
-                 logMessage(`Host: All Jesters played. First Jester (${getPlayerNameById(winningEntry.peerId)}) wins.`);
-             } else {
-                 logMessage(`Host: ${winningEntry.card.rank}${getCardSuit(winningEntry.card) || ''} (${getPlayerNameById(winningEntry.peerId)}) wins the trick.`);
-             }
-
-             const winnerPeerId = winningEntry.peerId;
-             gameState.players[winnerPeerId].tricksTaken++;
-             gameState.lastTrickWinnerPeerId = winnerPeerId;
-             logMessage(`Host: ${getPlayerNameById(winnerPeerId)} now has ${gameState.players[winnerPeerId].tricksTaken} tricks.`);
-
-             // Broadcast trick winner info (optional, state update also covers it)
-             // broadcastMessage({ type: 'trick_winner_info', winnerPeerId: winnerPeerId, winningCardId: winningEntry.card.id });
-
-             // Check if round is over
-             const totalTricksInRound = gameState.playerOrder.length * gameState.players[winnerPeerId].tricksTaken; // Simple check assumes equal hands dealt
-             const totalTricksTakenThisRound = Object.values(gameState.players).reduce((sum, p) => sum + p.tricksTaken, 0);
-
-             gameState.trickCards = []; // Clear trick
-
-             if (totalTricksTakenThisRound === gameState.roundNumber) {
-                 logMessage(`Host: Round ${gameState.roundNumber} ended. Scoring...`);
-                 endRoundScoring(); // This will broadcast final round state and potentially start next round timer
-             } else {
-                 // Winner leads next trick
-                 gameState.trickLeaderPeerId = winnerPeerId;
-                 gameState.currentTurnPeerId = winnerPeerId;
-                 logMessage(`Host: ${getPlayerNameById(winnerPeerId)} leads next trick.`);
-                 broadcastGameState(`Waiting for ${getPlayerNameById(winnerPeerId)} to play...`);
-             }
-        }
-        function getCardValueForComparison(card, trumpSuit, ledSuit) { // For trick evaluation
-             if (!card) return -1;
-             if (card.rank === WIZARD) return 100; // Wizards always win if played
-             if (card.rank === JESTER) return 0; // Jesters normally lose
-
-             const baseValue = RANKS.indexOf(card.rank) + 2; // 2-14
-             const cardSuit = getCardSuit(card);
-
-             if (cardSuit === trumpSuit) {
-                 return 50 + baseValue; // Trump cards (higher value than non-trump)
-             } else if (cardSuit === ledSuit) {
-                 return 20 + baseValue; // Followed suit (higher value than off-suit)
-             } else {
-                 return baseValue; // Off-suit, non-trump (lowest value group)
-             }
-        }
-        function getValidMoves(hand, leadSuit) { // For player action validation
-            if (!hand || hand.length === 0) return [];
-            const wizardsAndJesters = hand.filter(c => c.rank === WIZARD || c.rank === JESTER);
-
-            if (!leadSuit) { // Leading the trick
-                return hand; // Any card is valid
-            }
-
-             // Check if player has cards of the lead suit (excluding W/J)
-            const cardsInLeadSuit = hand.filter(c => getCardSuit(c) === leadSuit && c.rank !== WIZARD && c.rank !== JESTER);
-
-            if (cardsInLeadSuit.length > 0) {
-                // Must follow suit if possible. W/J are also always allowed.
-                return [...cardsInLeadSuit, ...wizardsAndJesters];
-            } else {
-                // Cannot follow suit, any card is allowed.
-                return hand;
-            }
-        }
-        function endRoundScoring() { // Host only
-            if (!isHost) return;
-            gameState.phase = 'scoring';
-            logMessage(`Host: --- Scoring Round ${gameState.roundNumber} ---`);
-            gameState.roundScoreDetails = {}; // Reset details for this round
-
-             for (const peerId in gameState.players) {
-                 const player = gameState.players[peerId];
-                 const bid = player.bid;
-                 const tricks = player.tricksTaken;
-                 let roundScore = 0;
-                 let detail = '';
-
-                 if (bid === null || bid === undefined) { // Should not happen if bidding was completed
-                      roundScore = 0; detail = "Bid Error";
-                      console.error(`Scoring Error: Player ${player.name} had no bid!`);
-                 } else if (bid === tricks) {
-                     roundScore = 20 + (tricks * 10); detail = `Made bid (${bid})`;
-                 } else {
-                     roundScore = -10 * Math.abs(bid - tricks); detail = `Missed bid (${bid}/${tricks})`;
-                 }
-                 player.score += roundScore;
-                 gameState.roundScoreDetails[peerId] = { points: roundScore, detail: detail };
-                 logMessage(`Host: ${player.name} Bid ${bid}, Took ${tricks} -> Score: ${roundScore}, Total: ${player.score}`);
-             }
-
-             // Update scoreboard history
-             const roundData = { round: gameState.roundNumber };
-             gameState.playerOrder.forEach((pid) => {
-                const player = gameState.players[pid];
-                roundData[`player_${pid}`] = { // Store by peerId
-                     points: gameState.roundScoreDetails[pid]?.points || 0,
-                     bidtaken: `${player.bid ?? '?'}/${player.tricksTaken ?? '?'}`,
-                     cumulative: player.score
-                 };
-             });
-             gameState.scoreboardData.push(roundData);
-
-             // Broadcast final scores and details for this round
-             const finalPlayerState = {};
-             Object.entries(gameState.players).forEach(([pid, pdata]) => {
-                 finalPlayerState[pid] = { name: pdata.name, score: pdata.score, bid: pdata.bid, tricksTaken: pdata.tricksTaken };
-             });
-             broadcastMessage({
-                 type: 'round_over_info',
-                 players: finalPlayerState,
-                 roundScoreDetails: gameState.roundScoreDetails,
-                 scoreboardData: gameState.scoreboardData
-             });
-
-             // Transition to ROUND_END phase locally after a delay (allows clients to see scoring popups)
-             setTimeout(() => {
-                if (gameState.roundNumber >= gameState.maxRounds) {
-                     gameOver();
-                 } else {
-                     gameState.phase = 'round_end';
-                     logMessage("Host: Round end phase. Waiting for host to start next.");
-                     broadcastGameState("Round finished. Waiting for Host..."); // Let clients know host can start next round
-                 }
-             }, 2500); // Delay before host can click "Next Round"
-        }
-        function gameOver() { // Host only
-            if (!isHost) return;
-            logMessage("Host: ========== Game Over ==========");
-            gameState.phase = 'gameOver';
-
-             const finalScores = {};
-             Object.entries(gameState.players).forEach(([pid, pdata]) => {
-                 finalScores[pid] = { name: pdata.name, score: pdata.score };
-             });
-
-             logMessage("Host: Broadcasting final game over state.");
-             broadcastMessage({ type: 'game_over', finalScores: finalScores });
-             broadcastGameState("Game Over!"); // Send final state
-             // Game ended, host can restart or players can leave.
-        }
-        function handlePlayerDisconnectDuringGame(disconnectedPeerId) { // Host only
-            if (!isHost || !gameState.isGameStarted || gameState.phase === 'gameOver') return;
-            const name = getPlayerNameById(disconnectedPeerId);
-            logMessage(`Host: Player ${name} disconnected during game!`);
-
-            // Remove player from playerOrder
-            gameState.playerOrder = gameState.playerOrder.filter(pid => pid !== disconnectedPeerId);
-            const remainingPlayers = gameState.playerOrder.length;
-
-            if (remainingPlayers < MIN_PLAYERS) {
-                logMessage(`Host: Too few players (${remainingPlayers}). Ending game.`);
-                setError(`Game aborted: ${name} left.`);
-                gameState.phase = 'gameOver'; // Treat as game over
-                broadcastMessage({ type: 'error_message', message: `Game aborted: ${name} left.` });
-                broadcastGameState(`Game aborted: ${name} left.`);
-            } else {
-                // Try to continue
-                logMessage(`Host: Continuing game with ${remainingPlayers} players.`);
-                // If it was the disconnected player's turn, advance turn
-                if (gameState.currentTurnPeerId === disconnectedPeerId) {
-                    logMessage(`Host: Advancing turn from disconnected player.`);
-                    if (gameState.phase === 'bidding') {
-                        // Need to decide how to handle bid - maybe auto-bid 0?
-                        gameState.bids[disconnectedPeerId] = 0; // Assign 0 bid automatically?
-                        gameState.players[disconnectedPeerId].bid = 0;
-                        
-                        // Find next player in updated order
-                        const nextPlayerIndex = 0; // Start with first player in new order
-                        if (nextPlayerIndex < remainingPlayers) {
-                            gameState.currentTurnPeerId = gameState.playerOrder[nextPlayerIndex];
-                        } else {
-                            gameState.phase = 'gameOver';
-                        }
-                    } else if (gameState.phase === 'playing') {
-                        // If they were leading, who leads now? Maybe winner of last trick?
-                        if (gameState.trickCards.length === 0 && gameState.lastTrickWinnerPeerId && gameState.playerOrder.includes(gameState.lastTrickWinnerPeerId)) {
-                            gameState.currentTurnPeerId = gameState.lastTrickWinnerPeerId;
-                        } else if (gameState.trickCards.length === 0) { // First trick, leader left
-                            const dealerIndex = gameState.playerOrder.indexOf(gameState.dealerPeerId);
-                            let firstPlayerIndex = dealerIndex !== -1 ? (dealerIndex + 1) % remainingPlayers : 0;
-                            gameState.currentTurnPeerId = gameState.playerOrder[firstPlayerIndex];
-                        } else { // Mid-trick
-                            const nextPlayerIndex = 0; // Start with first player in new order
-                            if (nextPlayerIndex < remainingPlayers) {
-                                gameState.currentTurnPeerId = gameState.playerOrder[nextPlayerIndex];
-                            } else {
-                                gameState.phase = 'gameOver';
-                            }
-                        }
-                    }
-                    logMessage(`Host: Turn advanced to ${getPlayerNameById(gameState.currentTurnPeerId)}`);
-                    broadcastGameState(`Player ${name} left. Turn passes to ${getPlayerNameById(gameState.currentTurnPeerId)}.`);
-                } else {
-                    // Disconnected player wasn't active, just update state
-                    broadcastGameState(`Player ${name} left. Continuing game.`);
+                const playerCard1Data = getCardValue(playerCard1Str);
+                const playerCard2Data = getCardValue(playerCard2Str);
+                const dealerCardData = getCardValue(dealerCardStr);
+
+                // 2. Spielerhand auswerten
+                const playerHandData = calculateHandValue([playerCard1Data, playerCard2Data]);
+
+                // 3. Beste Aktion ermitteln
+                const strategyResult = getBestAction(playerHandData, dealerCardData);
+
+                // 4. Ergebnis anzeigen
+                let handTypeDetail = playerHandData.isPair ? `Paar ${playerCard1Data.display}` : strategyResult.detail;
+                // Korrigiere Detail für nicht geteilte Paare
+                if (playerHandData.isPair && strategyResult.action !== 'P' && (playerHandData.pairValue === 5 || playerHandData.pairValue === 10)) {
+                     handTypeDetail = strategyResult.detail; // Verwende Detail von Hard Hand
+                } else if (playerHandData.isPair && strategyResult.action !== 'P'){
+                     handTypeDetail = "(Paar, nicht teilen)";
+                } else if (playerHandData.isPair) {
+                    handTypeDetail = `Paar ${playerCard1Data.display}`;
                 }
-            }
-        }
 
-        // --- Client-Side Action Handling ---
-        function handleCardClick(event) {
-             if (gameState.phase !== 'playing' || gameState.currentTurnPeerId !== myPeerId) return;
-             const cardDiv = event.target.closest('.card');
-             if (!cardDiv || !cardDiv.classList.contains('playable')) {
-                 setError("Invalid move: Card not playable."); // Show brief error
-                 setTimeout(() => setError(''), 1500);
-                 return;
-             }
-             const cardId = cardDiv.dataset.cardId;
-             const cardToPlay = myHand.find(c => c.id === cardId);
 
-             if (cardToPlay) {
-                logMessage(`Playing card ${cardId}. Sending to host...`);
-                sendMessage(currentRoomId, { type: 'play_card', cardId: cardId });
-                // Visually disable hand temporarily until state update confirms
-                 humanHandElement.querySelectorAll('.card').forEach(el => {
-                     el.classList.remove('playable'); el.classList.add('disabled');
-                     el.removeEventListener('click', handleCardClick); // Prevent double clicks
-                 });
-                 gameStatusElement.textContent = "Waiting for host..."; // Indicate action sent
-             } else {
-                 console.error("Client Error: Clicked playable card not found in local hand!", cardId);
-             }
-        }
-        function handleSubmitBid() {
-             if (gameState.phase !== 'bidding' || gameState.currentTurnPeerId !== myPeerId) return;
-             validateBidInput(); // Final validation check
-             if (submitBidButton.disabled) {
-                 setError("Cannot submit invalid bid."); // Should be prevented by validateBidInput's error msg
-                 setTimeout(() => setError(''), 1500);
-                 return;
-             }
-             const bidValue = bidInputElement.value;
-             logMessage(`Submitting bid ${bidValue}. Sending to host...`);
-             sendMessage(currentRoomId, { type: 'submit_bid', bid: bidValue });
-             bidControlsElement.classList.add('hidden'); // Hide immediately
-             playControlsElement.classList.remove('hidden'); // Show waiting status
-             playControlsElement.querySelector('span').textContent = "Waiting for others...";
-             gameStatusElement.textContent = "Waiting for other players to bid...";
-        }
+                 resultArea.innerHTML = `
+                    <div class="details">
+                        Deine Hand: ${playerHandData.display} (Wert: ${playerHandData.total}) ${handTypeDetail}<br>
+                        Dealer zeigt: ${dealerCardData.display}
+                    </div>
+                    <div id="resultText">${strategyResult.action}</div>
+                 `;
 
-        // --- Scoreboard Functions ---
-         function renderScoreboard() {
-             scoreboardHeader.innerHTML = '<th>Round</th>';
-             if (!gameState.playerOrder || gameState.playerOrder.length === 0) {
-                 scoreboardHeader.innerHTML += '<th>Player 1</th><th>Player 2</th><th>Player 3</th>'; // Placeholder
-                 scoreboardBody.innerHTML = ''; scoreboardFooter.innerHTML = ''; return;
-             }
-
-              // Use playerOrder to determine column order
-             gameState.playerOrder.forEach(pid => {
-                scoreboardHeader.insertAdjacentHTML('beforeend', `<th>${getPlayerNameById(pid)}</th>`);
-             });
-
-             scoreboardBody.innerHTML = '';
-             let cumulativeScores = {}; gameState.playerOrder.forEach(pid => cumulativeScores[pid] = 0);
-
-             gameState.scoreboardData.forEach(roundData => {
-                 const row = scoreboardBody.insertRow();
-                 row.insertCell().textContent = roundData.round;
-                 gameState.playerOrder.forEach(pid => {
-                     const playerData = roundData[`player_${pid}`]; // Data stored by peerId
-                     const score = playerData?.points ?? 0;
-                     const bidTaken = playerData?.bidtaken ?? '-/-';
-                     cumulativeScores[pid] += score;
-                     const cumulative = playerData?.cumulative ?? cumulativeScores[pid]; // Use host's cumulative if available
-
-                     const cell = row.insertCell();
-                     cell.innerHTML = `<span class="score-points">${score > 0 ? '+' : ''}${score}</span> <span class="score-bidtaken">(${bidTaken})</span> <span class="score-cumulative">${cumulative}</span>`;
-                     const [bidStr, takenStr] = bidTaken.split('/');
-                     if (bidStr !== '-' && takenStr !== '-' && bidStr !== '?' && takenStr !== '?') {
-                        const bid = parseInt(bidStr); const taken = parseInt(takenStr);
-                        if (!isNaN(bid) && !isNaN(taken)) cell.classList.add(bid === taken ? 'bid-made' : 'bid-missed');
+                 // Surrender Hinweis hinzufügen (optional)
+                 if (strategyResult.action === 'H' && !playerHandData.isSoft && !playerHandData.isPair) {
+                     const dealerVal = dealerCardData.value; // Numerischer Wert
+                     if ((playerHandData.total === 16 && [9, 10, 11].includes(dealerVal)) ||
+                         (playerHandData.total === 15 && dealerVal === 10))
+                     {
+                          resultArea.innerHTML += `<div class="hint">Hinweis: 'Surrender' (Aufgeben) könnte eine Option sein, falls die Regeln es erlauben.</div>`;
                      }
-                 });
-             });
-
-             scoreboardFooter.innerHTML = '';
-             const footerRow = scoreboardFooter.insertRow();
-             footerRow.insertCell().textContent = "Total";
-             gameState.playerOrder.forEach(pid => {
-                footerRow.insertCell().textContent = gameState.players[pid]?.score ?? 0;
-             });
-         }
-         function showScoreboard(isFinal = false) {
-             renderScoreboard();
-             restartGameFromScoreboardButton.classList.toggle('hidden', !isFinal || !isHost); // Show restart only if final and host
-             closeScoreboardButton.textContent = "Close"; // Keep it simple
-             scoreboardOverlay.classList.add('visible');
-         }
-         function hideScoreboard() { scoreboardOverlay.classList.remove('visible'); }
-
-        // --- Game State Broadcasting (Host Only) ---
-         function broadcastGameState(statusMessage = "") {
-            if (!isHost) return;
-            // Create a state snapshot suitable for clients (exclude full deck, maybe hands)
-            const stateToSend = { ...gameState };
-            delete stateToSend.deck; // Don't send deck
-
-            // Send hand sizes instead of full hands
-            const playersPublic = {};
-            for(const pid in stateToSend.players) {
-                playersPublic[pid] = { ...stateToSend.players[pid] }; // Copy player data
-                if (playersPublic[pid].hand) {
-                     playersPublic[pid].handSize = playersPublic[pid].hand.length; // Add hand size
-                 } else {
-                     playersPublic[pid].handSize = 0;
                  }
-                delete playersPublic[pid].hand; // Remove actual hand from broadcast
+
+
+            } catch (error) {
+                // Fehler anzeigen
+                resultArea.innerHTML = `<p class="error">Fehler: ${error.message}</p>`;
+                console.error("Berechnungsfehler:", error);
             }
-            stateToSend.players = playersPublic;
-             stateToSend.statusMessage = statusMessage || generateStatusMessage(); // Include status
+        });
 
-            broadcastMessage({ type: 'update_game_state', newState: stateToSend });
-
-            // Update host's UI as well (since broadcast doesn't reach self)
-             renderAllPlayerAreas();
-             renderTrumpCard();
-             renderCurrentTrick();
-             renderGameInfo();
-             updateControls();
-             gameStatusElement.textContent = stateToSend.statusMessage;
-
-             // Trigger specific requests after state update if needed
-             if (gameState.phase === 'bidding' && gameState.currentTurnPeerId !== myPeerId) {
-                sendMessage(gameState.currentTurnPeerId, { type: 'request_bid', roundNumber: gameState.roundNumber, bids: gameState.bids });
-             } else if (gameState.phase === 'playing' && gameState.currentTurnPeerId !== myPeerId) {
-                sendMessage(gameState.currentTurnPeerId, { type: 'request_play' });
-             }
-         }
-         function generateStatusMessage() { // Fallback status message generator
-            if (!gameState.isGameStarted) return "Waiting in Lobby...";
-             switch(gameState.phase) {
-                 case 'bidding': return `Waiting for ${getPlayerNameById(gameState.currentTurnPeerId)} to bid...`;
-                 case 'playing': return `Waiting for ${getPlayerNameById(gameState.currentTurnPeerId)} to play...`;
-                 case 'scoring': return `Calculating scores for round ${gameState.roundNumber}...`;
-                 case 'round_end': return `Round ${gameState.roundNumber} finished. Waiting for Host to start next.`;
-                 case 'gameOver':
-                    const winner = gameState.playerOrder.map(pid => gameState.players[pid]).sort((a, b) => b.score - a.score)[0];
-                    return winner ? `Game Over! ${winner.name} wins!` : "Game Over!";
-                 default: return "Please wait...";
-             }
-         }
-
-        // --- Event Listeners ---
-        document.addEventListener('DOMContentLoaded', () => {
-            getDomElements(); // Assign DOM elements
-
-             createRoomBtn.addEventListener('click', () => {
-                 myPlayerName = playerNameInput.value.trim();
-                 if (myPlayerName) createRoom();
-                 else setError("Please enter your name.");
+        // Optional: Eingabefelder beim Drücken von Enter fokussieren / berechnen
+        const inputs = document.querySelectorAll('input[type="text"]');
+        inputs.forEach((input, index) => {
+            input.addEventListener('keypress', function(event) {
+                if (event.key === 'Enter') {
+                    event.preventDefault(); // Verhindert Standardverhalten (Formular senden)
+                    if (index < inputs.length - 1) {
+                        inputs[index + 1].focus(); // Nächstes Feld fokussieren
+                    } else {
+                        document.getElementById('calculateButton').click(); // Letztes Feld -> Berechnen
+                    }
+                }
+            });
+             // Auto-Großschreibung während der Eingabe
+             input.addEventListener('input', function() {
+                 this.value = this.value.toUpperCase();
              });
+        });
 
-             joinRoomBtn.addEventListener('click', () => {
-                 myPlayerName = playerNameInput.value.trim();
-                 const roomId = roomIdToJoinInput.value.trim();
-                 if (myPlayerName && roomId) joinRoom(roomId);
-                 else if (!myPlayerName) setError("Please enter your name.");
-                 else setError("Please enter a Room ID.");
-             });
-
-            leaveRoomBtn.addEventListener('click', leaveRoom);
-            startGameBtn.addEventListener('click', startGameRequest); // Host only
-
-             submitBidButton.addEventListener('click', handleSubmitBid);
-             bidInputElement.addEventListener('keypress', (e) => { if (e.key === 'Enter') handleSubmitBid(); });
-             bidInputElement.addEventListener('input', validateBidInput);
-
-             // Card click handled dynamically in renderHumanHand
-
-             nextRoundButton.addEventListener('click', () => { if(isHost && gameState.phase === 'round_end') startNewRound(); }); // Host only
-             showScoreboardButton.addEventListener('click', () => showScoreboard(false));
-             showFinalScoreboardButton.addEventListener('click', () => showScoreboard(true));
-             restartGameButton.addEventListener('click', () => { if(isHost) { /* Need restart logic */ console.log("Restart game requested"); /* Send message? Reset state? */} }); // Host only
-             closeScoreboardButton.addEventListener('click', hideScoreboard);
-             restartGameFromScoreboardButton.addEventListener('click', () => { if(isHost) { /* Restart logic */ console.log("Restart game requested from scoreboard"); hideScoreboard(); /* Send message? Reset state? */} }); // Host only
-
-
-            // --- Initialisierung ---
-             showScreen('setup'); // Start on setup screen
-            initializePeerJS();
-        }); // End DOMContentLoaded
 
     </script>
 
