@@ -1,0 +1,314 @@
+<!DOCTYPE html>
+<html lang="de">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Live Webcam Hintergrund Entfernung mit Upload</title>
+    <style>
+        body {
+            font-family: sans-serif;
+            display: flex;
+            flex-direction: column;
+            align-items: center;
+            /* justify-content: center; */ /* Removed to allow scrolling if needed */
+            min-height: 100vh;
+            background-color: #f0f0f0;
+            margin: 20px 0; /* Added some margin */
+            padding: 0;
+        }
+        #controls {
+            margin-bottom: 15px;
+            display: flex;
+            align-items: center;
+            gap: 10px; /* Space between button and text */
+        }
+        #uploadButton {
+            padding: 8px 15px;
+            cursor: pointer;
+        }
+        #fileName {
+            font-style: italic;
+            color: #555;
+        }
+        #status {
+            margin-bottom: 10px;
+            font-weight: bold;
+            color: #333;
+            min-height: 1.2em; /* Prevent layout shift */
+        }
+        .container {
+            position: relative;
+            width: 640px; /* Standard-Webcam-Breite */
+            max-width: 95%; /* Responsive */
+            aspect-ratio: 640 / 480; /* Maintain aspect ratio */
+            height: auto; /* Let aspect ratio determine height */
+            border: 1px solid #ccc;
+            background-color: #eee; /* Fallback background */
+        }
+        /* Das Video-Element wird nur als Quelle benötigt, nicht angezeigt */
+        #webcam {
+            display: none;
+        }
+        #outputCanvas {
+            display: block;
+            width: 100%;
+            height: 100%;
+            object-fit: contain; /* Ensure canvas content fits */
+            background-color: transparent; /* Default transparent background */
+        }
+        /* Verstecktes File-Input */
+        #bgUpload {
+            display: none;
+        }
+        /* Optional: Spiegeln, wenn die Webcam gespiegelt ist */
+        /* #outputCanvas { transform: scaleX(-1); } */
+    </style>
+    <!-- Benötigte Bibliotheken von CDNs -->
+    <script src="https://cdn.jsdelivr.net/npm/@tensorflow/tfjs-core@3.18.0/dist/tf-core.min.js"></script>
+    <script src="https://cdn.jsdelivr.net/npm/@tensorflow/tfjs-converter@3.18.0/dist/tf-converter.min.js"></script>
+    <script src="https://cdn.jsdelivr.net/npm/@tensorflow/tfjs-backend-webgl@3.18.0/dist/tf-backend-webgl.min.js"></script>
+    <script src="https://cdn.jsdelivr.net/npm/@mediapipe/selfie_segmentation@0.1.1632777926/selfie_segmentation.min.js"></script>
+
+</head>
+<body>
+    <h1>Live Webcam Hintergrund Entfernung</h1>
+
+    <div id="controls">
+        <input type="file" id="bgUpload" accept="image/*">
+        <button id="uploadButton">Hintergrundbild wählen</button>
+        <span id="fileName">Kein Bild ausgewählt</span>
+    </div>
+
+    <p id="status">Initialisiere...</p>
+
+    <div class="container">
+        <!-- Video-Element für den Webcam-Stream (versteckt) -->
+        <video id="webcam" autoplay playsinline muted></video>
+        <!-- Canvas zum Zeichnen des Ergebnisses -->
+        <canvas id="outputCanvas"></canvas>
+    </div>
+
+    <script>
+        const videoElement = document.getElementById('webcam');
+        const canvasElement = document.getElementById('outputCanvas');
+        const canvasCtx = canvasElement.getContext('2d');
+        const statusElement = document.getElementById('status');
+        const uploadButton = document.getElementById('uploadButton');
+        const bgUploadInput = document.getElementById('bgUpload');
+        const fileNameSpan = document.getElementById('fileName');
+
+        let segmenter;
+        let animationFrameId;
+        let backgroundImage = null; // Variable für das hochgeladene Hintergrundbild
+        let tempCanvas = null; // Temporärer Canvas für die Maskierung
+        let tempCtx = null;    // Kontext des temporären Canvas
+
+        // --- NEU: Event Listener für den Upload-Button ---
+        uploadButton.addEventListener('click', () => {
+            bgUploadInput.click(); // Klickt auf das versteckte File-Input
+        });
+
+        // --- NEU: Event Listener für das File-Input ---
+        bgUploadInput.addEventListener('change', (event) => {
+            const file = event.target.files[0];
+            if (!file) {
+                fileNameSpan.textContent = 'Kein Bild ausgewählt';
+                backgroundImage = null; // Zurücksetzen, falls Auswahl abgebrochen wird
+                return;
+            }
+
+            if (!file.type.startsWith('image/')) {
+                alert('Bitte wählen Sie eine gültige Bilddatei (JPG, PNG, GIF, etc.).');
+                fileNameSpan.textContent = 'Ungültige Datei';
+                // Input leeren, damit dieselbe Datei erneut gewählt werden kann
+                bgUploadInput.value = '';
+                return;
+            }
+
+            fileNameSpan.textContent = `Lade: ${file.name}...`;
+
+            const reader = new FileReader();
+
+            reader.onload = (e) => {
+                const img = new Image();
+                img.onload = () => {
+                    backgroundImage = img; // Speichere das geladene Bild-Objekt
+                    fileNameSpan.textContent = `Aktiv: ${file.name}`;
+                    console.log('Hintergrundbild erfolgreich geladen.');
+                    // Kein explizites Neuzeichnen nötig, die Animationsschleife übernimmt das
+                };
+                img.onerror = () => {
+                    console.error('Fehler beim Laden des Bildes aus Daten-URL.');
+                    alert('Das Bild konnte nicht geladen werden.');
+                    fileNameSpan.textContent = 'Fehler beim Laden';
+                    backgroundImage = null;
+                    bgUploadInput.value = ''; // Input leeren
+                };
+                img.src = e.target.result; // Setze die Daten-URL als Quelle für das Bild
+            };
+
+            reader.onerror = (e) => {
+                console.error('Fehler beim Lesen der Datei:', e);
+                alert('Die Datei konnte nicht gelesen werden.');
+                fileNameSpan.textContent = 'Fehler beim Lesen';
+                backgroundImage = null;
+                bgUploadInput.value = ''; // Input leeren
+            };
+
+            reader.readAsDataURL(file); // Lese die Datei als Daten-URL
+        });
+
+
+        // Funktion zum Verarbeiten der Segmentierungsergebnisse
+        function onResults(results) {
+            // Canvas auf Video-Dimensionen einstellen (nur beim ersten Mal oder bei Änderung)
+            const videoWidth = videoElement.videoWidth;
+            const videoHeight = videoElement.videoHeight;
+
+            if (canvasElement.width !== videoWidth || canvasElement.height !== videoHeight) {
+                canvasElement.width = videoWidth;
+                canvasElement.height = videoHeight;
+
+                // Erstelle oder passe die Größe des temporären Canvas an
+                if (!tempCanvas || tempCanvas.width !== videoWidth || tempCanvas.height !== videoHeight) {
+                    tempCanvas = document.createElement('canvas');
+                    tempCanvas.width = videoWidth;
+                    tempCanvas.height = videoHeight;
+                    tempCtx = tempCanvas.getContext('2d');
+                    console.log("Temp canvas created/resized:", videoWidth, videoHeight);
+                }
+            }
+
+            // Stelle sicher, dass der temporäre Canvas existiert (wichtig nach Initialisierung)
+            if (!tempCanvas) return; // Warten, bis alles bereit ist
+
+            // --- Schritt 1: Erstelle die maskierte Person auf dem temporären Canvas ---
+            tempCtx.save();
+            tempCtx.clearRect(0, 0, tempCanvas.width, tempCanvas.height);
+            // Zeichne das Originalbild auf den temporären Canvas
+            tempCtx.drawImage(results.image, 0, 0, tempCanvas.width, tempCanvas.height);
+            // Wende die Maske an: Nur die Pixel der Person bleiben erhalten ('destination-in')
+            tempCtx.globalCompositeOperation = 'destination-in';
+            tempCtx.drawImage(results.segmentationMask, 0, 0, tempCanvas.width, tempCanvas.height);
+            // Setze den Composite-Modus zurück
+            tempCtx.restore();
+
+            // --- Schritt 2: Zeichne das Endergebnis auf den sichtbaren Canvas ---
+            canvasCtx.save();
+            canvasCtx.clearRect(0, 0, canvasElement.width, canvasElement.height);
+
+            // Zeichne das hochgeladene Hintergrundbild (falls vorhanden)
+            if (backgroundImage) {
+                // Zeichne das Bild so, dass es den Canvas ausfüllt (ggf. verzerrt)
+                // Alternativ: object-fit Logik implementieren (komplexer)
+                canvasCtx.drawImage(backgroundImage, 0, 0, canvasElement.width, canvasElement.height);
+            } else {
+                // Optional: Zeichne einen Standardhintergrund oder lasse ihn transparent
+                // canvasCtx.fillStyle = 'lightgray';
+                // canvasCtx.fillRect(0, 0, canvasElement.width, canvasElement.height);
+            }
+
+            // Zeichne die maskierte Person (vom temporären Canvas) über den Hintergrund
+            canvasCtx.drawImage(tempCanvas, 0, 0, canvasElement.width, canvasElement.height);
+
+            canvasCtx.restore();
+
+            // Fordere den nächsten Frame an
+            // Wichtig: Binde processFrame, um sicherzustellen, dass 'this' korrekt ist (obwohl hier nicht relevant)
+            animationFrameId = requestAnimationFrame(processFrame);
+        }
+
+        // Funktion zum Verarbeiten eines einzelnen Frames
+        async function processFrame() {
+            if (!segmenter || !videoElement.readyState >= 3) { // readyState >= 3 (HAVE_FUTURE_DATA) or 4 (HAVE_ENOUGH_DATA)
+                // Warte, bis alles bereit ist
+                // console.log("Waiting for segmenter or video data...");
+                animationFrameId = requestAnimationFrame(processFrame);
+                return;
+            }
+            try {
+                // Sende das aktuelle Videobild an das Segmentierungsmodell
+                await segmenter.send({ image: videoElement });
+                // Das Ergebnis wird asynchron an die 'onResults'-Funktion gesendet
+            } catch (error) {
+                console.error("Fehler bei der Segmentierung:", error);
+                statusElement.textContent = "Fehler bei der Segmentierung.";
+                // Stoppe die Schleife bei einem Fehler
+                if (animationFrameId) cancelAnimationFrame(animationFrameId);
+            }
+        }
+
+        // Hauptfunktion zum Initialisieren
+        async function initialize() {
+            statusElement.textContent = "Lade Modell...";
+            try {
+                // Initialisiere das Selfie Segmentation Modell
+                segmenter = new SelfieSegmentation({
+                    locateFile: (file) => {
+                        return `https://cdn.jsdelivr.net/npm/@mediapipe/selfie_segmentation@0.1.1632777926/${file}`;
+                    }
+                });
+
+                segmenter.setOptions({
+                    modelSelection: 1, // 0: short-range, 1: full-range (often better)
+                    selfieMode: false
+                });
+
+                segmenter.onResults(onResults);
+
+                await segmenter.initialize();
+                statusElement.textContent = "Modell geladen. Warte auf Webcam...";
+
+                // Webcam-Zugriff anfordern
+                navigator.mediaDevices.getUserMedia({ video: { width: 640, height: 480 } })
+                    .then((stream) => {
+                        videoElement.srcObject = stream;
+                        // Warte bis Metadaten geladen sind UND das Video tatsächlich spielt
+                        videoElement.onloadedmetadata = () => {
+                             console.log("Video metadata loaded");
+                             videoElement.play().then(() => {
+                                console.log("Video playing");
+                                statusElement.textContent = "Webcam aktiv. Starte Verarbeitung...";
+                                // Starte die Frame-Verarbeitungsschleife
+                                processFrame();
+                             }).catch(playError => {
+                                console.error("Video Play Error:", playError);
+                                statusElement.textContent = "Fehler beim Starten des Videos.";
+                             });
+                        };
+                    })
+                    .catch((err) => {
+                        console.error("Fehler beim Zugriff auf die Webcam: ", err);
+                        statusElement.textContent = `Fehler beim Zugriff auf die Webcam: ${err.message}. Bitte Berechtigung erteilen und Seite neu laden.`;
+                        // Deaktiviere Upload-Button bei Webcam-Fehler
+                        uploadButton.disabled = true;
+                    });
+
+            } catch (error) {
+                console.error("Initialisierungsfehler:", error);
+                statusElement.textContent = "Fehler beim Initialisieren des Modells.";
+                 uploadButton.disabled = true;
+            }
+        }
+
+        // Starte die Initialisierung, wenn das Fenster geladen ist
+        window.onload = initialize;
+
+        // Aufräumen, wenn die Seite verlassen wird
+        window.onunload = () => {
+            if (animationFrameId) {
+                cancelAnimationFrame(animationFrameId);
+            }
+            if (segmenter) {
+                segmenter.close();
+            }
+            const stream = videoElement.srcObject;
+            if (stream) {
+                const tracks = stream.getTracks();
+                tracks.forEach(track => track.stop());
+            }
+        };
+
+    </script>
+</body>
+</html>
