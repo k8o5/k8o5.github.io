@@ -3,516 +3,280 @@
 <head>
     <meta charset="UTF-8">
     <meta name="viewport" content="width=device-width, initial-scale=1.0">
-    <title>k8o5p2p - P2P Dateiübertragung</title>
+    <title>Dummes Arena PvP Spiel</title>
     <style>
-        /* Minimales CSS */
-        body { font-family: system-ui, -apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, Oxygen, Ubuntu, Cantarell, 'Open Sans', 'Helvetica Neue', sans-serif; line-height: 1.5; padding: 15px; max-width: 650px; margin: 20px auto; background-color: #f0f0f0; }
-        .container { background-color: #fff; padding: 20px; border-radius: 5px; box-shadow: 0 1px 3px rgba(0,0,0,0.1); }
-        h1 { text-align: center; color: #333; margin-bottom: 1.5em; }
-        label { font-weight: bold; display: block; margin-top: 1em; margin-bottom: 0.3em; }
-        textarea { width: 95%; min-height: 70px; margin-top: 2px; padding: 8px; border: 1px solid #ccc; border-radius: 3px; font-size: 0.9em; }
-        button { padding: 8px 12px; margin-top: 8px; margin-right: 5px; background-color: #007bff; color: white; border: none; border-radius: 3px; cursor: pointer; font-size: 0.95em; }
-        button:hover { background-color: #0056b3; }
-        button:disabled { background-color: #cccccc; cursor: not-allowed; }
-        #status { margin-top: 1.5em; padding: 10px; background-color: #e9ecef; border: 1px solid #ced4da; border-radius: 3px; text-align: center; font-weight: bold; font-size: 0.9em; }
-        #progressContainer { display: none; margin-top: 1em; }
-        progress { width: 100%; height: 20px; }
-        #downloadLink { display: block; margin-top: 1em; text-align: center; font-size: 1.1em; font-weight: bold; }
-        .section { border-top: 1px solid #eee; padding-top: 1em; margin-top: 1.5em;}
-        small { color: #555; font-size: 0.8em; display: block; margin-bottom: 0.5em; }
-        input[type="file"] { margin-top: 5px; }
-        #transferInfo { font-size: 0.85em; color: #333; text-align: center; margin-top: 5px; }
+        body {
+            display: flex;
+            flex-direction: column;
+            align-items: center;
+            font-family: sans-serif;
+            background-color: #f0f0f0;
+            margin-top: 20px;
+        }
+        #spielbereich {
+            position: relative; /* Wichtig für absolute Positionierung der Spieler */
+            width: 600px;
+            height: 400px;
+            border: 3px solid black;
+            background-color: #d3d3d3; /* Hellgrauer Hintergrund */
+            overflow: hidden; /* Verhindert, dass Spieler rausgehen (visuell) */
+        }
+        .spieler {
+            position: absolute;
+            width: 40px;
+            height: 40px;
+            border: 1px solid black;
+        }
+        #spieler1 {
+            background-color: red;
+            left: 50px; /* Startposition */
+            top: 180px;
+        }
+        #spieler2 {
+            background-color: blue;
+            right: 50px; /* Startposition */
+            top: 180px;
+        }
+        #info {
+            margin-top: 15px;
+            font-size: 1.2em;
+            text-align: center;
+        }
+        #steuerung {
+            margin-top: 10px;
+            font-size: 0.9em;
+            color: #555;
+            text-align: center;
+            max-width: 600px;
+        }
+        button {
+            margin-top: 15px;
+            padding: 10px 20px;
+            font-size: 1em;
+            cursor: pointer;
+        }
+        #gewinnerAnzeige {
+            position: absolute;
+            top: 50%;
+            left: 50%;
+            transform: translate(-50%, -50%);
+            font-size: 3em;
+            color: green;
+            background-color: rgba(255, 255, 255, 0.8);
+            padding: 20px;
+            border-radius: 10px;
+            display: none; /* Standardmäßig ausgeblendet */
+            text-align: center;
+            z-index: 10; /* Über den Spielern */
+        }
     </style>
 </head>
 <body>
-    <div class="container">
-        <h1>k8o5p2p</h1>
-        <p>Direkte P2P Dateiübertragung zwischen zwei Browsern. <br>Benötigt manuelles Kopieren & Einfügen der Verbindungsdaten.</p>
 
-        <div id="status">Status: Bereit</div>
+    <h1>Dummes Arena Spiel</h1>
 
-        <div class="section">
-            <label for="fileInput">1. Datei auswählen (Nur Sender):</label>
-            <input type="file" id="fileInput">
-        </div>
-
-        <div class="section">
-            <label>2. Verbindung aufbauen:</label>
-            <small>
-                <b>Sender:</b> Klicke "Angebot erstellen", kopiere Text aus "Angebot/Antwort zum Senden", sende ihn an Empfänger.<br>
-                <b>Empfänger:</b> Füge Text in "Empfangenes Angebot/Antwort" ein, klicke "Antwort erstellen", kopiere Text aus "Angebot/Antwort zum Senden", sende ihn zurück an Sender.<br>
-                <b>Sender:</b> Füge Antwort-Text in "Empfangenes Angebot/Antwort" ein, klicke "Verbindung verarbeiten".
-            </small>
-
-            <div>
-                <button id="createOfferBtn" disabled>Angebot erstellen (Sender)</button>
-                <button id="createAnswerBtn">Antwort erstellen (Empfänger)</button>
-                <button id="processSignalBtn">Verbindung verarbeiten</button>
-            </div>
-
-            <div>
-                <label for="localSdp">Angebot/Antwort zum Senden:</label>
-                <textarea id="localSdp" readonly placeholder="Angebot oder Antwort wird hier angezeigt..."></textarea>
-            </div>
-
-            <div>
-                <label for="remoteSdp">Empfangenes Angebot/Antwort:</label>
-                <textarea id="remoteSdp" placeholder="Hier Angebot vom Sender oder Antwort vom Empfänger einfügen..."></textarea>
-            </div>
-        </div>
-
-        <div id="progressContainer" class="section">
-             <label>Übertragungsfortschritt:</label>
-             <progress id="progressBar" value="0" max="100"></progress>
-             <div id="transferInfo">
-                 <span id="progressPercent">0%</span> - <span id="bytesInfo">Warte auf Start...</span>
-             </div>
-        </div>
-
-        <a id="downloadLink" style="display: none;" class="section"></a>
-
+    <div id="spielbereich">
+        <div id="spieler1" class="spieler"></div>
+        <div id="spieler2" class="spieler"></div>
+        <div id="gewinnerAnzeige"></div>
     </div>
 
+    <div id="info">
+        <span id="leben1">Spieler 1 Leben: 100</span> |
+        <span id="leben2">Spieler 2 Leben: 100</span>
+    </div>
+
+    <div id="steuerung">
+        Steuerung: Spieler 1 (Rot) mit WASD, Spieler 2 (Blau) mit Pfeiltasten.
+        <br>Berührt euch, um Schaden zu machen!
+    </div>
+
+    <button id="neustartButton">Neustart</button>
+
     <script>
-        // --- DOM Elemente ---
-        const fileInput = document.getElementById('fileInput');
-        const createOfferBtn = document.getElementById('createOfferBtn');
-        const createAnswerBtn = document.getElementById('createAnswerBtn');
-        const processSignalBtn = document.getElementById('processSignalBtn');
-        const localSdpTextarea = document.getElementById('localSdp');
-        const remoteSdpTextarea = document.getElementById('remoteSdp');
-        const statusDiv = document.getElementById('status');
-        const progressBar = document.getElementById('progressBar');
-        const progressPercent = document.getElementById('progressPercent');
-        const bytesInfo = document.getElementById('bytesInfo');
-        const progressContainer = document.getElementById('progressContainer');
-        const downloadLink = document.getElementById('downloadLink');
-        const transferInfo = document.getElementById('transferInfo'); // Container div
+        // Elemente holen
+        const spielbereich = document.getElementById('spielbereich');
+        const spieler1Element = document.getElementById('spieler1');
+        const spieler2Element = document.getElementById('spieler2');
+        const leben1Anzeige = document.getElementById('leben1');
+        const leben2Anzeige = document.getElementById('leben2');
+        const neustartButton = document.getElementById('neustartButton');
+        const gewinnerAnzeige = document.getElementById('gewinnerAnzeige');
 
-        // --- Variablen ---
-        let peerConnection;
-        let dataChannel;
-        let fileToSend = null;
-        let fileReader;
-        let receiveBuffer = [];
-        let receivedSize = 0;
-        let fileMetadata = null; // { name, size, type }
-        let isSender = false; // Um Logik zu steuern
+        // Spiel-Konstanten und Variablen
+        const spielerGroesse = 40; // Muss mit CSS übereinstimmen
+        const geschwindigkeit = 4;
+        const schadenProKollision = 2;
+        const arenaBreite = spielbereich.clientWidth;
+        const arenaHoehe = spielbereich.clientHeight;
 
-        const CHUNK_SIZE = 64 * 1024; // 64 KB Chunks
-
-        // --- WebRTC Konfiguration (STUN Server) ---
-        const configuration = {
-            iceServers: [
-                { urls: 'stun:stun.l.google.com:19302' },
-                { urls: 'stun:stun1.l.google.com:19302' },
-            ]
+        let spieler1 = {
+            x: 50,
+            y: arenaHoehe / 2 - spielerGroesse / 2,
+            leben: 100
         };
 
-        // --- Hilfsfunktionen ---
-        function updateStatus(message, isError = false) {
-            console.log("Status:", message);
-            statusDiv.textContent = `Status: ${message}`;
-            statusDiv.style.color = isError ? 'red' : 'black';
-        }
+        let spieler2 = {
+            x: arenaBreite - 50 - spielerGroesse,
+            y: arenaHoehe / 2 - spielerGroesse / 2,
+            leben: 100
+        };
 
-        function disableButtons(disable) {
-            createOfferBtn.disabled = disable;
-            createAnswerBtn.disabled = disable;
-            processSignalBtn.disabled = disable;
-            fileInput.disabled = disable;
-            // Angebot nur aktivieren, wenn Datei da ist UND nicht disabled
-            if (!disable && fileToSend) {
-                createOfferBtn.disabled = false;
-            } else if (disable) {
-                 createOfferBtn.disabled = true;
-            }
-        }
+        let gedrueckteTasten = {}; // Objekt zum Speichern gedrückter Tasten
+        let spielLaeuft = true;
+        let kollisionsCooldown = false; // Verhindert zu schnellen Schaden
 
-        function formatBytes(bytes, decimals = 2) {
-            if (!+bytes) return '0 Bytes';
-            const k = 1024;
-            const dm = decimals < 0 ? 0 : decimals;
-            const sizes = ['Bytes', 'KB', 'MB', 'GB', 'TB', 'PB', 'EB', 'ZB', 'YB'];
-            const i = Math.floor(Math.log(bytes) / Math.log(k));
-            return `${parseFloat((bytes / Math.pow(k, i)).toFixed(dm))} ${sizes[i]}`;
-        }
-
-         function updateProgress(current, total) {
-            if (!total) return;
-            const percent = Math.round((current / total) * 100);
-            progressBar.value = percent;
-            progressPercent.textContent = `${percent}%`;
-            bytesInfo.textContent = `${formatBytes(current)} / ${formatBytes(total)}`;
-            progressContainer.style.display = 'block';
-        }
-
-        // --- Kernlogik ---
-
-        fileInput.addEventListener('change', (event) => {
-            fileToSend = event.target.files[0];
-            if (fileToSend) {
-                updateStatus(`Datei ausgewählt: ${fileToSend.name} (${formatBytes(fileToSend.size)})`);
-                createOfferBtn.disabled = false;
-                isSender = true; // Wer Datei wählt, ist Sender
-            } else {
-                updateStatus("Keine Datei ausgewählt.");
-                createOfferBtn.disabled = true;
-                isSender = false;
-            }
+        // --- Event Listener für Tastendrücke ---
+        document.addEventListener('keydown', (event) => {
+            gedrueckteTasten[event.code] = true;
         });
 
-        // --- Angebot erstellen (Nur Sender) ---
-        createOfferBtn.onclick = async () => {
-            if (!fileToSend) {
-                alert("Bitte zuerst eine Datei auswählen!");
-                return;
-            }
-            isSender = true; // Sicherstellen
-            updateStatus("Erstelle Peer Connection und Angebot...");
-            disableButtons(true);
+        document.addEventListener('keyup', (event) => {
+            delete gedrueckteTasten[event.code]; // Taste aus dem Objekt entfernen
+        });
 
-            peerConnection = new RTCPeerConnection(configuration);
-            setupPeerConnectionEvents();
+        // --- Neustart Button ---
+        neustartButton.addEventListener('click', spielZuruecksetzen);
 
-            dataChannel = peerConnection.createDataChannel('fileTransferChannel');
-            setupDataChannelEvents(); // Setup vor Offer
-
-            try {
-                const offer = await peerConnection.createOffer();
-                await peerConnection.setLocalDescription(offer);
-
-                // Kurze Wartezeit, damit ICE Kandidaten gesammelt werden können (vereinfacht!)
-                await new Promise(resolve => setTimeout(resolve, 500));
-
-                localSdpTextarea.value = JSON.stringify(peerConnection.localDescription);
-                updateStatus("Angebot erstellt. Kopiere Text oben und sende ihn an den Empfänger.");
-                processSignalBtn.disabled = false; // Button zum Verarbeiten der Antwort aktivieren
-            } catch (error) {
-                console.error("Fehler beim Erstellen des Angebots:", error);
-                updateStatus(`Fehler beim Erstellen des Angebots: ${error.message}`, true);
-                resetState();
-            }
-        };
-
-        // --- Antwort erstellen (Nur Empfänger) ---
-        createAnswerBtn.onclick = async () => {
-            const offerString = remoteSdpTextarea.value.trim();
-            if (!offerString) {
-                alert("Bitte zuerst das Angebot vom Sender in 'Empfangenes Angebot/Antwort' einfügen!");
-                return;
-            }
-            isSender = false; // Wer Antwort erstellt, ist Empfänger
-            updateStatus("Verarbeite Angebot und erstelle Antwort...");
-            disableButtons(true);
-
-            peerConnection = new RTCPeerConnection(configuration);
-            setupPeerConnectionEvents();
-
-            // WICHTIG: Event Handler für Data Channel vom Sender setzen
-            peerConnection.ondatachannel = (event) => {
-                dataChannel = event.channel;
-                setupDataChannelEvents();
-                updateStatus("Data Channel vom Sender empfangen.");
+        // --- Spiel zurücksetzen Funktion ---
+        function spielZuruecksetzen() {
+            spieler1 = {
+                x: 50,
+                y: arenaHoehe / 2 - spielerGroesse / 2,
+                leben: 100
             };
-
-            try {
-                const offer = JSON.parse(offerString);
-                await peerConnection.setRemoteDescription(new RTCSessionDescription(offer));
-                const answer = await peerConnection.createAnswer();
-                await peerConnection.setLocalDescription(answer);
-
-                 // Kurze Wartezeit für ICE Kandidaten (vereinfacht!)
-                await new Promise(resolve => setTimeout(resolve, 500));
-
-                localSdpTextarea.value = JSON.stringify(peerConnection.localDescription);
-                updateStatus("Antwort erstellt. Kopiere Text oben und sende ihn an den Sender.");
-                // Remote Textarea leeren, da sie nicht mehr für die Antwort gebraucht wird
-                // remoteSdpTextarea.value = ''; // Optional, evtl. verwirrend
-            } catch (error) {
-                console.error("Fehler beim Erstellen der Antwort:", error);
-                updateStatus(`Fehler beim Erstellen der Antwort: ${error.message}`, true);
-                resetState();
+            spieler2 = {
+                x: arenaBreite - 50 - spielerGroesse,
+                y: arenaHoehe / 2 - spielerGroesse / 2,
+                leben: 100
+            };
+            gedrueckteTasten = {};
+            spielLaeuft = true;
+            kollisionsCooldown = false;
+            gewinnerAnzeige.style.display = 'none'; // Gewinneranzeige ausblenden
+            updateAnzeige(); // Anzeige aktualisieren
+            // Startpositionen visuell setzen
+            spieler1Element.style.left = spieler1.x + 'px';
+            spieler1Element.style.top = spieler1.y + 'px';
+            spieler2Element.style.left = spieler2.x + 'px';
+            spieler2Element.style.top = spieler2.y + 'px';
+            // Spiel-Loop neu starten (falls er gestoppt wurde)
+            if (!animationFrameId) { // Verhindert mehrfache Loops
+                 spielLoop();
             }
-        };
-
-        // --- Angebot/Antwort verarbeiten ---
-        processSignalBtn.onclick = async () => {
-            const remoteSdpString = remoteSdpTextarea.value.trim();
-            if (!remoteSdpString) {
-                alert("Bitte zuerst das empfangene Angebot oder die Antwort einfügen!");
-                return;
-            }
-            if (!peerConnection) {
-                 alert("Fehler: PeerConnection nicht initialisiert. Starte den Prozess neu (Angebot/Antwort erstellen).");
-                 return;
-            }
-
-            updateStatus("Verarbeite empfangenes Signal...");
-            disableButtons(true); // Verhindern weiterer Klicks während der Verarbeitung
-
-            try {
-                const remoteDesc = JSON.parse(remoteSdpString);
-                 if (peerConnection.signalingState === 'closed') {
-                    throw new Error("PeerConnection ist bereits geschlossen.");
-                 }
-                await peerConnection.setRemoteDescription(new RTCSessionDescription(remoteDesc));
-                updateStatus("Signal verarbeitet. Warte auf Verbindung...");
-                // Der Verbindungsaufbau geschieht nun automatisch im Hintergrund
-            } catch (error) {
-                console.error("Fehler beim Verarbeiten des Signals:", error);
-                updateStatus(`Fehler beim Verarbeiten des Signals: ${error.message}`, true);
-                // Nicht resetten, falls nur das Signal falsch war, aber PC noch existiert
-                 disableButtons(false); // Erlaube erneuten Versuch mit korrigiertem Signal
-            }
-        };
-
-        // --- Gemeinsame PeerConnection Event Listener ---
-        function setupPeerConnectionEvents() {
-            peerConnection.onicecandidate = (event) => {
-                // ICE Kandidaten werden normalerweise im SDP gebündelt,
-                // daher ist hier oft keine Aktion nötig bei manueller Signalisierung.
-                // Wenn sie doch separat kämen, müsste man sie hier sammeln und übertragen.
-                if (event.candidate) {
-                    console.log("Neuer ICE Kandidat gefunden (wird i.d.R. im SDP gebündelt)");
-                } else {
-                     console.log("Alle lokalen ICE Kandidaten gesammelt.");
-                     // Das finale SDP (im localDescription) sollte nun alle Kandidaten enthalten.
-                     // Bei Problemen könnte man hier das localSdpTextarea erneut aktualisieren.
-                    // localSdpTextarea.value = JSON.stringify(peerConnection.localDescription);
-                }
-            };
-
-            peerConnection.onconnectionstatechange = () => {
-                const state = peerConnection.connectionState;
-                console.log("Connection State:", state);
-                updateStatus(`Verbindungsstatus: ${state}`);
-                if (state === 'connected') {
-                    updateStatus("Verbunden!");
-                    disableButtons(true); // Verbindung steht, keine Signalisierung mehr
-                } else if (state === 'failed' || state === 'disconnected' || state === 'closed') {
-                    updateStatus(`Verbindung fehlgeschlagen/geschlossen: ${state}`, true);
-                    resetState();
-                }
-            };
-        }
-
-        // --- Gemeinsame DataChannel Event Listener ---
-        function setupDataChannelEvents() {
-            dataChannel.onopen = () => {
-                console.log("Data Channel ist offen.");
-                updateStatus("Data Channel offen. Bereit zum Senden/Empfangen.");
-                disableButtons(true);
-                if (isSender && fileToSend) {
-                    sendFile(); // Sender startet automatisch
-                }
-            };
-
-            dataChannel.onclose = () => {
-                console.log("Data Channel geschlossen.");
-                // Nur Status updaten, nicht unbedingt alles resetten
-                if (peerConnection && peerConnection.connectionState === 'connected') {
-                    updateStatus("Data Channel geschlossen, Übertragung beendet oder abgebrochen.");
-                }
-            };
-
-            dataChannel.onerror = (error) => {
-                console.error("Data Channel Fehler:", error);
-                updateStatus(`Data Channel Fehler: ${error.message || error}`, true);
-                resetState();
-            };
-
-            dataChannel.onmessage = (event) => {
-                // Empfänger-Logik
-                try {
-                    if (typeof event.data === 'string') {
-                        const message = JSON.parse(event.data);
-                        if (message.type === 'metadata') {
-                            fileMetadata = message.payload;
-                            receivedSize = 0;
-                            receiveBuffer = [];
-                            updateStatus(`Empfange Metadaten für: ${fileMetadata.name}`);
-                            console.log("Metadaten empfangen:", fileMetadata);
-                             updateProgress(0, fileMetadata.size); // Fortschrittsbalken initialisieren
-                        } else if (message.type === 'eof') {
-                            updateStatus("Datei vollständig empfangen (EOF).");
-                            console.log("End-of-File Signal empfangen.");
-                            assembleAndDownloadFile();
-                        }
-                    } else if (event.data instanceof ArrayBuffer) {
-                        if (!fileMetadata) throw new Error("Daten-Chunk empfangen, aber keine Metadaten vorhanden!");
-
-                        receiveBuffer.push(event.data);
-                        receivedSize += event.data.byteLength;
-                        updateProgress(receivedSize, fileMetadata.size);
-
-                        // Optional: Einfache Bestätigung (ACK) zur Flusskontrolle
-                        // if (dataChannel.bufferedAmount < CHUNK_SIZE * 10) {
-                        //     dataChannel.send(JSON.stringify({ type: 'ack' }));
-                        // }
-                    } else {
-                        console.warn("Unbekannter Nachrichtentyp empfangen:", event.data);
-                    }
-                } catch (error) {
-                    console.error("Fehler bei der Nachrichtenverarbeitung:", error);
-                    updateStatus(`Fehler beim Empfangen: ${error.message}`, true);
-                    resetState();
-                }
-            };
         }
 
 
-        // --- Datei Senden (Sender) ---
-        function sendFile() {
-            if (!fileToSend || !dataChannel || dataChannel.readyState !== 'open') {
-                updateStatus("Senden nicht möglich (Keine Datei / Channel nicht offen).", true);
+        // --- Spiel-Loop ---
+        let animationFrameId = null; // Um den Loop zu stoppen/starten
+        function spielLoop() {
+            if (!spielLaeuft) {
+                animationFrameId = null; // Loop beenden
                 return;
             }
 
-            updateStatus(`Sende Datei: ${fileToSend.name}`);
-            updateProgress(0, fileToSend.size); // Fortschrittsbalken initialisieren
+            bewegen();
+            pruefeKollision();
+            updateAnzeige();
+            pruefeSpielende();
 
-            // 1. Metadaten senden
-            const metadata = {
-                type: 'metadata',
-                payload: { name: fileToSend.name, size: fileToSend.size, type: fileToSend.type }
-            };
-            dataChannel.send(JSON.stringify(metadata));
-            console.log("Metadaten gesendet:", metadata.payload);
-
-            // 2. Datei in Chunks senden
-            let offset = 0;
-            fileReader = new FileReader();
-
-            fileReader.onload = (e) => {
-                 if (dataChannel.readyState !== 'open') {
-                     console.warn("Senden abgebrochen: Data Channel geschlossen.");
-                     updateStatus("Senden abgebrochen: Data Channel geschlossen.", true);
-                     return; // Nicht weiterlesen/senden
-                 }
-                try {
-                    const chunk = e.target.result; // ArrayBuffer
-                    dataChannel.send(chunk);
-                    offset += chunk.byteLength;
-                    updateProgress(offset, fileToSend.size);
-
-                    if (offset < fileToSend.size) {
-                        // Nächsten Chunk lesen (mit rudimentärer Flusskontrolle)
-                        setTimeout(readNextChunk, 0); // Kurze Pause für UI/Netzwerk
-                    } else {
-                        console.log("Alle Chunks gesendet.");
-                        // 3. End-of-File Signal senden
-                        dataChannel.send(JSON.stringify({ type: 'eof' }));
-                        updateStatus("Datei vollständig gesendet.");
-                        console.log("End-of-File Signal gesendet.");
-                        // Optional: Verbindung schließen nach Erfolg
-                        // setTimeout(resetState, 2000);
-                    }
-                } catch (sendError) {
-                     console.error("Fehler beim Senden eines Chunks:", sendError);
-                     updateStatus(`Fehler beim Senden: ${sendError.message}`, true);
-                     resetState();
-                }
-            };
-
-            fileReader.onerror = (error) => {
-                console.error("FileReader Fehler:", error);
-                updateStatus(`Fehler beim Lesen der Datei: ${error}`, true);
-                resetState();
-            };
-
-            // Funktion zum Lesen des nächsten Chunks (mit Flusskontrolle)
-            function readNextChunk() {
-                 if (!fileToSend || dataChannel.readyState !== 'open') {
-                     console.log("readNextChunk abgebrochen (Datei weg oder Channel zu).");
-                     return;
-                 }
-                 // Rudimentäre Backpressure: Warte, wenn zu viele Daten im Sendepuffer sind
-                 const bufferThreshold = CHUNK_SIZE * 16; // z.B. 1MB Puffer erlauben
-                 if (dataChannel.bufferedAmount > bufferThreshold) {
-                     console.log(`Warte, Sendepuffer voll (${formatBytes(dataChannel.bufferedAmount)})...`);
-                     setTimeout(readNextChunk, 100); // Erneut versuchen nach 100ms
-                     return;
-                 }
-                const slice = fileToSend.slice(offset, offset + CHUNK_SIZE);
-                fileReader.readAsArrayBuffer(slice);
-            }
-
-            // Ersten Chunk lesen
-            readNextChunk();
+            // Nächsten Frame anfordern
+           animationFrameId = requestAnimationFrame(spielLoop);
         }
 
-        // --- Datei zusammensetzen und Download anbieten (Empfänger) ---
-        function assembleAndDownloadFile() {
-            if (!fileMetadata || receiveBuffer.length === 0) {
-                updateStatus("Fehler: Keine Metadaten oder Daten zum Zusammensetzen.", true);
-                return;
-            }
+        // --- Bewegungslogik ---
+        function bewegen() {
+            // Spieler 1 (WASD)
+            if (gedrueckteTasten['KeyW']) spieler1.y -= geschwindigkeit;
+            if (gedrueckteTasten['KeyS']) spieler1.y += geschwindigkeit;
+            if (gedrueckteTasten['KeyA']) spieler1.x -= geschwindigkeit;
+            if (gedrueckteTasten['KeyD']) spieler1.x += geschwindigkeit;
 
-            try {
-                const receivedBlob = new Blob(receiveBuffer, { type: fileMetadata.type });
-                receiveBuffer = []; // Speicher freigeben
+            // Spieler 2 (Pfeiltasten)
+            if (gedrueckteTasten['ArrowUp']) spieler2.y -= geschwindigkeit;
+            if (gedrueckteTasten['ArrowDown']) spieler2.y += geschwindigkeit;
+            if (gedrueckteTasten['ArrowLeft']) spieler2.x -= geschwindigkeit;
+            if (gedrueckteTasten['ArrowRight']) spieler2.x += geschwindigkeit;
 
-                 if (receivedBlob.size !== fileMetadata.size) {
-                     console.warn(`Warnung: Empfangene Größe (${receivedBlob.size}) stimmt nicht mit Metadaten (${fileMetadata.size}) überein! Download könnte fehlerhaft sein.`);
-                     updateStatus(`Warnung: Größenkonflikt! Empfangen: ${formatBytes(receivedBlob.size)}. Download wird trotzdem angeboten.`);
-                } else {
-                     updateStatus("Datei erfolgreich zusammengesetzt.");
-                }
+            // Grenzen prüfen für Spieler 1
+            spieler1.x = Math.max(0, Math.min(arenaBreite - spielerGroesse, spieler1.x));
+            spieler1.y = Math.max(0, Math.min(arenaHoehe - spielerGroesse, spieler1.y));
 
-                downloadLink.href = URL.createObjectURL(receivedBlob);
-                downloadLink.download = fileMetadata.name;
-                downloadLink.textContent = `Datei "${fileMetadata.name}" herunterladen (${formatBytes(receivedBlob.size)})`;
-                downloadLink.style.display = 'block';
+            // Grenzen prüfen für Spieler 2
+            spieler2.x = Math.max(0, Math.min(arenaBreite - spielerGroesse, spieler2.x));
+            spieler2.y = Math.max(0, Math.min(arenaHoehe - spielerGroesse, spieler2.y));
 
-                // Optional: Verbindung nach Erfolg schließen
-                // setTimeout(resetState, 5000);
+            // Visuelle Position aktualisieren
+            spieler1Element.style.left = spieler1.x + 'px';
+            spieler1Element.style.top = spieler1.y + 'px';
+            spieler2Element.style.left = spieler2.x + 'px';
+            spieler2Element.style.top = spieler2.y + 'px';
+        }
 
-            } catch (error) {
-                console.error("Fehler beim Zusammensetzen/Download-Link:", error);
-                updateStatus(`Fehler beim Erstellen des Downloads: ${error.message}`, true);
-                resetState();
+        // --- Kollisionserkennung ---
+        function pruefeKollision() {
+            // Einfache Rechteck-Kollision (Axis-Aligned Bounding Box)
+            const kollidiert =
+                spieler1.x < spieler2.x + spielerGroesse &&
+                spieler1.x + spielerGroesse > spieler2.x &&
+                spieler1.y < spieler2.y + spielerGroesse &&
+                spieler1.y + spielerGroesse > spieler2.y;
+
+            if (kollidiert && !kollisionsCooldown) {
+                // Schaden zufügen
+                spieler1.leben -= schadenProKollision;
+                spieler2.leben -= schadenProKollision;
+
+                // Sicherstellen, dass Leben nicht unter 0 fällt
+                spieler1.leben = Math.max(0, spieler1.leben);
+                spieler2.leben = Math.max(0, spieler2.leben);
+
+                // Cooldown starten, um sofortigen Mehrfachschaden zu verhindern
+                kollisionsCooldown = true;
+                // Kleines visuelles Feedback (optional)
+                spieler1Element.style.opacity = '0.7';
+                spieler2Element.style.opacity = '0.7';
+
+                setTimeout(() => {
+                    kollisionsCooldown = false;
+                    spieler1Element.style.opacity = '1';
+                    spieler2Element.style.opacity = '1';
+                }, 200); // 200ms Cooldown
+
             }
         }
 
-        // --- Zustand zurücksetzen ---
-        function resetState() {
-            console.log("Setze Zustand zurück.");
-            if (dataChannel) {
-                dataChannel.close();
-                dataChannel = null;
-            }
-            if (peerConnection) {
-                peerConnection.close();
-                peerConnection = null;
-            }
-            if (fileReader && fileReader.readyState === FileReader.LOADING) {
-                fileReader.abort();
-                fileReader = null;
-            }
-            fileToSend = null;
-            receiveBuffer = [];
-            receivedSize = 0;
-            fileMetadata = null;
-            isSender = false;
-            localSdpTextarea.value = '';
-            remoteSdpTextarea.value = '';
-            fileInput.value = '';
-            disableButtons(false); // Alle Buttons wieder aktivieren
-            createOfferBtn.disabled = true; // Angebot erst nach Dateiauswahl
-            progressContainer.style.display = 'none';
-            progressBar.value = 0;
-            progressPercent.textContent = '0%';
-            bytesInfo.textContent = 'Warte auf Start...';
-            downloadLink.style.display = 'none';
-            downloadLink.href = '#';
-            downloadLink.textContent = '';
-            updateStatus("Bereit");
+        // --- Anzeige aktualisieren ---
+        function updateAnzeige() {
+            leben1Anzeige.textContent = `Spieler 1 Leben: ${spieler1.leben}`;
+            leben2Anzeige.textContent = `Spieler 2 Leben: ${spieler2.leben}`;
         }
 
-        // --- Initialisierung beim Laden der Seite ---
-        resetState(); // Startet im sauberen Zustand
+        // --- Spielende prüfen ---
+        function pruefeSpielende() {
+            let gewinnerText = '';
+            if (spieler1.leben <= 0 && spieler2.leben <= 0) {
+                gewinnerText = "Unentschieden!";
+                spielLaeuft = false;
+            } else if (spieler1.leben <= 0) {
+                gewinnerText = "Spieler 2 (Blau) gewinnt!";
+                spielLaeuft = false;
+            } else if (spieler2.leben <= 0) {
+                gewinnerText = "Spieler 1 (Rot) gewinnt!";
+                spielLaeuft = false;
+            }
+
+            if (!spielLaeuft && gewinnerText) {
+                 gewinnerAnzeige.textContent = gewinnerText;
+                 gewinnerAnzeige.style.display = 'block'; // Anzeige sichtbar machen
+            }
+        }
+
+        // --- Initiales Setup und Start des Spiel-Loops ---
+        spielZuruecksetzen(); // Setzt alles auf Anfangswerte
+        // spielLoop(); // Wird jetzt in spielZuruecksetzen aufgerufen
 
     </script>
+
 </body>
 </html>
