@@ -3,7 +3,7 @@
 <head>
     <meta charset="UTF-8">
     <meta name="viewport" content="width=device-width, initial-scale=1.0">
-    <title>k8o5 Web Game</title>
+    <title>k8o5</title>
     <style>
         :root {
             --card-width: 100px; --card-height: 140px; --bg-color-static: #1a1a2e; --text-color: #FFFFFF; /* Pure White */
@@ -52,7 +52,7 @@
         .spades, .clubs { color: #000; }
         .hearts, .diamonds { color: var(--accent-color); }
         .joker-area { display: flex; flex-wrap: wrap; gap: 10px; justify-content: center; margin-top: 15px; min-height: 50px; }
-        .joker-area > h2 { width: 100%; text-align: center; margin-bottom: 5px; } /* Style for Joker area title */
+        /* Removed the explicit h2 style here, as renderJokers now handles it */
         .joker-title { font-weight: bold; text-align: center; font-size: 14px; margin-bottom: 5px; color: #111;}
         .joker-desc { font-size: 12px; flex-grow: 1; color: #111;}
         .joker-cost { text-align: right; font-weight: bold; color: #111;}
@@ -171,7 +171,10 @@
             </div>
         </div>
 
-        <div class="joker-area" id="joker-area"> <h2>Jokers COMING SOON</h2> </div>
+        <div class="joker-area" id="joker-area">
+             <!-- Content managed by renderJokers -->
+             <h2>Jokers COMING SOON</h2> <!-- This will be replaced by renderJokers -->
+        </div>
         <button id="view-deck-button">View Deck (<span id="deck-count">52</span>)</button>
         <div class="shop hidden" id="shop"> <div class="shop-title">Shop</div> <div class="shop-items" id="shop-items"></div> <div class="actions"> <button id="leave-shop">Continue</button> <button id="reroll-shop">Reroll ($1)</button> </div> </div>
     </div>
@@ -307,14 +310,75 @@
         function handleDragEnd(event) { setTimeout(() => { handElement.querySelectorAll('.card.dragging').forEach(el => el.classList.remove('dragging')); clearDragOverEffects(); }, 0); draggedItemIndex = null; }
 
 
-        // --- Deck & Hand Management --- (Keep existing functions)
+        // --- Deck & Hand Management ---
         function createDeck() { state.deck = []; suits.forEach(s => ranks.forEach(r => state.deck.push({ suit: s, rank: r, faceDown: false }))); deckCountSpan.textContent = state.deck.length;}
         function shuffleDeck() { for (let i = state.deck.length - 1; i > 0; i--) { const j = Math.floor(Math.random() * (i + 1)); [state.deck[i], state.deck[j]] = [state.deck[j], state.deck[i]]; } }
-        function _internalDrawCard() { if (state.hand.length >= (state.maxHandSize || 8)) return null; if (state.deck.length === 0) { createDeck(); shuffleDeck(); console.log("Deck reshuffled."); } if (state.deck.length === 0) return null; const card = state.deck.pop(); card.faceDown = (state.currentBlind && state.currentBlind.name === "The House" && state.handsPlayed === 0 && state.discardsRemaining === state.discardsPerRound); deckCountSpan.textContent = state.deck.length; return card; }
+        // Corrected _internalDrawCard
+        function _internalDrawCard() {
+            if (state.hand.length >= (state.maxHandSize || 8)) return null;
+            if (state.deck.length === 0) {
+                createDeck(); shuffleDeck();
+                console.log("Deck reshuffled.");
+            }
+            if (state.deck.length === 0) return null; // Should not happen after reshuffle unless deck size is 0
+
+            const card = state.deck.pop();
+            // Apply face-down ONLY if it's "The House" AND it's the very start of the round (0 hands played, max discards left)
+            card.faceDown = (
+                state.currentBlind &&
+                state.currentBlind.name === "The House" &&
+                state.handsPlayed === 0 &&
+                state.discardsRemaining === state.discardsPerRound
+            );
+            deckCountSpan.textContent = state.deck.length;
+            return card;
+        }
         function selectCard(index) { if (state.isRoundEnding || longPressTriggered) { longPressTriggered = false; return; } if (index < 0 || index >= state.hand.length || !state.hand[index] || state.hand[index].faceDown) { return; } const cardElement = handElement.querySelector(`.card[data-index="${index}"]`); if (!cardElement) { return; } const cardIndexInSelection = state.selectedCards.indexOf(index); if (cardIndexInSelection === -1) { if (state.selectedCards.length < 5) { state.selectedCards.push(index); cardElement.classList.add('selected'); playSoundEffect('select'); } } else { state.selectedCards.splice(cardIndexInSelection, 1); cardElement.classList.remove('selected'); playSoundEffect('deselect'); } updateHandInfo(); updateButtonStates(); }
         function renderHand() { handElement.innerHTML = ''; state.hand.forEach((card, index) => { const cardElement = document.createElement('div'); cardElement.className = 'card'; cardElement.dataset.index = index; cardElement.draggable = !state.isRoundEnding; // Use state flag
              if (state.selectedCards.includes(index)) { cardElement.classList.add('selected'); } if (card.faceDown) { cardElement.classList.add('card-back'); } if (card._isNew) { cardElement.classList.add('appearing'); delete card._isNew; } cardElement.addEventListener('dragstart', (e) => handleDragStart(e, index)); cardElement.addEventListener('dragover', handleDragOver); cardElement.addEventListener('dragleave', handleDragLeave); cardElement.addEventListener('drop', (e) => handleDrop(e, index)); cardElement.addEventListener('dragend', handleDragEnd); cardElement.addEventListener('click', () => selectCard(index)); cardElement.addEventListener('contextmenu', (e) => { e.preventDefault(); openCardInspect(card, cardElement); }); cardElement.addEventListener('touchstart', (e) => { e.preventDefault(); longPressTriggered = false; clearTimeout(longPressTimer); longPressTimer = setTimeout(() => { longPressTriggered = true; openCardInspect(card, cardElement); }, LONG_PRESS_DURATION); }, {passive: false}); cardElement.addEventListener('touchend', () => clearTimeout(longPressTimer)); cardElement.addEventListener('touchmove', () => clearTimeout(longPressTimer)); const suitClass = card.suit.name; const topElement = document.createElement('div'); topElement.className = 'card-top'; const rankElementTop = document.createElement('div'); rankElementTop.className = `card-rank ${suitClass}`; rankElementTop.textContent = card.rank.name; const suitElementTop = document.createElement('div'); suitElementTop.className = `card-suit ${suitClass}`; suitElementTop.textContent = card.suit.symbol; topElement.appendChild(rankElementTop); topElement.appendChild(suitElementTop); const centerElement = document.createElement('div'); centerElement.className = `card-center ${suitClass}`; centerElement.textContent = card.suit.symbol; const bottomElement = document.createElement('div'); bottomElement.className = 'card-bottom'; const rankElementBottom = document.createElement('div'); rankElementBottom.className = `card-rank ${suitClass}`; rankElementBottom.textContent = card.rank.name; rankElementBottom.style.transform = 'rotate(180deg)'; const suitElementBottom = document.createElement('div'); suitElementBottom.className = `card-suit ${suitClass}`; suitElementBottom.textContent = card.suit.symbol; suitElementBottom.style.transform = 'rotate(180deg)'; bottomElement.appendChild(suitElementBottom); bottomElement.appendChild(rankElementBottom); if (!card.faceDown) { cardElement.appendChild(topElement); cardElement.appendChild(centerElement); cardElement.appendChild(bottomElement); } handElement.appendChild(cardElement); }); }
-        function renderJokers() { const jokerHeader = jokerAreaElement.querySelector('h2'); jokerAreaElement.innerHTML = ''; if (jokerHeader) jokerAreaElement.appendChild(jokerHeader); else { const newHeader = document.createElement('h2'); newHeader.textContent = "Jokers"; jokerAreaElement.appendChild(newHeader); } state.jokers.forEach(joker => { const jE = document.createElement('div'); jE.className = 'joker-card'; const tE = document.createElement('div'); tE.className = 'joker-title'; tE.textContent = joker.name; const dE = document.createElement('div'); dE.className = 'joker-desc'; dE.textContent = joker.description; jE.appendChild(tE); jE.appendChild(dE); jE.addEventListener('contextmenu', (e) => {e.preventDefault(); openCardInspect(joker, jE, true); }); jE.addEventListener('touchstart', (e) => { e.preventDefault(); longPressTriggered = false; clearTimeout(longPressTimer); longPressTimer = setTimeout(() => { longPressTriggered = true; openCardInspect(joker, jE, true); }, LONG_PRESS_DURATION); }, {passive: false}); jE.addEventListener('touchend', () => clearTimeout(longPressTimer)); jE.addEventListener('touchmove', () => clearTimeout(longPressTimer)); jokerAreaElement.appendChild(jE); }); }
+        // Corrected renderJokers
+        function renderJokers() {
+            const jokerHeader = jokerAreaElement.querySelector('h2'); // Try to find existing header
+            jokerAreaElement.innerHTML = ''; // Clear the area completely
+
+            // Re-create or re-use the header, but set its text correctly
+            const headerElement = jokerHeader || document.createElement('h2');
+            headerElement.textContent = "Jokers"; // <--- FIX: Explicitly set title
+            jokerAreaElement.appendChild(headerElement);
+
+            // Now render the jokers if any exist
+            state.jokers.forEach(joker => {
+                const jE = document.createElement('div');
+                jE.className = 'joker-card';
+                const tE = document.createElement('div');
+                tE.className = 'joker-title';
+                tE.textContent = joker.name;
+                const dE = document.createElement('div');
+                dE.className = 'joker-desc';
+                dE.textContent = joker.description;
+                jE.appendChild(tE);
+                jE.appendChild(dE);
+                // Add event listeners for inspection (keep existing code here)
+                jE.addEventListener('contextmenu', (e) => {e.preventDefault(); openCardInspect(joker, jE, true); });
+                jE.addEventListener('touchstart', (e) => { e.preventDefault(); longPressTriggered = false; clearTimeout(longPressTimer); longPressTimer = setTimeout(() => { longPressTriggered = true; openCardInspect(joker, jE, true); }, LONG_PRESS_DURATION); }, {passive: false});
+                jE.addEventListener('touchend', () => clearTimeout(longPressTimer));
+                jE.addEventListener('touchmove', () => clearTimeout(longPressTimer));
+
+                jokerAreaElement.appendChild(jE);
+            });
+
+            // Optional: Add a message if state.jokers.length is 0
+             if (state.jokers.length === 0 && headerElement.nextSibling === null) { // Only add if no jokers were added
+                 const placeholderText = document.createElement('p');
+                 placeholderText.textContent = "No Jokers active.";
+                 placeholderText.style.textAlign = 'center';
+                 placeholderText.style.opacity = '0.7';
+                 placeholderText.style.fontSize = '14px'; // Smaller text
+                 placeholderText.style.width = '100%';
+                 placeholderText.style.marginTop = '5px'; // Space below header
+                 jokerAreaElement.appendChild(placeholderText);
+             }
+        }
         function sortHand() { if (state.isRoundEnding) return; const currentMode = state.sortMode; if (currentMode === 'suit') { state.hand.sort((a, b) => { const suitDiff = b.suit.order - a.suit.order; if (suitDiff !== 0) return suitDiff; return b.rank.value - a.rank.value; }); state.sortMode = 'rank'; sortHandButton.textContent = '⇅ Rank'; sortHandButton.title = 'Sort by Rank'; } else { state.hand.sort((a, b) => { const rankDiff = b.rank.value - a.rank.value; if (rankDiff !== 0) return rankDiff; return b.suit.order - a.suit.order; }); state.sortMode = 'suit'; sortHandButton.textContent = '⇅ Suit'; sortHandButton.title = 'Sort by Suit'; } state.selectedCards = []; renderHand(); updateHandInfo(); updateButtonStates(); playSoundEffect('deselect'); }
 
 
@@ -368,7 +432,7 @@
               }
         }
 
-        // --- updateButtonStates, proceedToNextPhase, goToNextRoundSetup, startNextBlindInSequence --- (Keep as in previous correct version)
+        // --- updateButtonStates, proceedToNextPhase, goToNextRoundSetup --- (Keep as in previous correct version)
         function updateButtonStates() { // Checks if round should end, enables/disables buttons
             const actualRequiredScore = getRequiredScore(); // Get TRUE chip requirement
             const isBlindMet = state.score >= actualRequiredScore; // Compare ACTUAL chips earned vs ACTUAL required
@@ -442,6 +506,8 @@
             updateStats(); // This will update the Ante display
             console.log(`Set up for Ante ${state.currentAnte}`);
         }
+
+        // Corrected startNextBlindInSequence
         function startNextBlindInSequence() {
             state.isRoundEnding = false; // Ensure interactions are enabled
 
@@ -467,16 +533,43 @@
             state.discardsRemaining = state.discardsPerRound;
             state.selectedCards = [];
             state.timeOfDay = 0;
-            state.hand.forEach(card => card.faceDown = false); // Reset face down cards
+            // Hand management needs refinement based on the blind
+            // state.hand.forEach(card => card.faceDown = false); // Remove general reset here
 
+             // --- Specific Blind Setup ---
+             // Clear hand specifically for "The House" to ensure initial draw logic applies
              if (state.currentBlind.name === "The House") {
-                 state.hand.forEach(card => card.faceDown = true);
-                 console.log("Applying 'The House' effect: Cards face down.");
+                 console.log("Applying 'The House' effect: Clearing hand and drawing new cards face down.");
+                 state.hand = []; // Clear the hand to force a redraw
+                 // Draw a full new hand using the internal draw function
+                 const cardsToDraw = state.maxHandSize || 8;
+                 for (let i = 0; i < cardsToDraw; i++) {
+                    const newCard = _internalDrawCard(); // This will apply face-down logic correctly via its internal check
+                    if (newCard) {
+                        // Do NOT manually set faceDown here, _internalDrawCard handles it
+                        state.hand.push(newCard);
+                    } else {
+                        break; // Stop if deck runs out
+                    }
+                 }
+             } else {
+                 // For other blinds, ensure any existing cards are face up
+                 state.hand.forEach(card => card.faceDown = false);
+                 // Top up hand if needed (ensure it's full)
+                 const cardsNeeded = (state.maxHandSize || 8) - state.hand.length;
+                 for (let i = 0; i < cardsNeeded; i++) {
+                     const newCard = _internalDrawCard(); // Draw normally (will be face up)
+                     if (newCard) {
+                         state.hand.push(newCard);
+                     } else {
+                         break;
+                     }
+                 }
              }
 
              updateBackgroundGradient(state.timeOfDay); updateCelestialPosition(state.timeOfDay);
              updateBlindInfoDisplay(); // Show the selected blind info
-             renderHand();
+             renderHand(); // Render the potentially new or topped-up hand
              updateStats(); // Update UI, including buttons, hands, discards
              scoringInfoDiv.classList.remove('hidden');
              cardAreaDiv.classList.remove('hidden');
