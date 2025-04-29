@@ -3,12 +3,12 @@
 <head>
     <meta charset="UTF-8">
     <meta name="viewport" content="width=device-width, initial-scale=1.0">
-    <title>k8o5</title>
+    <title>k8o5</title> 
     <style>
         :root {
             --card-width: 100px; --card-height: 140px; --bg-color-static: #1a1a2e; --text-color: #FFFFFF; /* Pure White */
             --accent-color: #FF0033; /* Bright Red */
-            --card-bg: #e6e6e6; --joker-bg: #ffd700;
+            --card-bg: #e6e6e6; --joker-bg: #ffd700; --tarot-bg: #d8b4fe; /* Light Purple for Tarot */
              /* Hand-drawn Button Styles using Logo Colors */
              --button-bg: var(--accent-color); --button-border: var(--text-color); --button-text: var(--text-color);
              --button-hover-bg: #ff335c; --button-active-bg: #cc0029;
@@ -33,14 +33,16 @@
         .hand-name { font-size: 24px; text-align: center; margin-bottom: 10px; }
         .hand-multiplier { font-size: 18px; text-align: center; }
         .card-area { display: flex; flex-direction: column; gap: 15px; }
-        .hand-title-area { display: flex; justify-content: center; align-items: center; gap: 15px; margin-bottom: -10px; position: relative; }
+        .hand-title-area { display: flex; justify-content: center; align-items: center; gap: 10px; margin-bottom: -10px; position: relative; } /* Reduced gap slightly */
         .hand-title-area h2 { margin: 0; text-align: center; }
-        #sort-hand-button { font-size: 16px !important; line-height: 1 !important; padding: 4px 8px !important; }
+        /* Style for the two sort buttons */
+        #sort-rank-button, #sort-suit-button { font-size: 14px !important; line-height: 1 !important; padding: 3px 6px !important; }
         .hand-area, .deck-area { display: flex; flex-wrap: wrap; gap: 10px; justify-content: center; }
         .hand-area { min-height: calc(var(--card-height) + 20px); border: 2px dashed rgba(255, 255, 255, 0.2); border-radius: 10px; padding: 10px; }
-        .card, .joker-card { width: var(--card-width); height: var(--card-height); background-color: var(--card-bg); border-radius: 10px; position: relative; cursor: pointer; user-select: none; box-shadow: 0 4px 8px rgba(0, 0, 0, 0.2); display: flex; flex-direction: column; padding: 10px; box-sizing: border-box; transition: transform 0.2s ease-out, opacity 0.2s; overflow: hidden; }
+        .card, .joker-card, .tarot-card-display { width: var(--card-width); height: var(--card-height); background-color: var(--card-bg); border-radius: 10px; position: relative; cursor: pointer; user-select: none; box-shadow: 0 4px 8px rgba(0, 0, 0, 0.2); display: flex; flex-direction: column; padding: 10px; box-sizing: border-box; transition: transform 0.2s ease-out, opacity 0.2s, background-color 0.3s; overflow: hidden; }
         .joker-card { background-color: var(--joker-bg); color: #111; justify-content: space-between; }
-        .card:hover, .joker-card:hover:not(.shop-item) { transform: translateY(-10px) scale(1.08); z-index: 5; }
+        .tarot-card-display { background-color: var(--tarot-bg); color: #111; justify-content: space-between; } /* Style for tarot in shop */
+        .card:hover, .joker-card:hover:not(.shop-item), .tarot-card-display:hover:not(.shop-item) { transform: translateY(-10px) scale(1.08); z-index: 5; }
         .shop-item:hover { transform: translateY(-5px); }
         .card.selected { box-shadow: 0 0 0 3px var(--accent-color); }
         .card.dragging { opacity: 0.5; cursor: grabbing; }
@@ -51,8 +53,8 @@
         .card-center { font-size: 48px; display: flex; justify-content: center; align-items: center; flex-grow: 1; pointer-events: none; }
         .spades, .clubs { color: #000; }
         .hearts, .diamonds { color: var(--accent-color); }
-        .joker-area { display: flex; flex-wrap: wrap; gap: 10px; justify-content: center; margin-top: 15px; min-height: 50px; }
-        /* Removed the explicit h2 style here, as renderJokers now handles it */
+        .joker-area { display: flex; flex-wrap: wrap; gap: 10px; justify-content: center; margin-top: 15px; min-height: 50px; align-items: flex-start; } /* align-items: flex-start */
+        .joker-area h2 { width: 100%; text-align: center; margin-bottom: 10px; font-size: 20px; } /* Style for Joker header */
         .joker-title { font-weight: bold; text-align: center; font-size: 14px; margin-bottom: 5px; color: #111;}
         .joker-desc { font-size: 12px; flex-grow: 1; color: #111;}
         .joker-cost { text-align: right; font-weight: bold; color: #111;}
@@ -60,6 +62,9 @@
         .shop-item .joker-title, .shop-item .joker-desc, .shop-item .joker-cost { color: #111; }
         .shop-item button { margin-top: auto; width: 100%; box-sizing: border-box; }
         .shop-item.placeholder-item { border: 1px dashed #888; opacity: 0.6; cursor: default; background-color: #ccc; }
+        .shop-item.placeholder-item .joker-title, .shop-item.placeholder-item .joker-desc, .shop-item.placeholder-item .joker-cost { color: #555; }
+        .shop-item.placeholder-item button { visibility: hidden; }
+
         .actions { display: flex; justify-content: center; gap: 10px; flex-wrap: wrap; margin-top: 20px; }
         button, .button-like { font-family: 'Kalam', 'Courier New', cursive; background-color: var(--button-bg); color: var(--button-text); border: 2px solid var(--button-border); border-right-color: rgba(255,255,255, 0.8); border-bottom-color: rgba(255,255,255, 0.9); padding: 10px 20px; border-radius: 5px; cursor: pointer; font-weight: 400; font-size: 16px; transition: background-color 0.15s ease-out, transform 0.1s ease-out, border-color 0.15s, color 0.15s; text-align: center; position: relative; box-shadow: 1px 1px 0px 1px rgba(0,0,0,0.2); transform: rotate(-0.5deg); }
         button:hover, .button-like:hover { background-color: var(--button-hover-bg); transform: rotate(0.5deg) translateY(-1px); }
@@ -120,6 +125,9 @@
         .deck-view-controls { text-align: center; margin-top: 20px; }
         /* Removed select-blind-modal styles */
         .vector-box { background-color:transparent; border: 1px solid rgba(255, 255, 255, 0.1); clip-path: polygon(5% 0%, 95% 0%, 100% 10%, 100% 90%, 90% 100%, 10% 100%, 0% 95%, 0% 5%); padding: 20px 25px; }
+        #temporary-effects { position: absolute; top: 130px; /* Adjust as needed */ left: 50%; transform: translateX(-50%); background-color: rgba(0,0,0,0.7); color: white; padding: 5px 10px; border-radius: 5px; z-index: 50; opacity: 0; transition: opacity 0.5s ease-out; font-size: 14px; text-align: center; pointer-events: none; }
+        .enhancement-badge { position: absolute; top: 2px; right: 2px; font-size: 10px; background-color: rgba(255, 215, 0, 0.8); color: #333; padding: 1px 3px; border-radius: 3px; pointer-events: none; }
+
 
     </style>
 </head>
@@ -133,6 +141,9 @@
 
     <div id="sun" class="celestial-body"></div>
     <div id="moon" class="celestial-body"></div>
+
+     <!-- Temporary Effect Display Area -->
+     <div id="temporary-effects">Effect Message Here</div>
 
     <div class="game-container">
         <div class="header vector-box">
@@ -161,8 +172,10 @@
         <!-- Card area displayed during play -->
         <div class="card-area hidden">
             <div class="hand-title-area">
-                <h2>Your Hand</h2>
-                <button id="sort-hand-button" title="Sort by Suit">⇅ Suit</button>
+                 <h2>Your Hand</h2>
+                 <!-- Added two new buttons -->
+                 <button id="sort-rank-button" title="Sort by Rank">Sort Rank</button>
+                 <button id="sort-suit-button" title="Sort by Suit">Sort Suit</button>
             </div>
             <div class="hand-area" id="hand"></div>
             <div class="actions">
@@ -173,7 +186,7 @@
 
         <div class="joker-area" id="joker-area">
              <!-- Content managed by renderJokers -->
-             <h2>Jokers COMING SOON</h2> <!-- This will be replaced by renderJokers -->
+             <h2>Jokers</h2> <!-- Default title, renderJokers ensures it's correct -->
         </div>
         <button id="view-deck-button">View Deck (<span id="deck-count">52</span>)</button>
         <div class="shop hidden" id="shop"> <div class="shop-title">Shop</div> <div class="shop-items" id="shop-items"></div> <div class="actions"> <button id="leave-shop">Continue</button> <button id="reroll-shop">Reroll ($1)</button> </div> </div>
@@ -183,8 +196,7 @@
     <div class="game-over hidden" id="game-over"> <div class="game-over-content"> <div class="game-over-title">Game Over</div> <div>You failed to meet the blind requirement</div> <div class="end-stats"> <div>Final Ante: <span id="final-round">0</span></div> <div>Total Score: <span id="final-score">0</span></div> </div> <button id="restart-game">Play Again</button> </div> </div>
 
     <!-- Tutorial Modal -->
-    <div id="tutorial-popup" class="modal"> <div class="modal-content"> <h2>Welcome to k8o5!</h2> <h3>How to Play:</h3> <p>0. Drag & Drop or use Sort button (⇅) to arrange hand!</p> <p>1. Your hand refills automatically after playing cards.</p> <p>2. Select cards (Left-Click / Tap) to play a poker hand (max 5)</p> <p>2.5 Inspect cards (Right-Click / Long-Hold) </p> <p>3. Play hands or Discard selected cards</p> <p>4. Beat the current Blind's required score (displayed).</p> <!-- Removed division explanation -->
-             <p>5. Defeat Small, then Big, then the Boss blind to advance the Ante.</p> <p>6. Gamble your Boss Blind earnings before the shop!</p> <p>7. Buy Jokers/Items from the shop between Antes</p> <p>8. Keep advancing through the Antes!</p> <h3>Poker Hand Rankings:</h3> <p>High Card < Pair < Two Pair < Three of a Kind < Straight < Flush < Full House < Four of a Kind < Straight Flush < Royal Flush</p> <div class="modal-close-button-area"> <button id="close-popup-button">Start Playing</button> </div> </div> </div>
+    <div id="tutorial-popup" class="modal"> <div class="modal-content"> <h2>Welcome to k8o5!</h2> <h3>How to Play:</h3> <p>0. Drag & Drop or use Sort buttons to arrange hand!</p> <p>1. Your hand refills automatically & stays sorted after playing cards.</p> <p>2. Select cards (Left-Click / Tap) to play a poker hand (max 5)</p> <p>2.5 Inspect cards (Right-Click / Long-Hold) </p> <p>3. Play hands or Discard selected cards</p> <p>4. Beat the current Blind's required score (displayed).</p> <p>5. Defeat Small, then Big, then the Boss blind to advance the Ante.</p> <p>6. Gamble your Boss Blind earnings before the shop!</p> <p>7. Buy Jokers & Tarot Cards from the shop between Antes</p> <p>8. Keep advancing through the Antes!</p> <h3>Poker Hand Rankings:</h3> <p>High Card < Pair < Two Pair < Three of a Kind < Straight < Flush < Full House < Four of a Kind < Straight Flush < Royal Flush</p> <div class="modal-close-button-area"> <button id="close-popup-button">Start Playing</button> </div> </div> </div>
 
     <!-- Card Inspection Modal -->
     <div id="card-inspect-modal" class="modal"> <div class="inspected-card-container"> <div id="inspected-card-content" class="card inspected-card"></div> </div> </div>
@@ -197,8 +209,6 @@
 
     <!-- Deck View Modal -->
     <div id="deck-view-modal" class="modal"> <div class="modal-content"> <h3>Deck (<span id="deck-view-count">0</span> Cards)</h3> <div id="deck-view-content"> </div> <div class="deck-view-controls"> <button id="close-deck-view">Close</button> </div> </div> </div>
-
-    <!-- REMOVED Select Blind Modal HTML -->
 
     <!-- Audio Controls -->
     <div class="audio-controls">
@@ -219,7 +229,7 @@
             currentAnte: 1,
             currentBlindTypeIndex: 0, // 0: Small, 1: Big, 2: Boss
             shopItems: [],
-            sortMode: 'suit',
+            sortMode: 'rank', // Default sort mode (rank or suit)
             timeOfDay: 0, // Tracks progress within a single blind round (0 to 1)
             animateBackground: true,
             roundEarnings: 0, // Holds reward only from Boss Blind for gamble
@@ -232,17 +242,41 @@
         // ===== DEFINITIONS =====
         const suits = [ { name: 'spades', symbol: '♠', color: 'black', order: 4 }, { name: 'hearts', symbol: '♥', color: 'red', order: 3 }, { name: 'clubs', symbol: '♣', color: 'black', order: 2 }, { name: 'diamonds', symbol: '♦', color: 'red', order: 1 } ];
         const ranks = [ { name: '2', value: 2 }, { name: '3', value: 3 }, { name: '4', value: 4 }, { name: '5', value: 5 }, { name: '6', value: 6 }, { name: '7', value: 7 }, { name: '8', value: 8 }, { name: '9', value: 9 }, { name: '10', value: 10 }, { name: 'J', value: 11 }, { name: 'Q', value: 12 }, { name: 'K', value: 13 }, { name: 'A', value: 14 } ];
-        const allJokers = [ /* Jokers remain the same */ { name: "Greedy Joker", description: "x2 Mult for each Diamond card played", cost: 4, type: "mult", effect: (playedCards) => Math.max(1, Math.pow(2, playedCards.filter(c => c.suit.name === 'diamonds').length)) }, { name: "Lusty Joker", description: "+4 Mult for each Heart card played", cost: 4, type: "mult", effect: (playedCards) => playedCards.filter(c => c.suit.name === 'hearts').length * 4 }, { name: "Green Joker", description: "+1 Mult per hand played this round", cost: 4, type: "mult", effect: () => state.handsPlayed }, { name: "Wee Joker", description: "+25 Chips per scored J,Q,K", cost: 3, type: "chips", effect: (playedCards) => playedCards.filter(c => ['J', 'Q', 'K'].includes(c.rank.name)).length * 25 }, { name: "Four Fingers", description: "Flushes/Straights need 4 cards", cost: 7, type: "special", effect: () => 0 }, { name: "Raised Fist", description: "+Double lowest rank in hand to Mult", cost: 5, type: "mult", effect: () => { if (state.hand.length === 0) return 0; const lowest = state.hand.reduce((min, card) => card.rank.value < min.rank.value ? card : min, state.hand[0]); return lowest.rank.value * 2; }}, { name: "Misprint", description: "+0-23 Mult (random)", cost: 4, type: "mult", effect: () => Math.floor(Math.random() * 24) }, { name: "8 Ball", description: "1/4 chance +8 Mult per played 8", cost: 5, type: "mult", effect: (playedCards) => playedCards.filter(c => c.rank.name === '8').reduce((sum, c) => sum + (Math.random() < 0.25 ? 8 : 0), 0) }, { name: "Loyalty Card", description: "x4 Mult every 6th hand (this round)", cost: 5, type: "mult", effect: () => (state.handsPlayed % 6 === 0 && state.handsPlayed > 0) ? 4 : 1 }, { name: "Square Joker", description: "+2 Chips per card played", cost: 4, type: "chips", effect: (playedCards) => playedCards.length * 2 } ];
+        const allJokers = [
+             { name: "Greedy Joker", description: "x2 Mult for each Diamond card played", cost: 4, type: "mult", effect: (playedCards) => Math.max(1, Math.pow(2, playedCards.filter(c => c.suit.name === 'diamonds').length)) },
+             { name: "Lusty Joker", description: "+4 Mult for each Heart card played", cost: 4, type: "mult", effect: (playedCards) => playedCards.filter(c => c.suit.name === 'hearts').length * 4 },
+             { name: "Green Joker", description: "+1 Mult per hand played this round", cost: 4, type: "mult", effect: () => state.handsPlayed },
+             { name: "Wee Joker", description: "+25 Chips per scored J,Q,K", cost: 3, type: "chips", effect: (playedCards) => playedCards.filter(c => ['J', 'Q', 'K'].includes(c.rank.name)).length * 25 },
+             { name: "Four Fingers", description: "Flushes/Straights need 4 cards", cost: 7, type: "special", effect: () => 0 },
+             { name: "Raised Fist", description: "+Double lowest rank in hand to Mult", cost: 5, type: "mult", effect: () => { if (state.hand.length === 0) return 0; const lowest = state.hand.reduce((min, card) => card.rank.value < min.rank.value ? card : min, state.hand[0]); return lowest.rank.value * 2; }},
+             { name: "Misprint", description: "+0-23 Mult (random)", cost: 4, type: "mult", effect: () => Math.floor(Math.random() * 24) },
+             { name: "8 Ball", description: "1/4 chance +8 Mult per played 8", cost: 5, type: "mult", effect: (playedCards) => playedCards.filter(c => c.rank.name === '8').reduce((sum, c) => sum + (Math.random() < 0.25 ? 8 : 0), 0) },
+             { name: "Loyalty Card", description: "x4 Mult every 6th hand (this round)", cost: 5, type: "mult", effect: () => (state.handsPlayed % 6 === 0 && state.handsPlayed > 0) ? 4 : 1 },
+             { name: "Square Joker", description: "+2 Chips per card played", cost: 4, type: "chips", effect: (playedCards) => playedCards.length * 2 },
+             { name: "Odd Todd", description: "+30 Chips if played hand contains only Odd ranked cards (A=14)", cost: 4, type: "chips", effect: (playedCards) => playedCards.every(c => c.rank.value % 2 !== 0) ? 30 : 0 },
+             { name: "Even Steven", description: "x2 Mult if played hand contains only Even ranked cards", cost: 4, type: "mult", effect: (playedCards) => playedCards.every(c => c.rank.value % 2 === 0) ? 2 : 1 },
+             { name: "Chaos Joker", description: "Adds a random value between -1 and +4 to Mult", cost: 3, type: "mult", effect: () => Math.floor(Math.random() * 6) - 1 },
+        ];
+        const tarotCards = [
+             { name: "The Fool", description: "Gain $5", cost: 3, type: 'tarot', effect: () => { state.money += 5; updateStats(); displayTemporaryEffect("Gained $5!"); } }, // Added type
+             { name: "The Magician", description: "Gain +1 Discard for this round", cost: 3, type: 'tarot', effect: () => { state.discardsRemaining++; updateStats(); displayTemporaryEffect("+1 Discard this round!"); } },
+             { name: "The Empress", description: "Enhance a random card in hand (+10 Chips, +1 Mult)", cost: 4, type: 'tarot', effect: () => { if(state.hand.length > 0){ const i = Math.floor(Math.random() * state.hand.length); const card = state.hand[i]; card.enhancement = { chips: 10, mult: 1 }; card.enhancedDesc = "+10C/+1M"; renderHand(); displayTemporaryEffect(`Enhanced ${card.rank.name}${card.suit.symbol}!`);} else { displayTemporaryEffect("Hand empty, no card enhanced."); } } },
+             { name: "The Hermit", description: "Peek at the top 3 cards of the deck", cost: 2, type: 'tarot', effect: () => { const topCards = state.deck.slice(-3).reverse(); const cardNames = topCards.map(c => `${c.rank.name}${c.suit.symbol}`).join(', '); displayTemporaryEffect(`Top 3: ${cardNames || 'Deck Empty?'}`); } }
+        ];
 
-        // --- UPDATED Base scores for Ante 1 (Now the ACTUAL starting requirement) ---
-        const smallBlinds = [ { name: "Small Blind", description: "No special effects", baseScoreReq: 30, reward: 0, isBoss: false }]; // Start at 30
-        const bigBlinds = [ { name: "Big Blind", description: "No special effects", baseScoreReq: 45, reward: 0, isBoss: false }];   // Start at 45
-        const bossBlinds = [ { name: "The Hook", description: "Discards 2 random cards after each played hand", baseScoreReq: 60, reward: 5, isBoss: true, effect: () => { if (state.hand.length <= 2) { state.hand = []; } else { let d=0; while(d++<2 && state.hand.length>0) { const i = Math.floor(Math.random() * state.hand.length); state.hand.splice(i, 1); } } } }, { name: "The House", description: "First cards drawn face down", baseScoreReq: 60, reward: 5, isBoss: true }]; // Start at 60
+        const smallBlinds = [ { name: "Small Blind", description: "No special effects", baseScoreReq: 30, reward: 0, isBoss: false }];
+        const bigBlinds = [ { name: "Big Blind", description: "No special effects", baseScoreReq: 45, reward: 0, isBoss: false }];
+        const bossBlinds = [
+             { name: "The Hook", description: "Discards 2 random cards after each played hand", baseScoreReq: 60, reward: 5, isBoss: true, effect: () => { if (state.hand.length <= 2) { state.hand = []; } else { let d=0; while(d++<2 && state.hand.length>0) { const i = Math.floor(Math.random() * state.hand.length); state.hand.splice(i, 1)[0]; } } renderHand(); } },
+             { name: "The House", description: "First cards drawn face down", baseScoreReq: 60, reward: 5, isBoss: true },
+             { name: "The Wall", description: "Score required increases by 10% for each hand played", baseScoreReq: 70, reward: 6, isBoss: true, type: "scaling_score" },
+             { name: "The Eye", description: "All cards are played face down after the first hand", baseScoreReq: 65, reward: 5, isBoss: true, effect: () => { if (state.handsPlayed >= 1) { state.hand.forEach(c => c.faceDown = true); renderHand(); } } }
+        ];
 
-        // ===== DOM Elements ===== (Keep as is)
+        // ===== DOM Elements =====
         const handElement = document.getElementById('hand'); const jokerAreaElement = document.getElementById('joker-area'); const playHandButton = document.getElementById('play-hand'); const discardButton = document.getElementById('discard'); const handNameElement = document.getElementById('hand-name'); const handMultiplierElement = document.getElementById('hand-multiplier'); const moneyElement = document.getElementById('money'); const scoreElement = document.getElementById('score'); const roundElement = document.getElementById('round'); const handsRemainingElement = document.getElementById('hands-remaining'); const handsTotalElement = document.getElementById('hands-total'); const discardsRemainingElement = document.getElementById('discards-remaining'); const discardsPerRoundElement = document.getElementById('discards-per-round'); const shopElement = document.getElementById('shop'); const shopItemsElement = document.getElementById('shop-items'); const leaveShopButton = document.getElementById('leave-shop'); const rerollShopButton = document.getElementById('reroll-shop'); const blindNameElement = document.getElementById('current-blind-name'); const blindDescElement = document.getElementById('current-blind-desc'); const blindScoreElement = document.getElementById('current-blind-score'); const currentBlindDisplayArea = document.getElementById('current-blind-display-area'); const gameOverElement = document.getElementById('game-over'); const finalRoundElement = document.getElementById('final-round'); const finalScoreElement = document.getElementById('final-score'); const restartGameButton = document.getElementById('restart-game'); const tutorialPopup = document.getElementById('tutorial-popup'); const closePopupButton = document.getElementById('close-popup-button');
         const musicToggleButton = document.getElementById('music-toggle');
-        const sortHandButton = document.getElementById('sort-hand-button');
+        // Removed sortHandButton reference
         const volumeSlider = document.getElementById('volume-slider');
         const sfxVolumeSlider = document.getElementById('sfx-volume-slider');
         const sunElement = document.getElementById('sun');
@@ -267,27 +301,45 @@
         const deckCountSpan = document.getElementById('deck-count');
         const scoringInfoDiv = document.querySelector('.scoring-info');
         const cardAreaDiv = document.querySelector('.card-area');
+        const temporaryEffectsDiv = document.getElementById('temporary-effects'); // For Tarot messages etc.
 
-        // ===== AUDIO STATE ===== (Keep as is)
+        // ===== AUDIO STATE =====
         let audioCtx = null; let musicPlaying = false; let masterGain = null; let loopTimeout = null; let currentMusicState = 'idle'; let padOsc = null; let padGain = null;
         let musicParams = { scale: [0, 2, 4, 5, 7, 9, 11], octaveRange: 2, baseNoteMIDI: 48, noteDurationBase: 0.3, noteDurationVariance: 0.15, volume: 0.3, volumeVariance: 0.1, oscType: 'triangle', noteIndex: 0, lastPlayedScaleIndex: 0, patternLength: 8, nextScheduledTime: 0, padVolume: 0.15, padNoteDuration: 60.0 / 44 * 4, padOscType: 'sine', padBaseNoteMIDI: 36 };
         let sfxVolume = 0.4;
         const MIN_BPM = 44; const MAX_BPM_ADD = 30;
 
-        // ===== DRAG & DROP / INTERACTION STATE ===== (Keep as is)
+        // ===== DRAG & DROP / INTERACTION STATE =====
         let draggedItemIndex = null;
         let isDraggingInspect = false; let startXInspect, startYInspect, currentXRotate = 0, currentYRotate = 0;
         let longPressTimer = null; let longPressTriggered = false; const LONG_PRESS_DURATION = 500;
+        let temporaryEffectTimeout = null; // For clearing Tarot messages
 
         // ===== FUNCTION DEFINITIONS =====
 
-        // --- Background & Audio --- (Keep existing functions)
+        // --- Background & Audio ---
         function updateBackgroundGradient(timeProgress, isNight = false) { if (!state.animateBackground) { document.body.style.background = 'var(--bg-color-static)'; return; } document.body.classList.remove('bg-static'); let topColor, bottomColor; if (isNight) { topColor = `hsl(240, 40%, 10%)`; bottomColor = `hsl(245, 30%, 25%)`; } else { let hue; if (timeProgress < 0.5) { hue = 45 + (195 - 45) * (timeProgress / 0.5); } else { hue = 195 + (30 - 195) * ((timeProgress - 0.5) / 0.5); if (hue < 0) hue += 360; } const lightnessMidday = 70; const lightnessDawnSunset = 50; let topLightness, bottomLightness; if (timeProgress < 0.5) { topLightness = lightnessDawnSunset + (lightnessMidday - lightnessDawnSunset) * (timeProgress / 0.5); bottomLightness = 30 + (50 - 30) * (timeProgress / 0.5); } else { topLightness = lightnessMidday + (lightnessDawnSunset - lightnessMidday) * ((timeProgress - 0.5) / 0.5); bottomLightness = 50 + (30 - 50) * ((timeProgress - 0.5) / 0.5); } const saturationMidday = 75; const saturationDawnSunset = 60; let saturation; if (timeProgress < 0.5) { saturation = saturationDawnSunset + (saturationMidday - saturationDawnSunset) * (timeProgress / 0.5); } else { saturation = saturationMidday + (saturationDawnSunset - saturationMidday) * ((timeProgress - 0.5) / 0.5); } topColor = `hsl(${hue}, ${saturation}%, ${topLightness}%)`; bottomColor = `hsl(${(hue + 15) % 360}, ${saturation * 0.8}%, ${bottomLightness}%)`; } document.body.style.background = `linear-gradient(to bottom, ${topColor}, ${bottomColor})`; }
         function updateCelestialPosition(timeProgress, isNight = false) { if (!sunElement || !moonElement) return; if (!state.animateBackground) { sunElement.classList.remove('visible'); moonElement.classList.remove('visible'); return; } const screenWidth = window.innerWidth; const screenHeight = window.innerHeight; const pathWidth = screenWidth * 0.8; const startX = screenWidth * 0.1; const peakY = screenHeight * 0.15; const startEndY = screenHeight * 0.95; if (isNight) { const moonTime = 0.5; const moonX = startX + pathWidth * moonTime; const moonY = screenHeight * 0.2; sunElement.classList.remove('visible'); moonElement.style.left = `${moonX - moonElement.offsetWidth / 2}px`; moonElement.style.top = `${moonY - moonElement.offsetHeight / 2}px`; moonElement.classList.add('visible'); } else { const currentX = startX + pathWidth * timeProgress; const h = startX + pathWidth / 2; const a = (startEndY - peakY) / Math.pow(-pathWidth / 2, 2); const currentY = a * Math.pow(currentX - h, 2) + peakY; moonElement.classList.remove('visible'); sunElement.style.left = `${currentX - sunElement.offsetWidth / 2}px`; sunElement.style.top = `${currentY - sunElement.offsetHeight / 2}px`; sunElement.classList.add('visible'); } }
         function showTutorialPopup() { if (tutorialPopup) { tutorialPopup.style.display = 'flex'; } }
-        function hideTutorialPopup() { if (tutorialPopup) { tutorialPopup.style.display = 'none'; if (state.hand.length === 0) { for (let i = 0; i < state.maxHandSize; i++) { const card = _internalDrawCard(); if (card) state.hand.push(card); } console.log("Initial hand state populated:", state.hand); renderHand(); console.log("Initial renderHand called."); } updateStats(); updateBlindInfoDisplay(); if (!audioCtx) { if (setupAudio()) { musicToggleButton.disabled = false; } } if(state.animateBackground) { updateBackgroundGradient(state.timeOfDay); updateCelestialPosition(state.timeOfDay); }
-             // Start the first blind instead of showing modal
-             startNextBlindInSequence();
+        function hideTutorialPopup() {
+            if (tutorialPopup) {
+                tutorialPopup.style.display = 'none';
+                if (state.hand.length === 0) {
+                    for (let i = 0; i < state.maxHandSize; i++) {
+                        const card = _internalDrawCard();
+                        if (card) state.hand.push(card);
+                    }
+                    console.log("Initial hand state populated:", state.hand);
+                    // *** ADDED: Apply sort after initial deal ***
+                    applyCurrentSort();
+                    renderHand();
+                    console.log("Initial renderHand called.");
+                }
+                updateStats();
+                updateBlindInfoDisplay();
+                if (!audioCtx) { if (setupAudio()) { musicToggleButton.disabled = false; } }
+                if(state.animateBackground) { updateBackgroundGradient(state.timeOfDay); updateCelestialPosition(state.timeOfDay); }
+                 startNextBlindInSequence();
             }
          }
         function getFrequencyFromMIDI(midiNote) { return 440 * Math.pow(2, (midiNote - 69) / 12); }
@@ -295,327 +347,324 @@
         function playHarmonicNote(frequency, time, duration, volume, type = 'triangle', detune = 0, targetGainNode = masterGain) { if (!audioCtx || !targetGainNode || audioCtx.state !== 'running') return; const osc = audioCtx.createOscillator(); const noteGain = audioCtx.createGain(); osc.type = type; osc.frequency.setValueAtTime(frequency, time); if (detune) osc.detune.setValueAtTime(detune, time); noteGain.gain.setValueAtTime(0, time); noteGain.gain.linearRampToValueAtTime(volume, time + duration * 0.05); noteGain.gain.linearRampToValueAtTime(0, time + duration); osc.connect(noteGain); noteGain.connect(targetGainNode); osc.start(time); osc.stop(time + duration); }
         function playSoundEffect(type) { if (!audioCtx || !masterGain || audioCtx.state !== 'running') return; const now = audioCtx.currentTime; const sfxInstanceGain = audioCtx.createGain(); sfxInstanceGain.connect(masterGain); let baseFreq = getFrequencyFromMIDI(60); let freq1, freq2; let duration = 0.15; let vol = sfxVolume * 0.8; let detune = 3; if (type === 'select') { freq1 = baseFreq; freq2 = getFrequencyFromMIDI(64); duration = 0.12; playHarmonicNote(freq1, now, duration, vol, 'sine', detune, sfxInstanceGain); playHarmonicNote(freq2, now + 0.05, duration*0.8, vol * 0.8, 'sine', -detune, sfxInstanceGain); } else if (type === 'deselect') { freq1 = getFrequencyFromMIDI(64); freq2 = baseFreq; duration = 0.15; playHarmonicNote(freq1, now, duration, vol, 'sine', -detune, sfxInstanceGain); playHarmonicNote(freq2, now + 0.06, duration*0.8, vol * 0.8, 'sine', detune, sfxInstanceGain); } else { return; } sfxInstanceGain.gain.setValueAtTime(1.0, now); sfxInstanceGain.gain.linearRampToValueAtTime(0.0, now + duration + 0.1); }
         function playTickSound(time) { if (!audioCtx || !masterGain || audioCtx.state !== 'running') return; const osc = audioCtx.createOscillator(); const tickGain = audioCtx.createGain(); osc.type = 'square'; osc.frequency.setValueAtTime(1500, time); tickGain.gain.setValueAtTime(0, time); tickGain.gain.linearRampToValueAtTime(sfxVolume * 0.5, time + 0.001); tickGain.gain.exponentialRampToValueAtTime(0.001, time + 0.03); osc.connect(tickGain); tickGain.connect(masterGain); osc.start(time); osc.stop(time + 0.03); }
-        function calculateTempo() { if (currentMusicState === 'shop') return 160; const handsRemaining = Math.max(0, state.handsRequired - state.handsPlayed); if (state.handsPlayed === 1) { return MIN_BPM + 10; } else if (handsRemaining === 1 && state.handsPlayed > 0) { return MIN_BPM + MAX_BPM_ADD; } else { return MIN_BPM; } }
-        function scheduleMusicLoop() { if (!musicPlaying || !audioCtx) return; const currentBPM = calculateTempo(); const noteIntervalSeconds = 60.0 / currentBPM / (currentMusicState === 'shop' ? 4 : 2); const currentTime = audioCtx.currentTime; if (musicParams.nextScheduledTime < currentTime) { musicParams.nextScheduledTime = currentTime; musicParams.noteIndex = 0; musicParams.lastPlayedScaleIndex = Math.floor(musicParams.scale.length / 2); } let nextScaleIndex; const randomChance = Math.random(); if (randomChance < 0.6) { const stepDirection = Math.random() < 0.5 ? -1 : 1; nextScaleIndex = (musicParams.lastPlayedScaleIndex + stepDirection + musicParams.scale.length) % musicParams.scale.length; } else if (randomChance < 0.85) { const jump = Math.random() < 0.5 ? -2 : 2; nextScaleIndex = (musicParams.lastPlayedScaleIndex + jump + musicParams.scale.length) % musicParams.scale.length; } else { nextScaleIndex = Math.floor(Math.random() * musicParams.scale.length); } musicParams.lastPlayedScaleIndex = nextScaleIndex; const octaveShift = Math.floor(Math.random() * musicParams.octaveRange) * 12; const midiNote = musicParams.baseNoteMIDI + musicParams.scale[nextScaleIndex] + octaveShift; const freq = getFrequencyFromMIDI(midiNote); const duration = musicParams.noteDurationBase + (Math.random() * musicParams.noteDurationVariance * (Math.random() < 0.5 ? -1 : 1)); const noteVol = musicParams.volumeVariance * (0.6 + Math.random() * 0.4); playHarmonicNote(freq, musicParams.nextScheduledTime, duration, noteVol, currentMusicState === 'shop' ? 'sawtooth' : 'triangle', Math.random() * (currentMusicState === 'shop' ? 15:4) - (currentMusicState === 'shop' ? 7:2)); const harmonyVol = (musicParams.harmonyVolume || 0.2) * (0.8 + Math.random() * 0.4); const currentRound = state.currentAnte; /* Use ante for harmony complexity */ if (currentRound === 2 && currentMusicState !== 'shop') { const harmonyMidi = midiNote + (musicParams.harmonyInterval || 4); const harmonyFreq = getFrequencyFromMIDI(harmonyMidi); playHarmonicNote(harmonyFreq, musicParams.nextScheduledTime + noteIntervalSeconds * 0.1, duration * 0.9, harmonyVol, 'sine'); } else if (currentRound >= 3 && currentMusicState !== 'shop') { const harmonyMidi1 = midiNote + (musicParams.harmonyInterval || 4); const harmonyFreq1 = getFrequencyFromMIDI(harmonyMidi1); playHarmonicNote(harmonyFreq1, musicParams.nextScheduledTime + noteIntervalSeconds * 0.1, duration * 0.9, harmonyVol, 'sine'); const fifthInterval = 7; const harmonyMidi2 = midiNote + fifthInterval; const harmonyFreq2 = getFrequencyFromMIDI(harmonyMidi2); playHarmonicNote(harmonyFreq2, musicParams.nextScheduledTime + noteIntervalSeconds * 0.2, duration * 0.8, harmonyVol * 0.8, 'sine'); } const beatIndex = Math.floor(musicParams.noteIndex / (currentMusicState === 'shop' ? 4:2)); const padTriggerMod = (currentRound >= 3 && currentMusicState !== 'shop') ? musicParams.patternLength * 2 : musicParams.patternLength; if (beatIndex % padTriggerMod === 0 && currentMusicState !== 'shop') { if (padOsc) { try { padOsc.stop(musicParams.nextScheduledTime); } catch(e){} } padOsc = audioCtx.createOscillator(); const padMidi = musicParams.padBaseNoteMIDI + musicParams.scale[ (Math.random() < 0.7) ? 0 : Math.floor(musicParams.scale.length / 2) ]; padOsc.type = musicParams.padOscType; padOsc.frequency.setValueAtTime(getFrequencyFromMIDI(padMidi), musicParams.nextScheduledTime); if(padGain) { padGain.gain.cancelScheduledValues(musicParams.nextScheduledTime); padGain.gain.setValueAtTime(musicParams.padVolume * parseFloat(volumeSlider.value), musicParams.nextScheduledTime); padOsc.connect(padGain); padOsc.start(musicParams.nextScheduledTime); } } musicParams.noteIndex = (musicParams.noteIndex + 1); musicParams.nextScheduledTime += noteIntervalSeconds; const delay = Math.max(0, (musicParams.nextScheduledTime - audioCtx.currentTime) * 1000); loopTimeout = setTimeout(scheduleMusicLoop, delay); }
+        function calculateTempo() {
+            // *** MODIFIED: Lower shop BPM significantly ***
+            if (currentMusicState === 'shop') return 80; // Was 160, now much slower
+
+            const handsRemaining = Math.max(0, state.handsRequired - state.handsPlayed);
+             if (state.handsPlayed === 1) { return MIN_BPM + 10; } else if (handsRemaining === 1 && state.handsPlayed > 0) { return MIN_BPM + MAX_BPM_ADD; } else { return MIN_BPM; }
+         }
+        function scheduleMusicLoop() {
+            if (!musicPlaying || !audioCtx) return;
+            if (audioCtx.state === 'suspended') { console.log("AudioContext suspended, attempting resume..."); audioCtx.resume().catch(e => console.warn("Resume failed:", e)); loopTimeout = setTimeout(scheduleMusicLoop, 250); return; }
+            if (audioCtx.state !== 'running') { console.warn("AudioContext not running, stopping music loop."); stopMusic(); return; }
+
+            try {
+                const currentBPM = calculateTempo();
+                const noteIntervalSeconds = 60.0 / currentBPM / (currentMusicState === 'shop' ? 4 : 2);
+                const currentTime = audioCtx.currentTime;
+
+                if (musicParams.nextScheduledTime < currentTime - 0.1) { console.warn("Music scheduling fell behind, resetting."); musicParams.nextScheduledTime = currentTime; musicParams.noteIndex = 0; }
+
+                 let nextScaleIndex;
+                 const randomChance = Math.random();
+                 if (randomChance < 0.6) { const stepDirection = Math.random() < 0.5 ? -1 : 1; nextScaleIndex = (musicParams.lastPlayedScaleIndex + stepDirection + musicParams.scale.length) % musicParams.scale.length; } else if (randomChance < 0.85) { const jump = Math.random() < 0.5 ? -2 : 2; nextScaleIndex = (musicParams.lastPlayedScaleIndex + jump + musicParams.scale.length) % musicParams.scale.length; } else { nextScaleIndex = Math.floor(Math.random() * musicParams.scale.length); } musicParams.lastPlayedScaleIndex = nextScaleIndex; const octaveShift = Math.floor(Math.random() * musicParams.octaveRange) * 12; const midiNote = musicParams.baseNoteMIDI + musicParams.scale[nextScaleIndex] + octaveShift; const freq = getFrequencyFromMIDI(midiNote); const duration = musicParams.noteDurationBase + (Math.random() * musicParams.noteDurationVariance * (Math.random() < 0.5 ? -1 : 1)); const noteVol = musicParams.volumeVariance * (0.6 + Math.random() * 0.4);
+                 playHarmonicNote(freq, musicParams.nextScheduledTime, duration, noteVol, musicParams.oscType, Math.random() * (currentMusicState === 'shop' ? 8:4) - (currentMusicState === 'shop' ? 4:2)); // Use musicParams.oscType
+                 const harmonyVol = (musicParams.harmonyVolume || 0.2) * (0.8 + Math.random() * 0.4); const currentRound = state.currentAnte; if (currentRound === 2 && currentMusicState !== 'shop') { const harmonyMidi = midiNote + (musicParams.harmonyInterval || 4); const harmonyFreq = getFrequencyFromMIDI(harmonyMidi); playHarmonicNote(harmonyFreq, musicParams.nextScheduledTime + noteIntervalSeconds * 0.1, duration * 0.9, harmonyVol, 'sine'); } else if (currentRound >= 3 && currentMusicState !== 'shop') { const harmonyMidi1 = midiNote + (musicParams.harmonyInterval || 4); const harmonyFreq1 = getFrequencyFromMIDI(harmonyMidi1); playHarmonicNote(harmonyFreq1, musicParams.nextScheduledTime + noteIntervalSeconds * 0.1, duration * 0.9, harmonyVol, 'sine'); const fifthInterval = 7; const harmonyMidi2 = midiNote + fifthInterval; const harmonyFreq2 = getFrequencyFromMIDI(harmonyMidi2); playHarmonicNote(harmonyFreq2, musicParams.nextScheduledTime + noteIntervalSeconds * 0.2, duration * 0.8, harmonyVol * 0.8, 'sine'); }
+                 const beatIndex = Math.floor(musicParams.noteIndex / (currentMusicState === 'shop' ? 4:2)); const padTriggerMod = (currentRound >= 3 && currentMusicState !== 'shop') ? musicParams.patternLength * 2 : musicParams.patternLength; if (beatIndex % padTriggerMod === 0 && currentMusicState !== 'shop') { if (padOsc) { try { padOsc.stop(musicParams.nextScheduledTime); } catch(e){} } padOsc = audioCtx.createOscillator(); const padMidi = musicParams.padBaseNoteMIDI + musicParams.scale[ (Math.random() < 0.7) ? 0 : Math.floor(musicParams.scale.length / 2) ]; padOsc.type = musicParams.padOscType; padOsc.frequency.setValueAtTime(getFrequencyFromMIDI(padMidi), musicParams.nextScheduledTime); if(padGain) { padGain.gain.cancelScheduledValues(musicParams.nextScheduledTime); padGain.gain.setValueAtTime(musicParams.padVolume * parseFloat(volumeSlider.value), musicParams.nextScheduledTime); padOsc.connect(padGain); padOsc.start(musicParams.nextScheduledTime); } }
+                 musicParams.noteIndex = (musicParams.noteIndex + 1);
+                 musicParams.nextScheduledTime += noteIntervalSeconds;
+                 const delay = Math.max(10, (musicParams.nextScheduledTime - audioCtx.currentTime) * 1000);
+
+                 loopTimeout = setTimeout(scheduleMusicLoop, delay);
+
+            } catch (error) { console.error("Error in scheduleMusicLoop, stopping music:", error); stopMusic(); }
+        }
         function startMusic() { if (!setupAudio() || musicPlaying) return; const startAction = () => { musicPlaying = true; musicToggleButton.textContent = "Music: ON"; musicParams.nextScheduledTime = audioCtx.currentTime; if (padGain) { padGain.gain.cancelScheduledValues(audioCtx.currentTime); padGain.gain.linearRampToValueAtTime(musicParams.padVolume * parseFloat(volumeSlider.value), audioCtx.currentTime + 0.5); } scheduleMusicLoop(); }; if (audioCtx.state === 'suspended') { audioCtx.resume().then(startAction).catch(e => console.error("Error resuming AC:", e)); } else { startAction(); } }
         function stopMusic() { musicPlaying = false; if (loopTimeout) { clearTimeout(loopTimeout); loopTimeout = null; } if (padOsc) { try { padOsc.stop(audioCtx ? audioCtx.currentTime : 0); } catch(e){} padOsc = null; } if (padGain && audioCtx) { padGain.gain.cancelScheduledValues(audioCtx.currentTime); padGain.gain.linearRampToValueAtTime(0, audioCtx.currentTime + 0.5); } musicToggleButton.textContent = "Music: OFF"; console.log("Music stopped."); }
-        function updateMusicState(newState) { if (!audioCtx || newState === currentMusicState) return; console.log(`Updating music state to ${newState}`); currentMusicState = newState; musicParams.noteIndex = 0; musicParams.lastPlayedScaleIndex = Math.floor(musicParams.scale.length / 2); musicParams.nextScheduledTime = audioCtx ? audioCtx.currentTime : 0; switch (newState) { case 'shop': musicParams.baseNoteMIDI = 50; musicParams.padBaseNoteMIDI = 38; musicParams.padOscType = 'square'; musicParams.padVolume = 0.1; musicParams.oscType = 'sawtooth'; musicParams.scale = [0, 1, 4, 5, 8, 10]; break; case 'game_over': musicParams.scale = [0, 3, 5, 6, 10]; musicParams.baseNoteMIDI = 41; musicParams.padBaseNoteMIDI = 29; musicParams.padOscType = 'sawtooth'; musicParams.padVolume = 0.15; musicParams.oscType = 'sawtooth'; break; case 'playing': default: musicParams.scale = [0, 2, 4, 5, 7, 9, 11]; musicParams.baseNoteMIDI = 48; musicParams.padBaseNoteMIDI = 36; musicParams.padOscType = 'sine'; musicParams.padVolume = 0.25; musicParams.oscType = 'triangle'; break; } if (padGain) { padGain.gain.linearRampToValueAtTime(musicParams.padVolume * parseFloat(volumeSlider.value), audioCtx.currentTime + 0.1); }}
+        function updateMusicState(newState) {
+             if (!audioCtx || newState === currentMusicState) return;
+             console.log(`Updating music state to ${newState}`);
+             currentMusicState = newState;
+             musicParams.noteIndex = 0;
+             musicParams.lastPlayedScaleIndex = Math.floor(musicParams.scale.length / 2);
+             musicParams.nextScheduledTime = audioCtx ? audioCtx.currentTime : 0;
 
-        // --- Drag & Drop --- (Keep existing functions)
+             switch (newState) {
+                 case 'shop':
+                     musicParams.baseNoteMIDI = 50;
+                     musicParams.padBaseNoteMIDI = 38;
+                     musicParams.padOscType = 'square';
+                     musicParams.padVolume = 0.08; // Lower pad volume in shop
+                     // *** MODIFIED: Change shop oscillator type ***
+                     musicParams.oscType = 'triangle'; // Was 'sawtooth', now softer
+                     musicParams.scale = [0, 1, 4, 5, 8, 10];
+                     break;
+                 case 'game_over':
+                     musicParams.scale = [0, 3, 5, 6, 10]; musicParams.baseNoteMIDI = 41; musicParams.padBaseNoteMIDI = 29; musicParams.padOscType = 'sawtooth'; musicParams.padVolume = 0.15; musicParams.oscType = 'sawtooth';
+                     break;
+                 case 'playing':
+                 default:
+                     musicParams.scale = [0, 2, 4, 5, 7, 9, 11]; musicParams.baseNoteMIDI = 48; musicParams.padBaseNoteMIDI = 36; musicParams.padOscType = 'sine'; musicParams.padVolume = 0.25; musicParams.oscType = 'triangle';
+                     break;
+             }
+             // Update pad gain immediately based on new state's volume
+             if (padGain && audioCtx) {
+                 const currentSliderVolume = parseFloat(volumeSlider.value);
+                 padGain.gain.setTargetAtTime(musicParams.padVolume * currentSliderVolume, audioCtx.currentTime + 0.1, 0.01);
+             }
+         }
+
+        // --- Drag & Drop --- (No changes needed)
         function handleDragStart(event, index) { draggedItemIndex = index; if (event.target.classList.contains('card')) { event.target.classList.add('dragging'); } event.dataTransfer.effectAllowed = 'move'; event.dataTransfer.setData('text/plain', index.toString()); }
         function handleDragOver(event) { event.preventDefault(); event.dataTransfer.dropEffect = 'move'; const targetCard = event.target.closest('.card'); if (targetCard && !targetCard.classList.contains('drag-over')) { clearDragOverEffects(); targetCard.classList.add('drag-over'); } }
         function handleDragLeave(event) { const targetCard = event.target.closest('.card'); if(targetCard && event.relatedTarget && !targetCard.contains(event.relatedTarget)) { targetCard.classList.remove('drag-over'); } else if (!event.relatedTarget || !event.target.contains(event.relatedTarget)) { clearDragOverEffects(); } }
         function clearDragOverEffects() { handElement.querySelectorAll('.card.drag-over').forEach(el => el.classList.remove('drag-over')); }
-        function handleDrop(event, targetIndex) { event.preventDefault(); clearDragOverEffects(); const draggedIndexStr = event.dataTransfer.getData('text/plain'); if (draggedIndexStr === null || draggedIndexStr === "") { draggedItemIndex = null; return; } const draggedIndex = parseInt(draggedIndexStr); if (draggedItemIndex !== null && targetIndex !== null && draggedIndex !== targetIndex && draggedIndex >= 0 && draggedIndex < state.hand.length && targetIndex >= 0 && targetIndex < state.hand.length) { const itemToMove = state.hand.splice(draggedIndex, 1)[0]; state.hand.splice(targetIndex, 0, itemToMove); state.selectedCards = []; renderHand(); updateHandInfo(); updateButtonStates(); } draggedItemIndex = null; }
+        function handleDrop(event, targetIndex) { event.preventDefault(); clearDragOverEffects(); const draggedIndexStr = event.dataTransfer.getData('text/plain'); if (draggedIndexStr === null || draggedIndexStr === "") { draggedItemIndex = null; return; } const draggedIndex = parseInt(draggedIndexStr); if (draggedItemIndex !== null && targetIndex !== null && draggedIndex !== targetIndex && draggedIndex >= 0 && draggedIndex < state.hand.length && targetIndex >= 0 && targetIndex < state.hand.length) { const itemToMove = state.hand.splice(draggedIndex, 1)[0]; state.hand.splice(targetIndex, 0, itemToMove); state.selectedCards = []; applyCurrentSort(); /* Re-apply sort after manual drag */ renderHand(); updateHandInfo(); updateButtonStates(); } draggedItemIndex = null; }
         function handleDragEnd(event) { setTimeout(() => { handElement.querySelectorAll('.card.dragging').forEach(el => el.classList.remove('dragging')); clearDragOverEffects(); }, 0); draggedItemIndex = null; }
 
-
         // --- Deck & Hand Management ---
-        function createDeck() { state.deck = []; suits.forEach(s => ranks.forEach(r => state.deck.push({ suit: s, rank: r, faceDown: false }))); deckCountSpan.textContent = state.deck.length;}
+        function createDeck() { state.deck = []; suits.forEach(s => ranks.forEach(r => state.deck.push({ suit: s, rank: r, faceDown: false, enhancement: null, enhancedDesc: '' }))); deckCountSpan.textContent = state.deck.length;}
         function shuffleDeck() { for (let i = state.deck.length - 1; i > 0; i--) { const j = Math.floor(Math.random() * (i + 1)); [state.deck[i], state.deck[j]] = [state.deck[j], state.deck[i]]; } }
-        // Corrected _internalDrawCard
         function _internalDrawCard() {
             if (state.hand.length >= (state.maxHandSize || 8)) return null;
-            if (state.deck.length === 0) {
-                createDeck(); shuffleDeck();
-                console.log("Deck reshuffled.");
-            }
-            if (state.deck.length === 0) return null; // Should not happen after reshuffle unless deck size is 0
-
+            if (state.deck.length === 0) { createDeck(); shuffleDeck(); console.log("Deck reshuffled."); }
+            if (state.deck.length === 0) return null;
             const card = state.deck.pop();
-            // Apply face-down ONLY if it's "The House" AND it's the very start of the round (0 hands played, max discards left)
-            card.faceDown = (
-                state.currentBlind &&
-                state.currentBlind.name === "The House" &&
-                state.handsPlayed === 0 &&
-                state.discardsRemaining === state.discardsPerRound
-            );
+            card.faceDown = (state.currentBlind && state.currentBlind.name === "The House" && state.handsPlayed === 0 && state.discardsRemaining === state.discardsPerRound) || (state.currentBlind && state.currentBlind.name === "The Eye" && state.handsPlayed >= 1);
             deckCountSpan.textContent = state.deck.length;
             return card;
         }
         function selectCard(index) { if (state.isRoundEnding || longPressTriggered) { longPressTriggered = false; return; } if (index < 0 || index >= state.hand.length || !state.hand[index] || state.hand[index].faceDown) { return; } const cardElement = handElement.querySelector(`.card[data-index="${index}"]`); if (!cardElement) { return; } const cardIndexInSelection = state.selectedCards.indexOf(index); if (cardIndexInSelection === -1) { if (state.selectedCards.length < 5) { state.selectedCards.push(index); cardElement.classList.add('selected'); playSoundEffect('select'); } } else { state.selectedCards.splice(cardIndexInSelection, 1); cardElement.classList.remove('selected'); playSoundEffect('deselect'); } updateHandInfo(); updateButtonStates(); }
-        function renderHand() { handElement.innerHTML = ''; state.hand.forEach((card, index) => { const cardElement = document.createElement('div'); cardElement.className = 'card'; cardElement.dataset.index = index; cardElement.draggable = !state.isRoundEnding; // Use state flag
-             if (state.selectedCards.includes(index)) { cardElement.classList.add('selected'); } if (card.faceDown) { cardElement.classList.add('card-back'); } if (card._isNew) { cardElement.classList.add('appearing'); delete card._isNew; } cardElement.addEventListener('dragstart', (e) => handleDragStart(e, index)); cardElement.addEventListener('dragover', handleDragOver); cardElement.addEventListener('dragleave', handleDragLeave); cardElement.addEventListener('drop', (e) => handleDrop(e, index)); cardElement.addEventListener('dragend', handleDragEnd); cardElement.addEventListener('click', () => selectCard(index)); cardElement.addEventListener('contextmenu', (e) => { e.preventDefault(); openCardInspect(card, cardElement); }); cardElement.addEventListener('touchstart', (e) => { e.preventDefault(); longPressTriggered = false; clearTimeout(longPressTimer); longPressTimer = setTimeout(() => { longPressTriggered = true; openCardInspect(card, cardElement); }, LONG_PRESS_DURATION); }, {passive: false}); cardElement.addEventListener('touchend', () => clearTimeout(longPressTimer)); cardElement.addEventListener('touchmove', () => clearTimeout(longPressTimer)); const suitClass = card.suit.name; const topElement = document.createElement('div'); topElement.className = 'card-top'; const rankElementTop = document.createElement('div'); rankElementTop.className = `card-rank ${suitClass}`; rankElementTop.textContent = card.rank.name; const suitElementTop = document.createElement('div'); suitElementTop.className = `card-suit ${suitClass}`; suitElementTop.textContent = card.suit.symbol; topElement.appendChild(rankElementTop); topElement.appendChild(suitElementTop); const centerElement = document.createElement('div'); centerElement.className = `card-center ${suitClass}`; centerElement.textContent = card.suit.symbol; const bottomElement = document.createElement('div'); bottomElement.className = 'card-bottom'; const rankElementBottom = document.createElement('div'); rankElementBottom.className = `card-rank ${suitClass}`; rankElementBottom.textContent = card.rank.name; rankElementBottom.style.transform = 'rotate(180deg)'; const suitElementBottom = document.createElement('div'); suitElementBottom.className = `card-suit ${suitClass}`; suitElementBottom.textContent = card.suit.symbol; suitElementBottom.style.transform = 'rotate(180deg)'; bottomElement.appendChild(suitElementBottom); bottomElement.appendChild(rankElementBottom); if (!card.faceDown) { cardElement.appendChild(topElement); cardElement.appendChild(centerElement); cardElement.appendChild(bottomElement); } handElement.appendChild(cardElement); }); }
-        // Corrected renderJokers
+        function renderHand() { handElement.innerHTML = ''; state.hand.forEach((card, index) => { const cardElement = document.createElement('div'); cardElement.className = 'card'; cardElement.dataset.index = index; cardElement.draggable = !state.isRoundEnding; if (state.selectedCards.includes(index)) { cardElement.classList.add('selected'); } if (card.faceDown) { cardElement.classList.add('card-back'); } if (card._isNew) { cardElement.classList.add('appearing'); delete card._isNew; } cardElement.addEventListener('dragstart', (e) => handleDragStart(e, index)); cardElement.addEventListener('dragover', handleDragOver); cardElement.addEventListener('dragleave', handleDragLeave); cardElement.addEventListener('drop', (e) => handleDrop(e, index)); cardElement.addEventListener('dragend', handleDragEnd); cardElement.addEventListener('click', () => selectCard(index)); cardElement.addEventListener('contextmenu', (e) => { e.preventDefault(); openCardInspect(card, cardElement); }); cardElement.addEventListener('touchstart', (e) => { e.preventDefault(); longPressTriggered = false; clearTimeout(longPressTimer); longPressTimer = setTimeout(() => { longPressTriggered = true; openCardInspect(card, cardElement); }, LONG_PRESS_DURATION); }, {passive: false}); cardElement.addEventListener('touchend', () => clearTimeout(longPressTimer)); cardElement.addEventListener('touchmove', () => clearTimeout(longPressTimer)); const suitClass = card.suit.name; const topElement = document.createElement('div'); topElement.className = 'card-top'; const rankElementTop = document.createElement('div'); rankElementTop.className = `card-rank ${suitClass}`; rankElementTop.textContent = card.rank.name; const suitElementTop = document.createElement('div'); suitElementTop.className = `card-suit ${suitClass}`; suitElementTop.textContent = card.suit.symbol; topElement.appendChild(rankElementTop); topElement.appendChild(suitElementTop); const centerElement = document.createElement('div'); centerElement.className = `card-center ${suitClass}`; centerElement.textContent = card.suit.symbol; const bottomElement = document.createElement('div'); bottomElement.className = 'card-bottom'; const rankElementBottom = document.createElement('div'); rankElementBottom.className = `card-rank ${suitClass}`; rankElementBottom.style.transform = 'rotate(180deg)'; rankElementBottom.textContent = card.rank.name; const suitElementBottom = document.createElement('div'); suitElementBottom.className = `card-suit ${suitClass}`; suitElementBottom.textContent = card.suit.symbol; suitElementBottom.style.transform = 'rotate(180deg)'; bottomElement.appendChild(suitElementBottom); bottomElement.appendChild(rankElementBottom); if (!card.faceDown) { cardElement.appendChild(topElement); cardElement.appendChild(centerElement); cardElement.appendChild(bottomElement); }
+             if (card.enhancement && card.enhancedDesc) { const enhancementBadge = document.createElement('div'); enhancementBadge.className = 'enhancement-badge'; enhancementBadge.textContent = card.enhancedDesc; cardElement.appendChild(enhancementBadge); }
+             handElement.appendChild(cardElement); }); }
         function renderJokers() {
-            const jokerHeader = jokerAreaElement.querySelector('h2'); // Try to find existing header
-            jokerAreaElement.innerHTML = ''; // Clear the area completely
-
-            // Re-create or re-use the header, but set its text correctly
-            const headerElement = jokerHeader || document.createElement('h2');
-            headerElement.textContent = "Jokers"; // <--- FIX: Explicitly set title
+            const existingHeader = jokerAreaElement.querySelector('h2');
+            jokerAreaElement.innerHTML = '';
+            const headerElement = existingHeader || document.createElement('h2');
+            headerElement.textContent = "Jokers";
             jokerAreaElement.appendChild(headerElement);
-
-            // Now render the jokers if any exist
-            state.jokers.forEach(joker => {
-                const jE = document.createElement('div');
-                jE.className = 'joker-card';
-                const tE = document.createElement('div');
-                tE.className = 'joker-title';
-                tE.textContent = joker.name;
-                const dE = document.createElement('div');
-                dE.className = 'joker-desc';
-                dE.textContent = joker.description;
-                jE.appendChild(tE);
-                jE.appendChild(dE);
-                // Add event listeners for inspection (keep existing code here)
-                jE.addEventListener('contextmenu', (e) => {e.preventDefault(); openCardInspect(joker, jE, true); });
-                jE.addEventListener('touchstart', (e) => { e.preventDefault(); longPressTriggered = false; clearTimeout(longPressTimer); longPressTimer = setTimeout(() => { longPressTriggered = true; openCardInspect(joker, jE, true); }, LONG_PRESS_DURATION); }, {passive: false});
-                jE.addEventListener('touchend', () => clearTimeout(longPressTimer));
-                jE.addEventListener('touchmove', () => clearTimeout(longPressTimer));
-
-                jokerAreaElement.appendChild(jE);
-            });
-
-            // Optional: Add a message if state.jokers.length is 0
-             if (state.jokers.length === 0 && headerElement.nextSibling === null) { // Only add if no jokers were added
-                 const placeholderText = document.createElement('p');
-                 placeholderText.textContent = "No Jokers active.";
-                 placeholderText.style.textAlign = 'center';
-                 placeholderText.style.opacity = '0.7';
-                 placeholderText.style.fontSize = '14px'; // Smaller text
-                 placeholderText.style.width = '100%';
-                 placeholderText.style.marginTop = '5px'; // Space below header
-                 jokerAreaElement.appendChild(placeholderText);
-             }
+            if (state.jokers.length === 0) { const placeholderText = document.createElement('p'); placeholderText.textContent = "No Jokers active."; placeholderText.style.textAlign = 'center'; placeholderText.style.opacity = '0.7'; placeholderText.style.fontSize = '14px'; placeholderText.style.width = '100%'; placeholderText.style.marginTop = '5px'; jokerAreaElement.appendChild(placeholderText); }
+            else { state.jokers.forEach(joker => { const jE = document.createElement('div'); jE.className = 'joker-card'; const tE = document.createElement('div'); tE.className = 'joker-title'; tE.textContent = joker.name; const dE = document.createElement('div'); dE.className = 'joker-desc'; dE.textContent = joker.description; jE.appendChild(tE); jE.appendChild(dE); jE.addEventListener('contextmenu', (e) => {e.preventDefault(); openCardInspect(joker, jE, true); }); jE.addEventListener('touchstart', (e) => { e.preventDefault(); longPressTriggered = false; clearTimeout(longPressTimer); longPressTimer = setTimeout(() => { longPressTriggered = true; openCardInspect(joker, jE, true); }, LONG_PRESS_DURATION); }, {passive: false}); jE.addEventListener('touchend', () => clearTimeout(longPressTimer)); jE.addEventListener('touchmove', () => clearTimeout(longPressTimer)); jokerAreaElement.appendChild(jE); }); }
         }
-        function sortHand() { if (state.isRoundEnding) return; const currentMode = state.sortMode; if (currentMode === 'suit') { state.hand.sort((a, b) => { const suitDiff = b.suit.order - a.suit.order; if (suitDiff !== 0) return suitDiff; return b.rank.value - a.rank.value; }); state.sortMode = 'rank'; sortHandButton.textContent = '⇅ Rank'; sortHandButton.title = 'Sort by Rank'; } else { state.hand.sort((a, b) => { const rankDiff = b.rank.value - a.rank.value; if (rankDiff !== 0) return rankDiff; return b.suit.order - a.suit.order; }); state.sortMode = 'suit'; sortHandButton.textContent = '⇅ Suit'; sortHandButton.title = 'Sort by Suit'; } state.selectedCards = []; renderHand(); updateHandInfo(); updateButtonStates(); playSoundEffect('deselect'); }
 
+        // --- NEW Sorting Logic ---
+        function applyCurrentSort() {
+            if (state.isRoundEnding) return;
+            // console.log(`Applying sort mode: ${state.sortMode}`); // Debug log
+            if (state.sortMode === 'suit') {
+                state.hand.sort((a, b) => {
+                    const suitDiff = b.suit.order - a.suit.order;
+                    if (suitDiff !== 0) return suitDiff;
+                    return b.rank.value - a.rank.value;
+                });
+            } else { // Default or 'rank'
+                state.hand.sort((a, b) => {
+                    const rankDiff = b.rank.value - a.rank.value;
+                    if (rankDiff !== 0) return rankDiff;
+                    return b.suit.order - a.suit.order; // Secondary sort by suit order
+                });
+            }
+        }
+        function sortByRank() {
+            if (state.isRoundEnding) return;
+            state.sortMode = 'rank';
+            state.selectedCards = [];
+            applyCurrentSort();
+            renderHand();
+            updateHandInfo();
+            updateButtonStates();
+            playSoundEffect('deselect');
+        }
+        function sortBySuit() {
+             if (state.isRoundEnding) return;
+             state.sortMode = 'suit';
+             state.selectedCards = [];
+             applyCurrentSort();
+             renderHand();
+             updateHandInfo();
+             updateButtonStates();
+             playSoundEffect('deselect');
+        }
 
-        // --- Scoring & Gameplay Logic --- (Keep evaluateHand, playHand, discardCards, updateStats as they are)
-        function updateHandInfo() { // Calculates potential score of selected cards
-             if (state.selectedCards.length === 0) { handNameElement.textContent = "Select cards to play a hand"; handMultiplierElement.textContent = ""; return { score: 0, handName: "None" }; } const vSI = state.selectedCards.filter(i => i >= 0 && i < state.hand.length); if(vSI.length !== state.selectedCards.length) { console.warn("Invalid card indices found in selection, clearing."); state.selectedCards = []; renderHand(); updateButtonStates(); handNameElement.textContent = "Selection Cleared"; handMultiplierElement.textContent = ""; return { score: 0, handName: "Invalid Selection" }; } const sCO = vSI.map(index => state.hand[index]); if (sCO.some(card => !card || card.faceDown)) { handNameElement.textContent = "Cannot evaluate face down card"; handMultiplierElement.textContent = ""; return { score: 0, handName: "Invalid" }; } const hI = evaluateHand(sCO); handNameElement.textContent = hI.name; const { baseScore, baseMult } = hI; let aM = 0, mF = 1, aC = 0; for (const j of state.jokers) { if (typeof j.effect === 'function') { try { const jV = j.effect(sCO); if (j.type === "mult") { if (j.name.includes("x")) { mF *= Math.max(1, jV); } else { aM += (jV || 0); } } else if (j.type === "chips") { aC += (jV || 0); } } catch (error) { console.error(`Error evaluating joker ${j.name}:`, error); } } } const tM = (baseMult + aM) * mF; const pS = Math.floor((baseScore + aC) * tM); handMultiplierElement.textContent = `(${baseScore} + ${aC}) × (${baseMult} + ${aM}) × ${mF.toFixed(1)} = ${pS}`; return { score: pS, handName: hI.name }; } // Returns ACTUAL chips
-        function evaluateHand(cards) { // Base chip/mult values for hands
-             if (!Array.isArray(cards) || cards.length === 0) { return { name: "No cards", baseScore: 0, baseMult: 0 }; } if (cards.some(card => !card || card.faceDown)) { return { name: "Invalid Card(s)", baseScore: 0, baseMult: 0 }; } const sortedCards = [...cards].sort((a, b) => b.rank.value - a.rank.value); const numCards = sortedCards.length; const hasFourFingers = state.jokers.some(j => j.name === "Four Fingers"); const minFlushStraightLen = hasFourFingers ? 4 : 5; const rankCounts = {}; const suitCounts = {}; sortedCards.forEach(c => { rankCounts[c.rank.value] = (rankCounts[c.rank.value] || 0) + 1; suitCounts[c.suit.name] = (suitCounts[c.suit.name] || 0) + 1; }); const counts = Object.values(rankCounts); const ranks = sortedCards.map(c => c.rank.value); const uniqueRanks = [...new Set(ranks)].sort((a, b) => b - a); const isFlush = numCards >= minFlushStraightLen && Object.values(suitCounts).some(count => count >= minFlushStraightLen); const isStraight = (() => { if (uniqueRanks.length < minFlushStraightLen) return false; for (let i = 0; i <= uniqueRanks.length - minFlushStraightLen; i++) { let straight = true; for (let j = 0; j < minFlushStraightLen - 1; j++) { if (uniqueRanks[i + j] !== uniqueRanks[i + j + 1] + 1) { straight = false; break; } } if (straight) return true; } if (minFlushStraightLen === 5) { const aceLowRanks = [14, 5, 4, 3, 2]; if (aceLowRanks.every(r => uniqueRanks.includes(r))) return true; } return false; })(); if (isFlush && isStraight) { let isRoyal = false; let isStraightFlush = false; const flushSuit = Object.keys(suitCounts).find(s => suitCounts[s] >= minFlushStraightLen); if (flushSuit) { const suitCardsRanks = sortedCards.filter(c => c.suit.name === flushSuit).map(c => c.rank.value).sort((a, b) => b - a); if (suitCardsRanks.length >= minFlushStraightLen) { for (let i = 0; i <= suitCardsRanks.length - minFlushStraightLen; i++) { let straightInSuit = true; for (let j = 0; j < minFlushStraightLen - 1; j++) { if (suitCardsRanks[i + j] !== suitCardsRanks[i + j + 1] + 1) { straightInSuit = false; break; } } if (straightInSuit) { isStraightFlush = true; if (minFlushStraightLen === 5 && suitCardsRanks[i] === 14 && suitCardsRanks[i + 4] === 10) { isRoyal = true; } break; } } if (!isStraightFlush && minFlushStraightLen === 5) { const aceLowRanks = [14, 5, 4, 3, 2]; if (aceLowRanks.every(r => suitCardsRanks.includes(r))) { isStraightFlush = true; } } } } if (isRoyal) return { name: "Royal Flush", baseScore: 100, baseMult: 12 }; if (isStraightFlush) return { name: "Straight Flush", baseScore: 80, baseMult: 8 }; } if (counts.includes(4)) return { name: "Four of a Kind", baseScore: 60, baseMult: 7 }; if (counts.includes(3) && counts.includes(2)) return { name: "Full House", baseScore: 40, baseMult: 4 }; if (isFlush) return { name: "Flush", baseScore: 35, baseMult: 4 }; if (isStraight) return { name: "Straight", baseScore: 30, baseMult: 4 }; if (counts.includes(3)) return { name: "Three of a Kind", baseScore: 30, baseMult: 3 }; if (counts.filter(c => c === 2).length >= 2) return { name: "Two Pair", baseScore: 20, baseMult: 2 }; if (counts.includes(2)) return { name: "Pair", baseScore: 10, baseMult: 2 }; const highestCardValue = sortedCards[0].rank.value; return { name: "High Card", baseScore: 5 + (highestCardValue > 10 ? 10 : highestCardValue), baseMult: 1 }; }
-        function playHand() { // Adds score (raw chips) to state.score
-             if (state.isRoundEnding || state.selectedCards.length === 0 || state.handsPlayed >= state.handsRequired) { return; } const pCI = [...state.selectedCards].sort((a, b) => a - b); const pC = pCI.map(index => state.hand[index]); if (pC.some(card => !card || card.faceDown)) { return; } const { score: handScore, handName } = updateHandInfo(); // Gets ACTUAL chips
-             state.score += handScore; // Add ACTUAL chips to total score
-             state.handsPlayed++; const numPlayed = pC.length; const indicesToRemove = new Set(pCI); // Use the sorted indices
+        // --- Scoring & Gameplay Logic ---
+        function updateHandInfo() {
+             if (state.selectedCards.length === 0) { handNameElement.textContent = "Select cards to play a hand"; handMultiplierElement.textContent = ""; return { score: 0, handName: "None" }; } const vSI = state.selectedCards.filter(i => i >= 0 && i < state.hand.length); if(vSI.length !== state.selectedCards.length) { console.warn("Invalid card indices found in selection, clearing."); state.selectedCards = []; renderHand(); updateButtonStates(); handNameElement.textContent = "Selection Cleared"; handMultiplierElement.textContent = ""; return { score: 0, handName: "Invalid Selection" }; } const sCO = vSI.map(index => state.hand[index]); if (sCO.some(card => !card || card.faceDown)) { handNameElement.textContent = "Cannot evaluate face down card"; handMultiplierElement.textContent = ""; return { score: 0, handName: "Invalid" }; }
+             const hI = evaluateHand(sCO);
+             handNameElement.textContent = hI.name;
+             const { baseScore, baseMult } = hI; // Base includes enhancement
+             let aM = 0, mF = 1, aC = 0;
+             for (const j of state.jokers) { if (typeof j.effect === 'function') { try { const jV = j.effect(sCO, hI);
+                 if (j.type === "mult") { if (j.name.includes("x")) { mF *= Math.max(1, jV); } else { aM += (jV || 0); } }
+                 else if (j.type === "chips") { aC += (jV || 0); }
+             } catch (error) { console.error(`Error evaluating joker ${j.name}:`, error); } } }
+             const tM = (baseMult + aM) * mF;
+             const pS = Math.floor((baseScore + aC) * tM);
+             handMultiplierElement.textContent = `(${baseScore}[B] + ${aC}[J]) × (${baseMult}[B] + ${aM}[J]) × ${mF.toFixed(1)}[J] = ${pS}`;
+             return { score: pS, handName: hI.name };
+         }
+        function evaluateHand(cards) {
+             if (!Array.isArray(cards) || cards.length === 0) { return { name: "No cards", baseScore: 0, baseMult: 0 }; } if (cards.some(card => !card || card.faceDown)) { return { name: "Invalid Card(s)", baseScore: 0, baseMult: 0 }; }
+             let enhancementChips = 0; let enhancementMult = 0; cards.forEach(c => { if (c.enhancement) { enhancementChips += (c.enhancement.chips || 0); enhancementMult += (c.enhancement.mult || 0); } });
+             const sortedCards = [...cards].sort((a, b) => b.rank.value - a.rank.value); const numCards = sortedCards.length; const hasFourFingers = state.jokers.some(j => j.name === "Four Fingers"); const minFlushStraightLen = hasFourFingers ? 4 : 5; const rankCounts = {}; const suitCounts = {}; sortedCards.forEach(c => { rankCounts[c.rank.value] = (rankCounts[c.rank.value] || 0) + 1; suitCounts[c.suit.name] = (suitCounts[c.suit.name] || 0) + 1; }); const counts = Object.values(rankCounts); const ranks = sortedCards.map(c => c.rank.value); const uniqueRanks = [...new Set(ranks)].sort((a, b) => b - a); const isFlush = numCards >= minFlushStraightLen && Object.values(suitCounts).some(count => count >= minFlushStraightLen); const isStraight = (() => { if (uniqueRanks.length < minFlushStraightLen) return false; for (let i = 0; i <= uniqueRanks.length - minFlushStraightLen; i++) { let straight = true; for (let j = 0; j < minFlushStraightLen - 1; j++) { if (uniqueRanks[i + j] !== uniqueRanks[i + j + 1] + 1) { straight = false; break; } } if (straight) return true; } if (minFlushStraightLen === 5) { const aceLowRanks = [14, 5, 4, 3, 2]; if (aceLowRanks.every(r => uniqueRanks.includes(r))) return true; } return false; })();
+             let handResult = { name: "High Card", baseScore: 5, baseMult: 1 };
+             if (isFlush && isStraight) { let isRoyal = false; let isStraightFlush = false; const flushSuit = Object.keys(suitCounts).find(s => suitCounts[s] >= minFlushStraightLen); if (flushSuit) { const suitCardsRanks = sortedCards.filter(c => c.suit.name === flushSuit).map(c => c.rank.value).sort((a, b) => b - a); if (suitCardsRanks.length >= minFlushStraightLen) { for (let i = 0; i <= suitCardsRanks.length - minFlushStraightLen; i++) { let straightInSuit = true; for (let j = 0; j < minFlushStraightLen - 1; j++) { if (suitCardsRanks[i + j] !== suitCardsRanks[i + j + 1] + 1) { straightInSuit = false; break; } } if (straightInSuit) { isStraightFlush = true; if (minFlushStraightLen === 5 && suitCardsRanks[i] === 14 && suitCardsRanks[i + 4] === 10) { isRoyal = true; } break; } } if (!isStraightFlush && minFlushStraightLen === 5) { const aceLowRanks = [14, 5, 4, 3, 2]; if (aceLowRanks.every(r => suitCardsRanks.includes(r))) { isStraightFlush = true; } } } } if (isRoyal) handResult = { name: "Royal Flush", baseScore: 100, baseMult: 12 }; else if (isStraightFlush) handResult = { name: "Straight Flush", baseScore: 80, baseMult: 8 }; }
+             else if (counts.includes(4)) handResult = { name: "Four of a Kind", baseScore: 60, baseMult: 7 };
+             else if (counts.includes(3) && counts.includes(2)) handResult = { name: "Full House", baseScore: 40, baseMult: 4 };
+             else if (isFlush) handResult = { name: "Flush", baseScore: 35, baseMult: 4 };
+             else if (isStraight) handResult = { name: "Straight", baseScore: 30, baseMult: 4 };
+             else if (counts.includes(3)) handResult = { name: "Three of a Kind", baseScore: 30, baseMult: 3 };
+             else if (counts.filter(c => c === 2).length >= 2) handResult = { name: "Two Pair", baseScore: 20, baseMult: 2 };
+             else if (counts.includes(2)) handResult = { name: "Pair", baseScore: 10, baseMult: 2 };
+             else { const highestCardValue = sortedCards[0].rank.value; handResult = { name: "High Card", baseScore: 5 + (highestCardValue > 10 ? 10 : highestCardValue), baseMult: 1 }; }
+             handResult.baseScore += enhancementChips; handResult.baseMult += enhancementMult; return handResult;
+        }
+        function playHand() {
+             if (state.isRoundEnding || state.selectedCards.length === 0 || state.handsPlayed >= state.handsRequired) { return; } const pCI = [...state.selectedCards].sort((a, b) => a - b); const pC = pCI.map(index => state.hand[index]); if (pC.some(card => !card || card.faceDown)) { return; }
+             const { score: handScore, handName } = updateHandInfo();
+             state.score += handScore;
+             state.handsPlayed++;
+             const numPlayed = pC.length;
              const elementsToRemove = pCI.map(originalIndex => handElement.querySelector(`.card[data-index="${originalIndex}"]`)).filter(Boolean);
              elementsToRemove.forEach(el => el.classList.add('playing'));
              const originalCardsToRemove = new Set(pC);
-             state.hand = state.hand.filter(card => !originalCardsToRemove.has(card)); state.selectedCards = []; const drawnCardsData = []; const cardsToDraw = Math.min(numPlayed, (state.maxHandSize || 8) - state.hand.length); for (let i = 0; i < cardsToDraw; i++) { const newCard = _internalDrawCard(); if(newCard){ newCard._isNew = true; drawnCardsData.push(newCard); } } if (state.currentBlind?.effect && typeof state.currentBlind.effect === 'function') { state.currentBlind.effect(); }
-             state.hand.push(...drawnCardsData); state.timeOfDay = state.handsPlayed / Math.max(1, state.handsRequired); updateBackgroundGradient(state.timeOfDay); updateCelestialPosition(state.timeOfDay); setTimeout(() => { renderHand(); updateStats(); // Calls updateButtonStates internally
-              updateHandInfo(); updateMusicState('playing'); }, 300); }
-        function discardCards() { // No score change
-             if (state.isRoundEnding || state.selectedCards.length === 0 || state.discardsRemaining <= 0 || state.handsPlayed >= state.handsRequired ) { return; } const dI = [...state.selectedCards].sort((a, b) => a - b); const dC = dI.map(index => state.hand[index]); if (dC.some(card => !card || card.faceDown)) { return; } state.discardsRemaining--; const indicesToRemove = new Set(dI);
+             state.hand = state.hand.filter(card => !originalCardsToRemove.has(card));
+             state.selectedCards = [];
+             const drawnCardsData = []; const cardsToDraw = Math.min(numPlayed, (state.maxHandSize || 8) - state.hand.length);
+             for (let i = 0; i < cardsToDraw; i++) { const newCard = _internalDrawCard(); if(newCard){ newCard._isNew = true; drawnCardsData.push(newCard); } }
+             if (state.currentBlind?.effect && typeof state.currentBlind.effect === 'function') { console.log(`Applying blind effect for: ${state.currentBlind.name}`); state.currentBlind.effect(); }
+             state.hand.push(...drawnCardsData);
+             // *** Apply sort before rendering ***
+             applyCurrentSort();
+             state.timeOfDay = state.handsPlayed / Math.max(1, state.handsRequired); updateBackgroundGradient(state.timeOfDay); updateCelestialPosition(state.timeOfDay);
+             setTimeout(() => { renderHand(); updateStats(); updateHandInfo(); updateMusicState('playing'); }, 300);
+        }
+        function discardCards() {
+             if (state.isRoundEnding || state.selectedCards.length === 0 || state.discardsRemaining <= 0 || state.handsPlayed >= state.handsRequired ) { return; } const dI = [...state.selectedCards].sort((a, b) => a - b); const dC = dI.map(index => state.hand[index]); if (dC.some(card => !card || card.faceDown)) { return; }
+             state.discardsRemaining--;
              const elementsToRemove = dI.map(originalIndex => handElement.querySelector(`.card[data-index="${originalIndex}"]`)).filter(Boolean);
              elementsToRemove.forEach(el => el.classList.add('discarding'));
              const originalCardsToRemove = new Set(dC);
-             state.hand = state.hand.filter(card => !originalCardsToRemove.has(card)); state.selectedCards = []; const cTD = Math.min(dI.length, (state.maxHandSize || 8) - state.hand.length); const drawnCardsData = []; for (let i = 0; i < cTD; i++) { const newCard = _internalDrawCard(); if(newCard) { newCard._isNew = true; drawnCardsData.push(newCard); } } setTimeout(() => { state.hand.push(...drawnCardsData); renderHand(); updateStats(); // Calls updateButtonStates internally
-              updateHandInfo(); updateMusicState('playing'); }, 300); }
-        function updateStats() { // Updates UI displays
+             state.hand = state.hand.filter(card => !originalCardsToRemove.has(card));
+             state.selectedCards = [];
+             const cTD = Math.min(dI.length, (state.maxHandSize || 8) - state.hand.length); const drawnCardsData = [];
+             for (let i = 0; i < cTD; i++) { const newCard = _internalDrawCard(); if(newCard) { newCard._isNew = true; drawnCardsData.push(newCard); } }
+             // *** Apply sort after drawing, before timeout ***
+              state.hand.push(...drawnCardsData);
+              applyCurrentSort(); // Sort the hand with the new cards
+             setTimeout(() => { renderHand(); updateStats(); updateHandInfo(); updateMusicState('playing'); }, 300);
+        }
+        function updateStats() {
              moneyElement.textContent = state.money;
-             scoreElement.textContent = state.score; // Display ACTUAL total chips earned this round
-             roundElement.textContent = state.currentAnte; // Display current Ante
-             const handsLeft = Math.max(0, state.handsRequired - state.handsPlayed); handsRemainingElement.textContent = handsLeft; handsTotalElement.textContent = state.handsRequired; discardsRemainingElement.textContent = state.discardsRemaining; discardsPerRoundElement.textContent = state.discardsPerRound; deckCountSpan.textContent = state.deck.length; updateButtonStates(); // Check game state & update buttons
+             scoreElement.textContent = state.score;
+             roundElement.textContent = state.currentAnte;
+             const handsLeft = Math.max(0, state.handsRequired - state.handsPlayed); handsRemainingElement.textContent = handsLeft; handsTotalElement.textContent = state.handsRequired; discardsRemainingElement.textContent = state.discardsRemaining; discardsPerRoundElement.textContent = state.discardsPerRound; deckCountSpan.textContent = state.deck.length;
+             updateBlindInfoDisplay();
+             updateButtonStates();
          }
-
-        function getRequiredScore(blind = state.currentBlind) { // Calculates ACTUAL scaled chip requirement
-            if (!blind || !blind.baseScoreReq) return Infinity;
-            const base = blind.baseScoreReq; // Use the NEW lower base score (e.g., 30)
-            const scale = 1 + (state.currentAnte - 1) * 0.6; // Adjust 0.6 to change scaling speed
-            const actualRequiredScore = Math.floor(base * scale);
-            return actualRequiredScore;
-        }
-
-        function updateBlindInfoDisplay() { // Shows current blind info, displaying the ACTUAL score
+        function getRequiredScore(blind = state.currentBlind) {
+             if (!blind || !blind.baseScoreReq) return Infinity;
+             let base = blind.baseScoreReq;
+             const scale = 1 + (state.currentAnte - 1) * 0.6;
+             let actualRequiredScore = Math.floor(base * scale);
+             if (blind.type === "scaling_score" && blind.name === "The Wall") { const increaseMultiplier = 1 + (state.handsPlayed * 0.10); actualRequiredScore = Math.floor(actualRequiredScore * increaseMultiplier); }
+             const variation = (Math.random() * 0.10) - 0.05;
+             actualRequiredScore = Math.max(1, Math.floor(actualRequiredScore * (1 + variation)));
+             return actualRequiredScore;
+         }
+        function updateBlindInfoDisplay() {
              if (!currentBlindDisplayArea) return;
-             if (state.currentBlind) {
-                 currentBlindDisplayArea.classList.remove('hidden');
-                 blindNameElement.textContent = state.currentBlind.name;
-                 blindDescElement.textContent = state.currentBlind.description;
-                 const actualRequiredScore = getRequiredScore(); // Get the TRUE chip score needed
-                 blindScoreElement.textContent = actualRequiredScore; // Display the ACTUAL required score <<< CHANGE HERE
-              } else {
-                 currentBlindDisplayArea.classList.add('hidden');
-              }
+             if (state.currentBlind) { currentBlindDisplayArea.classList.remove('hidden'); blindNameElement.textContent = state.currentBlind.name; blindDescElement.textContent = state.currentBlind.description; const actualRequiredScore = getRequiredScore(); blindScoreElement.textContent = actualRequiredScore; }
+             else { currentBlindDisplayArea.classList.add('hidden'); }
         }
-
-        // --- updateButtonStates, proceedToNextPhase, goToNextRoundSetup --- (Keep as in previous correct version)
-        function updateButtonStates() { // Checks if round should end, enables/disables buttons
-            const actualRequiredScore = getRequiredScore(); // Get TRUE chip requirement
-            const isBlindMet = state.score >= actualRequiredScore; // Compare ACTUAL chips earned vs ACTUAL required
+        function updateButtonStates() {
+            const actualRequiredScore = getRequiredScore();
+            const isBlindMet = state.score >= actualRequiredScore;
             const hasHandsLeft = state.handsRequired - state.handsPlayed > 0;
-
-            let anySelectedFaceDown = false;
-            if (state.selectedCards.length > 0) {
-                const validSelectedIndices = state.selectedCards.filter(i => i >= 0 && i < state.hand.length);
-                anySelectedFaceDown = validSelectedIndices.map(index => state.hand[index]).filter(Boolean).some(card => card.faceDown);
-            }
-
+            let anySelectedFaceDown = false; if (state.selectedCards.length > 0) { const validSelectedIndices = state.selectedCards.filter(i => i >= 0 && i < state.hand.length); anySelectedFaceDown = validSelectedIndices.map(index => state.hand[index]).filter(Boolean).some(card => card.faceDown); }
             playHandButton.disabled = state.isRoundEnding || state.selectedCards.length === 0 || !hasHandsLeft || anySelectedFaceDown || !state.currentBlind;
             discardButton.disabled = state.isRoundEnding || state.selectedCards.length === 0 || state.discardsRemaining <= 0 || !hasHandsLeft || anySelectedFaceDown || !state.currentBlind;
-
-            if (!state.isRoundEnding && state.currentBlind && (!hasHandsLeft || isBlindMet)) {
-                console.log(`Round end condition met: hasHandsLeft=${hasHandsLeft}, isBlindMet=${isBlindMet} (Score: ${state.score}/${actualRequiredScore})`);
-                state.isRoundEnding = true;
-                playHandButton.disabled = true;
-                discardButton.disabled = true;
-                renderHand();
-
-                setTimeout(() => {
-                    if (!hasHandsLeft && !isBlindMet) {
-                        console.log("Game Over triggered.");
-                        gameOver();
-                    } else {
-                        // Blind was met (or ran out of hands but met it)
-                        console.log("Proceeding to next phase.");
-                        proceedToNextPhase();
-                    }
-                }, 500);
-            }
+            if (!state.isRoundEnding && state.currentBlind && (!hasHandsLeft || isBlindMet)) { console.log(`Round end condition met: hasHandsLeft=${hasHandsLeft}, isBlindMet=${isBlindMet} (Score: ${state.score}/${actualRequiredScore})`); state.isRoundEnding = true; playHandButton.disabled = true; discardButton.disabled = true; renderHand(); setTimeout(() => { if (!hasHandsLeft && !isBlindMet) { console.log("Game Over triggered: Ran out of hands and score not met."); gameOver(); } else { console.log("Blind beaten or round ended successfully."); proceedToNextPhase(); } }, 500); }
         }
-        function proceedToNextPhase() { // Called after beating a blind
+        function proceedToNextPhase() {
             if (!state.currentBlind || state.isRoundEnding === 'processing') return;
-            console.log(`Beaten blind: ${state.currentBlind.name} (Type Index: ${state.currentBlindTypeIndex})`);
-            state.isRoundEnding = 'processing';
-
-            const wasBossBlind = state.currentBlindTypeIndex === 2;
-            state.roundEarnings = wasBossBlind ? state.currentBlind.reward || 0 : 0; // Only boss blind gives earnings for gamble
-
-            state.currentBlind = null; // Clear current blind
-            updateBlindInfoDisplay(); // Hide blind info
-            scoringInfoDiv.classList.add('hidden');
-            cardAreaDiv.classList.add('hidden');
-
-            state.currentBlindTypeIndex++; // Move to next blind type (Small -> Big -> Boss -> Next Ante)
-
-            if (state.currentBlindTypeIndex >= 3) { // Finished Boss Blind
-                console.log("Ante complete!");
-                if (state.roundEarnings > 0) {
-                    console.log("Showing gamble modal for boss earnings:", state.roundEarnings);
-                    showGambleModal(); // Gamble -> Shop -> Next Ante
-                } else {
-                    console.log("No boss earnings, proceeding to shop.");
-                     goToNextRoundSetup(); // Prepare next ante state
-                     openShop(); // Open shop
-                }
-            } else { // Still within the same Ante (Small -> Big or Big -> Boss)
-                console.log(`Starting next blind in sequence (Index: ${state.currentBlindTypeIndex})`);
-                state.isRoundEnding = false; // Reset flag before starting next blind
-                startNextBlindInSequence(); // Immediately start the next blind
-            }
+            console.log(`Beaten blind: ${state.currentBlind.name} (Type Index: ${state.currentBlindTypeIndex})`); state.isRoundEnding = 'processing'; const wasBossBlind = state.currentBlindTypeIndex === 2; state.roundEarnings = wasBossBlind ? state.currentBlind.reward || 0 : 0; state.currentBlind = null; updateBlindInfoDisplay(); scoringInfoDiv.classList.add('hidden'); cardAreaDiv.classList.add('hidden'); state.currentBlindTypeIndex++;
+            if (state.currentBlindTypeIndex >= 3) { console.log("Ante complete!"); if (state.roundEarnings > 0) { console.log("Showing gamble modal for boss earnings:", state.roundEarnings); showGambleModal(); } else { console.log("No boss earnings, proceeding to shop."); goToNextRoundSetup(); openShop(); } }
+            else { console.log(`Starting next blind in sequence (Index: ${state.currentBlindTypeIndex})`); state.isRoundEnding = false; startNextBlindInSequence(); }
         }
-        function goToNextRoundSetup(){ // Prepare state for the *next* Ante level
-            state.currentAnte++;
-            state.currentBlindTypeIndex = 0; // Reset to Small Blind for the new Ante
-            state.maxHandSize = 8; // Example: Reset potential modifications
-            state.nextPurchaseFree = false;
-            state.nextRoundSellMultiplier = 1;
-            updateStats(); // This will update the Ante display
-            console.log(`Set up for Ante ${state.currentAnte}`);
-        }
-
-        // Corrected startNextBlindInSequence
+        function goToNextRoundSetup(){ state.currentAnte++; state.currentBlindTypeIndex = 0; state.maxHandSize = 8; state.nextPurchaseFree = false; state.nextRoundSellMultiplier = 1; updateStats(); console.log(`Set up for Ante ${state.currentAnte}`); }
         function startNextBlindInSequence() {
-            state.isRoundEnding = false; // Ensure interactions are enabled
-
-            let blindPool;
-            switch (state.currentBlindTypeIndex) {
-                case 0: blindPool = smallBlinds; break;
-                case 1: blindPool = bigBlinds; break;
-                case 2: blindPool = bossBlinds; break;
-                default:
-                    console.error("Invalid blind type index:", state.currentBlindTypeIndex);
-                    gameOver();
-                    return;
-            }
-
-            const chosenBlind = blindPool[Math.floor(Math.random() * blindPool.length)];
-            state.currentBlind = chosenBlind;
-
-            console.log(`Starting Ante ${state.currentAnte}, Blind: ${state.currentBlind.name} (Index: ${state.currentBlindTypeIndex})`);
-
-            // Reset round-specific state
-            state.score = 0;
-            state.handsPlayed = 0;
-            state.discardsRemaining = state.discardsPerRound;
-            state.selectedCards = [];
-            state.timeOfDay = 0;
-            // Hand management needs refinement based on the blind
-            // state.hand.forEach(card => card.faceDown = false); // Remove general reset here
-
-             // --- Specific Blind Setup ---
-             // Clear hand specifically for "The House" to ensure initial draw logic applies
-             if (state.currentBlind.name === "The House") {
-                 console.log("Applying 'The House' effect: Clearing hand and drawing new cards face down.");
-                 state.hand = []; // Clear the hand to force a redraw
-                 // Draw a full new hand using the internal draw function
-                 const cardsToDraw = state.maxHandSize || 8;
-                 for (let i = 0; i < cardsToDraw; i++) {
-                    const newCard = _internalDrawCard(); // This will apply face-down logic correctly via its internal check
-                    if (newCard) {
-                        // Do NOT manually set faceDown here, _internalDrawCard handles it
-                        state.hand.push(newCard);
-                    } else {
-                        break; // Stop if deck runs out
-                    }
-                 }
-             } else {
-                 // For other blinds, ensure any existing cards are face up
-                 state.hand.forEach(card => card.faceDown = false);
-                 // Top up hand if needed (ensure it's full)
-                 const cardsNeeded = (state.maxHandSize || 8) - state.hand.length;
-                 for (let i = 0; i < cardsNeeded; i++) {
-                     const newCard = _internalDrawCard(); // Draw normally (will be face up)
-                     if (newCard) {
-                         state.hand.push(newCard);
-                     } else {
-                         break;
-                     }
-                 }
-             }
-
-             updateBackgroundGradient(state.timeOfDay); updateCelestialPosition(state.timeOfDay);
-             updateBlindInfoDisplay(); // Show the selected blind info
-             renderHand(); // Render the potentially new or topped-up hand
-             updateStats(); // Update UI, including buttons, hands, discards
-             scoringInfoDiv.classList.remove('hidden');
-             cardAreaDiv.classList.remove('hidden');
-             updateMusicState('playing');
+             state.isRoundEnding = false; let blindPool; switch (state.currentBlindTypeIndex) { case 0: blindPool = smallBlinds; break; case 1: blindPool = bigBlinds; break; case 2: blindPool = bossBlinds; break; default: console.error("Invalid blind type index:", state.currentBlindTypeIndex); gameOver(); return; } const chosenBlind = { ...blindPool[Math.floor(Math.random() * blindPool.length)] }; state.currentBlind = chosenBlind; console.log(`Starting Ante ${state.currentAnte}, Blind: ${state.currentBlind.name} (Index: ${state.currentBlindTypeIndex})`); state.score = 0; state.handsPlayed = 0; state.discardsRemaining = state.discardsPerRound; state.selectedCards = []; state.timeOfDay = 0; state.hand.forEach(card => card.faceDown = false); if (state.currentBlind.name === "The House") { console.log("Applying 'The House' effect: Will draw initial cards face down."); } const cardsNeeded = (state.maxHandSize || 8) - state.hand.length; if (cardsNeeded > 0) { console.log(`Topping up hand by ${cardsNeeded} cards.`); for (let i = 0; i < cardsNeeded; i++) { const newCard = _internalDrawCard(); if (newCard) { state.hand.push(newCard); } else { break; } } } else if (state.hand.length > (state.maxHandSize || 8)) { console.warn("Hand size exceeds max, trimming."); state.hand = state.hand.slice(0, state.maxHandSize || 8); }
+             // *** Apply sort after potentially topping up hand ***
+             applyCurrentSort();
+             updateBackgroundGradient(state.timeOfDay); updateCelestialPosition(state.timeOfDay); renderHand(); updateStats(); scoringInfoDiv.classList.remove('hidden'); cardAreaDiv.classList.remove('hidden'); updateMusicState('playing');
         }
 
-        // --- Gamble, GameOver, Restart --- (Keep as is)
+        // --- Gamble, GameOver, Restart ---
         function showGambleModal() { gambleAmountSpan.textContent = state.roundEarnings; gambleResultDiv.textContent = ''; gambleYesButton.disabled = false; gambleNoButton.textContent = "No Thanks"; gambleNoButton.onclick = () => resolveGamble(false); gambleModal.style.display = 'flex'; updateMusicState('idle'); }
         function resolveGamble(didGamble) { let displayAmount = 0; let receiptTitle = ""; if (didGamble) { const win = Math.random() < 0.5; if (win) { displayAmount = state.roundEarnings * 2; state.money += displayAmount; gambleResultDiv.textContent = `WIN! Doubled earnings to $${displayAmount}!`; receiptTitle = "Gamble Win:"; } else { displayAmount = 0; gambleResultDiv.textContent = `LOSE! Lost $${state.roundEarnings}.`; receiptTitle = "Gamble Loss:"; } } else { displayAmount = state.roundEarnings; state.money += displayAmount; gambleResultDiv.textContent = `Kept $${displayAmount}.`; receiptTitle = "Kept Earnings:"; } state.roundEarnings = 0; gambleYesButton.disabled = true; gambleNoButton.textContent = "Continue"; gambleNoButton.onclick = () => { gambleModal.style.display = 'none'; gambleNoButton.onclick = () => resolveGamble(false); updateStats(); animateReceipt(receiptTitle, displayAmount, () => { goToNextRoundSetup(); openShop(); }); }; }
         function gameOver() { console.log("Executing gameOver function"); state.isRoundEnding = false; finalRoundElement.textContent = state.currentAnte; finalScoreElement.textContent = state.score; gameOverElement.classList.remove('hidden'); updateMusicState('game_over'); shopElement.classList.add('hidden'); cardAreaDiv.classList.add('hidden'); scoringInfoDiv.classList.add('hidden'); currentBlindDisplayArea.classList.add('hidden'); }
         function restartGame() { stopMusic(); initGame(); }
 
-        // --- Shop Logic --- (Keep as is)
-        function populateShop() { state.shopItems = []; const aJ = allJokers.filter(j => !state.jokers.some(o => o.name === j.name) && state.jokers.length < 5); const nJTO = Math.min(2, aJ.length); for (let i = 0; i < nJTO; i++) { const rI = Math.floor(Math.random() * aJ.length); const j = aJ.splice(rI, 1)[0]; if (j) state.shopItems.push({ type: 'joker', item: j }); } while (state.shopItems.length < 3) { state.shopItems.push({ type: 'placeholder', item: { name: "Coming Soon", cost: 0, description: "More items planned!"} }); } state.shopItems.sort(() => Math.random() - 0.5); renderShopItems(); }
-        function renderShopItems() { shopItemsElement.innerHTML = ''; state.shopItems.forEach((sI, index) => { const i = sI.item; const iE = document.createElement('div'); iE.className = 'joker-card shop-item'; if (sI.type === 'placeholder') iE.classList.add('placeholder-item'); const tE = document.createElement('div'); tE.className = 'joker-title'; tE.textContent = i.name; const dE = document.createElement('div'); dE.className = 'joker-desc'; dE.textContent = i.description || ""; const cE = document.createElement('div'); cE.className = 'joker-cost'; let displayCost = i.cost !== undefined ? i.cost : '?'; let actualCost = i.cost !== undefined ? i.cost : Infinity; let freeApplied = false; if (state.nextPurchaseFree && sI.type !== 'placeholder' && actualCost > 0) { displayCost = 0; actualCost = 0; freeApplied = true; } cE.textContent = `$${displayCost}`; const bB = document.createElement('button'); bB.textContent = `Buy ($${displayCost})`; bB.disabled = sI.type === 'placeholder' || state.money < actualCost || (sI.type === 'joker' && state.jokers.length >= 5); bB.onclick = () => buyItem(index, actualCost, freeApplied); iE.addEventListener('contextmenu', (e) => { e.preventDefault(); openCardInspect(i, iE, true); }); iE.addEventListener('touchstart', (e) => { e.preventDefault(); longPressTriggered = false; clearTimeout(longPressTimer); longPressTimer = setTimeout(() => { longPressTriggered = true; openCardInspect(i, iE, true); }, LONG_PRESS_DURATION); }, {passive: false}); iE.addEventListener('touchend', () => clearTimeout(longPressTimer)); iE.addEventListener('touchmove', () => clearTimeout(longPressTimer)); iE.appendChild(tE); iE.appendChild(dE); iE.appendChild(cE); iE.appendChild(bB); shopItemsElement.appendChild(iE); }); const rC = 1; rerollShopButton.textContent = `Reroll ($${rC})`; rerollShopButton.disabled = state.money < rC; }
-        function buyItem(index, cost, wasFree) { const sI = state.shopItems[index]; if (!sI || sI.type === 'placeholder' || state.money < cost || (sI.type === 'joker' && state.jokers.length >= 5)) { return; } playSoundEffect('select'); state.money -= cost; if (sI.type === 'joker') { state.jokers.push(sI.item); renderJokers(); } if(wasFree) { state.nextPurchaseFree = false; console.log("Used free shop purchase."); } state.shopItems.splice(index, 1); updateStats(); renderShopItems(); }
+        // --- Shop Logic ---
+        function populateShop() {
+             state.shopItems = []; const availableJokers = allJokers.filter(j => !state.jokers.some(owned => owned.name === j.name) && state.jokers.length < 5); const availableTarots = [...tarotCards]; const numJokersToOffer = Math.min(2, availableJokers.length); const numTarotsToOffer = Math.random() < 0.4 ? 1 : 0; const numPlaceholders = Math.max(0, 3 - numJokersToOffer - numTarotsToOffer);
+             for (let i = 0; i < numJokersToOffer; i++) { const randomIndex = Math.floor(Math.random() * availableJokers.length); const joker = availableJokers.splice(randomIndex, 1)[0]; if (joker) state.shopItems.push({ type: 'joker', item: joker }); }
+             for (let i = 0; i < numTarotsToOffer && availableTarots.length > 0; i++) { const randomIndex = Math.floor(Math.random() * availableTarots.length); const tarot = availableTarots[randomIndex]; if (tarot) state.shopItems.push({ type: 'tarot', item: tarot }); }
+             for (let i = 0; i < numPlaceholders; i++) { state.shopItems.push({ type: 'placeholder', item: { name: "Coming Soon", cost: 0, description: "More items planned!" } }); }
+             state.shopItems.sort(() => Math.random() - 0.5); renderShopItems();
+        }
+        function renderShopItems() {
+            shopItemsElement.innerHTML = ''; state.shopItems.forEach((sI, index) => { const i = sI.item; const iE = document.createElement('div'); iE.className = 'shop-item'; if (sI.type === 'joker') iE.classList.add('joker-card'); else if (sI.type === 'tarot') iE.classList.add('tarot-card-display'); else if (sI.type === 'placeholder') iE.classList.add('placeholder-item'); const tE = document.createElement('div'); tE.className = 'joker-title'; tE.textContent = i.name; const dE = document.createElement('div'); dE.className = 'joker-desc'; dE.textContent = i.description || ""; const cE = document.createElement('div'); cE.className = 'joker-cost'; let displayCost = i.cost !== undefined ? i.cost : '?'; let actualCost = i.cost !== undefined ? i.cost : Infinity; let freeApplied = false; if (state.nextPurchaseFree && sI.type !== 'placeholder' && actualCost > 0) { displayCost = 0; actualCost = 0; freeApplied = true; } cE.textContent = (sI.type === 'placeholder' && i.cost === '-') ? '' : `$${displayCost}`; const bB = document.createElement('button'); if (sI.type === 'tarot') bB.textContent = `Use ($${displayCost})`; else if (sI.type === 'placeholder') bB.textContent = 'Purchased'; else bB.textContent = `Buy ($${displayCost})`; bB.disabled = sI.type === 'placeholder' || state.money < actualCost || (sI.type === 'joker' && state.jokers.length >= 5); bB.onclick = () => buyItem(index, actualCost, freeApplied); iE.addEventListener('contextmenu', (e) => { e.preventDefault(); openCardInspect(i, iE, sI.type === 'joker' || sI.type === 'tarot'); }); iE.addEventListener('touchstart', (e) => { e.preventDefault(); longPressTriggered = false; clearTimeout(longPressTimer); longPressTimer = setTimeout(() => { longPressTriggered = true; openCardInspect(i, iE, sI.type === 'joker' || sI.type === 'tarot'); }, LONG_PRESS_DURATION); }, {passive: false}); iE.addEventListener('touchend', () => clearTimeout(longPressTimer)); iE.addEventListener('touchmove', () => clearTimeout(longPressTimer)); iE.appendChild(tE); iE.appendChild(dE); iE.appendChild(cE); iE.appendChild(bB); shopItemsElement.appendChild(iE); }); const rC = 1; rerollShopButton.textContent = `Reroll ($${rC})`; rerollShopButton.disabled = state.money < rC;
+        }
+        function buyItem(index, cost, wasFree) {
+             const sI = state.shopItems[index]; if (!sI || sI.type === 'placeholder' || state.money < cost) { return; } if (sI.type === 'joker' && state.jokers.length >= 5) { return; } playSoundEffect('select'); state.money -= cost; let itemConsumedOrAdded = false;
+             if (sI.type === 'joker') { state.jokers.push(sI.item); renderJokers(); itemConsumedOrAdded = true; }
+             else if (sI.type === 'tarot') { if (typeof sI.item.effect === 'function') { try { sI.item.effect(); } catch (error) { console.error(`Error applying Tarot ${sI.item.name}:`, error); } } itemConsumedOrAdded = true; }
+             if (wasFree) { state.nextPurchaseFree = false; console.log("Used free shop purchase."); }
+             if (itemConsumedOrAdded) { state.shopItems[index] = { type: 'placeholder', item: { name: "Purchased", cost: '-', description: ""} }; }
+             updateStats(); renderShopItems();
+        }
         function rerollShop() { const rC = 1; if (state.money < rC) { return; } playSoundEffect('deselect'); state.money -= rC; populateShop(); updateStats(); }
         function openShop() { console.log("Opening shop for Ante:", state.currentAnte); state.isRoundEnding = false; populateShop(); shopElement.classList.remove('hidden'); updateStats(); updateMusicState('shop'); updateBackgroundGradient(0.5, true); updateCelestialPosition(0.5, true); }
         function closeShop() { shopElement.classList.add('hidden'); console.log("Leaving shop, starting next blind sequence."); updateMusicState('idle'); startNextBlindInSequence(); }
 
-        // --- UI & Modals --- (Keep openCardInspect, closeCardInspect, animateReceipt, renderDeckView)
-        function openCardInspect(cardData, cardElement, isJoker = false) { if (!cardInspectModal || !inspectedCardContent || !inspectedCardContainer) return; if (isJoker) { inspectedCardContent.innerHTML = `<div class="joker-title">${cardData.name}</div><div class="joker-desc">${cardData.description || ""}</div>${cardData.cost !== undefined ? `<div class="joker-cost">$${cardData.cost}</div>` : ''}`; inspectedCardContent.className = 'card inspected-card joker-card'; } else if (cardData && cardData.rank && cardData.suit) { const suitClass = cardData.suit.name; inspectedCardContent.innerHTML = `<div class="card-top"><div class="card-rank ${suitClass}">${cardData.rank.name}</div><div class="card-suit ${suitClass}">${cardData.suit.symbol}</div></div><div class="card-center ${suitClass}">${cardData.suit.symbol}</div><div class="card-bottom"><div class="card-suit ${suitClass}" style="transform: rotate(180deg);">${cardData.suit.symbol}</div><div class="card-rank ${suitClass}" style="transform: rotate(180deg);">${cardData.rank.name}</div></div>`; inspectedCardContent.className = `card inspected-card ${suitClass}`; } else { return; } currentXRotate = 0; currentYRotate = 15; inspectedCardContent.style.transform = `rotateY(${currentYRotate}deg) rotateX(${currentXRotate}deg)`; cardInspectModal.style.display = 'flex'; }
+        // --- UI & Modals ---
+        function openCardInspect(cardData, cardElement, isSpecial = false) {
+             if (!cardInspectModal || !inspectedCardContent || !inspectedCardContainer) return; inspectedCardContent.innerHTML = ''; let className = 'card inspected-card';
+             if (isSpecial && cardData.type === 'tarot') { className += ' tarot-card-display'; inspectedCardContent.innerHTML = `<div class="joker-title">${cardData.name}</div><div class="joker-desc">${cardData.description || ""}</div>${cardData.cost !== undefined ? `<div class="joker-cost">$${cardData.cost}</div>` : ''}`; }
+             else if (isSpecial) { className += ' joker-card'; inspectedCardContent.innerHTML = `<div class="joker-title">${cardData.name}</div><div class="joker-desc">${cardData.description || ""}</div>${cardData.cost !== undefined ? `<div class="joker-cost">$${cardData.cost}</div>` : ''}`; }
+             else if (cardData && cardData.rank && cardData.suit) { const suitClass = cardData.suit.name; className += ` ${suitClass}`; inspectedCardContent.innerHTML = `<div class="card-top"><div class="card-rank ${suitClass}">${cardData.rank.name}</div><div class="card-suit ${suitClass}">${cardData.suit.symbol}</div></div><div class="card-center ${suitClass}">${cardData.suit.symbol}</div><div class="card-bottom"><div class="card-suit ${suitClass}" style="transform: rotate(180deg);">${cardData.suit.symbol}</div><div class="card-rank ${suitClass}" style="transform: rotate(180deg);">${cardData.rank.name}</div></div>`; if (cardData.enhancement && cardData.enhancedDesc) { inspectedCardContent.innerHTML += `<div class="enhancement-badge" style="font-size: 14px; padding: 2px 5px;">${cardData.enhancedDesc}</div>`; } }
+             else { return; }
+             inspectedCardContent.className = className; currentXRotate = 0; currentYRotate = 15; inspectedCardContent.style.transform = `rotateY(${currentYRotate}deg) rotateX(${currentXRotate}deg)`; cardInspectModal.style.display = 'flex';
+        }
         function closeCardInspect() { if (cardInspectModal) cardInspectModal.style.display = 'none'; isDraggingInspect = false; }
         let receiptInterval = null;
         function animateReceipt(text, amount, callback) { if(!receiptPrinterElement || !receiptTextElement || !receiptAmountElement) { if(callback) callback(); return; } receiptTextElement.textContent = ''; receiptAmountElement.textContent = ''; receiptPrinterElement.classList.remove('hidden'); let charIndex = 0; const fullText = `${text}\n`; const typingSpeed = 50; clearInterval(receiptInterval); receiptInterval = setInterval(() => { if (charIndex < fullText.length) { receiptTextElement.textContent += fullText[charIndex]; if(audioCtx) playTickSound(audioCtx.currentTime); charIndex++; } else { clearInterval(receiptInterval); receiptAmountElement.textContent = `$${amount}`; if(audioCtx) playTickSound(audioCtx.currentTime); setTimeout(() => { receiptPrinterElement.classList.add('hidden'); if(callback) callback(); }, 1500); } }, typingSpeed); }
-        function renderDeckView() { deckViewContent.innerHTML = ''; deckViewCount.textContent = state.deck.length; state.deck.forEach(card => { const cardElement = document.createElement('div'); cardElement.className = 'card'; const suitClass = card.suit.name; cardElement.innerHTML = `<div class="card-top"><div class="card-rank ${suitClass}">${card.rank.name}</div><div class="card-suit ${suitClass}">${card.suit.symbol}</div></div><div class="card-center ${suitClass}">${card.suit.symbol}</div><div class="card-bottom"><div class="card-suit ${suitClass}" style="transform: rotate(180deg);">${card.suit.symbol}</div><div class="card-rank ${suitClass}" style="transform: rotate(180deg);">${card.rank.name}</div></div>`; deckViewContent.appendChild(cardElement); }); }
+        function renderDeckView() { deckViewContent.innerHTML = ''; deckViewCount.textContent = state.deck.length; const deckToView = [...state.deck].reverse(); deckToView.forEach(card => { const cardElement = document.createElement('div'); cardElement.className = 'card'; const suitClass = card.suit.name; cardElement.innerHTML = `<div class="card-top"><div class="card-rank ${suitClass}">${card.rank.name}</div><div class="card-suit ${suitClass}">${card.suit.symbol}</div></div><div class="card-center ${suitClass}">${card.suit.symbol}</div><div class="card-bottom"><div class="card-suit ${suitClass}" style="transform: rotate(180deg);">${card.suit.symbol}</div><div class="card-rank ${suitClass}" style="transform: rotate(180deg);">${card.rank.name}</div></div>`; if (card.enhancement && card.enhancedDesc) { cardElement.innerHTML += `<div class="enhancement-badge" style="font-size: 8px;">${card.enhancedDesc}</div>`; } deckViewContent.appendChild(cardElement); }); }
+        function displayTemporaryEffect(message) {
+             if (temporaryEffectsDiv) { temporaryEffectsDiv.textContent = message; temporaryEffectsDiv.style.opacity = 1; clearTimeout(temporaryEffectTimeout); temporaryEffectTimeout = setTimeout(() => { temporaryEffectsDiv.style.opacity = 0; }, 3500); }
+              console.log("Temp Effect:", message);
+         }
+
 
         // --- Init Game ---
-        function initGame() { // Keep as is, already reflects new structure
+        function initGame() {
             console.log("Initializing game...");
-            state.deck = []; state.hand = []; state.selectedCards = []; state.money = 0; state.score = 0; state.currentAnte = 1; state.currentBlindTypeIndex = 0;
-            state.handsPlayed = 0; state.handsRequired = 3; state.discardsRemaining = state.discardsPerRound; state.jokers = []; state.currentBlind = null;
-            state.shopItems = []; draggedItemIndex = null; state.sortMode = 'suit'; state.timeOfDay = 0; state.animateBackground = true; state.roundEarnings = 0; state.maxHandSize = 8; state.nextPurchaseFree = false; state.nextRoundSellMultiplier = 1; state.isRoundEnding = false;
-            bgToggleButton.textContent = 'BG Anim: ON'; document.body.style.background = 'var(--bg-color-static)'; sortHandButton.textContent = '⇅ Suit'; sortHandButton.title = 'Sort by Suit';
+            state.deck = []; state.hand = []; state.selectedCards = []; state.money = 0; state.score = 0; state.currentAnte = 1; state.currentBlindTypeIndex = 0; state.handsPlayed = 0; state.handsRequired = 3; state.discardsRemaining = 3; state.discardsPerRound = 3; state.jokers = []; state.currentBlind = null; state.shopItems = []; draggedItemIndex = null;
+            state.sortMode = 'rank'; // Reset to default sort
+            state.timeOfDay = 0; state.animateBackground = true; state.roundEarnings = 0; state.maxHandSize = 8; state.nextPurchaseFree = false; state.nextRoundSellMultiplier = 1; state.isRoundEnding = false;
+            bgToggleButton.textContent = 'BG Anim: ON'; document.body.style.background = 'var(--bg-color-static)'; document.body.classList.remove('bg-animated');
+            gameOverElement.classList.add('hidden'); shopElement.classList.add('hidden'); gambleModal.style.display = 'none'; receiptPrinterElement.classList.add('hidden'); deckViewModal.style.display = 'none'; cardInspectModal.style.display = 'none'; scoringInfoDiv.classList.add('hidden'); cardAreaDiv.classList.add('hidden'); currentBlindDisplayArea.classList.add('hidden'); if(temporaryEffectsDiv) temporaryEffectsDiv.style.opacity = 0;
             createDeck(); shuffleDeck();
-            updateStats(); renderHand(); renderJokers(); updateBlindInfoDisplay();
-            gameOverElement.classList.add('hidden'); shopElement.classList.add('hidden'); gambleModal.style.display = 'none'; receiptPrinterElement.classList.add('hidden');
-            deckViewModal.style.display = 'none'; cardInspectModal.style.display = 'none';
-            scoringInfoDiv.classList.add('hidden'); cardAreaDiv.classList.add('hidden');
-            updateMusicState('idle');
+            renderHand(); renderJokers(); updateStats(); updateBlindInfoDisplay(); updateMusicState('idle');
             showTutorialPopup();
             console.log("Game Initialized.");
         }
 
 
-        // ===== EVENT LISTENERS ===== (Keep as is)
+        // ===== EVENT LISTENERS =====
         playHandButton.addEventListener('click', playHand);
         discardButton.addEventListener('click', discardCards);
         leaveShopButton.addEventListener('click', closeShop);
@@ -623,22 +672,44 @@
         restartGameButton.addEventListener('click', restartGame);
         if(closePopupButton) { closePopupButton.addEventListener('click', hideTutorialPopup); } else { console.error("Close popup button not found!"); }
         if(musicToggleButton) { musicToggleButton.addEventListener('click', () => { if (musicPlaying) { stopMusic(); } else { if (!audioCtx) setupAudio(); startMusic(); } }); }
-        if(sortHandButton) { sortHandButton.addEventListener('click', sortHand); } else { console.error("Sort button not found!"); }
-        if(volumeSlider) { volumeSlider.addEventListener('input', (e) => { const newVolume = parseFloat(e.target.value); if (masterGain && audioCtx && audioCtx.state === 'running') { masterGain.gain.setTargetAtTime(newVolume, audioCtx.currentTime, 0.01); } if(padGain && audioCtx && audioCtx.state === 'running'){ padGain.gain.setTargetAtTime(musicParams.padVolume * newVolume, audioCtx.currentTime, 0.01); } }); } else { console.error("Volume slider not found!"); }
+
+        // *** ADDED listeners for new sort buttons ***
+        const sortRankBtn = document.getElementById('sort-rank-button');
+        const sortSuitBtn = document.getElementById('sort-suit-button');
+        if(sortRankBtn) { sortRankBtn.addEventListener('click', sortByRank); } else { console.error("Sort Rank button not found!"); }
+        if(sortSuitBtn) { sortSuitBtn.addEventListener('click', sortBySuit); } else { console.error("Sort Suit button not found!"); }
+
+        // *** MODIFIED Volume Listener for loudness ***
+        if(volumeSlider) {
+            volumeSlider.addEventListener('input', (e) => {
+                const newVolume = parseFloat(e.target.value);
+                const boostFactor = 2.0; // Allow up to 200% gain
+                const effectiveVolume = Math.min(2.0, newVolume * boostFactor); // Clamp gain
+
+                if (masterGain && audioCtx && audioCtx.state === 'running') {
+                    // console.log(`Setting master gain: slider=${newVolume}, effective=${effectiveVolume}`); // Debug
+                    masterGain.gain.setTargetAtTime(effectiveVolume, audioCtx.currentTime, 0.01);
+                }
+                // Adjust pad gain based on original slider value
+                if(padGain && audioCtx && audioCtx.state === 'running'){
+                     const effectivePadVolume = musicParams.padVolume * newVolume;
+                    padGain.gain.setTargetAtTime(effectivePadVolume, audioCtx.currentTime, 0.01);
+                }
+            });
+        } else { console.error("Volume slider not found!"); }
+
         if(sfxVolumeSlider) { sfxVolumeSlider.addEventListener('input', (e) => { sfxVolume = parseFloat(e.target.value); }); } else { console.error("SFX Volume slider not found!"); }
-        if(bgToggleButton) { bgToggleButton.addEventListener('click', () => { state.animateBackground = !state.animateBackground; if (state.animateBackground) { bgToggleButton.textContent = 'BG Anim: ON'; document.body.classList.remove('bg-static'); const isNight = !shopElement.classList.contains('hidden'); updateBackgroundGradient(state.timeOfDay, isNight); updateCelestialPosition(state.timeOfDay, isNight); } else { bgToggleButton.textContent = 'BG Anim: OFF'; document.body.style.background = 'var(--bg-color-static)'; if (sunElement) sunElement.classList.remove('visible'); if (moonElement) moonElement.classList.remove('visible'); } }); } else { console.error("BG Toggle button not found!"); }
+        if(bgToggleButton) { bgToggleButton.addEventListener('click', () => { state.animateBackground = !state.animateBackground; if (state.animateBackground) { bgToggleButton.textContent = 'BG Anim: ON'; document.body.classList.remove('bg-static'); const isNight = !shopElement.classList.contains('hidden'); updateBackgroundGradient(state.timeOfDay, isNight); updateCelestialPosition(state.timeOfDay, isNight); } else { bgToggleButton.textContent = 'BG Anim: OFF'; document.body.style.background = 'var(--bg-color-static)'; document.body.classList.add('bg-static'); if (sunElement) sunElement.classList.remove('visible'); if (moonElement) moonElement.classList.remove('visible'); } }); } else { console.error("BG Toggle button not found!"); }
         if (cardInspectModal) { cardInspectModal.addEventListener('click', (e) => { if (e.target === cardInspectModal || e.target.closest('.inspected-card-container') === null) { closeCardInspect(); } }); }
         if (inspectedCardContainer) { inspectedCardContainer.addEventListener('mousedown', (e) => { isDraggingInspect = true; startXInspect = e.clientX; startYInspect = e.clientY; inspectedCardContainer.style.cursor = 'grabbing'; }); document.addEventListener('mousemove', (e) => { if (!isDraggingInspect) return; const deltaX = e.clientX - startXInspect; const deltaY = e.clientY - startYInspect; const rotateSensitivity = 0.4; currentYRotate += deltaX * rotateSensitivity; currentXRotate -= deltaY * rotateSensitivity; currentXRotate = Math.max(-60, Math.min(60, currentXRotate)); inspectedCardContent.style.transform = `rotateY(${currentYRotate}deg) rotateX(${currentXRotate}deg)`; startXInspect = e.clientX; startYInspect = e.clientY; }); document.addEventListener('mouseup', () => { if (isDraggingInspect) { isDraggingInspect = false; inspectedCardContainer.style.cursor = 'grab'; } }); document.addEventListener('mouseleave', () => { if (isDraggingInspect) { isDraggingInspect = false; inspectedCardContainer.style.cursor = 'grab'; } }); }
         if(gambleYesButton) { gambleYesButton.addEventListener('click', () => resolveGamble(true)); } else { console.error("Gamble Yes button not found!"); }
         if(gambleNoButton) { gambleNoButton.addEventListener('click', () => resolveGamble(false)); } else { console.error("Gamble No button not found!"); }
         if(viewDeckButton) { viewDeckButton.addEventListener('click', () => { renderDeckView(); deckViewModal.style.display = 'flex'; }); } else { console.error("View Deck button not found!"); }
         if(closeDeckViewButton) { closeDeckViewButton.addEventListener('click', () => { deckViewModal.style.display = 'none'; }); } else { console.error("Close Deck View button not found!"); }
-         [deckViewModal].forEach(modal => { // Removed selectBlindModal from this list
+         [deckViewModal, gambleModal].forEach(modal => {
              if (modal) {
                  modal.addEventListener('click', (e) => {
-                     if (e.target === modal) {
-                        modal.style.display = 'none';
-                     }
+                     if (e.target === modal) { modal.style.display = 'none'; if(modal === gambleModal) { resolveGamble(false); } }
                  });
              }
          });
@@ -647,8 +718,14 @@
         // ===== INITIAL GAME SETUP =====
         document.addEventListener('DOMContentLoaded', () => {
             console.log("DOM Loaded, initializing game.");
-             if(volumeSlider) volumeSlider.value = musicParams.volume;
+             if(volumeSlider) volumeSlider.value = musicParams.volume; // Set initial slider position
              if(sfxVolumeSlider) sfxVolumeSlider.value = sfxVolume;
+             // Set initial masterGain based on slider *and* potential boost if needed (but boost usually starts off)
+             if(audioCtx && masterGain) {
+                const initialVolume = parseFloat(volumeSlider.value);
+                const initialBoostFactor = 1.0; // No boost initially
+                masterGain.gain.setValueAtTime(initialVolume * initialBoostFactor, audioCtx.currentTime);
+             }
             initGame();
         });
 
