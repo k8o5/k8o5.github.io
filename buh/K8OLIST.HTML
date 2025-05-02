@@ -9,8 +9,9 @@
     <!-- Supabase Client Library via CDN -->
     <script src="https://cdn.jsdelivr.net/npm/@supabase/supabase-js@2"></script>
 
-    <!-- Einfaches Inline-Styling (um nur eine HTML-Datei zu haben, oder extern wie zuvor) -->
+    <!-- Style (wie zuvor) -->
     <style>
+        /* CSS bleibt unverändert */
         body { font-family: -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, Helvetica, Arial, sans-serif; line-height: 1.6; margin: 0; padding: 0; background-color: #f4f4f4; color: #333; }
         header { background-color: #007bff; color: #fff; padding: 1rem 0; text-align: center; }
         main { max-width: 600px; margin: 2rem auto; padding: 1.5rem; background-color: #fff; box-shadow: 0 2px 5px rgba(0,0,0,0.1); border-radius: 8px; }
@@ -39,6 +40,8 @@
             form { flex-direction: column; }
             input[type="text"] { margin-bottom: 0.5rem; }
         }
+         @keyframes spin { to { transform: rotate(360deg); } }
+         #load-spinner {display: inline-block; width: 1em; height: 1em; border: 2px solid #ccc; border-top-color: #333; border-radius: 50%; animation: spin 1s linear infinite;}
     </style>
 </head>
 <body>
@@ -59,8 +62,7 @@
 
         <section id="item-list-section">
             <h2>Item Liste</h2>
-            <div id="loading-message">Lade Items... <span id="load-spinner" style="display: inline-block; width: 1em; height: 1em; border: 2px solid #ccc; border-top-color: #333; border-radius: 50%; animation: spin 1s linear infinite;"></span></div>
-             <style>@keyframes spin { to { transform: rotate(360deg); } }</style>
+            <div id="loading-message">Lade Items... <span id="load-spinner"></span></div>
             <ul id="item-list">
                 <!-- Items werden hier per JavaScript eingefügt -->
             </ul>
@@ -77,25 +79,34 @@
     <!-- JavaScript Logik -->
     <script>
         // ----- Konfiguration -----
-        // ERSETZE DIESE MIT DEINEN SUPABASE PROJEKT-DATEN!
         const SUPABASE_URL = 'https://ntfliujadjhlgwflecxp.supabase.co'; // Z.B. 'https://xyz.supabase.co'
         const SUPABASE_ANON_KEY = 'eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9.eyJpc3MiOiJzdXBhYmFzZSIsInJlZiI6Im50ZmxpdWphZGpobGd3ZmxlY3hwIiwicm9sZSI6ImFub24iLCJpYXQiOjE3NDYyMDc1MTAsImV4cCI6MjA2MTc4MzUxMH0.q4pc4d8GKXYMISreatPWLOnqRrVbS2OgoJMJcbSUG14'; // Der öffentliche Anon-Key
 
         // ----- Supabase Client Initialisierung -----
-        let supabase;
+        let supabase; // Lokale Variable für die Client-Instanz
         try {
             if (!SUPABASE_URL || !SUPABASE_ANON_KEY || SUPABASE_URL === 'DEINE_SUPABASE_URL') {
                  throw new Error("Supabase URL oder Anon Key fehlen oder sind nicht ersetzt worden!");
             }
-            supabase = supabaseJs.createClient(SUPABASE_URL, SUPABASE_ANON_KEY);
+            // *** KORREKTUR HIER: supabase.createClient statt supabaseJs.createClient ***
+            supabase = supabase.createClient(SUPABASE_URL, SUPABASE_ANON_KEY);
             console.log("Supabase Client initialisiert.");
         } catch (error) {
             console.error("FEHLER bei der Supabase Initialisierung:", error);
-            // Zeige Fehler im UI statt nur in der Konsole
             const listErrorDiv = document.getElementById('list-error');
             const loadingMsg = document.getElementById('loading-message');
             if(listErrorDiv && loadingMsg) {
-                 listErrorDiv.textContent = `Fehler: Supabase konnte nicht initialisiert werden. (${error.message}). Prüfe URL/Key in index.html.`;
+                 // Detailreichere Fehlermeldung für den Nutzer
+                 let userMessage = `Fehler: Verbindung zum Backend (Supabase) fehlgeschlagen.`;
+                 if (error.message.includes("Key")) {
+                    userMessage += " Möglicherweise sind die Zugangsdaten (URL/Key) in 'index.html' falsch oder nicht ersetzt worden.";
+                 } else if (error instanceof ReferenceError){
+                     userMessage += " Ein technischer Fehler ist aufgetreten (ReferenceError)."; // Wie dieser Fall
+                 } else {
+                    userMessage += ` (${error.message}).`;
+                 }
+                 userMessage += " Bitte überprüfe die Browser-Konsole für technische Details."
+                 listErrorDiv.textContent = userMessage;
                  listErrorDiv.style.display = 'block';
                  loadingMsg.style.display = 'none';
             } else {
@@ -103,6 +114,7 @@
             }
         }
 
+        // ----- Restliches JavaScript (unverändert) -----
         // ----- DOM Elemente -----
         const addItemForm = document.getElementById('add-item-form');
         const itemNameInput = document.getElementById('item-name');
@@ -113,14 +125,28 @@
         const emptyListMessage = document.getElementById('empty-list-message');
 
         // ----- Hilfsfunktionen -----
-        function showMessage(element, message, isError = true) {
+        function showMessage(element, message, isError = true) { /* ... */ }
+        function hideMessage(element) { /* ... */ }
+        function setLoading(isLoading) { /* ... */ }
+
+        // ----- Kernfunktionen -----
+        async function fetchAndRenderItems() { /* ... */ }
+        function renderItem(item) { /* ... */ }
+        async function addItem(itemName) { /* ... */ }
+        async function deleteItem(itemId, listItemElement) { /* ... */ }
+
+        // ----- Event Listener -----
+        addItemForm.addEventListener('submit', (event) => { /* ... */ });
+
+        // ----- Initialisierung -----
+        document.addEventListener('DOMContentLoaded', () => { /* ... */ });
+
+        // ----- HILFSFUNKTIONEN Implementation (zur Vollständigkeit hier wiederholt) -----
+         function showMessage(element, message, isError = true) {
             element.textContent = message;
             element.style.display = 'block';
-            if (isError) {
-                element.classList.add('error-message'); // Sicherstellen, dass Klasse gesetzt ist
-            } else {
-                element.classList.remove('error-message'); // Evtl. Fehlerklasse entfernen
-            }
+            element.className = isError ? 'error-message' : ''; // Klasse dynamisch setzen/entfernen
+            if (!isError) element.style.color = 'green'; // Optional: Erfolgsmeldungen
         }
 
         function hideMessage(element) {
@@ -128,52 +154,54 @@
             element.style.display = 'none';
         }
 
-        function setLoading(isLoading) {
-            loadingMessage.style.display = isLoading ? 'block' : 'none';
-             if (!isLoading) {
+       function setLoading(isLoading) {
+            loadingMessage.style.display = isLoading ? 'flex' : 'none'; // Flex oder Block je nach Layout
+            if (isLoading) { // Ensure spinner exists and animation plays
                 const spinner = document.getElementById('load-spinner');
-                if (spinner) spinner.style.display = 'none'; // Spinner auch verstecken
+                if (!spinner) { // Create spinner if it doesn't exist (robustness)
+                    const newSpinner = document.createElement('span');
+                    newSpinner.id = 'load-spinner';
+                    loadingMessage.appendChild(newSpinner);
+                } else {
+                   spinner.style.display = 'inline-block'; // Ensure visible if hidden before
+                }
             }
         }
 
-        // ----- Kernfunktionen -----
 
-        /** Lädt Items von Supabase und zeigt sie an */
-        async function fetchAndRenderItems() {
-            if (!supabase) return; // Stopp, wenn Supabase nicht bereit ist
-
+        // ----- KERNFUNKTIONEN Implementation (zur Vollständigkeit hier wiederholt) -----
+         async function fetchAndRenderItems() {
+            if (!supabase) return;
             setLoading(true);
             hideMessage(listError);
-            hideMessage(emptyListMessage); // Auch Leermeldung verstecken
-            itemList.innerHTML = ''; // Liste leeren
+            hideMessage(emptyListMessage);
+            itemList.innerHTML = '';
 
             try {
                 const { data: items, error } = await supabase
                     .from('items')
-                    .select('id, name, created_at') // Nur benötigte Spalten abfragen
-                    .order('created_at', { ascending: false }); // Neueste zuerst
+                    .select('id, name, created_at')
+                    .order('created_at', { ascending: false });
 
-                if (error) throw error; // Fehler weiterwerfen
+                if (error) throw error;
 
                 if (items && items.length > 0) {
-                    items.forEach(renderItem);
+                     // Statt forEach items.reverse().forEach(renderItem); ODER .order 'ascending: true' und normal .forEach
+                    items.forEach(renderItem); // `renderItem` fügt jetzt mit prepend ein
                 } else {
-                    // Zeige die "Liste ist leer" Meldung statt der Ladeanzeige
                     emptyListMessage.style.display = 'block';
                 }
-
             } catch (error) {
                 console.error('Fehler beim Laden der Items:', error);
                 showMessage(listError, `Fehler beim Abrufen der Liste: ${error.message || 'Unbekannter Fehler'}`);
             } finally {
-                setLoading(false); // Ladeanzeige immer ausblenden
+                setLoading(false);
             }
         }
 
-        /** Rendert ein einzelnes Item */
         function renderItem(item) {
             const li = document.createElement('li');
-            li.dataset.id = item.id; // ID für Löschaktion speichern
+            li.dataset.id = item.id;
 
             const nameSpan = document.createElement('span');
             nameSpan.textContent = item.name;
@@ -182,28 +210,21 @@
             const deleteButton = document.createElement('button');
             deleteButton.textContent = 'Löschen';
             deleteButton.classList.add('delete-button');
-            deleteButton.onclick = async () => { // Direktes onclick ist hier ok für Demo
-                // Kleine Verzögerung um UI responsiv zu halten, falls viele Klicks
-                 deleteButton.disabled = true;
-                 deleteButton.textContent = 'Lösche...';
+            deleteButton.onclick = async () => {
+                deleteButton.disabled = true;
+                deleteButton.textContent = 'Lösche...';
                 if (confirm(`Sicher, dass du "${item.name}" löschen möchtest?`)) {
-                     await deleteItem(item.id, li); // li übergeben für direktes Entfernen
+                    await deleteItem(item.id, li);
                 } else {
-                    // Reset button state if cancelled
                     deleteButton.disabled = false;
                     deleteButton.textContent = 'Löschen';
                 }
-                // Nicht benötigt, da deleteItem im Erfolgsfall das Element entfernt oder Fehler zeigt
-                 // fetchAndRenderItems(); // Neu laden - alternative, robustere Methode
             };
             li.appendChild(deleteButton);
-
-            // Füge neues Element am Anfang der Liste ein (visuell passend zu `order`)
-            //itemList.appendChild(li); // Am Ende einfügen
-             itemList.prepend(li); // Am Anfang einfügen
+             itemList.prepend(li); // Fügt am Anfang hinzu
+            //itemList.appendChild(li); // Fügt am Ende hinzu
         }
 
-        /** Fügt ein neues Item hinzu */
         async function addItem(itemName) {
             if (!supabase || !itemName) return;
 
@@ -213,39 +234,36 @@
             submitButton.disabled = true;
             submitButton.textContent = 'Speichern...';
 
-
             try {
                 const { data, error } = await supabase
                     .from('items')
                     .insert({ name: itemName })
-                    .select('id, name, created_at') // Wichtig: Die neu erzeugten Daten zurückgeben
-                    .single(); // Wir erwarten nur ein Ergebnis
+                    .select('id, name, created_at')
+                    .single();
 
                 if (error) throw error;
 
                 console.log('Item hinzugefügt:', data);
-                itemNameInput.value = ''; // Input leeren
-                hideMessage(emptyListMessage); // "Leer"-Meldung entfernen, falls sichtbar
-                renderItem(data); // Nur das neue Item rendern (effizienter als Neuladen)
-
+                itemNameInput.value = '';
+                hideMessage(emptyListMessage);
+                renderItem(data); // Neues Item am Anfang rendern
             } catch (error) {
                 console.error('Fehler beim Hinzufügen:', error);
-                 // Spezifischere Fehlermeldung bei Constraint Verletzung (z.B. zu lang)
                 let message = `Fehler beim Speichern: ${error.message || 'Unbekannter Fehler'}`;
-                if (error.message.includes("check constraint")) {
-                    message = "Fehler: Item-Name ist möglicherweise zu lang oder ungültig.";
+                if (error.message.includes("check constraint") || error.message.includes("value too long")) {
+                     message = "Fehler: Der Item-Name ist möglicherweise zu lang (max 280 Zeichen) oder ungültig.";
+                } else if (error.message.includes("Rate limit exceeded")) {
+                     message = "Fehler: Zu viele Anfragen. Bitte warte einen Moment und versuche es erneut.";
                 }
                 showMessage(addError, message);
             } finally {
-                 submitButton.disabled = false;
-                 submitButton.textContent = originalButtonText;
+                submitButton.disabled = false;
+                submitButton.textContent = originalButtonText;
             }
         }
 
-        /** Löscht ein Item */
-        async function deleteItem(itemId, listItemElement) {
+         async function deleteItem(itemId, listItemElement) {
             if (!supabase) return;
-            // Der Button wurde schon im `onclick` deaktiviert
 
             try {
                 const { error } = await supabase
@@ -256,56 +274,60 @@
                 if (error) throw error;
 
                 console.log('Item gelöscht:', itemId);
-                // listItemElement.remove(); // Element direkt entfernen statt neu zu laden
-
-                // Visuelles Feedback + Entfernen nach kurzer Zeit für bessere UX
-                 listItemElement.style.transition = 'opacity 0.5s ease, transform 0.5s ease';
-                 listItemElement.style.opacity = '0';
-                 listItemElement.style.transform = 'translateX(-20px)';
-                 setTimeout(() => {
-                     listItemElement.remove();
-                      // Prüfen, ob die Liste jetzt leer ist
-                     if(itemList.children.length === 0) {
-                         emptyListMessage.style.display = 'block';
-                     }
-                 }, 500); // Nach 500ms entfernen
-
-                 hideMessage(listError); // Eventuellen vorherigen Löschfehler ausblenden
-
+                listItemElement.style.transition = 'opacity 0.5s ease, transform 0.5s ease';
+                listItemElement.style.opacity = '0';
+                listItemElement.style.transform = 'translateX(-20px)';
+                setTimeout(() => {
+                    listItemElement.remove();
+                    if(itemList.children.length === 0) {
+                        emptyListMessage.style.display = 'block';
+                    }
+                }, 500);
+                hideMessage(listError);
             } catch (error) {
                 console.error('Fehler beim Löschen:', error);
-                showMessage(listError, `Fehler beim Löschen: ${error.message || 'Unbekannter Fehler'}`);
-                 // Button wiederherstellen, falls ein Fehler auftritt
+                let message = `Fehler beim Löschen: ${error.message || 'Unbekannter Fehler'}`;
+                if (error.message.includes("Rate limit exceeded")) {
+                     message = "Fehler: Zu viele Löschanfragen. Bitte warte einen Moment.";
+                 }
+                showMessage(listError, message);
                  const deleteButton = listItemElement.querySelector('.delete-button');
                  if (deleteButton) {
                      deleteButton.disabled = false;
                      deleteButton.textContent = 'Löschen';
                  }
-                 // Fehler nach einiger Zeit ausblenden
+                 listItemElement.style.opacity = '1'; // Reset style on error
+                 listItemElement.style.transform = 'none';
                 setTimeout(() => hideMessage(listError), 5000);
             }
         }
 
-        // ----- Event Listener -----
+         // ----- EVENT LISTENER -----
         addItemForm.addEventListener('submit', (event) => {
             event.preventDefault();
             const itemName = itemNameInput.value.trim();
             if (itemName) {
+                 hideMessage(addError); // Hide previous add error before attempting new add
                 addItem(itemName);
             } else {
+                 // Avoid calling addItem if field is empty
                 showMessage(addError, 'Bitte gib einen Namen für das Item ein.');
+                 itemNameInput.focus(); // Set focus back to input
             }
         });
+
 
         // ----- Initialisierung -----
         document.addEventListener('DOMContentLoaded', () => {
-            if (supabase) {
-                fetchAndRenderItems(); // Starte den Ladevorgang
+            // Check if supabase was initialized correctly before fetching
+            if (typeof supabase !== 'undefined' && supabase) {
+                fetchAndRenderItems();
+            } else {
+                 // Error is already shown by the initialization block
+                 console.log("Supabase nicht verfügbar, fetchItems wird nicht ausgeführt.");
+                  setLoading(false); // Ensure loading indicator is hidden if init failed
             }
-            // Fehlermeldung, falls Supabase nicht initialisiert werden konnte,
-            // wird bereits im Initialisierungs-Try-Catch angezeigt.
         });
-
     </script>
 
 </body>
