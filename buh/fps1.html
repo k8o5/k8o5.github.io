@@ -1,0 +1,559 @@
+<!DOCTYPE html>
+<html lang="de">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>3JS FPS Demo - BHop & TTS Chat</title>
+    <meta name="description" content="3JS FPS Multiplayer Demo mit Supabase - Springen und TTS Chat.">
+
+    <!-- Supabase Client Library via CDN -->
+    <script src="https://cdn.jsdelivr.net/npm/@supabase/supabase-js@2"></script>
+
+    <!-- Three.js Library and PointerLockControls via CDN -->
+    <script type="importmap">
+        {
+            "imports": {
+                "three": "https://unpkg.com/three@0.160.0/build/three.module.js",
+                "three/addons/": "https://unpkg.com/three@0.160.0/examples/jsm/"
+            }
+        }
+    </script>
+
+    <style>
+        body { margin: 0; overflow: hidden; background-color: #f0f0f0; font-family: sans-serif; }
+        canvas { display: block; }
+        #blocker { position: absolute; width: 100%; height: 100%; background-color: rgba(0,0,0,0.5); display: flex; justify-content: center; align-items: center; z-index: 10; }
+        #instructions { width: 80%; max-width: 450px; font-size: 28px; text-align: center; color: white; cursor: pointer; background: rgba(50,50,50,0.7); padding: 20px; border-radius: 10px; }
+        #crosshair { position: absolute; top: 50%; left: 50%; width: 4px; height: 4px; background-color: white; border-radius: 50%; transform: translate(-50%, -50%); mix-blend-mode: difference; z-index: 101; display: none; }
+        #loading { position: absolute; top: 10px; left: 10px; font-size: 1.5em; color: #fff; background-color: rgba(0,0,0,0.6); padding: 5px 10px; border-radius: 5px; z-index: 100; }
+        footer { position: absolute; bottom: 5px; left: 5px; font-size: small; color: rgba(255,255,255,0.7); text-shadow: 1px 1px 2px black; z-index: 100; }
+
+        /* NEU: Chat Styling */
+        #chat-container {
+            position: absolute;
+            bottom: 30px; /* Etwas Platz über Footer */
+            left: 10px;
+            width: 300px;
+            max-height: 150px; /* Begrenzte Höhe für Nachrichten */
+            display: flex;
+            flex-direction: column-reverse; /* Neueste Nachricht unten */
+            overflow: hidden; /* Verhindert Überlaufen vor Scrollbar (optional) */
+            z-index: 5; /* Unter Blocker/Crosshair */
+        }
+        #chat-display {
+             overflow-y: auto; /* Scrollbar wenn nötig */
+             padding: 5px;
+             background-color: rgba(0, 0, 0, 0.4);
+             border-radius: 5px 5px 0 0; /* Oben rund */
+             color: white;
+             font-size: 0.9em;
+             text-shadow: 1px 1px 1px black;
+             margin-bottom: 2px; /* Kleiner Abstand zum Input */
+             display: none; /* Wird angezeigt, wenn Chat aktiv ist */
+        }
+         #chat-display p { margin: 2px 0; } /* Weniger Abstand zwischen Nachrichten */
+
+        #chat-input {
+            width: calc(100% - 12px); /* Breite anpassen wegen Padding */
+            padding: 5px;
+            border: none;
+            background-color: rgba(50, 50, 50, 0.7);
+            color: white;
+            border-radius: 0 0 5px 5px; /* Unten rund */
+            display: none; /* Standardmäßig versteckt */
+            outline: none;
+            z-index: 6; /* Über Chat-Display */
+        }
+    </style>
+</head>
+<body>
+    <div id="blocker">
+        <div id="instructions">
+            Klicken zum Spielen<br>
+            (W, A, S, D = Bewegen, MAUS = Umschauen)<br>
+            (SPACE = Springen, T = Chat öffnen)<br>
+            (ESC = Mauszeiger freigeben)
+        </div>
+    </div>
+    <div id="crosshair">+</div>
+    <div id="loading">Verbinde mit Supabase und lade Spiel...</div>
+
+    <!-- NEU: Chat UI -->
+    <div id="chat-container">
+        <div id="chat-display"></div>
+        <input type="text" id="chat-input" placeholder="Nachricht eingeben und Enter drücken...">
+    </div>
+
+    <footer>K8O-3JS-FPS | Backend: Supabase</footer>
+
+    <script type="module">
+        import * as THREE from 'three';
+        import { PointerLockControls } from 'three/addons/controls/PointerLockControls.js';
+
+        // ----- Konfiguration -----
+        const SUPABASE_URL = 'https://ntfliujadjhlgwflecxp.supabase.co'; // DEINE URL HIER
+        const SUPABASE_ANON_KEY = 'eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9.eyJpc3MiOiJzdXBhYmFzZSIsInJlZiI6Im50ZmxpdWphZGpobGd3ZmxlY3hwIiwicm9sZSI6ImFub24iLCJpYXQiOjE3NDYyMDc1MTAsImV4cCI6MjA2MTc4MzUxMH0.q4pc4d8GKXYMISreatPWLOnqRrVbS2OgoJMJcbSUG14'; // DEIN ANON KEY HIER
+        const PLAYER_TABLE = 'players';
+        const MOVE_SPEED = 5.0;
+        const UPDATE_INTERVAL_MS = 100;
+        const EYE_HEIGHT = 1.6; // Wieder feste Augenhöhe
+        const MAP_SIZE = 100;
+        const TREE_COUNT = 150;
+
+        // Physik-Konstanten (nur Springen)
+        const GRAVITY = 30.0;
+        const JUMP_HEIGHT = 10.0;
+
+        // ----- Globale Variablen -----
+        let supabaseClient;
+        let scene, camera, renderer, controls;
+        let localPlayerGroup;
+        let weaponMesh;
+        let remotePlayers = {}; // { clientId: { mesh: Mesh, lastUpdate: number } } // Kein isCrouching mehr
+        let myClientId = `client_${crypto.randomUUID()}`;
+        const clock = new THREE.Clock();
+
+        // Bewegungszustand
+        let moveForward = false, moveBackward = false, moveLeft = false, moveRight = false;
+        let playerVelocity = new THREE.Vector3();
+        const movementDirection = new THREE.Vector3();
+        let canJump = false;
+        let jumpRequested = false;
+
+        // NEU: Chat-Zustand
+        let isChatting = false;
+
+        let lastUpdateTime = 0;
+        let updateInterval;
+        let realtimeChannel;
+
+        // ----- DOM Elemente -----
+        const loadingElement = document.getElementById('loading');
+        const blocker = document.getElementById('blocker');
+        const instructions = document.getElementById('instructions');
+        const crosshair = document.getElementById('crosshair');
+        // NEU: Chat-Elemente
+        const chatContainer = document.getElementById('chat-container');
+        const chatDisplay = document.getElementById('chat-display');
+        const chatInput = document.getElementById('chat-input');
+
+        // ----- Initialisierung -----
+        async function init() {
+            try {
+                // Supabase, Szene, Kamera, Renderer, Licht (wie im FPS-Beispiel)
+                if (!SUPABASE_URL || !SUPABASE_ANON_KEY) throw new Error("Supabase URL/Key fehlen!");
+                supabaseClient = supabase.createClient(SUPABASE_URL, SUPABASE_ANON_KEY);
+                console.log("Supabase Client initialisiert.");
+                scene = new THREE.Scene();
+                scene.background = new THREE.Color(0x87ceeb);
+                scene.fog = new THREE.Fog(0x87ceeb, 0, 75);
+                camera = new THREE.PerspectiveCamera(75, window.innerWidth / window.innerHeight, 0.1, 1000);
+                renderer = new THREE.WebGLRenderer({ antialias: true });
+                renderer.setSize(window.innerWidth, window.innerHeight);
+                renderer.setPixelRatio(window.devicePixelRatio);
+                document.body.appendChild(renderer.domElement);
+                const ambientLight = new THREE.AmbientLight(0xffffff, 0.7);
+                scene.add(ambientLight);
+                const directionalLight = new THREE.DirectionalLight(0xffffff, 1.0);
+                directionalLight.position.set(15, 20, 10);
+                scene.add(directionalLight);
+
+                // Pointer Lock Controls & Spieler-Gruppe (wie im FPS-Beispiel)
+                localPlayerGroup = new THREE.Group();
+                localPlayerGroup.position.set(0, 0, 5); // Y=0 ist Boden
+                scene.add(localPlayerGroup);
+                camera.position.y = EYE_HEIGHT; // Feste Augenhöhe
+                localPlayerGroup.add(camera);
+                controls = new PointerLockControls(camera, renderer.domElement);
+
+                // Pointer Lock Events
+                instructions.addEventListener('click', () => {
+                    if (!isChatting) controls.lock(); // Nur locken, wenn nicht im Chat
+                });
+                controls.addEventListener('lock', () => {
+                    instructions.style.display = 'none';
+                    blocker.style.display = 'none';
+                    crosshair.style.display = 'block';
+                    chatInput.style.display = 'none'; // Sicherstellen, dass Chat zu ist
+                    chatDisplay.style.display = 'none';
+                    isChatting = false;
+                });
+                controls.addEventListener('unlock', () => {
+                    if (!isChatting) { // Nur Blocker zeigen, wenn nicht gerade Chat geöffnet wird
+                        blocker.style.display = 'flex';
+                        instructions.style.display = '';
+                    }
+                    crosshair.style.display = 'none';
+                });
+                // scene.add(controls.getObject()); // Nicht nötig
+
+                // Karte & Waffe erstellen (wie im FPS-Beispiel)
+                createMap();
+                createWeaponView();
+
+                // Supabase Registrierung, Spieler laden (ohne Crouch-Logik)
+                await registerLocalPlayer();
+                await loadInitialPlayers();
+
+                // Echtzeit-Listener (wird für Broadcast erweitert)
+                setupRealtimeListener();
+
+                // Event Listener (mit Chat-Logik)
+                setupEventListeners();
+
+                // Start
+                loadingElement.style.display = 'none';
+                animate();
+                updateInterval = setInterval(sendStateUpdate, UPDATE_INTERVAL_MS);
+
+            } catch (error) { /* Fehlerbehandlung wie vorher */ }
+        }
+
+        // ----- Karten- und Objekt-Erstellung -----
+        function createMap() { /* ... Code wie im FPS-Beispiel ... */
+             const groundGeometry = new THREE.PlaneGeometry(MAP_SIZE, MAP_SIZE);
+             const groundMaterial = new THREE.MeshStandardMaterial({ color: 0x3c6d3c, side: THREE.DoubleSide });
+             const groundMesh = new THREE.Mesh(groundGeometry, groundMaterial);
+             groundMesh.rotation.x = -Math.PI / 2; scene.add(groundMesh);
+             const treeGeometryTrunk = new THREE.CylinderGeometry(0.2, 0.3, 2, 8);
+             const treeMaterialTrunk = new THREE.MeshStandardMaterial({ color: 0x8b4513 });
+             const treeGeometryLeaves = new THREE.ConeGeometry(1, 3, 8);
+             const treeMaterialLeaves = new THREE.MeshStandardMaterial({ color: 0x228b22 });
+             for (let i = 0; i < TREE_COUNT; i++) { const tree = new THREE.Group(); const trunk = new THREE.Mesh(treeGeometryTrunk, treeMaterialTrunk); trunk.position.y = 1; tree.add(trunk); const leaves = new THREE.Mesh(treeGeometryLeaves, treeMaterialLeaves); leaves.position.y = 2 + 1.5; tree.add(leaves); const angle = Math.random() * Math.PI * 2; const radius = 5 + Math.random() * (MAP_SIZE / 2 - 5); tree.position.x = Math.cos(angle) * radius; tree.position.z = Math.sin(angle) * radius; tree.rotation.y = Math.random() * Math.PI * 2; scene.add(tree); }
+        }
+        function createWeaponView() { /* ... Code wie im FPS-Beispiel ... */
+             const weaponGeometry = new THREE.BoxGeometry(0.1, 0.1, 0.8);
+             const weaponMaterial = new THREE.MeshStandardMaterial({ color: 0x444444 });
+             weaponMesh = new THREE.Mesh(weaponGeometry, weaponMaterial);
+             weaponMesh.position.set(0.25, -0.2, -0.6); weaponMesh.rotation.y = -0.1;
+             camera.add(weaponMesh);
+        }
+        function createRemotePlayerMesh() { // Wieder die einfache Version
+            const geometry = new THREE.BoxGeometry(1, 1.8, 1);
+            const material = new THREE.MeshStandardMaterial({ color: 0xff0000 });
+            const mesh = new THREE.Mesh(geometry, material);
+            mesh.position.y = 1.8 / 2; // Basis auf Bodenhöhe
+            return mesh;
+        }
+
+        // ----- Spieler Logik -----
+        async function registerLocalPlayer() { // Ohne is_crouching
+            const initialState = {
+                player_client_id: myClientId,
+                x: localPlayerGroup.position.x, y: localPlayerGroup.position.y, z: localPlayerGroup.position.z,
+                rotation_y: controls.getObject().rotation.y,
+                last_seen: new Date().toISOString()
+            };
+            const { error } = await supabaseClient.from(PLAYER_TABLE).upsert(initialState, { onConflict: 'player_client_id' });
+            if (error) { console.error("Fehler Registrieren:", error); throw new Error("DB Reg fehlgeschlagen."); }
+            console.log("Lokaler Spieler registriert:", myClientId);
+        }
+        async function loadInitialPlayers() { // Ohne is_crouching
+             console.log("Lade initiale Spieler...");
+             const { data: players, error } = await supabaseClient
+                .from(PLAYER_TABLE)
+                .select('player_client_id, x, y, z, rotation_y') // Nur relevante Felder
+                .neq('player_client_id', myClientId);
+             if (error) { console.error("Ladefehler:", error); return; }
+             if (players && players.length > 0) {
+                 players.forEach(playerData => {
+                     if (!remotePlayers[playerData.player_client_id]) {
+                         console.log("Füge initialen Spieler hinzu:", playerData.player_client_id);
+                         const newPlayerMesh = createRemotePlayerMesh();
+                         // Position des Meshes anpassen (Pivot ist in der Mitte)
+                         newPlayerMesh.position.set(playerData.x, playerData.y + newPlayerMesh.geometry.parameters.height / 2, playerData.z);
+                         newPlayerMesh.rotation.y = playerData.rotation_y;
+                         scene.add(newPlayerMesh);
+                         remotePlayers[playerData.player_client_id] = { mesh: newPlayerMesh, lastUpdate: Date.now() };
+                     }
+                 });
+             }
+             console.log("Initiale Spieler geladen.");
+        }
+
+        // ----- Bewegung & Steuerung -----
+        // GEÄNDERT: EventListener für Chat hinzugefügt
+        function setupEventListeners() {
+            const onKeyDown = (event) => {
+                // Bewegungstasten nur verarbeiten, wenn NICHT im Chat
+                if (isChatting) return;
+
+                switch (event.code) {
+                    case 'ArrowUp': case 'KeyW': moveForward = true; break;
+                    case 'ArrowLeft': case 'KeyA': moveLeft = true; break;
+                    case 'ArrowDown': case 'KeyS': moveBackward = true; break;
+                    case 'ArrowRight': case 'KeyD': moveRight = true; break;
+                    case 'Space':
+                        if (canJump) jumpRequested = true;
+                        break;
+                    case 'KeyT': // NEU: Chat öffnen
+                        event.preventDefault(); // Verhindert ggf. 't' Eingabe
+                        if (controls.isLocked) { // Nur öffnen, wenn Spiel aktiv
+                             isChatting = true;
+                             controls.unlock(); // Mauszeiger freigeben
+                             chatInput.style.display = 'block';
+                             chatDisplay.style.display = 'block'; // Auch Nachrichten anzeigen
+                             chatInput.focus();
+                             console.log("Chat geöffnet");
+                        }
+                        break;
+                }
+            };
+
+            const onKeyUp = (event) => {
+                 // Bewegungstasten loslassen immer verarbeiten
+                 switch (event.code) {
+                    case 'ArrowUp': case 'KeyW': moveForward = false; break;
+                    case 'ArrowLeft': case 'KeyA': moveLeft = false; break;
+                    case 'ArrowDown': case 'KeyS': moveBackward = false; break;
+                    case 'ArrowRight': case 'KeyD': moveRight = false; break;
+                 }
+            };
+
+            // NEU: Listener für Chat-Input
+            chatInput.addEventListener('keydown', (event) => {
+                if (event.key === 'Enter') {
+                    event.preventDefault();
+                    const message = chatInput.value.trim();
+                    if (message) {
+                        handleChatMessageSend(message); // Nachricht senden/verarbeiten
+                    }
+                    // Chat schließen
+                    chatInput.value = '';
+                    chatInput.style.display = 'none';
+                     // chatDisplay bleibt sichtbar bis zum nächsten Lock
+                    isChatting = false;
+                    // WICHTIG: Der User muss erneut klicken, um das Spiel fortzusetzen (PointerLock)
+                    blocker.style.display = 'flex'; // Blocker wieder anzeigen
+                    instructions.style.display = '';
+                    console.log("Chat geschlossen (Enter)");
+
+                } else if (event.key === 'Escape') {
+                    event.preventDefault();
+                     // Chat abbrechen/schließen
+                     chatInput.value = '';
+                     chatInput.style.display = 'none';
+                     chatDisplay.style.display = 'none'; // Auch Nachrichten ausblenden
+                     isChatting = false;
+                     // WICHTIG: User muss klicken zum Weiterspielen
+                     blocker.style.display = 'flex';
+                     instructions.style.display = '';
+                     console.log("Chat geschlossen (Escape)");
+                }
+            });
+
+
+            document.addEventListener('keydown', onKeyDown);
+            document.addEventListener('keyup', onKeyUp);
+            window.addEventListener('resize', onWindowResize);
+            window.addEventListener('beforeunload', async () => { /* ... Code von vorher ... */ });
+        }
+
+        function onWindowResize() { /* ... Code von vorher ... */ }
+
+        // GEÄNDERT: handleMovement nur mit Sprung-Logik
+        function handleMovement(deltaTime) {
+            // Keine Bewegung, wenn Pointer nicht gesperrt ODER im Chat
+            if (!controls.isLocked || isChatting) {
+                // Nur Schwerkraft anwenden, wenn nicht gesperrt/im Chat
+                 if (localPlayerGroup.position.y > 0 || playerVelocity.y < 0) {
+                    playerVelocity.y -= GRAVITY * deltaTime;
+                    localPlayerGroup.position.y += playerVelocity.y * deltaTime;
+                     if (localPlayerGroup.position.y < 0) { // Verhindern, dass man durchfällt, wenn nicht gesperrt
+                        localPlayerGroup.position.y = 0;
+                        playerVelocity.y = 0;
+                     }
+                 } else {
+                      playerVelocity.y = 0; // Am Boden stoppen
+                      localPlayerGroup.position.y = 0;
+                 }
+                 // Keine X/Z Bewegung
+                 playerVelocity.x = 0;
+                 playerVelocity.z = 0;
+                 return;
+            }
+
+            // --- Vertikale Bewegung (Springen & Schwerkraft) ---
+            if (localPlayerGroup.position.y <= 0) {
+                playerVelocity.y = Math.max(0, playerVelocity.y);
+                canJump = true;
+                localPlayerGroup.position.y = 0;
+            } else {
+                 canJump = false;
+            }
+            if (jumpRequested && canJump) {
+                playerVelocity.y = JUMP_HEIGHT;
+                canJump = false;
+            }
+            jumpRequested = false;
+            playerVelocity.y -= GRAVITY * deltaTime;
+            localPlayerGroup.position.y += playerVelocity.y * deltaTime;
+
+            // --- Horizontale Bewegung --- (Kein Crouch-Multiplier mehr)
+            playerVelocity.x -= playerVelocity.x * 10.0 * deltaTime;
+            playerVelocity.z -= playerVelocity.z * 10.0 * deltaTime;
+            movementDirection.z = Number(moveForward) - Number(moveBackward);
+            movementDirection.x = Number(moveRight) - Number(moveLeft);
+            movementDirection.normalize();
+            if (moveForward || moveBackward) playerVelocity.z -= movementDirection.z * MOVE_SPEED * 3.0 * deltaTime;
+            if (moveLeft || moveRight) playerVelocity.x -= movementDirection.x * MOVE_SPEED * 3.0 * deltaTime;
+            controls.moveRight(-playerVelocity.x * deltaTime);
+            controls.moveForward(-playerVelocity.z * deltaTime);
+        }
+
+        // ----- Supabase Realtime & Chat -----
+        // GEÄNDERT: setupRealtimeListener für Broadcast und DB Changes
+        function setupRealtimeListener() {
+            console.log("Starte Realtime Listener für Tabelle:", PLAYER_TABLE);
+            realtimeChannel = supabaseClient.channel('multiplayer-game') // Kanalname frei wählbar
+                .on( // Listener für Datenbank-Änderungen (Spielerpositionen)
+                    'postgres_changes',
+                    { event: '*', schema: 'public', table: PLAYER_TABLE },
+                    (payload) => handlePlayerUpdate(payload) // Eigene Funktion dafür
+                )
+                .on( // NEU: Listener für Broadcast-Nachrichten (Chat)
+                    'broadcast',
+                    { event: 'chat' }, // Nur auf 'chat'-Events hören
+                    (payload) => handleChatMessageReceive(payload.payload) // Eigene Funktion
+                )
+                .subscribe((status, err) => {
+                    if (status === 'SUBSCRIBED') {
+                        console.log('Realtime Verbindung erfolgreich!');
+                        // Lade initiale Spieler erst *nach* erfolgreicher Verbindung
+                        // loadInitialPlayers(); // Ist schon in init()
+                    } else { /* Fehlerbehandlung */ }
+                });
+        }
+
+        // Eigene Funktion für Spieler-Positionsupdates
+        function handlePlayerUpdate(payload) {
+             const eventType = payload.eventType;
+             const data = eventType === 'DELETE' ? payload.old : payload.new;
+             if (!data || !data.player_client_id || data.player_client_id === myClientId) return;
+             const clientId = data.player_client_id;
+             let remotePlayer = remotePlayers[clientId];
+
+             switch (eventType) {
+                 case 'INSERT':
+                     if (!remotePlayer) { /* ... Spieler hinzufügen wie vorher ... */
+                         const newPlayerMesh = createRemotePlayerMesh();
+                         newPlayerMesh.position.set(data.x, data.y + newPlayerMesh.geometry.parameters.height / 2, data.z);
+                         newPlayerMesh.rotation.y = data.rotation_y || 0;
+                         scene.add(newPlayerMesh);
+                         remotePlayers[clientId] = { mesh: newPlayerMesh, lastUpdate: Date.now() };
+                     }
+                     break;
+                 case 'UPDATE':
+                      if (remotePlayer) { /* ... Position/Rotation updaten wie vorher (ohne Crouch) ... */
+                          // TODO: Interpolation
+                          remotePlayer.mesh.position.x = data.x;
+                          remotePlayer.mesh.position.y = data.y + remotePlayer.mesh.geometry.parameters.height / 2; // Y anpassen
+                          remotePlayer.mesh.position.z = data.z;
+                          remotePlayer.mesh.rotation.y = data.rotation_y || remotePlayer.mesh.rotation.y;
+                          remotePlayer.lastUpdate = Date.now();
+                      } else { /* INSERT verpasst, wie vorher */ }
+                     break;
+                 case 'DELETE':
+                     if (remotePlayer) { /* ... Spieler entfernen wie vorher ... */
+                         scene.remove(remotePlayer.mesh);
+                         if (remotePlayer.mesh.geometry) remotePlayer.mesh.geometry.dispose();
+                         if (remotePlayer.mesh.material) remotePlayer.mesh.material.dispose();
+                         delete remotePlayers[clientId];
+                     }
+                     break;
+             }
+        }
+
+        // NEU: Funktion zum Senden einer Chat-Nachricht
+        async function handleChatMessageSend(message) {
+            console.log("Sende Chat:", message);
+            displayChatMessage(`Du: ${message}`); // Lokal anzeigen
+            speakMessage(message); // Lokal vorlesen
+
+            if (realtimeChannel) {
+                try {
+                    await realtimeChannel.send({
+                        type: 'broadcast',
+                        event: 'chat',
+                        payload: { sender: myClientId, text: message },
+                    });
+                } catch (error) {
+                    console.error("Fehler beim Senden der Broadcast-Nachricht:", error);
+                    displayChatMessage("Fehler beim Senden.", true);
+                }
+            }
+        }
+
+        // NEU: Funktion zum Empfangen einer Chat-Nachricht
+        function handleChatMessageReceive(payload) {
+            // Stelle sicher, dass es nicht die eigene Nachricht ist (obwohl send() das oft nicht zurückgibt)
+            if (payload.sender !== myClientId && payload.text) {
+                console.log("Empfange Chat:", payload.text, "von", payload.sender);
+                const senderNickname = payload.sender.substring(0, 8); // Kürzen für Anzeige
+                displayChatMessage(`${senderNickname}: ${payload.text}`);
+                speakMessage(payload.text); // Empfangene Nachricht vorlesen
+            }
+        }
+
+        // NEU: Hilfsfunktion zum Anzeigen von Chat-Nachrichten im UI
+        function displayChatMessage(message, isError = false) {
+            if (!chatDisplay) return;
+            chatDisplay.style.display = 'block'; // Sicherstellen, dass es sichtbar ist
+            const p = document.createElement('p');
+            p.textContent = message;
+            if (isError) p.style.color = 'red';
+            chatDisplay.appendChild(p); // Fügt unten an (wegen flex-direction: column-reverse)
+            // Optional: Begrenze Anzahl Nachrichten oder scrolle automatisch
+            chatDisplay.scrollTop = chatDisplay.scrollHeight; // Nach unten scrollen
+        }
+
+        // NEU: Hilfsfunktion für Text-to-Speech
+        function speakMessage(text) {
+            if ('speechSynthesis' in window) {
+                // Optional: Vorherige Sprache abbrechen, falls noch aktiv
+                // window.speechSynthesis.cancel();
+
+                const utterance = new SpeechSynthesisUtterance(text);
+                // Hier könnten Optionen gesetzt werden:
+                // utterance.voice = ...; // Stimme auswählen
+                // utterance.lang = 'de-DE'; // Sprache setzen
+                // utterance.rate = 1.0; // Geschwindigkeit
+                // utterance.pitch = 1.0; // Tonhöhe
+                window.speechSynthesis.speak(utterance);
+            } else {
+                console.warn("Text-to-Speech wird von diesem Browser nicht unterstützt.");
+            }
+        }
+
+        // GEÄNDERT: sendStateUpdate ohne is_crouching
+        async function sendStateUpdate() {
+            // Sende nur, wenn aktiv im Spiel
+            // if (!controls.isLocked) return; // Ggf. doch senden?
+
+            const currentRotationY = controls.getObject().rotation.y;
+            const currentPosition = localPlayerGroup.position;
+            const stateData = {
+                player_client_id: myClientId,
+                x: currentPosition.x, y: currentPosition.y, z: currentPosition.z,
+                rotation_y: currentRotationY,
+                last_seen: new Date().toISOString()
+            };
+            const { error } = await supabaseClient.from(PLAYER_TABLE).upsert(stateData, { onConflict: 'player_client_id' });
+            if (error) { console.error("Fehler Senden Zustand:", error); }
+        }
+
+        // ----- Game Loop -----
+        function animate() {
+            requestAnimationFrame(animate);
+            const deltaTime = clock.getDelta();
+            handleMovement(deltaTime);
+            renderer.render(scene, camera);
+        }
+
+        // ----- Start -----
+        init();
+
+    </script>
+
+</body>
+</html>
