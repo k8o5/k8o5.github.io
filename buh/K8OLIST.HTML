@@ -1,0 +1,312 @@
+<!DOCTYPE html>
+<html lang="de">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>K8O - Öffentliche Liste (GitHub Pages Demo)</title>
+    <meta name="description" content="Öffentliche Item-Liste mit Supabase Backend via Anon Key auf GitHub Pages.">
+
+    <!-- Supabase Client Library via CDN -->
+    <script src="https://cdn.jsdelivr.net/npm/@supabase/supabase-js@2"></script>
+
+    <!-- Einfaches Inline-Styling (um nur eine HTML-Datei zu haben, oder extern wie zuvor) -->
+    <style>
+        body { font-family: -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, Helvetica, Arial, sans-serif; line-height: 1.6; margin: 0; padding: 0; background-color: #f4f4f4; color: #333; }
+        header { background-color: #007bff; color: #fff; padding: 1rem 0; text-align: center; }
+        main { max-width: 600px; margin: 2rem auto; padding: 1.5rem; background-color: #fff; box-shadow: 0 2px 5px rgba(0,0,0,0.1); border-radius: 8px; }
+        section { margin-bottom: 2rem; }
+        h1 { margin: 0; font-size: 1.8em;}
+        h2 { color: #333; border-bottom: 2px solid #eee; padding-bottom: 0.6rem; margin-top: 0;}
+        form { display: flex; gap: 0.5rem; margin-bottom: 1rem; }
+        input[type="text"] { flex-grow: 1; padding: 0.7rem; border: 1px solid #ccc; border-radius: 4px; font-size: 1em; }
+        button { padding: 0.7rem 1.2rem; background-color: #28a745; color: #fff; border: none; border-radius: 4px; cursor: pointer; font-size: 1em; transition: background-color 0.2s ease; }
+        button:hover { background-color: #218838; }
+        button[type="submit"] { background-color: #007bff; } /* Add button blue */
+        button[type="submit"]:hover { background-color: #0056b3; }
+        ul { list-style: none; padding: 0; }
+        li { display: flex; justify-content: space-between; align-items: center; padding: 0.8rem 0.5rem; border-bottom: 1px solid #eee; transition: background-color 0.2s ease; }
+        li:last-child { border-bottom: none; }
+        li:hover { background-color: #f9f9f9; }
+        li span { flex-grow: 1; margin-right: 1rem; word-break: break-word; } /* Wrap long text */
+        .delete-button { background-color: #dc3545; color: white; border: none; padding: 0.3rem 0.7rem; border-radius: 4px; cursor: pointer; font-size: 0.85em; }
+        .delete-button:hover { background-color: #c82333; }
+        .error-message { color: #dc3545; margin-top: 0.5rem; font-weight: bold; background-color: #f8d7da; border: 1px solid #f5c6cb; padding: 0.5rem; border-radius: 4px; }
+        #loading-message, #list-error, #add-error { margin-top: 1rem; }
+        footer { text-align: center; margin-top: 3rem; padding: 1rem; font-size: 0.9em; color: #777; }
+        /* Small screen adjustments */
+        @media (max-width: 640px) {
+            main { margin: 1rem; padding: 1rem;}
+            form { flex-direction: column; }
+            input[type="text"] { margin-bottom: 0.5rem; }
+        }
+    </style>
+</head>
+<body>
+
+    <header>
+        <h1>K8O - Öffentliche Liste</h1>
+    </header>
+
+    <main>
+        <section id="add-item-section">
+            <h2>Neues Item hinzufügen</h2>
+            <form id="add-item-form">
+                <input type="text" id="item-name" placeholder="Item-Name (max 280 Zeichen)" required maxlength="280">
+                <button type="submit">Hinzufügen</button>
+            </form>
+            <div id="add-error" class="error-message" style="display: none;"></div>
+        </section>
+
+        <section id="item-list-section">
+            <h2>Item Liste</h2>
+            <div id="loading-message">Lade Items... <span id="load-spinner" style="display: inline-block; width: 1em; height: 1em; border: 2px solid #ccc; border-top-color: #333; border-radius: 50%; animation: spin 1s linear infinite;"></span></div>
+             <style>@keyframes spin { to { transform: rotate(360deg); } }</style>
+            <ul id="item-list">
+                <!-- Items werden hier per JavaScript eingefügt -->
+            </ul>
+            <div id="list-error" class="error-message" style="display: none;"></div>
+             <p id="empty-list-message" style="display: none; color: #666; text-align: center; margin-top: 1rem;">Die Liste ist leer. Füge neue Items hinzu!</p>
+        </section>
+    </main>
+
+    <footer>
+        <p>K8O Demo | Gehostet auf GitHub Pages | Backend: Supabase (Anon Key)</p>
+        <p style="font-size: 0.8em; color: #999;">Hinweis: Da der Anon-Key verwendet wird, kann jeder Besucher Items hinzufügen und löschen.</p>
+    </footer>
+
+    <!-- JavaScript Logik -->
+    <script>
+        // ----- Konfiguration -----
+        // ERSETZE DIESE MIT DEINEN SUPABASE PROJEKT-DATEN!
+        const SUPABASE_URL = 'DEINE_SUPABASE_URL'; // Z.B. 'https://xyz.supabase.co'
+        const SUPABASE_ANON_KEY = 'DEIN_SUPABASE_ANON_KEY'; // Der öffentliche Anon-Key
+
+        // ----- Supabase Client Initialisierung -----
+        let supabase;
+        try {
+            if (!SUPABASE_URL || !SUPABASE_ANON_KEY || SUPABASE_URL === 'DEINE_SUPABASE_URL') {
+                 throw new Error("Supabase URL oder Anon Key fehlen oder sind nicht ersetzt worden!");
+            }
+            supabase = supabaseJs.createClient(SUPABASE_URL, SUPABASE_ANON_KEY);
+            console.log("Supabase Client initialisiert.");
+        } catch (error) {
+            console.error("FEHLER bei der Supabase Initialisierung:", error);
+            // Zeige Fehler im UI statt nur in der Konsole
+            const listErrorDiv = document.getElementById('list-error');
+            const loadingMsg = document.getElementById('loading-message');
+            if(listErrorDiv && loadingMsg) {
+                 listErrorDiv.textContent = `Fehler: Supabase konnte nicht initialisiert werden. (${error.message}). Prüfe URL/Key in index.html.`;
+                 listErrorDiv.style.display = 'block';
+                 loadingMsg.style.display = 'none';
+            } else {
+                alert("Supabase konnte nicht initialisiert werden. Prüfe URL/Key und die HTML-Struktur.");
+            }
+        }
+
+        // ----- DOM Elemente -----
+        const addItemForm = document.getElementById('add-item-form');
+        const itemNameInput = document.getElementById('item-name');
+        const itemList = document.getElementById('item-list');
+        const loadingMessage = document.getElementById('loading-message');
+        const listError = document.getElementById('list-error');
+        const addError = document.getElementById('add-error');
+        const emptyListMessage = document.getElementById('empty-list-message');
+
+        // ----- Hilfsfunktionen -----
+        function showMessage(element, message, isError = true) {
+            element.textContent = message;
+            element.style.display = 'block';
+            if (isError) {
+                element.classList.add('error-message'); // Sicherstellen, dass Klasse gesetzt ist
+            } else {
+                element.classList.remove('error-message'); // Evtl. Fehlerklasse entfernen
+            }
+        }
+
+        function hideMessage(element) {
+            element.textContent = '';
+            element.style.display = 'none';
+        }
+
+        function setLoading(isLoading) {
+            loadingMessage.style.display = isLoading ? 'block' : 'none';
+             if (!isLoading) {
+                const spinner = document.getElementById('load-spinner');
+                if (spinner) spinner.style.display = 'none'; // Spinner auch verstecken
+            }
+        }
+
+        // ----- Kernfunktionen -----
+
+        /** Lädt Items von Supabase und zeigt sie an */
+        async function fetchAndRenderItems() {
+            if (!supabase) return; // Stopp, wenn Supabase nicht bereit ist
+
+            setLoading(true);
+            hideMessage(listError);
+            hideMessage(emptyListMessage); // Auch Leermeldung verstecken
+            itemList.innerHTML = ''; // Liste leeren
+
+            try {
+                const { data: items, error } = await supabase
+                    .from('items')
+                    .select('id, name, created_at') // Nur benötigte Spalten abfragen
+                    .order('created_at', { ascending: false }); // Neueste zuerst
+
+                if (error) throw error; // Fehler weiterwerfen
+
+                if (items && items.length > 0) {
+                    items.forEach(renderItem);
+                } else {
+                    // Zeige die "Liste ist leer" Meldung statt der Ladeanzeige
+                    emptyListMessage.style.display = 'block';
+                }
+
+            } catch (error) {
+                console.error('Fehler beim Laden der Items:', error);
+                showMessage(listError, `Fehler beim Abrufen der Liste: ${error.message || 'Unbekannter Fehler'}`);
+            } finally {
+                setLoading(false); // Ladeanzeige immer ausblenden
+            }
+        }
+
+        /** Rendert ein einzelnes Item */
+        function renderItem(item) {
+            const li = document.createElement('li');
+            li.dataset.id = item.id; // ID für Löschaktion speichern
+
+            const nameSpan = document.createElement('span');
+            nameSpan.textContent = item.name;
+            li.appendChild(nameSpan);
+
+            const deleteButton = document.createElement('button');
+            deleteButton.textContent = 'Löschen';
+            deleteButton.classList.add('delete-button');
+            deleteButton.onclick = async () => { // Direktes onclick ist hier ok für Demo
+                // Kleine Verzögerung um UI responsiv zu halten, falls viele Klicks
+                 deleteButton.disabled = true;
+                 deleteButton.textContent = 'Lösche...';
+                if (confirm(`Sicher, dass du "${item.name}" löschen möchtest?`)) {
+                     await deleteItem(item.id, li); // li übergeben für direktes Entfernen
+                } else {
+                    // Reset button state if cancelled
+                    deleteButton.disabled = false;
+                    deleteButton.textContent = 'Löschen';
+                }
+                // Nicht benötigt, da deleteItem im Erfolgsfall das Element entfernt oder Fehler zeigt
+                 // fetchAndRenderItems(); // Neu laden - alternative, robustere Methode
+            };
+            li.appendChild(deleteButton);
+
+            // Füge neues Element am Anfang der Liste ein (visuell passend zu `order`)
+            //itemList.appendChild(li); // Am Ende einfügen
+             itemList.prepend(li); // Am Anfang einfügen
+        }
+
+        /** Fügt ein neues Item hinzu */
+        async function addItem(itemName) {
+            if (!supabase || !itemName) return;
+
+            hideMessage(addError);
+            const submitButton = addItemForm.querySelector('button[type="submit"]');
+            const originalButtonText = submitButton.textContent;
+            submitButton.disabled = true;
+            submitButton.textContent = 'Speichern...';
+
+
+            try {
+                const { data, error } = await supabase
+                    .from('items')
+                    .insert({ name: itemName })
+                    .select('id, name, created_at') // Wichtig: Die neu erzeugten Daten zurückgeben
+                    .single(); // Wir erwarten nur ein Ergebnis
+
+                if (error) throw error;
+
+                console.log('Item hinzugefügt:', data);
+                itemNameInput.value = ''; // Input leeren
+                hideMessage(emptyListMessage); // "Leer"-Meldung entfernen, falls sichtbar
+                renderItem(data); // Nur das neue Item rendern (effizienter als Neuladen)
+
+            } catch (error) {
+                console.error('Fehler beim Hinzufügen:', error);
+                 // Spezifischere Fehlermeldung bei Constraint Verletzung (z.B. zu lang)
+                let message = `Fehler beim Speichern: ${error.message || 'Unbekannter Fehler'}`;
+                if (error.message.includes("check constraint")) {
+                    message = "Fehler: Item-Name ist möglicherweise zu lang oder ungültig.";
+                }
+                showMessage(addError, message);
+            } finally {
+                 submitButton.disabled = false;
+                 submitButton.textContent = originalButtonText;
+            }
+        }
+
+        /** Löscht ein Item */
+        async function deleteItem(itemId, listItemElement) {
+            if (!supabase) return;
+            // Der Button wurde schon im `onclick` deaktiviert
+
+            try {
+                const { error } = await supabase
+                    .from('items')
+                    .delete()
+                    .match({ id: itemId });
+
+                if (error) throw error;
+
+                console.log('Item gelöscht:', itemId);
+                // listItemElement.remove(); // Element direkt entfernen statt neu zu laden
+
+                // Visuelles Feedback + Entfernen nach kurzer Zeit für bessere UX
+                 listItemElement.style.transition = 'opacity 0.5s ease, transform 0.5s ease';
+                 listItemElement.style.opacity = '0';
+                 listItemElement.style.transform = 'translateX(-20px)';
+                 setTimeout(() => {
+                     listItemElement.remove();
+                      // Prüfen, ob die Liste jetzt leer ist
+                     if(itemList.children.length === 0) {
+                         emptyListMessage.style.display = 'block';
+                     }
+                 }, 500); // Nach 500ms entfernen
+
+                 hideMessage(listError); // Eventuellen vorherigen Löschfehler ausblenden
+
+            } catch (error) {
+                console.error('Fehler beim Löschen:', error);
+                showMessage(listError, `Fehler beim Löschen: ${error.message || 'Unbekannter Fehler'}`);
+                 // Button wiederherstellen, falls ein Fehler auftritt
+                 const deleteButton = listItemElement.querySelector('.delete-button');
+                 if (deleteButton) {
+                     deleteButton.disabled = false;
+                     deleteButton.textContent = 'Löschen';
+                 }
+                 // Fehler nach einiger Zeit ausblenden
+                setTimeout(() => hideMessage(listError), 5000);
+            }
+        }
+
+        // ----- Event Listener -----
+        addItemForm.addEventListener('submit', (event) => {
+            event.preventDefault();
+            const itemName = itemNameInput.value.trim();
+            if (itemName) {
+                addItem(itemName);
+            } else {
+                showMessage(addError, 'Bitte gib einen Namen für das Item ein.');
+            }
+        });
+
+        // ----- Initialisierung -----
+        document.addEventListener('DOMContentLoaded', () => {
+            if (supabase) {
+                fetchAndRenderItems(); // Starte den Ladevorgang
+            }
+            // Fehlermeldung, falls Supabase nicht initialisiert werden konnte,
+            // wird bereits im Initialisierungs-Try-Catch angezeigt.
+        });
+
+    </script>
+
+</body>
+</html>
