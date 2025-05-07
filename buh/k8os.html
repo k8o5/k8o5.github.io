@@ -1,616 +1,453 @@
 <!DOCTYPE html>
-<html lang="de">
+<html lang="en">
 <head>
     <meta charset="UTF-8">
-    <meta name="viewport" content="width=device-width, initial-scale=1.0">
-    <title>K8OS Brain Interface</title>
+    <meta name="viewport" content="width=device-width, initial-scale=1.0, user-scalable=no">
+    <title>Dood Jumper - Control Choice</title>
     <style>
-        /* --- CSS Styling --- */
-        body {
-            font-family: -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, Helvetica, Arial, sans-serif, "Apple Color Emoji", "Segoe UI Emoji", "Segoe UI Symbol";
-            line-height: 1.6;
-            padding: 20px;
-            background-color: #f0f2f5;
-            color: #1c1e21;
+        html, body {
             margin: 0;
+            padding: 0;
+            overflow: hidden;
+            width: 100%;
+            height: 100%;
+            background-color: #000;
+            font-family: 'Arial Rounded MT Bold', Arial, sans-serif;
+            touch-action: none;
         }
-        #k8os-interface {
-            max-width: 950px;
-            margin: 20px auto;
-            background-color: #ffffff;
-            padding: 25px 30px;
+        canvas {
+            display: block;
+            touch-action: none;
+        }
+        #uiLayer {
+            position: absolute;
+            top: 0;
+            left: 0;
+            width: 100%;
+            height: 100%;
+            pointer-events: none;
+            display: flex;
+            flex-direction: column;
+            align-items: center;
+            color: white;
+            text-shadow: 1px 1px 3px rgba(0,0,0,0.7);
+        }
+        #instructions {
+            font-size: calc(10px + 1vmin);
+            background-color: rgba(0,0,0,0.4);
+            padding: 0.5em 1em;
             border-radius: 8px;
-            box-shadow: 0 4px 12px rgba(0, 0, 0, 0.1);
-            border: 1px solid #dddfe2;
+            margin-top: 10px;
+            text-align: center;
+            pointer-events: all; /* Allow interaction if needed */
         }
-        h1, h2 {
-            color: #182a4d;
-            border-bottom: 2px solid #8a9bff;
-            padding-bottom: 8px;
-            margin-top: 0;
+        #startScreen {
+            position: absolute;
+            top: 0;
+            left: 0;
+            width: 100%;
+            height: 100%;
+            background-color: rgba(0,0,0,0.7);
+            display: flex;
+            flex-direction: column;
+            justify-content: center;
+            align-items: center;
+            pointer-events: all;
+            z-index: 10;
+        }
+        #startScreen h1 {
+            font-size: calc(24px + 3vmin);
+            color: #FFD700;
             margin-bottom: 20px;
         }
-        h1 { font-size: 1.8em; }
-        h2 { font-size: 1.4em; }
-        p, li { color: #3b3f45; }
-        .section {
-            margin-bottom: 30px;
-            padding: 20px;
-            border: 1px solid #e4e6eb;
-            border-radius: 6px;
-            background-color: #f7f8fa;
+        .control-choice {
+            margin-bottom: 20px;
         }
-        label {
-            display: block;
-            margin-bottom: 6px;
-            font-weight: 600;
-            color: #4b4f56;
-        }
-        input[type="text"],
-        textarea {
-            width: calc(100% - 22px);
-            padding: 10px;
-            margin-bottom: 15px;
-            border: 1px solid #ccd0d5;
-            border-radius: 5px;
-            font-size: 1em;
-            background-color: #fff;
-        }
-        textarea {
-            min-height: 60px;
-            resize: vertical;
-        }
-        button {
-            padding: 10px 18px;
-            background-color: #6a7dfe;
-            color: white;
-            border: none;
-            border-radius: 5px;
-            cursor: pointer;
-            font-size: 1em;
-            font-weight: 500;
-            transition: background-color 0.2s ease-in-out, box-shadow 0.2s ease;
+        .control-choice label {
             margin-right: 10px;
+            font-size: calc(14px + 1vmin);
         }
-        button:hover {
-            background-color: #5a6ce0;
-            box-shadow: 0 2px 4px rgba(0, 0, 0, 0.1);
-        }
-        button:active {
-             background-color: #4a5ac0;
-        }
-        button:disabled {
-            background-color: #ccd0d5;
-            cursor: not-allowed;
-        }
-        #graph-visualization {
-            min-height: 150px;
-            background-color: #e9ebee;
-            border: 1px dashed #ced0d4;
-            text-align: center;
-            display: flex;
-            align-items: center;
-            justify-content: center;
-            color: #606770;
-            margin-bottom: 15px;
-            border-radius: 4px;
-            padding: 15px;
-        }
-        #info-panel, #kairos-suggestions, #status-bar {
-            margin-top: 20px;
-            padding: 15px;
-            background-color: #e7f3ff;
-            border: 1px solid #cce0ff;
-            border-radius: 5px;
-        }
-        #status-bar div { margin-bottom: 5px; }
-        #status-bar span { font-weight: bold; color: #1d2129; }
-
-        pre {
-            background-color: #f5f6f7;
-            padding: 12px;
-            border-radius: 4px;
-            overflow-x: auto;
-            border: 1px solid #e4e6eb;
-            font-size: 0.9em;
-            color: #333;
-            white-space: pre-wrap; /* Wrap long lines in pre */
-            word-wrap: break-word;
-        }
-        .node, .edge {
-            border: 1px solid #dce1f0;
-            padding: 12px;
-            margin-bottom: 10px;
-            border-radius: 5px;
-            background-color: #ffffff;
-            box-shadow: 0 1px 2px rgba(0,0,0,0.05);
-        }
-        .node strong, .edge strong {
-            color: #4a5ac0;
+        .control-choice input[type="radio"] {
             margin-right: 5px;
-            display: inline-block;
-            min-width: 80px; /* Align labels */
         }
-        .node span, .edge span {
-            word-break: break-word;
+        #startButton {
+            font-size: calc(18px + 2vmin);
+            padding: 0.8em 1.5em;
+            background-color: #FFD700;
+            color: #333;
+            border: none;
+            border-radius: 10px;
+            cursor: pointer;
+            box-shadow: 0 5px 15px rgba(0,0,0,0.3);
         }
-        #graph-list h3 {
-            margin-top: 15px;
-            margin-bottom: 10px;
-            color: #4b4f56;
-            font-size: 1.1em;
-        }
-        #search-results .node {
-             padding: 10px;
-        }
-        #suggestions-output ul {
-            list-style: disc;
-            padding-left: 20px;
-            margin: 0;
-        }
-         #suggestions-output li {
-             margin-bottom: 8px;
-         }
-         .loading-indicator {
-             display: none; /* Hidden by default */
-             text-align: center;
-             padding: 10px;
-             font-style: italic;
-             color: #606770;
-         }
-         .error-message {
-             color: #d93025;
-             background-color: #fce8e6;
-             border: 1px solid #f5c6cb;
-             padding: 10px 15px;
-             border-radius: 5px;
-             margin-top: 10px;
-         }
+        .hidden { display: none !important; }
     </style>
 </head>
 <body>
-
-<div id="k8os-interface">
-    <h1>K8OS Brain Interface</h1>
-
-    <div id="status-bar" class="section">
-        <h2>Netzwerk Status</h2>
-        <div>Gateway: <span id="gateway-url">Nicht verbunden</span></div>
-        <div>User ID: <span id="user-id">N/A</span></div>
-        <div>Reputation: <span id="user-reputation">N/A</span></div>
-        <div>Letzte Aktualisierung: <span id="last-update">N/A</span></div>
-        <div class="loading-indicator" id="status-loading">Aktualisiere Status...</div>
+    <canvas id="gameCanvas"></canvas>
+    <div id="uiLayer">
+        <div id="instructions"></div>
     </div>
 
-    <div class="section">
-        <h2>Semantischer Hyper-Graph</h2>
-        <div id="graph-visualization">Graph-Visualisierung wird hier geladen...</div>
-        <button id="refresh-graph-button" onclick="ui.fetchAndRenderGraph()">Graph aktualisieren</button>
-        <div class="loading-indicator" id="graph-loading">Lade Graph-Daten...</div>
-        <div id="graph-list">
-            <!-- Knoten und Kanten werden hier dynamisch eingefügt -->
+    <div id="startScreen">
+        <h1>Dood Jumper</h1>
+        <div class="control-choice" id="mobileControlChoice">
+            <p style="margin-bottom: 10px; font-size: calc(15px + 1vmin);">Choose your controls:</p>
+            <label><input type="radio" name="controlType" value="tilt" checked> Tilt</label>
+            <label><input type="radio" name="controlType" value="tap"> Tap Screen</label>
         </div>
+        <button id="startButton">Start Game</button>
     </div>
 
-    <div id="contribution-form" class="section">
-        <h2>Beitrag leisten (Knoten/Konzept)</h2>
-        <label for="node-content">Inhalt/Konzept:</label>
-        <textarea id="node-content" rows="4" placeholder="Beschreiben Sie das Konzept, die Frage, die Hypothese..."></textarea>
-        <label for="node-type">Typ:</label>
-        <input type="text" id="node-type" placeholder="z.B. Frage, Hypothese, Datenpunkt, Prinzip">
-        <label for="node-references">Referenzen (Knoten-IDs, kommasepariert, optional):</label>
-        <input type="text" id="node-references" placeholder="k8id_abc123,k8id_def456">
-        <button id="submit-node-button" onclick="ui.submitNode()">Knoten einreichen</button>
-        <div class="loading-indicator" id="node-submit-loading">Reiche Knoten ein...</div>
-        <div id="node-submit-message"></div>
-    </div>
+    <script>
+        const canvas = document.getElementById('gameCanvas');
+        const ctx = canvas.getContext('2d');
+        const startScreen = document.getElementById('startScreen');
+        const startButton = document.getElementById('startButton');
+        const instructionsDiv = document.getElementById('instructions');
+        const mobileControlChoiceDiv = document.getElementById('mobileControlChoice');
 
-     <div id="relation-form" class="section">
-        <h2>Beziehung herstellen (Kante)</h2>
-        <label for="edge-source">Quell-Knoten ID:</label>
-        <input type="text" id="edge-source" placeholder="ID des Startknotens">
-        <label for="edge-target">Ziel-Knoten ID:</label>
-        <input type="text" id="edge-target" placeholder="ID des Endknotens">
-         <label for="edge-type">Beziehungstyp:</label>
-        <input type="text" id="edge-type" placeholder="z.B. widerlegt, unterstützt, verursacht, korreliert mit, fragt nach">
-        <label for="edge-rationale">Begründung (optional):</label>
-        <textarea id="edge-rationale" rows="2" placeholder="Kurze Begründung für diese Beziehung"></textarea>
-        <button id="submit-edge-button" onclick="ui.submitEdge()">Kante einreichen</button>
-        <div class="loading-indicator" id="edge-submit-loading">Reiche Kante ein...</div>
-        <div id="edge-submit-message"></div>
-    </div>
+        let canvasWidth = window.innerWidth;
+        let canvasHeight = window.innerHeight;
+        canvas.width = canvasWidth;
+        canvas.height = canvasHeight;
 
-    <div id="info-panel" class="section">
-        <h2>Suche & Erkundung</h2>
-        <label for="search-query">Suche nach Inhalt, Typ oder ID:</label>
-        <input type="text" id="search-query" placeholder="Suchbegriff eingeben...">
-        <button id="search-button" onclick="ui.searchGraph()">Suchen</button>
-        <div class="loading-indicator" id="search-loading">Suche läuft...</div>
-        <div id="search-results"></div>
-    </div>
+        // --- OS Detection & Control Scheme ---
+        const userAgent = navigator.userAgent || navigator.vendor || window.opera;
+        let isAndroid = /android/i.test(userAgent);
+        let isIOS = /iPad|iPhone|iPod/.test(userAgent) && !window.MSStream;
+        let isMobile = isAndroid || isIOS;
 
-    <div id="kairos-suggestions" class="section">
-        <h2>Kairos Engine Vorschläge</h2>
-        <p>Vorschläge für nächste Schritte, offene Fragen oder Kollaborationen basierend auf dem Netzwerkzustand.</p>
-        <button id="suggest-button" onclick="ui.fetchSuggestions()">Vorschläge anfordern</button>
-        <div class="loading-indicator" id="suggestions-loading">Generiere Vorschläge...</div>
-        <div id="suggestions-output"></div>
-    </div>
+        let controlScheme = 'keyboard'; // Default: 'keyboard', 'tilt', 'tap'
+        if (isMobile) {
+            mobileControlChoiceDiv.classList.remove('hidden');
+        } else {
+            mobileControlChoiceDiv.classList.add('hidden');
+        }
 
-</div>
+        let gameSpeedMultiplier = 1; // Keep speed multiplier logic if needed
+        if (isAndroid) gameSpeedMultiplier = 2;
 
-<script>
-    // --- K8OS Interface Logic ---
 
-    // Konfiguration der API-Basis-URL
-    // WICHTIG: Dies muss die Adresse eines erreichbaren K8OS Gateway Knotens sein.
-    const k8osGatewayUrl = 'http://localhost:8080/api/v1'; // Lokaler Testserver als Standard
+        // --- Player Properties ---
+        const playerWidth = Math.min(canvasWidth * 0.09, 36);
+        const playerHeight = playerWidth;
+        let playerX = canvasWidth / 2 - playerWidth / 2;
+        let playerY = canvasHeight - playerHeight - 100;
+        let playerDY = 0;
+        let playerDX = 0;
+        const basePlayerMoveSpeed = canvasWidth * 0.012 > 5 ? canvasWidth * 0.012 : 5;
+        let playerMoveSpeed = basePlayerMoveSpeed * gameSpeedMultiplier;
+        const baseGravity = 0.0006 * canvasHeight;
+        let gravity = baseGravity * gameSpeedMultiplier * gameSpeedMultiplier;
+        const baseJumpStrength = -0.018 * canvasHeight;
+        let jumpStrength = baseJumpStrength * gameSpeedMultiplier;
+        let playerBlinkTimer = 0;
+        const playerBlinkInterval = 180, playerBlinkDuration = 7;
 
-    // --- API Client Funktionen ---
-    const apiClient = {
-        async request(endpoint, method = 'GET', body = null) {
-            const url = `${k8osGatewayUrl}${endpoint}`;
-            const options = {
-                method: method,
-                headers: {
-                    'Content-Type': 'application/json',
-                    // Hier würde die Authentifizierung hinzugefügt werden, falls benötigt
-                    // 'Authorization': `Bearer ${auth.getToken()}`
-                },
-            };
-            if (body) {
-                options.body = JSON.stringify(body);
-            }
+        // --- Platform Properties --- (truncated for brevity, same as before)
+        const basePlatformWidth = Math.max(canvasWidth * 0.15, 70);
+        const platformHeight = Math.max(canvasHeight * 0.02, 12);
+        const defaultPlatformColor = '#60D060', bouncyPlatformColor = '#6495ED', breakablePlatformColor = '#A0522D';
+        let platforms = [];
+        const initialPlatforms = 7, platformSpawnThreshold = canvasHeight * 0.25;
+        let lastPlatformY = canvasHeight - 50;
+        const PLATFORM_TYPES = { NORMAL: 'normal', BOUNCY: 'bouncy', BREAKABLE: 'breakable' };
 
-            try {
-                const response = await fetch(url, options);
-                const responseData = await response.json().catch(() => null); // Versuche JSON zu parsen, auch bei Fehlern
+        // --- Power-ups ---
+        const POWERUP_TYPES = { SUPER_SPRING: 'super_spring' };
+        let hasSuperJumpCharge = false;
 
-                if (!response.ok) {
-                    // Versuche, eine Fehlermeldung aus der API-Antwort zu extrahieren
-                    const errorMessage = responseData?.message || responseData?.error || `HTTP Error ${response.status}`;
-                    console.error(`API Error ${response.status} on ${method} ${endpoint}:`, errorMessage, responseData);
-                    throw new Error(errorMessage); // Wirf einen Fehler mit der API-Nachricht
+        // --- Particles ---
+        let particles = [];
+
+        // --- Game State ---
+        let score = 0;
+        let highScore = localStorage.getItem('doodJumperControlChoiceHighScore') || 0;
+        let cameraY = 0;
+        let gameState = 'PRE_GAME'; // PRE_GAME, PLAYING, GAME_OVER
+
+        // --- Background Stars --- (truncated, same as before)
+        let stars = [];
+        function initializeStars() { /* ... same ... */ stars = []; const numStars = Math.floor(canvasWidth * canvasHeight / 8000); for(let i = 0; i < numStars; i++) { stars.push({ x: Math.random(), y: Math.random(), size: Math.random() * 1.5 + 0.5, opacity: Math.random() * 0.4 + 0.2 }); } }
+
+
+        // --- Gyroscope ---
+        let gyroAvailable = false;
+        let gyroPermissionGranted = false;
+        const baseGyroSensitivity = 0.5;
+        let gyroSensitivity = baseGyroSensitivity;
+        let baseGamma = null;
+        let rawGammaValueForPupils = 0;
+
+        // --- Tap Controls ---
+        let activePointerId = null;
+
+
+        function updateInstructions() {
+            if (gameState === 'PRE_GAME') {
+                instructionsDiv.textContent = isMobile ? "Select control scheme above." : "Use Arrow Keys to Move.";
+            } else if (gameState === 'PLAYING') {
+                if (controlScheme === 'tilt') {
+                    instructionsDiv.textContent = "Tilt device to move. Tap Game Over screen to restart.";
+                } else if (controlScheme === 'tap') {
+                    instructionsDiv.textContent = "Tap left/right screen half to move. Tap Game Over screen to restart.";
+                } else { // keyboard
+                    instructionsDiv.textContent = "Use Arrow Keys. Press Enter on Game Over to restart.";
                 }
-
-                return responseData; // Erfolgreiche Antwortdaten zurückgeben
-
-            } catch (error) {
-                console.error(`Network or API request error on ${method} ${endpoint}:`, error);
-                // Unterscheide zwischen API-Fehlern (bereits Error-Objekte) und Netzwerkfehlern
-                if (error instanceof Error && error.message.startsWith('HTTP Error')) {
-                     throw error; // API-Fehler weiterwerfen
-                } else {
-                    throw new Error(`Netzwerkfehler oder K8OS Gateway nicht erreichbar unter ${k8osGatewayUrl}.`); // Generischer Netzwerkfehler
-                }
-            }
-        },
-
-        // Spezifische API-Aufrufe
-        getNodes: (params = {}) => apiClient.request(`/nodes?${new URLSearchParams(params)}`),
-        getNode: (id) => apiClient.request(`/nodes/${id}`),
-        submitNode: (data) => apiClient.request('/nodes', 'POST', data),
-
-        getEdges: (params = {}) => apiClient.request(`/edges?${new URLSearchParams(params)}`),
-        getEdge: (id) => apiClient.request(`/edges/${id}`),
-        submitEdge: (data) => apiClient.request('/edges', 'POST', data),
-
-        search: (params = {}) => apiClient.request(`/search?${new URLSearchParams(params)}`),
-        getSuggestions: (params = {}) => apiClient.request(`/kairos/suggestions?${new URLSearchParams(params)}`),
-
-        // Beispiel für Status/User-Info (müsste von der API bereitgestellt werden)
-        getStatus: () => apiClient.request('/status') // Hypothetischer Endpunkt
-    };
-
-
-    // --- UI Interaction Logic ---
-    const ui = {
-        // Initialisierung beim Laden der Seite
-        init: function() {
-            document.getElementById('gateway-url').textContent = k8osGatewayUrl;
-            // Event Listener für Buttons hinzufügen
-            document.getElementById('refresh-graph-button').addEventListener('click', () => this.fetchAndRenderGraph());
-            document.getElementById('submit-node-button').addEventListener('click', () => this.submitNode());
-            document.getElementById('submit-edge-button').addEventListener('click', () => this.submitEdge());
-            document.getElementById('search-button').addEventListener('click', () => this.searchGraph());
-            document.getElementById('suggest-button').addEventListener('click', () => this.fetchSuggestions());
-
-            // Initial Daten laden
-            this.updateStatus();
-            this.fetchAndRenderGraph();
-        },
-
-        // Zeigt/versteckt Ladeindikatoren und deaktiviert Buttons
-        setLoading: function(elementId, isLoading) {
-            const indicator = document.getElementById(elementId);
-            if (indicator) indicator.style.display = isLoading ? 'block' : 'none';
-
-            // Zugehörige Buttons deaktivieren/aktivieren
-            const buttonId = elementId.replace('-loading', '-button');
-            const button = document.getElementById(buttonId);
-            if (button) button.disabled = isLoading;
-        },
-
-        // Zeigt Nachrichten (Erfolg oder Fehler) an
-        showMessage: function(elementId, message, isError = false) {
-            const messageDiv = document.getElementById(elementId);
-            if (!messageDiv) return;
-            messageDiv.textContent = message;
-            messageDiv.className = isError ? 'error-message' : 'success-message'; // CSS Klassen für Styling
-             // Nachricht nach einiger Zeit ausblenden
-             setTimeout(() => { messageDiv.textContent = ''; messageDiv.className = ''; }, isError ? 8000 : 5000);
-        },
-
-        // Hilfsfunktion zum Escapen von HTML
-        escapeHtml: function(unsafe) {
-            if (typeof unsafe !== 'string') return unsafe; // Nur Strings escapen
-            return unsafe
-                 .replace(/&/g, "&")
-                 .replace(/</g, "<")
-                 .replace(/>/g, ">")
-                 .replace(/"/g, """)
-                 .replace(/'/g, "'");
-        },
-
-        // Status vom Backend holen und anzeigen
-        updateStatus: async function() {
-            this.setLoading('status-loading', true);
-            try {
-                // Annahme: /status Endpunkt gibt { userId, reputation } zurück
-                const status = await apiClient.getStatus(); // Dieser Endpunkt muss existieren!
-                document.getElementById('user-id').textContent = status.userId || 'Unbekannt';
-                document.getElementById('user-reputation').textContent = status.reputation?.toFixed(2) || 'N/A';
-                document.getElementById('last-update').textContent = new Date().toLocaleTimeString();
-            } catch (error) {
-                console.error("Fehler beim Abrufen des Status:", error);
-                document.getElementById('user-id').textContent = 'Fehler';
-                document.getElementById('user-reputation').textContent = 'Fehler';
-                document.getElementById('last-update').textContent = `Fehler (${new Date().toLocaleTimeString()})`;
-                // Optional: Fehlermeldung im Statusbereich anzeigen
-            } finally {
-                this.setLoading('status-loading', false);
-            }
-        },
-
-        // Graph-Daten vom Backend holen und rendern
-        fetchAndRenderGraph: async function() {
-            this.setLoading('graph-loading', true);
-            const graphList = document.getElementById('graph-list');
-            graphList.innerHTML = ''; // Liste leeren
-
-            try {
-                const [nodesData, edgesData] = await Promise.all([
-                    apiClient.getNodes({ limit: 50, sort: 'timestamp:desc' }), // Letzte 50 Knoten
-                    apiClient.getEdges({ limit: 50, sort: 'timestamp:desc' })  // Letzte 50 Kanten
-                ]);
-
-                this.displayGraphData(nodesData.nodes || [], edgesData.edges || []);
-
-            } catch (error) {
-                graphList.innerHTML = `<p class="error-message">Fehler beim Laden der Graph-Daten: ${this.escapeHtml(error.message)}</p>`;
-            } finally {
-                this.setLoading('graph-loading', false);
-            }
-        },
-
-        // Rendert die Knoten- und Kantenlisten im HTML
-        displayGraphData: function(nodes, edges) {
-            const graphList = document.getElementById('graph-list');
-            let html = '<h3>Knoten (' + nodes.length + '):</h3>';
-            if (nodes.length === 0) {
-                html += '<p>Keine Knoten im Netzwerk gefunden.</p>';
-            } else {
-                nodes.forEach(node => {
-                    html += `
-                        <div class="node">
-                            <strong>ID:</strong> <span>${this.escapeHtml(node.id)}</span> <br>
-                            <strong>Typ:</strong> <span>${this.escapeHtml(node.type)}</span> <br>
-                            <strong>Inhalt:</strong> <pre>${this.escapeHtml(node.content)}</pre>
-                            <strong>Autor:</strong> <span>${this.escapeHtml(node.author_id || 'N/A')}</span> <br>
-                            <strong>Resonanz:</strong> <span>${node.resonance_score?.toFixed(2) || 'N/A'}</span> <br>
-                            <strong>Zeitstempel:</strong> <span>${new Date(node.timestamp).toLocaleString()}</span>
-                        </div>`;
-                });
-            }
-
-            html += '<h3>Kanten (' + edges.length + '):</h3>';
-            if (edges.length === 0) {
-                html += '<p>Keine Kanten im Netzwerk gefunden.</p>';
-            } else {
-                 edges.forEach(edge => {
-                    html += `
-                        <div class="edge">
-                            <strong>ID:</strong> <span>${this.escapeHtml(edge.id)}</span> <br>
-                            <strong>Von Knoten:</strong> <span>${this.escapeHtml(edge.source_node_id)}</span> <br>
-                            <strong>Nach Knoten:</strong> <span>${this.escapeHtml(edge.target_node_id)}</span> <br>
-                            <strong>Typ:</strong> <span>${this.escapeHtml(edge.type)}</span> <br>
-                            <strong>Begründung:</strong> <pre>${this.escapeHtml(edge.rationale || 'Keine')}</pre>
-                            <strong>Validierung:</strong> <span>${edge.validation_score?.toFixed(2) || 'N/A'}</span> <br>
-                            <strong>Zeitstempel:</strong> <span>${new Date(edge.timestamp).toLocaleString()}</span>
-                        </div>`;
-                });
-            }
-            graphList.innerHTML = html;
-        },
-
-        // Knoten über die API einreichen
-        submitNode: async function() {
-            const content = document.getElementById('node-content').value.trim();
-            const type = document.getElementById('node-type').value.trim();
-            const referencesRaw = document.getElementById('node-references').value.trim();
-            const references = referencesRaw ? referencesRaw.split(',').map(ref => ref.trim()).filter(ref => ref) : [];
-
-            if (!content || !type) {
-                this.showMessage('node-submit-message', 'Inhalt und Typ dürfen nicht leer sein.', true);
-                return;
-            }
-
-            this.setLoading('node-submit-loading', true);
-            this.showMessage('node-submit-message', ''); // Alte Nachrichten löschen
-
-            try {
-                const data = { content, type };
-                if (references.length > 0) {
-                    data.references = references;
-                }
-                // Annahme: API gibt bei 202 Accepted eine Status-URL oder bei 201 Created das Objekt zurück
-                const response = await apiClient.submitNode(data);
-
-                if (response && response.id) { // Direkt erstellt (Status 201)
-                     this.showMessage('node-submit-message', `Knoten erfolgreich erstellt! ID: ${response.id}`);
-                     document.getElementById('node-content').value = '';
-                     document.getElementById('node-type').value = '';
-                     document.getElementById('node-references').value = '';
-                     this.fetchAndRenderGraph(); // Graph neu laden
-                } else if (response && response.status_url) { // Zur Validierung angenommen (Status 202)
-                     this.showMessage('node-submit-message', `Knoten zur Validierung angenommen. Status: ${response.status_url}`);
-                     document.getElementById('node-content').value = '';
-                     document.getElementById('node-type').value = '';
-                     document.getElementById('node-references').value = '';
-                } else {
-                     // Fallback, falls die Antwortstruktur unerwartet ist
-                     this.showMessage('node-submit-message', 'Knoten eingereicht, aber Antwort vom Server unklar.');
-                }
-
-            } catch (error) {
-                this.showMessage('node-submit-message', `Fehler beim Einreichen des Knotens: ${this.escapeHtml(error.message)}`, true);
-            } finally {
-                this.setLoading('node-submit-loading', false);
-            }
-        },
-
-        // Kante über die API einreichen
-        submitEdge: async function() {
-            const sourceId = document.getElementById('edge-source').value.trim();
-            const targetId = document.getElementById('edge-target').value.trim();
-            const type = document.getElementById('edge-type').value.trim();
-            const rationale = document.getElementById('edge-rationale').value.trim();
-
-             if (!sourceId || !targetId || !type) {
-                this.showMessage('edge-submit-message', 'Quell-ID, Ziel-ID und Typ dürfen nicht leer sein.', true);
-                return;
-            }
-
-            this.setLoading('edge-submit-loading', true);
-            this.showMessage('edge-submit-message', '');
-
-            try {
-                 const data = { source_node_id: sourceId, target_node_id: targetId, type };
-                 if (rationale) {
-                     data.rationale = rationale;
-                 }
-                 const response = await apiClient.submitEdge(data);
-
-                 if (response && response.id) { // Direkt erstellt
-                     this.showMessage('edge-submit-message', `Kante erfolgreich erstellt! ID: ${response.id}`);
-                     document.getElementById('edge-source').value = '';
-                     document.getElementById('edge-target').value = '';
-                     document.getElementById('edge-type').value = '';
-                     document.getElementById('edge-rationale').value = '';
-                     this.fetchAndRenderGraph(); // Graph neu laden
-                 } else if (response && response.status_url) { // Zur Validierung angenommen
-                     this.showMessage('edge-submit-message', `Kante zur Validierung angenommen. Status: ${response.status_url}`);
-                      document.getElementById('edge-source').value = '';
-                     document.getElementById('edge-target').value = '';
-                     document.getElementById('edge-type').value = '';
-                     document.getElementById('edge-rationale').value = '';
-                 } else {
-                      this.showMessage('edge-submit-message', 'Kante eingereicht, aber Antwort vom Server unklar.');
-                 }
-
-            } catch (error) {
-                 this.showMessage('edge-submit-message', `Fehler beim Einreichen der Kante: ${this.escapeHtml(error.message)}`, true);
-            } finally {
-                 this.setLoading('edge-submit-loading', false);
-            }
-        },
-
-        // Suche über die API ausführen
-        searchGraph: async function() {
-            const query = document.getElementById('search-query').value.trim();
-            if (!query) {
-                document.getElementById('search-results').innerHTML = '<p>Bitte geben Sie einen Suchbegriff ein.</p>';
-                return;
-            }
-
-            this.setLoading('search-loading', true);
-            const resultsDiv = document.getElementById('search-results');
-            resultsDiv.innerHTML = '';
-
-            try {
-                const searchData = await apiClient.search({ q: query, limit: 20 }); // Suche mit Limit
-                let html = `<h3>Suchergebnisse für "${this.escapeHtml(query)}":</h3>`;
-                if (!searchData.results || searchData.results.length === 0) {
-                    html += '<p>Keine Ergebnisse gefunden.</p>';
-                } else {
-                    searchData.results.forEach(result => {
-                        if (result.type === 'node' && result.data) {
-                             html += `
-                                <div class="node">
-                                    <strong>Typ:</strong> Knoten <br>
-                                    <strong>ID:</strong> <span>${this.escapeHtml(result.data.id)}</span> <br>
-                                    <strong>Knoten-Typ:</strong> <span>${this.escapeHtml(result.data.type)}</span> <br>
-                                    <strong>Inhalt:</strong> <pre>${this.escapeHtml(result.data.content)}</pre>
-                                    <strong>Relevanz:</strong> <span>${result.score?.toFixed(3) || 'N/A'}</span>
-                                </div>`;
-                        } else if (result.type === 'edge' && result.data) {
-                             html += `
-                                <div class="edge">
-                                     <strong>Typ:</strong> Kante <br>
-                                     <strong>ID:</strong> <span>${this.escapeHtml(result.data.id)}</span> <br>
-                                     <strong>Von:</strong> <span>${this.escapeHtml(result.data.source_node_id)}</span> <br>
-                                     <strong>Nach:</strong> <span>${this.escapeHtml(result.data.target_node_id)}</span> <br>
-                                     <strong>Kanten-Typ:</strong> <span>${this.escapeHtml(result.data.type)}</span> <br>
-                                     <strong>Relevanz:</strong> <span>${result.score?.toFixed(3) || 'N/A'}</span>
-                                </div>`;
-                        }
-                    });
-                }
-                resultsDiv.innerHTML = html;
-
-            } catch (error) {
-                 resultsDiv.innerHTML = `<p class="error-message">Fehler bei der Suche: ${this.escapeHtml(error.message)}</p>`;
-            } finally {
-                 this.setLoading('search-loading', false);
-            }
-        },
-
-        // Kairos Engine Vorschläge abrufen
-        fetchSuggestions: async function() {
-            this.setLoading('suggestions-loading', true);
-            const suggestionsDiv = document.getElementById('suggestions-output');
-            suggestionsDiv.innerHTML = '';
-
-            try {
-                // Optional: Kontext für Vorschläge mitgeben, z.B. aktueller Fokus
-                // const contextNodeId = ...;
-                // const suggestionsData = await apiClient.getSuggestions({ context_node: contextNodeId });
-                const suggestionsData = await apiClient.getSuggestions();
-
-                if (!suggestionsData.suggestions || suggestionsData.suggestions.length === 0) {
-                    suggestionsDiv.innerHTML = '<p>Keine spezifischen Vorschläge von der Kairos Engine verfügbar.</p>';
-                } else {
-                    let html = '<ul>';
-                    suggestionsData.suggestions.forEach(suggestion => {
-                        html += `<li>[${this.escapeHtml(suggestion.type)}] ${this.escapeHtml(suggestion.description || suggestion.rationale || 'Keine Beschreibung')}</li>`;
-                        // Detailliertere Anzeige je nach suggestion.type möglich
-                    });
-                    html += '</ul>';
-                    suggestionsDiv.innerHTML = html;
-                }
-
-            } catch (error) {
-                 suggestionsDiv.innerHTML = `<p class="error-message">Fehler beim Abrufen der Vorschläge: ${this.escapeHtml(error.message)}</p>`;
-            } finally {
-                 this.setLoading('suggestions-loading', false);
+            } else if (gameState === 'GAME_OVER') {
+                 instructionsDiv.textContent = isMobile ? "Tap Game Over screen to restart." : "Press Enter to Restart.";
             }
         }
-    };
 
-    // Initialisiere die UI und lade erste Daten, wenn das Dokument bereit ist
-    document.addEventListener('DOMContentLoaded', () => ui.init());
 
-</script>
+        // --- Helper: Resize Canvas --- (truncated, same as before)
+        function resizeCanvas() { canvasWidth = window.innerWidth; canvasHeight = window.innerHeight; canvas.width = canvasWidth; canvas.height = canvasHeight; initializeStars(); updateInstructions(); }
+        window.addEventListener('resize', resizeCanvas);
 
+
+        // --- Platform Creation, Spawning --- (truncated, same as before)
+        function createPlatform(y, x) { /* ... same ... */ let type = PLATFORM_TYPES.NORMAL; let color = defaultPlatformColor; let jumpMod = 1; let currentWidth = basePlatformWidth * (Math.random() * 0.3 + 0.85); let isBreakable = false; const randomType = Math.random(); if (randomType < 0.12 && y < cameraY + canvasHeight - 200) { type = PLATFORM_TYPES.BOUNCY; color = bouncyPlatformColor; jumpMod = 1.9; } else if (randomType < 0.27 && y < cameraY + canvasHeight - 150) { type = PLATFORM_TYPES.BREAKABLE; color = breakablePlatformColor; isBreakable = true; } let newPlatform = { x: x !== undefined ? x : Math.random() * (canvasWidth - currentWidth), y: y, width: currentWidth, height: platformHeight, type: type, color: color, jumpModifier: jumpMod, hasPowerUp: null, isBreakable: isBreakable, isBroken: false, breakTimer: 0 }; if (newPlatform.type === PLATFORM_TYPES.NORMAL && Math.random() < 0.1 && y < cameraY + canvasHeight - 150) { newPlatform.hasPowerUp = { type: POWERUP_TYPES.SUPER_SPRING, itemWidth: playerWidth * 0.6, itemHeight: playerWidth * 0.6, collected: false }; } return newPlatform; }
+        function initializePlatforms() { /* ... same ... */ platforms = []; platforms.push(createPlatform(canvasHeight - platformHeight * 4, canvasWidth / 2 - basePlatformWidth / 2)); for (let i = 1; i < initialPlatforms; i++) { let newY = platforms[platforms.length - 1].y - (Math.random() * canvasHeight * 0.1 + canvasHeight * 0.12); platforms.push(createPlatform(newY)); } lastPlatformY = platforms[platforms.length - 1].y; }
+        function spawnNewPlatforms() { /* ... same ... */  while (lastPlatformY > cameraY - platformSpawnThreshold - canvasHeight) { let newY = lastPlatformY - (Math.random() * canvasHeight * 0.1 + canvasHeight * 0.13); platforms.push(createPlatform(newY)); lastPlatformY = newY; } platforms = platforms.filter(p => p.y - cameraY < canvasHeight + 200 && !p.isBroken); }
+
+
+        // --- Particle System & Powerups --- (truncated, same as before)
+        function createParticles(x,y,c,pC,sS,lS) { /* ... same ... */ for (let i = 0; i < c; i++) { particles.push({ x: x, y: y, vx: (Math.random() - 0.5) * (canvasWidth * 0.01) * sS, vy: (Math.random() * (-canvasHeight * 0.005) - (canvasHeight*0.0015)) * sS * gameSpeedMultiplier, size: Math.random() * (playerWidth*0.08) + (playerWidth*0.05), life: ((Math.random() * 30 + 30) * lS) / gameSpeedMultiplier, color: pC }); } }
+        function updateParticles() { /* ... same ... */ for (let i = particles.length - 1; i >= 0; i--) { let p = particles[i]; p.x += p.vx; p.y += p.vy; p.vy += gravity * 0.3; p.life--; if (p.life <= 0) particles.splice(i, 1); } }
+        function activatePowerUp(type) { if (type === POWERUP_TYPES.SUPER_SPRING) hasSuperJumpCharge = true; }
+
+
+        // --- Game Logic Update ---
+        function update() {
+            if (gameState !== 'PLAYING') return;
+
+            playerDY += gravity;
+            playerY += playerDY;
+
+            if (controlScheme === 'keyboard' || controlScheme === 'tap') {
+                playerX += playerDX;
+            }
+            // Gyro directly modifies playerX in its handler
+
+            if (playerX + playerWidth < 0) playerX = canvasWidth;
+            else if (playerX > canvasWidth) playerX = -playerWidth;
+
+            // Platform collision (same as before)
+            platforms.forEach(platform => { /* ... same collision logic ... */ if (platform.isBroken) return; if (playerDY > 0 && playerX < platform.x + platform.width && playerX + playerWidth > platform.x && playerY + playerHeight > platform.y && playerY + playerHeight < platform.y + platform.height + playerDY * 1.1) { playerY = platform.y - playerHeight; if (platform.hasPowerUp && !platform.hasPowerUp.collected) { activatePowerUp(platform.hasPowerUp.type); platform.hasPowerUp.collected = true; createParticles(platform.x + platform.width / 2, platform.y, 15, 'rgba(255,215,0,0.9)'); } let currentJumpStrength = jumpStrength; if (hasSuperJumpCharge) { currentJumpStrength *= 2.4; hasSuperJumpCharge = false; createParticles(playerX + playerWidth / 2, playerY + playerHeight, 30, 'rgba(255,105,180,0.9)', 1.5); } else { currentJumpStrength *= platform.jumpModifier; createParticles(playerX + playerWidth / 2, playerY + playerHeight, platform.type === PLATFORM_TYPES.BOUNCY ? 15 : 8, platform.type === PLATFORM_TYPES.BOUNCY ? 'rgba(100,149,237,0.9)' : 'rgba(220,220,220,0.7)'); } playerDY = currentJumpStrength; if (platform.isBreakable) { platform.isBroken = true; createParticles(platform.x + platform.width / 2, platform.y + platform.height / 2, 20, 'rgba(139,69,19,0.7)', 0.8, 0.5); } } });
+
+
+            const cameraThreshold = canvasHeight / 2.8;
+            if (playerY - cameraY < cameraThreshold) {
+                cameraY -= (cameraThreshold - (playerY - cameraY)) * 0.08 * gameSpeedMultiplier;
+            }
+
+            let currentHeightScore = Math.max(0, Math.floor(-cameraY / (canvasHeight * 0.015)));
+            score = Math.max(score, currentHeightScore);
+
+            spawnNewPlatforms();
+            updateParticles();
+            playerBlinkTimer = (playerBlinkTimer + 1) % (playerBlinkInterval + playerBlinkDuration);
+
+            if (playerY - cameraY > canvasHeight + playerHeight * 2) {
+                gameState = 'GAME_OVER';
+                updateInstructions(); // Update for game over
+                if (score > highScore) {
+                    highScore = score;
+                    localStorage.setItem('doodJumperControlChoiceHighScore', highScore);
+                }
+            }
+        }
+
+        // --- Drawing Functions --- (truncated, same as before, just ensure drawUI updates if needed)
+        function drawBackgroundAndStars() { /* ... same ... */ let topColorStop = Math.max(0, Math.min(1, (-cameraY / (canvasHeight * 20)))); const skyBlue = { r: 135, g: 206, b: 235 }; const deepSpace = { r: 10, g: 10, b: 40 }; let r = Math.round(skyBlue.r + (deepSpace.r - skyBlue.r) * topColorStop); let g = Math.round(skyBlue.g + (deepSpace.g - skyBlue.g) * topColorStop); let b = Math.round(skyBlue.b + (deepSpace.b - skyBlue.b) * topColorStop); let gradient = ctx.createLinearGradient(0, 0, 0, canvasHeight); gradient.addColorStop(0, `rgb(${r},${g},${b})`); gradient.addColorStop(1, `rgb(${Math.max(30,r-50)},${Math.max(30,g-50)},${Math.max(50,b-50)})`); ctx.fillStyle = gradient; ctx.fillRect(0, 0, canvasWidth, canvasHeight); let starVisibilityFactor = Math.min(1, Math.max(0, (-cameraY - canvasHeight*2.5) / (canvasHeight*15))); if (starVisibilityFactor > 0) { stars.forEach(s => { ctx.fillStyle = `rgba(255, 255, 255, ${s.opacity * starVisibilityFactor * (Math.sin(Date.now() * 0.001 + s.x * 10) * 0.2 + 0.8)})`; ctx.beginPath(); ctx.arc(s.x * canvasWidth, s.y * canvasHeight, s.size * starVisibilityFactor, 0, Math.PI * 2); ctx.fill(); }); } }
+        function drawPlayer() { /* ... same ... */ const centerX = playerX + playerWidth / 2; const centerY = playerY + playerHeight / 2; ctx.fillStyle = '#FFD700'; ctx.beginPath(); ctx.arc(centerX, centerY, playerWidth / 2, 0, Math.PI * 2); ctx.fill(); ctx.strokeStyle = '#CDAD00'; ctx.lineWidth = 2; ctx.stroke(); const eyeRadius = playerWidth / 7; const eyeY = centerY - playerHeight * 0.05; const eyeDist = playerWidth / 4.5; let eyesClosed = playerBlinkTimer >= playerBlinkInterval; ctx.fillStyle = 'white'; ctx.beginPath(); ctx.arc(centerX - eyeDist, eyeY, eyeRadius, 0, Math.PI * 2); ctx.fill(); ctx.beginPath(); ctx.arc(centerX + eyeDist, eyeY, eyeRadius, 0, Math.PI * 2); ctx.fill(); if (!eyesClosed) { ctx.fillStyle = 'black'; const pupilRadius = eyeRadius / 2.2; let pupilOffsetX = 0; const currentDXSource = (controlScheme === 'tilt' && gyroPermissionGranted && gyroAvailable) ? (rawGammaValueForPupils * 0.1) : playerDX; if (currentDXSource > 0.1) pupilOffsetX = eyeRadius * 0.3; if (currentDXSource < -0.1) pupilOffsetX = -eyeRadius * 0.3; ctx.beginPath(); ctx.arc(centerX - eyeDist + pupilOffsetX, eyeY, pupilRadius, 0, Math.PI * 2); ctx.fill(); ctx.beginPath(); ctx.arc(centerX + eyeDist + pupilOffsetX, eyeY, pupilRadius, 0, Math.PI * 2); ctx.fill(); } else { ctx.strokeStyle = 'black'; ctx.lineWidth = 2; ctx.beginPath(); ctx.moveTo(centerX - eyeDist - eyeRadius*0.7, eyeY); ctx.lineTo(centerX - eyeDist + eyeRadius*0.7, eyeY); ctx.stroke(); ctx.beginPath(); ctx.moveTo(centerX + eyeDist - eyeRadius*0.7, eyeY); ctx.lineTo(centerX + eyeDist + eyeRadius*0.7, eyeY); ctx.stroke(); } if (hasSuperJumpCharge) { ctx.fillStyle = 'rgba(255, 100, 0, 0.5)'; ctx.beginPath(); ctx.arc(centerX, centerY, playerWidth / 2 + 4, 0, Math.PI * 2); ctx.fill(); } }
+        function drawPlatforms() { /* ... same ... */ platforms.forEach(platform => { if (platform.isBroken) return; ctx.fillStyle = platform.color; const cornerRadius = Math.min(platformHeight * 0.3, 5); ctx.beginPath(); ctx.moveTo(platform.x + cornerRadius, platform.y); ctx.lineTo(platform.x + platform.width - cornerRadius, platform.y); ctx.arcTo(platform.x + platform.width, platform.y, platform.x + platform.width, platform.y + cornerRadius, cornerRadius); ctx.lineTo(platform.x + platform.width, platform.y + platform.height - cornerRadius); ctx.arcTo(platform.x + platform.width, platform.y + platform.height, platform.x + platform.width - cornerRadius, platform.y + platform.height, cornerRadius); ctx.lineTo(platform.x + cornerRadius, platform.y + platform.height); ctx.arcTo(platform.x, platform.y + platform.height, platform.x, platform.y + platform.height - cornerRadius, cornerRadius); ctx.lineTo(platform.x, platform.y + cornerRadius); ctx.arcTo(platform.x, platform.y, platform.x + cornerRadius, platform.y, cornerRadius); ctx.closePath(); ctx.fill(); if (platform.type === PLATFORM_TYPES.BOUNCY) { ctx.strokeStyle = 'rgba(255,255,255,0.6)'; ctx.lineWidth = 2; const springY = platform.y + platform.height / 2; const sW = platform.width*0.6; const sX = platform.x + platform.width*0.2; for(let i=0; i<3; i++) { ctx.beginPath(); ctx.arc(sX + (sW/3)*i + sW/6, springY, sW/7, Math.PI, 0); ctx.stroke(); } } if (platform.type === PLATFORM_TYPES.BREAKABLE) { ctx.strokeStyle = 'rgba(0,0,0,0.3)'; ctx.lineWidth = 1; ctx.beginPath(); ctx.moveTo(platform.x + platform.width * 0.2, platform.y + platform.height * 0.3); ctx.lineTo(platform.x + platform.width * 0.8, platform.y + platform.height * 0.7); ctx.stroke(); ctx.beginPath(); ctx.moveTo(platform.x + platform.width * 0.3, platform.y + platform.height * 0.8); ctx.lineTo(platform.x + platform.width * 0.7, platform.y + platform.height * 0.2); ctx.stroke(); } if (platform.hasPowerUp && !platform.hasPowerUp.collected) { const item = platform.hasPowerUp; const itemX = platform.x + platform.width / 2 - item.itemWidth / 2; const itemY = platform.y - item.itemHeight - 3; ctx.fillStyle = '#FF8C00'; ctx.fillRect(itemX, itemY, item.itemWidth, item.itemHeight); ctx.strokeStyle = '#A52A2A'; ctx.lineWidth = 1.5; ctx.strokeRect(itemX, itemY, item.itemWidth, item.itemHeight); ctx.beginPath(); for(let i=0; i<3; i++){ ctx.moveTo(itemX + 4, itemY + item.itemHeight*(0.2 + i*0.3)); ctx.lineTo(itemX + item.itemWidth - 4, itemY + item.itemHeight*(0.2 + i*0.3)); } ctx.stroke(); } }); }
+        function drawParticles() { /* ... same ... */ particles.forEach(p => { ctx.fillStyle = p.color; ctx.beginPath(); ctx.arc(p.x, p.y, p.size * (p.life / ( (30 + 30)/2 / gameSpeedMultiplier ) + 0.2), 0, Math.PI * 2); ctx.fill(); }); }
+        function drawUI() { /* ... same ... */ const fontSizeSmall = Math.max(16, canvasHeight * 0.025); const fontSizeMedium = Math.max(20, canvasHeight * 0.035); const fontSizeLarge = Math.max(28, canvasHeight * 0.05); ctx.fillStyle = '#FFF'; ctx.textShadow = '1px 1px 2px black'; ctx.font = `bold ${fontSizeMedium}px "Arial Rounded MT Bold", Arial, sans-serif`; ctx.textAlign = 'left'; ctx.fillText('Score: ' + score, 15, fontSizeMedium + 5); ctx.textAlign = 'right'; ctx.fillText('High: ' + highScore, canvasWidth - 15, fontSizeMedium + 5); if (hasSuperJumpCharge && gameState === 'PLAYING') { ctx.fillStyle = '#FF8C00'; ctx.textAlign = 'center'; ctx.font = `bold ${fontSizeSmall}px "Arial Rounded MT Bold", Arial, sans-serif`; ctx.fillText('SUPER JUMP!', canvasWidth/2, fontSizeMedium + 5); } if (gameState === 'GAME_OVER') { ctx.fillStyle = 'rgba(0, 0, 0, 0.75)'; ctx.fillRect(canvasWidth / 2 - canvasWidth*0.35, canvasHeight / 2 - canvasHeight*0.15, canvasWidth*0.7, canvasHeight*0.3); ctx.fillStyle = '#FFF'; ctx.font = `bold ${fontSizeLarge}px "Arial Rounded MT Bold", Arial, sans-serif`; ctx.textAlign = 'center'; ctx.fillText('Game Over!', canvasWidth / 2, canvasHeight / 2 - canvasHeight*0.04); ctx.font = `bold ${fontSizeMedium}px "Arial Rounded MT Bold", Arial, sans-serif`; ctx.fillText('Score: ' + score, canvasWidth / 2, canvasHeight / 2 + canvasHeight*0.01); ctx.font = `${fontSizeSmall}px "Arial Rounded MT Bold", Arial, sans-serif`; ctx.fillText(isMobile ? 'Tap here to Restart' : 'Press Enter to Restart', canvasWidth / 2, canvasHeight / 2 + canvasHeight*0.06); } }
+
+
+        function draw() {
+            ctx.clearRect(0, 0, canvasWidth, canvasHeight);
+            if (gameState === 'PRE_GAME') {
+                // Start screen is HTML overlay, so canvas can be simple or show a static background
+                ctx.fillStyle = '#111'; // Darker background for pre-game
+                ctx.fillRect(0,0,canvasWidth, canvasHeight);
+                drawBackgroundAndStars(); // Or a simpler static background
+                return;
+            }
+
+            drawBackgroundAndStars();
+            ctx.save(); ctx.translate(0, -cameraY);
+            drawPlatforms(); drawParticles(); drawPlayer();
+            ctx.restore();
+            drawUI();
+        }
+
+        // --- Event Handlers ---
+        function handleKeyDown(e) {
+            if (gameState === 'GAME_OVER' && e.key === 'Enter' && controlScheme === 'keyboard') {
+                resetGameAndStartInternal(); return;
+            }
+            if (gameState !== 'PLAYING' || controlScheme !== 'keyboard') return;
+
+            if (e.key === 'ArrowLeft' || e.key === 'a') playerDX = -playerMoveSpeed;
+            else if (e.key === 'ArrowRight' || e.key === 'd') playerDX = playerMoveSpeed;
+        }
+
+        function handleKeyUp(e) {
+            if (gameState !== 'PLAYING' || controlScheme !== 'keyboard') return;
+            if ((e.key === 'ArrowLeft' || e.key === 'a') && playerDX < 0) playerDX = 0;
+            else if ((e.key === 'ArrowRight' || e.key === 'd') && playerDX > 0) playerDX = 0;
+        }
+
+        function handleDeviceOrientation(event) {
+            if (controlScheme !== 'tilt' || !gyroPermissionGranted || !event.gamma) {
+                gyroAvailable = controlScheme === 'tilt' && gyroPermissionGranted; // Update availability based on permission
+                return;
+            }
+            gyroAvailable = true;
+            if (baseGamma === null && event.gamma !== null) baseGamma = event.gamma;
+
+            let tilt = event.gamma - (baseGamma || 0);
+            rawGammaValueForPupils = event.gamma;
+            const deadZone = 3;
+            if (Math.abs(tilt) < deadZone) { /* No movement */ }
+            else {
+                let calculatedDX = (tilt - Math.sign(tilt) * deadZone) * gyroSensitivity;
+                const gyroMaxSpeed = basePlayerMoveSpeed * gameSpeedMultiplier;
+                calculatedDX = Math.max(-gyroMaxSpeed, Math.min(gyroMaxSpeed, calculatedDX));
+                playerX += calculatedDX; // Gyro directly modifies playerX
+            }
+            playerDX = 0; // Ensure keyboard DX is not used if gyro active
+        }
+
+        function handleCanvasPointerDown(event) {
+            if (gameState === 'GAME_OVER') { // Handle restart tap on game over screen
+                // Check if tap is within the "Game Over" message area for mobile
+                const rect = canvas.getBoundingClientRect();
+                const tapX = event.clientX - rect.left;
+                const tapY = event.clientY - rect.top;
+
+                // Define the approximate area of the "Tap here to Restart" text
+                const restartTextY = canvasHeight / 2 + canvasHeight * 0.06;
+                const restartTextArea = {
+                    x: canvasWidth / 2 - canvasWidth * 0.2,
+                    y: restartTextY - canvasHeight*0.03, // A bit above the text
+                    width: canvasWidth * 0.4,
+                    height: canvasHeight * 0.06 // Around the text
+                };
+
+                if (isMobile && tapX >= restartTextArea.x && tapX <= restartTextArea.x + restartTextArea.width &&
+                    tapY >= restartTextArea.y && tapY <= restartTextArea.y + restartTextArea.height) {
+                    resetGameAndStartInternal();
+                }
+                return;
+            }
+
+            if (gameState !== 'PLAYING' || controlScheme !== 'tap' || activePointerId !== null) return;
+            activePointerId = event.pointerId;
+            event.preventDefault(); // Prevent scrolling/other default actions
+
+            if (event.clientX < canvasWidth / 2) {
+                playerDX = -playerMoveSpeed;
+            } else {
+                playerDX = playerMoveSpeed;
+            }
+        }
+
+        function handleCanvasPointerUp(event) {
+            if (controlScheme !== 'tap' || event.pointerId !== activePointerId) return;
+            activePointerId = null;
+            playerDX = 0;
+        }
+
+
+        function requestGyroPermission(callback) {
+            if (typeof DeviceOrientationEvent !== 'undefined' && typeof DeviceOrientationEvent.requestPermission === 'function') {
+                DeviceOrientationEvent.requestPermission()
+                    .then(permissionState => {
+                        gyroPermissionGranted = (permissionState === 'granted');
+                        if(gyroPermissionGranted) window.addEventListener('deviceorientation', handleDeviceOrientation);
+                        callback();
+                    })
+                    .catch(error => {
+                        console.error("Gyro permission request error:", error);
+                        gyroPermissionGranted = false;
+                        callback();
+                    });
+            } else {
+                // Assume permission or it will fail silently (Android, non-HTTPS iOS)
+                gyroPermissionGranted = true; // Attempt to use it
+                window.addEventListener('deviceorientation', handleDeviceOrientation);
+                // Check if gyro actually provides data
+                setTimeout(() => { if (controlScheme === 'tilt' && !gyroAvailable && gameState === 'PLAYING') console.log("Gyro data not received."); }, 1500);
+                callback();
+            }
+        }
+
+        startButton.addEventListener('click', () => {
+            if (isMobile) {
+                const selected = document.querySelector('input[name="controlType"]:checked');
+                controlScheme = selected ? selected.value : 'tap'; // Default to tap if somehow none selected
+            } else {
+                controlScheme = 'keyboard';
+            }
+
+            if (controlScheme === 'tilt') {
+                requestGyroPermission(startGameFlowInternal);
+            } else {
+                startGameFlowInternal();
+            }
+        });
+
+
+        function startGameFlowInternal() {
+            startScreen.classList.add('hidden');
+            updateInstructions();
+            resetGameAndStartInternal();
+        }
+
+
+        // --- Game Management ---
+        function resetGameAndStartInternal() {
+            playerX = canvasWidth / 2 - playerWidth / 2;
+            playerY = canvasHeight - playerHeight - canvasHeight * 0.15;
+            playerDY = 0; playerDX = 0; score = 0; cameraY = 0;
+            hasSuperJumpCharge = false; particles = []; baseGamma = null; rawGammaValueForPupils = 0;
+            activePointerId = null; // Reset tap control state
+            initializePlatforms();
+            playerDY = jumpStrength * 1.2;
+            gameState = 'PLAYING';
+            updateInstructions();
+            if (!gameLoopRunning) gameLoop();
+        }
+
+        let gameLoopRunning = false;
+        function gameLoop() {
+            gameLoopRunning = true;
+            update();
+            draw();
+            if (gameState === 'PRE_GAME' || gameState === 'PLAYING') {
+                requestAnimationFrame(gameLoop);
+            } else { // GAME_OVER
+                gameLoopRunning = false;
+                draw(); // One final draw for game over screen
+            }
+        }
+
+        // --- Initial Setup ---
+        document.addEventListener('keydown', handleKeyDown);
+        document.addEventListener('keyup', handleKeyUp);
+        canvas.addEventListener('pointerdown', handleCanvasPointerDown);
+        canvas.addEventListener('pointerup', handleCanvasPointerUp);
+        canvas.addEventListener('pointercancel', handleCanvasPointerUp); // Handle cancels like pointerup
+
+
+        initializeStars();
+        resizeCanvas(); // Initial size setup & instruction update
+        updateInstructions(); // Set initial instructions
+        draw(); // Draw PRE_GAME screen initially (or its background)
+    </script>
 </body>
 </html>
