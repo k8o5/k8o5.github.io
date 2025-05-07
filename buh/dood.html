@@ -3,7 +3,7 @@
 <head>
     <meta charset="UTF-8">
     <meta name="viewport" content="width=device-width, initial-scale=1.0, user-scalable=no">
-    <title>k8o5's Doodle Jumper</title>
+    <title>Dood Jumper</title> {/* CHANGED: Game Title */}
     <style>
         html, body {
             margin: 0;
@@ -78,28 +78,53 @@
         canvas.width = canvasWidth;
         canvas.height = canvasHeight;
 
+        // --- OS Detection and Speed Multiplier --- NEW SECTION ---
+        const userAgent = navigator.userAgent || navigator.vendor || window.opera;
+        let isAndroid = /android/i.test(userAgent);
+        let isIOS = /iPad|iPhone|iPod/.test(userAgent) && !window.MSStream;
+
+        let gameSpeedMultiplier = 1;
+        if (isAndroid) {
+            gameSpeedMultiplier = 2; // Make game faster on Android
+            console.log("Android detected. Game speed multiplier:", gameSpeedMultiplier);
+        } else if (isIOS) {
+            gameSpeedMultiplier = 1; // Normal speed for iOS
+            console.log("iOS detected. Game speed multiplier:", gameSpeedMultiplier);
+        } else {
+            gameSpeedMultiplier = 1; // Default for other platforms
+            console.log("Other OS or Desktop. Game speed multiplier:", gameSpeedMultiplier);
+        }
+        // --- END OF NEW SECTION ---
+
+
         // --- Player Properties ---
         const playerWidth = Math.min(canvasWidth * 0.09, 36);
-        const playerHeight = playerWidth; // Keep aspect ratio
+        const playerHeight = playerWidth;
         let playerX = canvasWidth / 2 - playerWidth / 2;
         let playerY = canvasHeight - playerHeight - 100;
         let playerDY = 0;
         let playerDX = 0;
-        const playerMoveSpeed = canvasWidth * 0.012 > 5 ? canvasWidth * 0.012 : 5; // Scale speed slightly
-        const gravity = 0.0006 * canvasHeight; // Scale gravity
-        const jumpStrength = -0.018 * canvasHeight; // Scale jump
+        // CHANGED: Apply gameSpeedMultiplier
+        const basePlayerMoveSpeed = canvasWidth * 0.012 > 5 ? canvasWidth * 0.012 : 5;
+        let playerMoveSpeed = basePlayerMoveSpeed * gameSpeedMultiplier;
+        const baseGravity = 0.0006 * canvasHeight;
+        let gravity = baseGravity * gameSpeedMultiplier * gameSpeedMultiplier; // Gravity often scales with speed^2
+        const baseJumpStrength = -0.018 * canvasHeight;
+        let jumpStrength = baseJumpStrength * gameSpeedMultiplier;
+
         let playerBlinkTimer = 0;
         const playerBlinkInterval = 180;
         const playerBlinkDuration = 7;
 
-        // --- Platform Properties ---
+
+        // --- Platform Properties --- (No changes here needed for speed directly)
         const basePlatformWidth = Math.max(canvasWidth * 0.15, 70);
         const platformHeight = Math.max(canvasHeight * 0.02, 12);
         const defaultPlatformColor = '#60D060';
         const bouncyPlatformColor = '#6495ED';
         const breakablePlatformColor = '#A0522D'; // Sienna (Brown)
         let platforms = [];
-        const initialPlatforms = 7; // Adjusted for potentially taller screens
+        const initialPlatforms = 7;
         const platformSpawnThreshold = canvasHeight * 0.25;
         let lastPlatformY = canvasHeight - 50;
 
@@ -118,15 +143,15 @@
 
         // --- Game State ---
         let score = 0;
-        let highScore = localStorage.getItem('superDoodleHighScore') || 0;
+        let highScore = localStorage.getItem('doodJumperHighScore') || 0; // CHANGED: LocalStorage key
         let cameraY = 0;
-        let gameState = 'PRE_GAME'; // PRE_GAME, PLAYING, GAME_OVER
+        let gameState = 'PRE_GAME';
 
         // --- Background Stars ---
         let stars = [];
         function initializeStars() {
             stars = [];
-            const numStars = Math.floor(canvasWidth * canvasHeight / 8000); // Scale num stars
+            const numStars = Math.floor(canvasWidth * canvasHeight / 8000);
             for(let i = 0; i < numStars; i++) {
                 stars.push({
                     x: Math.random(), y: Math.random(),
@@ -139,8 +164,11 @@
         // --- Gyroscope ---
         let gyroAvailable = false;
         let gyroPermissionGranted = false;
-        const gyroSensitivity = 0.5; // Adjust as needed
-        let baseGamma = null; // For calibration on first use
+        const baseGyroSensitivity = 0.5;
+        let gyroSensitivity = baseGyroSensitivity; // Gyro might need speed adjustment too, or not. Test this.
+        let baseGamma = null;
+        let rawGammaValueForPupils = 0;
+
 
         // --- Helper: Resize Canvas ---
         function resizeCanvas() {
@@ -149,18 +177,15 @@
             canvas.width = canvasWidth;
             canvas.height = canvasHeight;
 
-            // Re-initialize or adjust elements that depend on canvas size
-            // Player size might need to be relative, or keep fixed for consistency
-            // playerX might need to be re-centered if width changes drastically mid-game (not typical)
-            // playerMoveSpeed, gravity, jumpStrength are already relative/scaled
+            // Re-apply speed-adjusted physics parameters if they depend on canvas size
+            // playerMoveSpeed = (canvasWidth * 0.012 > 5 ? canvasWidth * 0.012 : 5) * gameSpeedMultiplier;
+            // gravity = (0.0006 * canvasHeight) * gameSpeedMultiplier * gameSpeedMultiplier;
+            // jumpStrength = (-0.018 * canvasHeight) * gameSpeedMultiplier;
+            // The above are already calculated based on initial canvas size, might not need re-calc unless base values change.
+            // For simplicity, we'll stick to the initial calculation.
+            // If you wanted physics to change dynamically on resize, you'd re-calculate here.
 
-            initializeStars(); // Re-create stars for new dimensions
-            // Re-position UI or let CSS handle it
-            if (gameState === 'PLAYING' || gameState === 'GAME_OVER') {
-                // If game is active, might need to re-evaluate platform positions
-                // or accept that resizing during gameplay could be weird.
-                // For Doodle Jump, it's usually portrait, so width changes are less common.
-            }
+            initializeStars();
         }
         window.addEventListener('resize', resizeCanvas);
 
@@ -174,11 +199,11 @@
             let isBreakable = false;
 
             const randomType = Math.random();
-            if (randomType < 0.12 && y < cameraY + canvasHeight - 200) { // Bouncy
+            if (randomType < 0.12 && y < cameraY + canvasHeight - 200) {
                 type = PLATFORM_TYPES.BOUNCY;
                 color = bouncyPlatformColor;
                 jumpMod = 1.9;
-            } else if (randomType < 0.27 && y < cameraY + canvasHeight - 150) { // Breakable (more frequent)
+            } else if (randomType < 0.27 && y < cameraY + canvasHeight - 150) {
                 type = PLATFORM_TYPES.BREAKABLE;
                 color = breakablePlatformColor;
                 isBreakable = true;
@@ -195,7 +220,7 @@
                 hasPowerUp: null,
                 isBreakable: isBreakable,
                 isBroken: false,
-                breakTimer: 0 // For animation if needed
+                breakTimer: 0
             };
 
             if (newPlatform.type === PLATFORM_TYPES.NORMAL && Math.random() < 0.1 && y < cameraY + canvasHeight - 150) {
@@ -224,19 +249,19 @@
                 platforms.push(createPlatform(newY));
                 lastPlatformY = newY;
             }
-            // Remove platforms way off screen OR broken ones
             platforms = platforms.filter(p => p.y - cameraY < canvasHeight + 200 && !p.isBroken);
         }
 
         // --- Particle System ---
+        // CHANGED: Apply gameSpeedMultiplier to particle vertical speed and life for consistency
         function createParticles(x, y, count = 8, pColor = 'rgba(255,255,255,0.8)', speedScale = 1, lifeScale = 1) {
             for (let i = 0; i < count; i++) {
                 particles.push({
                     x: x, y: y,
                     vx: (Math.random() - 0.5) * (canvasWidth * 0.01) * speedScale,
-                    vy: (Math.random() * (-canvasHeight * 0.005) - (canvasHeight*0.0015)) * speedScale,
+                    vy: (Math.random() * (-canvasHeight * 0.005) - (canvasHeight*0.0015)) * speedScale * gameSpeedMultiplier, // Faster particles
                     size: Math.random() * (playerWidth*0.08) + (playerWidth*0.05),
-                    life: (Math.random() * 30 + 30) * lifeScale,
+                    life: ((Math.random() * 30 + 30) * lifeScale) / gameSpeedMultiplier, // Shorter life for faster game
                     color: pColor
                 });
             }
@@ -244,8 +269,9 @@
         function updateParticles() {
             for (let i = particles.length - 1; i >= 0; i--) {
                 let p = particles[i];
-                p.x += p.vx; p.y += p.vy;
-                p.vy += gravity * 0.3;
+                p.x += p.vx;
+                p.y += p.vy; // vy already scaled by gameSpeedMultiplier at creation
+                p.vy += gravity * 0.3; // Gravity also scaled
                 p.life--;
                 if (p.life <= 0) particles.splice(i, 1);
             }
@@ -259,10 +285,10 @@
         function update() {
             if (gameState !== 'PLAYING') return;
 
-            playerDY += gravity;
-            playerY += playerDY;
-            if (!gyroPermissionGranted || !gyroAvailable) { // Only use keyboard DX if gyro not active
-                 playerX += playerDX;
+            playerDY += gravity; // Gravity is already scaled
+            playerY += playerDY; // playerDY is affected by scaled gravity and jump
+            if (!gyroPermissionGranted || !gyroAvailable) {
+                 playerX += playerDX; // playerDX comes from playerMoveSpeed which is scaled
             }
 
 
@@ -286,9 +312,9 @@
                         createParticles(platform.x + platform.width / 2, platform.y, 15, 'rgba(255,215,0,0.9)');
                     }
 
-                    let currentJumpStrength = jumpStrength;
+                    let currentJumpStrength = jumpStrength; // jumpStrength is already scaled
                     if (hasSuperJumpCharge) {
-                        currentJumpStrength *= 2.4;
+                        currentJumpStrength *= 2.4; // Super jump relative to current (scaled) jump
                         hasSuperJumpCharge = false;
                         createParticles(playerX + playerWidth / 2, playerY + playerHeight, 30, 'rgba(255,105,180,0.9)', 1.5);
                     } else {
@@ -299,18 +325,18 @@
                     playerDY = currentJumpStrength;
 
                     if (platform.isBreakable) {
-                        platform.isBroken = true; // Mark for removal in next spawn/filter
-                        // Add breaking sound/animation later if desired
-                        createParticles(platform.x + platform.width / 2, platform.y + platform.height / 2, 20, 'rgba(139,69,19,0.7)', 0.8, 0.5); // Brownish particles
+                        platform.isBroken = true;
+                        createParticles(platform.x + platform.width / 2, platform.y + platform.height / 2, 20, 'rgba(139,69,19,0.7)', 0.8, 0.5);
                     }
                 }
             });
 
             const cameraThreshold = canvasHeight / 2.8;
             if (playerY - cameraY < cameraThreshold) {
-                cameraY -= (cameraThreshold - (playerY - cameraY)) * 0.08;
+                cameraY -= (cameraThreshold - (playerY - cameraY)) * 0.08 * gameSpeedMultiplier; // Camera follows faster
             }
 
+            // Score scaling could also be affected by gameSpeedMultiplier if desired, or kept independent
             let currentHeightScore = Math.max(0, Math.floor(-cameraY / (canvasHeight * 0.015)));
             score = Math.max(score, currentHeightScore);
 
@@ -318,16 +344,16 @@
             updateParticles();
             playerBlinkTimer = (playerBlinkTimer + 1) % (playerBlinkInterval + playerBlinkDuration);
 
-            if (playerY - cameraY > canvasHeight + playerHeight * 2) { // Give more buffer
+            if (playerY - cameraY > canvasHeight + playerHeight * 2) {
                 gameState = 'GAME_OVER';
                 if (score > highScore) {
                     highScore = score;
-                    localStorage.setItem('superDoodleHighScore', highScore);
+                    localStorage.setItem('doodJumperHighScore', highScore); // CHANGED: LocalStorage key
                 }
             }
         }
 
-        // --- Drawing Functions ---
+        // --- Drawing Functions --- (Largely unchanged, drawing speed is tied to requestAnimationFrame)
         function drawBackgroundAndStars() {
             let topColorStop = Math.max(0, Math.min(1, (-cameraY / (canvasHeight * 20))));
             const skyBlue = { r: 135, g: 206, b: 235 };
@@ -373,9 +399,9 @@
                 ctx.fillStyle = 'black';
                 const pupilRadius = eyeRadius / 2.2;
                 let pupilOffsetX = 0;
-                const currentDX = (gyroPermissionGranted && gyroAvailable) ? (rawGammaValueForPupils * 0.1) : playerDX; // Use raw gamma for pupil direction
-                if (currentDX > 0.1) pupilOffsetX = eyeRadius * 0.3;
-                if (currentDX < -0.1) pupilOffsetX = -eyeRadius * 0.3;
+                const currentDXSource = (gyroPermissionGranted && gyroAvailable) ? (rawGammaValueForPupils * 0.1) : playerDX;
+                if (currentDXSource > 0.1) pupilOffsetX = eyeRadius * 0.3;
+                if (currentDXSource < -0.1) pupilOffsetX = -eyeRadius * 0.3;
                 ctx.beginPath(); ctx.arc(centerX - eyeDist + pupilOffsetX, eyeY, pupilRadius, 0, Math.PI * 2); ctx.fill();
                 ctx.beginPath(); ctx.arc(centerX + eyeDist + pupilOffsetX, eyeY, pupilRadius, 0, Math.PI * 2); ctx.fill();
             } else {
@@ -388,12 +414,11 @@
                 ctx.beginPath(); ctx.arc(centerX, centerY, playerWidth / 2 + 4, 0, Math.PI * 2); ctx.fill();
             }
         }
-        let rawGammaValueForPupils = 0; // Store raw gamma for pupil direction
 
 
         function drawPlatforms() {
             platforms.forEach(platform => {
-                if (platform.isBroken) return; // Don't draw broken platforms
+                if (platform.isBroken) return;
                 ctx.fillStyle = platform.color;
                 const cornerRadius = Math.min(platformHeight * 0.3, 5);
                 ctx.beginPath();
@@ -409,12 +434,12 @@
                 ctx.closePath();
                 ctx.fill();
 
-                if (platform.type === PLATFORM_TYPES.BOUNCY) { // Visual for bouncy
+                if (platform.type === PLATFORM_TYPES.BOUNCY) {
                     ctx.strokeStyle = 'rgba(255,255,255,0.6)'; ctx.lineWidth = 2;
                     const springY = platform.y + platform.height / 2; const sW = platform.width*0.6; const sX = platform.x + platform.width*0.2;
                     for(let i=0; i<3; i++) { ctx.beginPath(); ctx.arc(sX + (sW/3)*i + sW/6, springY, sW/7, Math.PI, 0); ctx.stroke(); }
                 }
-                 if (platform.type === PLATFORM_TYPES.BREAKABLE) { // Visual for breakable (e.g. cracks)
+                 if (platform.type === PLATFORM_TYPES.BREAKABLE) {
                     ctx.strokeStyle = 'rgba(0,0,0,0.3)'; ctx.lineWidth = 1;
                     ctx.beginPath(); ctx.moveTo(platform.x + platform.width * 0.2, platform.y + platform.height * 0.3); ctx.lineTo(platform.x + platform.width * 0.8, platform.y + platform.height * 0.7); ctx.stroke();
                     ctx.beginPath(); ctx.moveTo(platform.x + platform.width * 0.3, platform.y + platform.height * 0.8); ctx.lineTo(platform.x + platform.width * 0.7, platform.y + platform.height * 0.2); ctx.stroke();
@@ -434,7 +459,9 @@
         function drawParticles() {
             particles.forEach(p => {
                 ctx.fillStyle = p.color; ctx.beginPath();
-                ctx.arc(p.x, p.y, p.size * (p.life / 60 + 0.2), 0, Math.PI * 2); ctx.fill();
+                // Particle size could also be affected by life if desired
+                ctx.arc(p.x, p.y, p.size * (p.life / ( (30 + 30)/2 / gameSpeedMultiplier ) + 0.2), 0, Math.PI * 2);
+                ctx.fill();
             });
         }
 
@@ -473,15 +500,13 @@
         function draw() {
             ctx.clearRect(0, 0, canvasWidth, canvasHeight);
             if (gameState === 'PRE_GAME') {
-                // Start button is HTML, background can be simple
                 ctx.fillStyle = '#222';
                 ctx.fillRect(0,0,canvasWidth, canvasHeight);
-                // Potentially draw a title or simple instructions
                 ctx.fillStyle = 'white';
                 ctx.font = `bold ${Math.max(24, canvasWidth*0.05)}px "Arial Rounded MT Bold"`;
                 ctx.textAlign = 'center';
-                ctx.fillText("Super Doodle Jumper FX", canvasWidth/2, canvasHeight*0.3);
-                return; // Don't draw game elements yet
+                ctx.fillText("Dood Jumper", canvasWidth/2, canvasHeight*0.3); // CHANGED: Game Title
+                return;
             }
 
             drawBackgroundAndStars();
@@ -498,9 +523,9 @@
             }
             if (gameState !== 'PLAYING') return;
 
-            if (!gyroPermissionGranted || !gyroAvailable) { // Only use keyboard if gyro not active
-                if (e.key === 'ArrowLeft' || e.key === 'a') playerDX = -playerMoveSpeed;
-                else if (e.key === 'ArrowRight' || e.key === 'd') playerDX = playerMoveSpeed;
+            if (!gyroPermissionGranted || !gyroAvailable) {
+                if (e.key === 'ArrowLeft' || e.key === 'a') playerDX = -playerMoveSpeed; // playerMoveSpeed is scaled
+                else if (e.key === 'ArrowRight' || e.key === 'd') playerDX = playerMoveSpeed; // playerMoveSpeed is scaled
             }
         }
 
@@ -513,37 +538,41 @@
         }
 
         function handleDeviceOrientation(event) {
-            if (!gyroPermissionGranted || !event.gamma) { // gamma might be null initially
+            if (!gyroPermissionGranted || !event.gamma) {
                 gyroAvailable = false;
                 return;
             }
             gyroAvailable = true;
 
-            if (baseGamma === null && event.gamma !== null) { // One-time "calibration" on first valid gamma
+            if (baseGamma === null && event.gamma !== null) {
                 baseGamma = event.gamma;
             }
-            
-            let tilt = event.gamma - (baseGamma || 0); // Use calibrated gamma
-            rawGammaValueForPupils = event.gamma; // For pupil direction
 
-            // Dead zone
-            const deadZone = 3; // degrees
+            let tilt = event.gamma - (baseGamma || 0);
+            rawGammaValueForPupils = event.gamma;
+
+            const deadZone = 3;
             if (Math.abs(tilt) < deadZone) {
-                playerX += 0; // Effectively playerDX = 0 from gyro
+                 // No gyro movement
             } else {
-                // Apply sensitivity and clamp max speed
+                // Gyro sensitivity may or may not need scaling with gameSpeedMultiplier.
+                // For now, let's assume baseGyroSensitivity feels okay across platforms.
+                // If Android gyro feels too slow/fast, adjust gyroSensitivity here or at declaration.
+                // Example: let effectiveGyroSensitivity = gyroSensitivity * gameSpeedMultiplier;
                 let calculatedDX = (tilt - Math.sign(tilt) * deadZone) * gyroSensitivity;
-                calculatedDX = Math.max(-playerMoveSpeed, Math.min(playerMoveSpeed, calculatedDX));
-                playerX += calculatedDX; // Directly modify playerX for gyro
+                // Player move speed here is a rate of change, not a fixed speed like keyboard.
+                // It might be better to scale the 'playerMoveSpeed' used for clamping gyro input.
+                const gyroMaxSpeed = basePlayerMoveSpeed * gameSpeedMultiplier; // Use the scaled speed for clamping
+                calculatedDX = Math.max(-gyroMaxSpeed, Math.min(gyroMaxSpeed, calculatedDX));
+                playerX += calculatedDX;
             }
-            playerDX = 0; // Reset keyboard DX if gyro is active
+            playerDX = 0;
         }
 
         function handleScreenTap() {
             if (gameState === 'GAME_OVER') {
                 resetGameAndStart();
             }
-            // Could add touch controls here if gyro fails (e.g. tap left/right side)
         }
 
         function requestGyroPermission() {
@@ -564,19 +593,14 @@
                         console.error("Gyro permission request error:", error);
                         gyroPermissionGranted = false;
                         instructionsDiv.textContent = "Gyro not available. Use Arrow Keys. Tap to restart.";
-                        startGameFlow(); // Proceed without gyro
+                        startGameFlow();
                     });
             } else {
-                // For browsers/devices not needing explicit permission (e.g., Android, or older iOS)
-                // or if served over HTTP (where permission API won't work for iOS)
                 window.addEventListener('deviceorientation', handleDeviceOrientation);
-                gyroPermissionGranted = true; // Assume it will work or fail silently
-                // Check if gyro actually provides data in the first few frames.
+                gyroPermissionGranted = true;
                 let initialGyroCheck = setTimeout(() => {
-                    if(!gyroAvailable && gameState === 'PLAYING') { // Check if gyro data came in
-                        console.log("Gyro seems unavailable after timeout.");
-                        // gyroPermissionGranted = false; // Can't rely on it
-                        // instructionsDiv.textContent = "Gyro not working. Use Arrow Keys. Tap to restart.";
+                    if(!gyroAvailable && gameState === 'PLAYING') {
+                        // console.log("Gyro seems unavailable after timeout.");
                     }
                 }, 1000);
                 instructionsDiv.textContent = "Tilt device to move (if available). Tap to restart.";
@@ -591,7 +615,7 @@
 
         function startGameFlow() {
             startButton.classList.add('hidden');
-            instructionsDiv.classList.remove('hidden'); // Ensure instructions are visible
+            instructionsDiv.classList.remove('hidden');
             resetGameAndStart();
         }
 
@@ -605,12 +629,12 @@
             cameraY = 0;
             hasSuperJumpCharge = false;
             particles = [];
-            baseGamma = null; // Recalibrate gyro on new game
+            baseGamma = null;
             rawGammaValueForPupils = 0;
             initializePlatforms();
-            playerDY = jumpStrength * 1.2;
+            playerDY = jumpStrength * 1.2; // jumpStrength is already scaled
             gameState = 'PLAYING';
-            if (!gameLoopRunning) gameLoop(); // Start loop if not already running
+            if (!gameLoopRunning) gameLoop();
         }
 
         let gameLoopRunning = false;
@@ -621,20 +645,20 @@
             if (gameState === 'PRE_GAME' || gameState === 'PLAYING') {
                 requestAnimationFrame(gameLoop);
             } else {
-                gameLoopRunning = false; // Stop loop if game over and not restarting immediately
-                 draw(); // One final draw for game over screen
+                gameLoopRunning = false;
+                 draw();
             }
         }
 
         // --- Initial Setup ---
         document.addEventListener('keydown', handleKeyDown);
         document.addEventListener('keyup', handleKeyUp);
-        canvas.addEventListener('click', handleScreenTap); // For mobile restart / fallback controls
+        canvas.addEventListener('click', handleScreenTap);
 
         initializeStars();
-        resizeCanvas(); // Initial size setup
-        draw(); // Draw PRE_GAME screen initially
-        instructionsDiv.classList.add('hidden'); // Hide instructions until start
+        resizeCanvas();
+        draw();
+        instructionsDiv.classList.add('hidden');
     </script>
 </body>
 </html>
