@@ -1,0 +1,646 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>DAS - 3D Arena Ball Game v8 (JS SFX, Physics Impr.)</title>
+    <style>
+        body { margin: 0; overflow: hidden; background-color: #000000; }
+        canvas { display: block; cursor: crosshair; }
+        #info {
+            position: absolute; top: 10px; width: 100%; text-align: center;
+            color: white; font-family: 'Arial', sans-serif; font-size: 16px;
+            z-index: 10; text-shadow: 1px 1px 3px black;
+        }
+         #score {
+            position: absolute; top: 35px; width: 100%; text-align: center;
+            color: white; font-family: 'Arial', sans-serif; font-size: 26px; font-weight: bold;
+            z-index: 10; text-shadow: 1px 1px 4px black;
+        }
+        #boost-meter {
+             position: absolute; bottom: 20px; left: 20px; width: 200px; height: 25px;
+             border: 2px solid white; background-color: rgba(0, 0, 0, 0.5); z-index: 10;
+             border-radius: 5px; box-shadow: 0 0 10px rgba(0, 255, 255, 0.5);
+        }
+         #boost-bar {
+            width: 100%; height: 100%; background-color: #00FFFF;
+            transition: width 0.1s linear; border-radius: 3px;
+            box-shadow: inset 0 0 5px rgba(0,0,0,0.5);
+         }
+         #boost-text {
+            position: absolute; bottom: 50px; left: 20px; color: white; font-family: 'Arial', sans-serif;
+            font-size: 16px; text-shadow: 1px 1px 2px black; z-index: 10; font-weight: bold;
+         }
+    </style>
+</head>
+<body>
+    <div id="info">Click Screen to Lock Mouse | W/S/A/D: Move | Mouse: Look | Shift: Boost | Esc: Unlock Mouse | First to 3 wins!</div>
+    <div id="score">Player: 0 - AI: 0</div>
+    <div id="boost-text">BOOST</div>
+    <div id="boost-meter">
+        <div id="boost-bar"></div>
+    </div>
+
+    <!-- Audio elements removed, will use Web Audio API -->
+
+    <script type="importmap">
+      {
+        "imports": {
+          "three": "https://unpkg.com/three@0.160.0/build/three.module.js",
+          "three/addons/": "https://unpkg.com/three@0.160.0/examples/jsm/"
+        }
+      }
+    </script>
+
+    <script type="module">
+        import * as THREE from 'three';
+        import { RGBELoader } from 'three/addons/loaders/RGBELoader.js';
+        import { EffectComposer } from 'three/addons/postprocessing/EffectComposer.js';
+        import { RenderPass } from 'three/addons/postprocessing/RenderPass.js';
+        import { UnrealBloomPass } from 'three/addons/postprocessing/UnrealBloomPass.js';
+        import { OutputPass } from 'three/addons/postprocessing/OutputPass.js';
+
+        // --- Core Setup, Arena, Game State, Props, Physics ---
+        let scene, camera, renderer, composer; let playerCar, aiCar, ballMesh, ground, gameCanvas; const clock = new THREE.Clock();
+        const arenaWidth = 80; const arenaDepth = 50; const wallHeight = 10; const wallThickness = 2; const goalWidth = 20; const goalMinZ = -goalWidth / 2; const goalMaxZ = goalWidth / 2; const goalLineLeft = -arenaWidth / 2; const goalLineRight = arenaWidth / 2;
+        let playerScore = 0; let aiScore = 0; let scoreElement, boostBarElement;
+        const winningScore = 3; let gameOver = false;
+        const carWidth = 2.5; const carDepth = 4.5; const carHeight = 1.2; const carYPosition = carHeight / 2; const ballRadius = carWidth / 1.7; const ballYPosition = ballRadius;
+        
+        const friction = 0.98;          // General friction for ball
+        const ballWallRestitution = 0.7;  // Bounciness of ball off walls
+        const carBallRestitution = 0.75;  // Bounciness between car and ball
+        const carWallRestitution = 0.3;   // How much speed car retains after hitting a wall
+        const maxBallSpeed = 30;
+
+        // --- Web Audio API Setup ---
+        let audioCtx;
+        let masterGain;
+        let musicOscillator; // For background music (simple example)
+        let boostOscillator, boostGain;
+
+        // --- Player & AI States ---
+        const playerState = { mesh: null, speed: 0, acceleration: 7.5, deceleration: 6.5, maxSpeed: 15.0, turnSpeed: 3.2, steering: 0, width: carWidth, depth: carDepth, isBoosting: false, boostAmount: 100, maxBoost: 100, boostForce: 11.0, boostConsumptionRate: 30, boostRechargeRate: 12, worldVelocity: new THREE.Vector3() };
+        const aiState = { mesh: null, speed: 0, acceleration: 6.0, deceleration: 5.0, maxSpeed: 12.0, turnSpeed: 2.5, steering: 0, width: carWidth, depth: carDepth, targetPos: new THREE.Vector3(), worldVelocity: new THREE.Vector3() };
+        const ballState = { mesh: null, radius: ballRadius, vx: 0, vy: 0, vz: 0 };
+
+        // --- Input Handling ---
+        const keysPressed = {};
+        document.addEventListener('keydown', (event) => { keysPressed[event.key.toLowerCase()] = true; keysPressed[event.code] = true; if (event.key === "Escape" && isPointerLocked) { document.exitPointerLock(); } });
+        document.addEventListener('keyup', (event) => { keysPressed[event.key.toLowerCase()] = false; keysPressed[event.code] = false; });
+
+        // --- Mouse Camera Control State ---
+        let isPointerLocked = false;
+        let cameraHorizontalAngle = Math.PI;
+        let cameraVerticalAngle = 0.35;
+        const mouseSensitivity = 0.002;
+        const cameraDistance = 22;
+        const verticalAngleMin = 0.05;
+        const verticalAngleMax = Math.PI / 2 - 0.1;
+
+        // --- Particle System for Boost ---
+        const particles = []; const maxParticles = 100; let particleGeometry, particleMaterial; let currentParticleIndex = 0;
+
+
+        function init() {
+            scoreElement = document.getElementById('score');
+            boostBarElement = document.getElementById('boost-bar');
+
+            // --- Initialize Web Audio API ---
+            try {
+                audioCtx = new (window.AudioContext || window.webkitAudioContext)();
+                masterGain = audioCtx.createGain();
+                masterGain.gain.setValueAtTime(0.3, audioCtx.currentTime); // Master volume
+                masterGain.connect(audioCtx.destination);
+            } catch (e) {
+                console.error("Web Audio API is not supported in this browser", e);
+                // Provide fallback or disable audio features
+                audioCtx = null; 
+            }
+            
+            scene = new THREE.Scene();
+            camera = new THREE.PerspectiveCamera(75, window.innerWidth / window.innerHeight, 0.1, 1000);
+            // No THREE.AudioListener needed if managing audio directly with Web Audio API context that's not tied to camera position
+
+            renderer = new THREE.WebGLRenderer({ antialias: true });
+            renderer.setSize(window.innerWidth, window.innerHeight);
+            renderer.shadowMap.enabled = true; renderer.shadowMap.type = THREE.PCFSoftShadowMap;
+            renderer.toneMapping = THREE.ACESFilmicToneMapping; renderer.toneMappingExposure = 1.0;
+            document.body.appendChild(renderer.domElement);
+            gameCanvas = renderer.domElement;
+
+            composer = new EffectComposer(renderer);
+            composer.addPass(new RenderPass(scene, camera));
+            composer.addPass(new UnrealBloomPass(new THREE.Vector2(window.innerWidth, window.innerHeight), 0.7, 0.3, 0.6));
+            composer.addPass(new OutputPass());
+
+            new RGBELoader().setPath('https://unpkg.com/three@0.160.0/examples/textures/equirectangular/')
+                .load('venice_sunset_1k.hdr', function (texture) {
+                    texture.mapping = THREE.EquirectangularReflectionMapping;
+                    scene.background = texture; scene.environment = texture;
+                });
+
+            const ambientLight = new THREE.AmbientLight(0xffffff, 0.1); scene.add(ambientLight);
+            const directionalLight = new THREE.DirectionalLight(0xffffff, 2.0);
+            directionalLight.position.set(50, 70, 40); directionalLight.castShadow = true;
+            directionalLight.shadow.mapSize.width = 2048; directionalLight.shadow.mapSize.height = 2048;
+            directionalLight.shadow.camera.left = -arenaWidth; directionalLight.shadow.camera.right = arenaWidth;
+            directionalLight.shadow.camera.top = arenaDepth; directionalLight.shadow.camera.bottom = -arenaDepth;
+            directionalLight.shadow.camera.near = 1; directionalLight.shadow.camera.far = 200;
+            directionalLight.shadow.bias = -0.0005; scene.add(directionalLight);
+
+            createGround(); createArenaWalls();
+
+            const carGeometry = new THREE.BoxGeometry(carWidth, carHeight, carDepth);
+            const playerMaterial = new THREE.MeshStandardMaterial({ color: 0xff0000, roughness: 0.2, metalness: 0.8 });
+            playerCar = new THREE.Mesh(carGeometry, playerMaterial);
+            playerCar.castShadow = true; playerCar.receiveShadow = false;
+            playerState.mesh = playerCar; scene.add(playerCar);
+            const aiMaterial = new THREE.MeshStandardMaterial({ color: 0x0000ff, roughness: 0.2, metalness: 0.8 });
+            aiCar = new THREE.Mesh(carGeometry.clone(), aiMaterial);
+            aiCar.castShadow = true; aiCar.receiveShadow = false;
+            aiState.mesh = aiCar; scene.add(aiCar);
+
+            const ballGeometry = new THREE.SphereGeometry(ballRadius, 32, 32);
+            const ballMaterial = new THREE.MeshStandardMaterial({ color: 0xffffff, roughness: 0.1, metalness: 0.5, emissive: 0x222222 });
+            ballMesh = new THREE.Mesh(ballGeometry, ballMaterial);
+            ballMesh.castShadow = true; ballMesh.receiveShadow = true;
+            ballState.mesh = ballMesh; scene.add(ballMesh);
+
+            initParticles();
+
+            gameCanvas.addEventListener('click', () => {
+                if (!isPointerLocked && audioCtx) { // Resume AudioContext on user gesture
+                    if (audioCtx.state === 'suspended') audioCtx.resume();
+                    gameCanvas.requestPointerLock();
+                    playBackgroundMusic(); // Start music on first click
+                } else if (!isPointerLocked) {
+                    gameCanvas.requestPointerLock();
+                }
+            });
+            document.addEventListener('pointerlockchange', lockChangeAlert, false);
+            document.addEventListener('mousemove', updateCameraAngle, false);
+            window.addEventListener('resize', onWindowResize, false);
+
+            resetRound();
+            animate();
+        }
+
+        // --- Web Audio SFX Functions ---
+        function playSound(type, options = {}) {
+            if (!audioCtx) return;
+
+            let oscillator, gain, source;
+            const now = audioCtx.currentTime;
+
+            switch (type) {
+                case 'hit':
+                    source = audioCtx.createBufferSource();
+                    const hitBuffer = audioCtx.createBuffer(1, Math.floor(0.1 * audioCtx.sampleRate), audioCtx.sampleRate);
+                    const hitData = hitBuffer.getChannelData(0);
+                    for (let i = 0; i < hitData.length; i++) {
+                        hitData[i] = Math.random() * 2 - 1; // White noise
+                    }
+                    source.buffer = hitBuffer;
+                    gain = audioCtx.createGain();
+                    gain.gain.setValueAtTime(options.volume || 0.3, now);
+                    gain.gain.exponentialRampToValueAtTime(0.001, now + 0.1);
+                    source.connect(gain).connect(masterGain);
+                    source.start(now);
+                    break;
+
+                case 'wallThump':
+                    source = audioCtx.createBufferSource();
+                    const thumpBuffer = audioCtx.createBuffer(1, Math.floor(0.15 * audioCtx.sampleRate), audioCtx.sampleRate);
+                    const thumpData = thumpBuffer.getChannelData(0);
+                    for (let i = 0; i < thumpData.length; i++) {
+                        thumpData[i] = Math.random() * 2 - 1;
+                    }
+                    source.buffer = thumpBuffer;
+                    const filter = audioCtx.createBiquadFilter();
+                    filter.type = "lowpass";
+                    filter.frequency.setValueAtTime(300, now); // Low-pass for thump
+                    gain = audioCtx.createGain();
+                    gain.gain.setValueAtTime(options.volume || 0.4, now);
+                    gain.gain.exponentialRampToValueAtTime(0.001, now + 0.15);
+                    source.connect(filter).connect(gain).connect(masterGain);
+                    source.start(now);
+                    break;
+
+                case 'goal':
+                    gain = audioCtx.createGain();
+                    gain.gain.setValueAtTime(0, now); // Start silent
+                    gain.gain.linearRampToValueAtTime(options.volume || 0.5, now + 0.05); // Quick attack
+                    gain.gain.linearRampToValueAtTime(0, now + 0.8); // Decay
+
+                    oscillator = audioCtx.createOscillator();
+                    oscillator.type = 'sine';
+                    oscillator.frequency.setValueAtTime(440, now); // A4
+                    oscillator.frequency.linearRampToValueAtTime(660, now + 0.2); // E5
+                    oscillator.connect(gain).connect(masterGain);
+                    oscillator.start(now);
+                    oscillator.stop(now + 0.8);
+                    break;
+            }
+        }
+
+        function startBoostSound() {
+            if (!audioCtx || boostOscillator) return; // Already playing or no context
+            const now = audioCtx.currentTime;
+
+            boostOscillator = audioCtx.createOscillator();
+            boostGain = audioCtx.createGain();
+
+            boostOscillator.type = 'sawtooth';
+            boostOscillator.frequency.setValueAtTime(100, now); // Base pitch for boost
+            boostOscillator.frequency.linearRampToValueAtTime(150, now + 0.5); // Pitch up slightly
+
+            boostGain.gain.setValueAtTime(0, now);
+            boostGain.gain.linearRampToValueAtTime(0.2, now + 0.1); // Fade in
+
+            boostOscillator.connect(boostGain).connect(masterGain);
+            boostOscillator.start(now);
+        }
+
+        function stopBoostSound() {
+            if (!audioCtx || !boostOscillator || !boostGain) return;
+            const now = audioCtx.currentTime;
+
+            boostGain.gain.linearRampToValueAtTime(0.001, now + 0.2); // Fade out
+            boostOscillator.stop(now + 0.21); // Stop after fade
+
+            boostOscillator = null;
+            boostGain = null;
+        }
+        
+        let musicPlaying = false;
+        function playBackgroundMusic() {
+            if (!audioCtx || musicPlaying) return;
+            musicPlaying = true;
+            musicOscillator = audioCtx.createOscillator();
+            const musicGain = audioCtx.createGain();
+            
+            musicOscillator.type = 'square';
+            musicOscillator.frequency.setValueAtTime(110, audioCtx.currentTime); // A2
+            
+            musicGain.gain.setValueAtTime(0.05, audioCtx.currentTime); // Low volume for bg
+            
+            musicOscillator.connect(musicGain).connect(masterGain);
+            musicOscillator.start();
+            // This is a very simple continuous tone. A real bg track would be complex.
+            // For a sequence, you'd schedule multiple notes/oscillators.
+        }
+
+
+        function createGround() { /* ... Identical to v7 ... */ const groundTexture = createProceduralTexture(1024, 1024, (ctx, canvas) => { ctx.fillStyle = '#3E7D3B'; ctx.fillRect(0, 0, canvas.width, canvas.height); for (let i = 0; i < 50000; i++) { ctx.fillStyle = `rgba(60, ${100 + Math.random() * 55}, 60, ${0.5 + Math.random() * 0.3})`; ctx.fillRect(Math.random() * canvas.width, Math.random() * canvas.height, 1, Math.random() * 10 + 5); } }); groundTexture.wrapS = groundTexture.wrapT = THREE.RepeatWrapping; groundTexture.repeat.set(arenaWidth / 20, arenaDepth / 20); const groundMaterial = new THREE.MeshStandardMaterial({ map: groundTexture, roughness: 0.8, metalness: 0.1 }); ground = new THREE.Mesh(new THREE.PlaneGeometry(arenaWidth + wallThickness * 4, arenaDepth + wallThickness * 4), groundMaterial); ground.rotation.x = -Math.PI / 2; ground.receiveShadow = true; scene.add(ground); }
+        function createArenaWalls() { /* ... Identical to v7 ... */ const wallTexture = createProceduralTexture(512, 512, (ctx, canvas) => { ctx.fillStyle = '#909090'; ctx.fillRect(0, 0, canvas.width, canvas.height); ctx.strokeStyle = '#707070'; ctx.lineWidth = 2; for (let i = 0; i < 20; i++) { ctx.beginPath(); ctx.moveTo(Math.random() * canvas.width, Math.random() * canvas.height); ctx.lineTo(Math.random() * canvas.width, Math.random() * canvas.height); ctx.stroke(); } for (let i = 0; i < 1000; i++) { ctx.fillStyle = `rgba(0,0,0,${Math.random() * 0.1})`; ctx.beginPath(); ctx.arc(Math.random() * canvas.width, Math.random() * canvas.height, Math.random() * 5 + 1, 0, Math.PI * 2); ctx.fill(); } }); wallTexture.wrapS = wallTexture.wrapT = THREE.RepeatWrapping; const wallMaterial = new THREE.MeshStandardMaterial({ map: wallTexture, roughness: 0.7, metalness: 0.2, }); const halfArenaW = arenaWidth / 2; const halfArenaD = arenaDepth / 2; const halfWallH = wallHeight / 2; const halfGoalW = goalWidth / 2; const sideWallLength = (arenaDepth - goalWidth) / 2; const wallProps = { castShadow: true, receiveShadow: true }; const longWallGeo = new THREE.BoxGeometry(arenaWidth + wallThickness*2, wallHeight, wallThickness); const topWall = new THREE.Mesh(longWallGeo, wallMaterial.clone()); topWall.material.map = wallTexture.clone(); topWall.material.map.repeat.set((arenaWidth+wallThickness*2)/10, wallHeight/10); topWall.material.map.needsUpdate = true; topWall.position.set(0, halfWallH, halfArenaD + wallThickness / 2); Object.assign(topWall, wallProps); scene.add(topWall); const bottomWall = new THREE.Mesh(longWallGeo, wallMaterial.clone()); bottomWall.material.map = wallTexture.clone(); bottomWall.material.map.repeat.set((arenaWidth+wallThickness*2)/10, wallHeight/10); bottomWall.material.map.needsUpdate = true; bottomWall.position.set(0, halfWallH, -halfArenaD - wallThickness / 2); Object.assign(bottomWall, wallProps); scene.add(bottomWall); const sideWallSegGeo = new THREE.BoxGeometry(wallThickness, wallHeight, sideWallLength); const leftWallTopSeg = new THREE.Mesh(sideWallSegGeo, wallMaterial.clone()); leftWallTopSeg.material.map = wallTexture.clone(); leftWallTopSeg.material.map.repeat.set(wallThickness/5, sideWallLength/10); leftWallTopSeg.material.map.needsUpdate = true; leftWallTopSeg.position.set(-halfArenaW - wallThickness / 2, halfWallH, halfGoalW + sideWallLength / 2); Object.assign(leftWallTopSeg, wallProps); scene.add(leftWallTopSeg); const leftWallBottomSeg = new THREE.Mesh(sideWallSegGeo, wallMaterial.clone()); leftWallBottomSeg.material.map = wallTexture.clone(); leftWallBottomSeg.material.map.repeat.set(wallThickness/5, sideWallLength/10); leftWallBottomSeg.material.map.needsUpdate = true; leftWallBottomSeg.position.set(-halfArenaW - wallThickness / 2, halfWallH, -halfGoalW - sideWallLength / 2); Object.assign(leftWallBottomSeg, wallProps); scene.add(leftWallBottomSeg); const rightWallTopSeg = new THREE.Mesh(sideWallSegGeo, wallMaterial.clone()); rightWallTopSeg.material.map = wallTexture.clone(); rightWallTopSeg.material.map.repeat.set(wallThickness/5, sideWallLength/10); rightWallTopSeg.material.map.needsUpdate = true; rightWallTopSeg.position.set(halfArenaW + wallThickness / 2, halfWallH, halfGoalW + sideWallLength / 2); Object.assign(rightWallTopSeg, wallProps); scene.add(rightWallTopSeg); const rightWallBottomSeg = new THREE.Mesh(sideWallSegGeo, wallMaterial.clone()); rightWallBottomSeg.material.map = wallTexture.clone(); rightWallBottomSeg.material.map.repeat.set(wallThickness/5, sideWallLength/10); rightWallBottomSeg.material.map.needsUpdate = true; rightWallBottomSeg.position.set(halfArenaW + wallThickness / 2, halfWallH, -halfGoalW - sideWallLength / 2); Object.assign(rightWallBottomSeg, wallProps); scene.add(rightWallBottomSeg); const postGeo = new THREE.CylinderGeometry(wallThickness/2, wallThickness/2, wallHeight, 8); const postMaterial = new THREE.MeshStandardMaterial({ color: 0x777777, roughness: 0.3, metalness: 0.6 }); const posts = [ new THREE.Vector3(goalLineLeft, halfWallH, goalMinZ), new THREE.Vector3(goalLineLeft, halfWallH, goalMaxZ), new THREE.Vector3(goalLineRight, halfWallH, goalMinZ), new THREE.Vector3(goalLineRight, halfWallH, goalMaxZ) ]; posts.forEach(p => { const post = new THREE.Mesh(postGeo, postMaterial); post.position.copy(p); post.castShadow = true; scene.add(post); }); }
+        function createProceduralTexture(width, height, drawCallback) { /* ... Identical to v7 ... */ const canvas = document.createElement('canvas'); canvas.width = width; canvas.height = height; const context = canvas.getContext('2d'); drawCallback(context, canvas); return new THREE.CanvasTexture(canvas); }
+
+        function lockChangeAlert() { /* ... Identical to v7 ... */ if (document.pointerLockElement === gameCanvas) { console.log('Pointer Locked'); isPointerLocked = true; if (audioCtx && audioCtx.state === 'suspended') audioCtx.resume(); } else { console.log('Pointer Unlocked'); isPointerLocked = false; if (playerState.isBoosting) stopBoostSound(); } }
+        function updateCameraAngle(event) { /* ... Identical to v7 ... */ if (isPointerLocked) { cameraHorizontalAngle -= event.movementX * mouseSensitivity; cameraVerticalAngle -= event.movementY * mouseSensitivity; cameraVerticalAngle = Math.max(verticalAngleMin, Math.min(verticalAngleMax, cameraVerticalAngle)); } }
+        function onWindowResize() { /* ... Identical to v7 ... */ camera.aspect = window.innerWidth / window.innerHeight; camera.updateProjectionMatrix(); renderer.setSize(window.innerWidth, window.innerHeight); composer.setSize(window.innerWidth, window.innerHeight); }
+        function updateScoreDisplay() { /* ... Identical to v7 ... */ if (gameOver) return; scoreElement.textContent = `Player: ${playerScore} - AI: ${aiScore}`; }
+        function showGameOver(winner) { /* ... Identical to v7, added stop boost sound ... */ gameOver = true; scoreElement.textContent = `${winner} Wins! (${playerScore} - ${aiScore})`; scoreElement.style.color = (winner === 'Player') ? 'lightgreen' : 'tomato'; document.getElementById('info').textContent = "Refresh page (F5) to play again."; if (document.pointerLockElement === gameCanvas) { document.exitPointerLock(); } if (playerState.isBoosting) stopBoostSound(); }
+        function updateBoostUI() { /* ... Identical to v7 ... */ const boostPercent = (playerState.boostAmount / playerState.maxBoost) * 100; boostBarElement.style.width = `${boostPercent}%`; }
+
+        function resetRound() {
+            if (gameOver) return;
+            playerState.speed = 0; playerState.steering = 0; playerState.boostAmount = playerState.maxBoost; playerState.isBoosting = false;
+            playerCar.position.set(goalLineRight / 2, carYPosition, 0);
+            // MODIFIED: Player car starts facing its own goal (180 degree turn from original)
+            playerCar.rotation.y = Math.PI / 2; // Original was -Math.PI/2 (facing AI goal), now faces own goal.
+            playerCar.quaternion.setFromEuler(playerCar.rotation);
+
+            aiState.speed = 0; aiState.steering = 0;
+            aiCar.position.set(goalLineLeft / 2, carYPosition, 0);
+            aiCar.rotation.y = Math.PI / 2; // AI still faces player/center (its local +Z along world +X)
+            aiCar.quaternion.setFromEuler(aiCar.rotation);
+
+            ballState.vx = 0; ballState.vy = 0; ballState.vz = 0;
+            ballMesh.position.set(0, ballYPosition, 0);
+
+            // MODIFIED: Camera angle to match new player car orientation
+            cameraHorizontalAngle = playerCar.rotation.y + Math.PI;
+            cameraVerticalAngle = 0.35;
+
+            updateScoreDisplay(); updateBoostUI();
+            if (playerState.isBoosting) stopBoostSound(); // Ensure boost sound stops
+        }
+
+        function initParticles() { /* ... Identical to v7 ... */ particleGeometry = new THREE.SphereGeometry(0.1, 4, 2); particleMaterial = new THREE.MeshBasicMaterial({ color: 0x00FFFF, transparent: true, opacity: 0.8, blending: THREE.AdditiveBlending }); for (let i = 0; i < maxParticles; i++) { const particle = new THREE.Mesh(particleGeometry, particleMaterial.clone()); particle.visible = false; particle.userData = { lifetime: 0, velocity: new THREE.Vector3() }; particles.push(particle); scene.add(particle); } }
+        function emitBoostParticle() { /* ... Identical to v7 ... */ if (!playerCar) return; const particle = particles[currentParticleIndex]; currentParticleIndex = (currentParticleIndex + 1) % maxParticles; const carForward = new THREE.Vector3(0, 0, -1).applyQuaternion(playerCar.quaternion); const carRight = new THREE.Vector3(1,0,0).applyQuaternion(playerCar.quaternion); const spread = carWidth * 0.3; const offsetDir = (currentParticleIndex % 2 === 0) ? 1 : -1; particle.position.copy(playerCar.position).addScaledVector(carForward, carDepth * 0.5).addScaledVector(carRight, spread * offsetDir).add(new THREE.Vector3(0, -carHeight * 0.2, 0)); particle.userData.velocity.copy(carForward).multiplyScalar(-3 - Math.random() * 3); particle.userData.velocity.y += (Math.random() - 0.5) * 2; particle.userData.lifetime = 0.3 + Math.random() * 0.4; particle.material.opacity = 0.6 + Math.random() * 0.4; particle.scale.setScalar(1.0 + Math.random() * 0.5); particle.visible = true; }
+        function updateParticles(deltaTime) { /* ... Identical to v7 ... */ for (let i = 0; i < maxParticles; i++) { const particle = particles[i]; if (particle.visible) { particle.userData.lifetime -= deltaTime; if (particle.userData.lifetime <= 0) { particle.visible = false; } else { particle.position.addScaledVector(particle.userData.velocity, deltaTime); particle.material.opacity = Math.max(0, particle.material.opacity - (deltaTime * 2.5)); particle.scale.multiplyScalar(0.98); } } } }
+
+
+        // --- Physics & Collision ---
+        function updateBall(deltaTime) { /* ... Identical to v7 (using global friction) ... */ if (gameOver) { ballState.vx=0; ballState.vy=0; ballState.vz=0; return; } ballMesh.position.x += ballState.vx * deltaTime; ballMesh.position.y += ballState.vy * deltaTime; ballMesh.position.z += ballState.vz * deltaTime; ballState.vx *= friction; ballState.vz *= friction; ballState.vy *= friction; if (ballMesh.position.y - ballState.radius < 0 && ballState.vy < 0) { ballMesh.position.y = ballState.radius; ballState.vy *= -0.6; ballState.vx *= 0.95; ballState.vz *= 0.95; } const currentSpeedSq = ballState.vx**2 + ballState.vy**2 + ballState.vz**2; if (currentSpeedSq > maxBallSpeed**2) { const currentSpeed = Math.sqrt(currentSpeedSq); const scale = maxBallSpeed / currentSpeed; ballState.vx *= scale; ballState.vy *= scale; ballState.vz *= scale; } }
+        
+        function handleBallWallCollision() {
+            const pos = ballMesh.position; const rad = ballState.radius;
+            const arenaMinX = -arenaWidth / 2; const arenaMaxX = arenaWidth / 2;
+            const arenaMinZ = -arenaDepth / 2; const arenaMaxZ = arenaDepth / 2;
+            const pushOutFactor = 1.0; // Reduced pushout, rely on restitution
+            let collided = false;
+
+            if (pos.x - rad < arenaMinX) {
+                if (!(pos.z > goalMinZ && pos.z < goalMaxZ)) { // Not a goal
+                    pos.x = arenaMinX + rad * pushOutFactor;
+                    ballState.vx *= -ballWallRestitution;
+                    collided = true;
+                }
+            } else if (pos.x + rad > arenaMaxX) {
+                if (!(pos.z > goalMinZ && pos.z < goalMaxZ)) { // Not a goal
+                    pos.x = arenaMaxX - rad * pushOutFactor;
+                    ballState.vx *= -ballWallRestitution;
+                    collided = true;
+                }
+            }
+            if (pos.z - rad < arenaMinZ) {
+                pos.z = arenaMinZ + rad * pushOutFactor;
+                ballState.vz *= -ballWallRestitution;
+                collided = true;
+            } else if (pos.z + rad > arenaMaxZ) {
+                pos.z = arenaMaxZ - rad * pushOutFactor;
+                ballState.vz *= -ballWallRestitution;
+                collided = true;
+            }
+            if (collided) playSound('wallThump', { volume: 0.2 }); // Quieter for ball-wall
+        }
+
+        function handleCarBallCollision(carMesh, carState, ballMesh, ballState) {
+            const carPos = carMesh.position; const ballPos = ballMesh.position;
+            const distSq = carPos.distanceToSquared(ballPos);
+            // More accurate effective radius for a box-like car
+            const carEffectiveRadius = Math.max(carState.width, carState.depth) / 2 * 0.8; // Approximation
+            const combinedRadius = carEffectiveRadius + ballState.radius;
+
+            if (distSq < combinedRadius**2) {
+                playSound('hit', {volume: 0.4});
+                const distance = Math.sqrt(distSq);
+                const overlap = combinedRadius - distance;
+                const normal = new THREE.Vector3().subVectors(ballPos, carPos);
+                normal.y = 0; // Keep collision horizontal for simplicity
+                if (normal.lengthSq() < 0.0001) { // Avoid division by zero if perfectly centered
+                    normal.set((Math.random() - 0.5) * 2, 0, (Math.random() - 0.5) * 2).normalize();
+                } else {
+                    normal.normalize();
+                }
+                ballMesh.position.addScaledVector(normal, overlap * 1.01); // Push ball out
+
+                // Simplified impulse calculation
+                const carForward = new THREE.Vector3(0, 0, -1).applyQuaternion(carMesh.quaternion);
+                const carWorldVel = carForward.multiplyScalar(carState.speed); // Car's velocity vector
+
+                const ballWorldVel = new THREE.Vector3(ballState.vx, ballState.vy, ballState.vz);
+
+                // Relative velocity
+                const relativeVelocity = new THREE.Vector3().subVectors(ballWorldVel, carWorldVel);
+                let velocityAlongNormal = relativeVelocity.dot(normal);
+
+                // Do not resolve if velocities are separating
+                if (velocityAlongNormal > 0) return;
+
+                let j = -(1 + carBallRestitution) * velocityAlongNormal;
+                // Apply impulse (simplified: assuming equal mass or ball is lighter)
+                const impulse = normal.clone().multiplyScalar(j);
+
+                ballState.vx += impulse.x;
+                // ballState.vy += impulse.y; // Normal.y is 0, so vy isn't changed by this impulse
+                ballState.vz += impulse.z;
+
+                // Add a bit of direct push based on car speed, especially for boost
+                const basePush = 2.0 + (carState.isBoosting ? 6.0 : 0) + Math.abs(carState.speed) * 0.2;
+                ballState.vx += normal.x * basePush * 0.1; // Reduced direct push scaling
+                ballState.vz += normal.z * basePush * 0.1;
+            }
+        }
+        
+        function checkGoals() { /* ... Identical, added playSound ... */ if (gameOver) return; const pos = ballMesh.position; const rad = ballState.radius; let goalScored = false; if (pos.x - rad < goalLineLeft && pos.z > goalMinZ && pos.z < goalMaxZ) { aiScore++; goalScored = true; console.log("AI Score!"); } else if (pos.x + rad > goalLineRight && pos.z > goalMinZ && pos.z < goalMaxZ) { playerScore++; goalScored = true; console.log("Player Score!"); } if (goalScored) { playSound('goal'); if (playerScore >= winningScore) showGameOver("Player"); else if (aiScore >= winningScore) showGameOver("AI"); else resetRound(); } }
+
+        // --- IMPROVED Car-Wall Collision ---
+        const _worldCorners = [new THREE.Vector3(), new THREE.Vector3(), new THREE.Vector3(), new THREE.Vector3()];
+        function getRotatedCarWorldAABB(center, quaternion, width, depth, targetBox) {
+            const halfWidth = width / 2;
+            const halfDepth = depth / 2;
+            // Local corners (only need 4 for 2D AABB on XZ plane)
+            _worldCorners[0].set( halfWidth, 0,  halfDepth);
+            _worldCorners[1].set( halfWidth, 0, -halfDepth);
+            _worldCorners[2].set(-halfWidth, 0,  halfDepth);
+            _worldCorners[3].set(-halfWidth, 0, -halfDepth);
+
+            targetBox.makeEmpty(); // Reset the target box
+
+            _worldCorners.forEach(localCorner => {
+                const worldCorner = localCorner.clone().applyQuaternion(quaternion).add(center);
+                targetBox.expandByPoint(worldCorner);
+            });
+            return targetBox; // Min/max x, y, z define the AABB
+        }
+
+        const carAABB = new THREE.Box3(); // Reusable Box3 for car AABB calculation
+        function handleCarWallCollision(carObj, state, potentialPosition, deltaTime) {
+            const arenaMinX = -arenaWidth / 2; const arenaMaxX = arenaWidth / 2;
+            const arenaMinZ = -arenaDepth / 2; const arenaMaxZ = arenaDepth / 2;
+            
+            getRotatedCarWorldAABB(potentialPosition, carObj.quaternion, state.width, state.depth, carAABB);
+
+            let collisionNormal = new THREE.Vector3();
+            let penetrationDepth = 0;
+            let collided = false;
+
+            // Check X walls
+            if (carAABB.min.x < arenaMinX) {
+                penetrationDepth = arenaMinX - carAABB.min.x;
+                potentialPosition.x += penetrationDepth;
+                collisionNormal.x = 1;
+                collided = true;
+            } else if (carAABB.max.x > arenaMaxX) {
+                penetrationDepth = carAABB.max.x - arenaMaxX;
+                potentialPosition.x -= penetrationDepth;
+                collisionNormal.x = -1;
+                collided = true;
+            }
+
+            // Check Z walls (re-calculate AABB if X was adjusted, or do it in passes - simpler for now: check independently)
+            // For more accuracy, after X correction, re-calc AABB before Z check. But this is ok for arcade.
+            getRotatedCarWorldAABB(potentialPosition, carObj.quaternion, state.width, state.depth, carAABB); // Recalc with new X
+
+            if (carAABB.min.z < arenaMinZ) {
+                penetrationDepth = arenaMinZ - carAABB.min.z;
+                potentialPosition.z += penetrationDepth;
+                collisionNormal.z = 1; // Collision normal points outward from wall
+                collided = true;
+            } else if (carAABB.max.z > arenaMaxZ) {
+                penetrationDepth = carAABB.max.z - arenaMaxZ;
+                potentialPosition.z -= penetrationDepth;
+                collisionNormal.z = -1;
+                collided = true;
+            }
+
+            carObj.position.copy(potentialPosition);
+
+            if (collided) {
+                playSound('wallThump', { volume: 0.3 });
+                collisionNormal.normalize();
+
+                // Reflect velocity component along the normal and dampen
+                const vDotN = state.worldVelocity.dot(collisionNormal);
+                const impulseMagnitude = -(1 + carWallRestitution) * vDotN;
+                state.worldVelocity.addScaledVector(collisionNormal, impulseMagnitude);
+                
+                // Update speed based on new worldVelocity's projection onto car's forward
+                const forwardDir = new THREE.Vector3(0,0,-1).applyQuaternion(carObj.quaternion);
+                state.speed = state.worldVelocity.dot(forwardDir);
+
+                // Further dampen overall speed slightly to prevent infinite bouncing
+                state.speed *= 0.9; 
+            }
+            return collided;
+        }
+
+
+        // --- Car Updates ---
+        function updatePlayerCar(deltaTime) {
+            if (gameOver) { playerState.speed = 0; playerState.isBoosting = false; if(boostOscillator) stopBoostSound(); return; }
+            let moveForward = keysPressed['w'] || keysPressed['ArrowUp'];
+            let moveBackward = keysPressed['s'] || keysPressed['ArrowDown'];
+            let turnLeft = keysPressed['a'] || keysPressed['ArrowLeft'];
+            let turnRight = keysPressed['d'] || keysPressed['ArrowRight'];
+            let boostPressed = keysPressed['shift'] || keysPressed['ShiftLeft'];
+
+            const oldIsBoosting = playerState.isBoosting;
+            playerState.isBoosting = boostPressed && playerState.boostAmount > 0 && moveForward;
+
+            if (playerState.isBoosting) {
+                if (!oldIsBoosting) startBoostSound();
+                playerState.boostAmount -= playerState.boostConsumptionRate * deltaTime;
+                playerState.boostAmount = Math.max(0, playerState.boostAmount);
+                emitBoostParticle(); emitBoostParticle();
+            } else {
+                if (oldIsBoosting) stopBoostSound();
+                if (playerState.boostAmount < playerState.maxBoost) {
+                    playerState.boostAmount += playerState.boostRechargeRate * deltaTime;
+                    playerState.boostAmount = Math.min(playerState.maxBoost, playerState.boostAmount);
+                }
+            }
+            if (playerState.boostAmount <= 0 && playerState.isBoosting) {
+                 playerState.isBoosting = false; stopBoostSound();
+            }
+            updateBoostUI();
+
+            playerState.steering = 0; if (turnLeft) playerState.steering = 1; if (turnRight) playerState.steering = -1;
+            if (Math.abs(playerState.speed) > 0.01 || playerState.isBoosting || turnLeft || turnRight) {
+                const speedFactor = 1.0 - Math.min(1, Math.abs(playerState.speed) / (playerState.maxSpeed * 1.5));
+                const actualTurnSpeed = playerState.turnSpeed * (playerState.speed >=0 ? speedFactor : 1.0);
+                playerCar.rotateY(playerState.steering * actualTurnSpeed * deltaTime);
+                playerCar.quaternion.normalize(); // Normalize after rotation
+            }
+
+            let currentAcceleration = playerState.acceleration;
+            if (playerState.isBoosting && moveForward) currentAcceleration += playerState.boostForce;
+            
+            if (moveForward) playerState.speed += currentAcceleration * deltaTime;
+            else if (moveBackward) playerState.speed -= playerState.acceleration * deltaTime;
+            else playerState.speed = Math.sign(playerState.speed) * Math.max(0, Math.abs(playerState.speed) - playerState.deceleration * deltaTime);
+            
+            const currentMaxSpeed = playerState.isBoosting ? playerState.maxSpeed * 1.4 : playerState.maxSpeed;
+            playerState.speed = Math.max(-playerState.maxSpeed / 1.8, Math.min(currentMaxSpeed, playerState.speed));
+            
+            const forward = new THREE.Vector3(0, 0, -1).applyQuaternion(playerCar.quaternion);
+            playerState.worldVelocity.copy(forward).multiplyScalar(playerState.speed); // Update world velocity
+
+            const potentialPosition = playerCar.position.clone().addScaledVector(playerState.worldVelocity, deltaTime);
+            handleCarWallCollision(playerCar, playerState, potentialPosition, deltaTime);
+        }
+
+        function updateAiCar(deltaTime) {
+             if (gameOver) { aiState.speed = 0; return; }
+            const ballPos = ballMesh.position; const aiPos = aiCar.position;
+            const aiGoalPos = new THREE.Vector3(goalLineLeft + carDepth, carYPosition, 0); // Defend this goal
+            // const playerGoalPos = new THREE.Vector3(goalLineRight - carDepth, carYPosition, 0); // Attack this goal
+
+            // Basic AI: try to get between ball and own goal, or push ball to opponent goal
+            let targetPosStrategic = new THREE.Vector3();
+            const ballToOwnGoalDir = new THREE.Vector3().subVectors(aiGoalPos, ballPos).normalize();
+            const defensivePos = new THREE.Vector3().addVectors(ballPos, ballToOwnGoalDir.multiplyScalar(carDepth * 1.5)); // Position behind ball relative to own goal
+
+            // If ball is near AI goal, be more defensive
+            if (ballPos.x < -arenaWidth / 4) { // Ball in AI's defensive third
+                targetPosStrategic.lerpVectors(defensivePos, ballPos, 0.3); // Blend between ball and defensive spot
+            } else { // Ball is further away, more offensive
+                targetPosStrategic.copy(ballPos);
+                 // Add a lead to the ball based on ball's velocity
+                const timeToIntercept = aiPos.distanceTo(ballPos) / (aiState.maxSpeed * 0.7 + 0.1); // Estimate time
+                targetPosStrategic.addScaledVector(new THREE.Vector3(ballState.vx, 0, ballState.vz), timeToIntercept * 0.5);
+            }
+            aiState.targetPos.lerp(targetPosStrategic, 0.2); // Smooth target changes
+
+            // Clamp target to stay within reasonable bounds
+            aiState.targetPos.x = THREE.MathUtils.clamp(aiState.targetPos.x, -arenaWidth/2 + carDepth, arenaWidth/2 - carDepth);
+            aiState.targetPos.z = THREE.MathUtils.clamp(aiState.targetPos.z, -arenaDepth/2 + carDepth, arenaDepth/2 - carDepth);
+
+
+            const targetDirection = new THREE.Vector3().subVectors(aiState.targetPos, aiPos);
+            targetDirection.y = 0; targetDirection.normalize();
+            const aiForward = new THREE.Vector3(0, 0, -1).applyQuaternion(aiCar.quaternion);
+            const angleToTarget = Math.atan2(targetDirection.x, targetDirection.z);
+            const currentAngle = Math.atan2(aiForward.x, aiForward.z);
+            let angleDifference = angleToTarget - currentAngle;
+            while (angleDifference > Math.PI) angleDifference -= Math.PI * 2;
+            while (angleDifference < -Math.PI) angleDifference += Math.PI * 2;
+
+            const steeringThreshold = 0.1;
+            if (angleDifference > steeringThreshold) aiState.steering = 1;
+            else if (angleDifference < -steeringThreshold) aiState.steering = -1;
+            else aiState.steering = 0;
+            
+            aiCar.rotateY(aiState.steering * aiState.turnSpeed * deltaTime);
+            aiCar.quaternion.normalize();
+
+            const dotProd = aiForward.dot(targetDirection);
+            if (dotProd > 0.2) { // If facing generally towards target
+                aiState.speed += aiState.acceleration * deltaTime;
+            } else if (dotProd < -0.5 && aiState.speed > 1.0){ // If facing away, slow down
+                aiState.speed -= aiState.acceleration * deltaTime * 0.5;
+            } else { // Otherwise, natural deceleration
+                aiState.speed = Math.sign(aiState.speed) * Math.max(0, Math.abs(aiState.speed) - aiState.deceleration * deltaTime);
+            }
+            aiState.speed = Math.min(aiState.maxSpeed, aiState.speed);
+            aiState.speed = Math.max(0, aiState.speed); // AI doesn't reverse for now
+
+            const currentAiForward = new THREE.Vector3(0,0,-1).applyQuaternion(aiCar.quaternion);
+            aiState.worldVelocity.copy(currentAiForward).multiplyScalar(aiState.speed);
+
+            const aiPotentialPosition = aiPos.clone().addScaledVector(aiState.worldVelocity, deltaTime);
+            handleCarWallCollision(aiCar, aiState, aiPotentialPosition, deltaTime);
+        }
+
+
+        // --- Camera Update Logic ---
+        function updateCamera(deltaTime) { /* ... Identical to v7 ... */ if (!playerCar) return; const carPos = playerCar.position; const horizontalDist = Math.cos(cameraVerticalAngle) * cameraDistance; const offsetX = Math.sin(cameraHorizontalAngle) * horizontalDist; const offsetZ = Math.cos(cameraHorizontalAngle) * horizontalDist; const offsetY = Math.sin(cameraVerticalAngle) * cameraDistance; const desiredPosition = new THREE.Vector3( carPos.x + offsetX, carPos.y + offsetY + 1.0, carPos.z + offsetZ ); if (desiredPosition.y < 0.5) desiredPosition.y = 0.5; camera.position.lerp(desiredPosition, 0.15); const lookAtTarget = new THREE.Vector3(carPos.x, carPos.y + 0.8, carPos.z); camera.lookAt(lookAtTarget); }
+
+        function animate() {
+            requestAnimationFrame(animate);
+            const deltaTime = Math.min(clock.getDelta(), 0.05);
+
+            if (!gameOver) {
+                updatePlayerCar(deltaTime);
+                updateAiCar(deltaTime);
+                updateBall(deltaTime);
+                updateParticles(deltaTime);
+
+                handleBallWallCollision();
+                handleCarBallCollision(playerCar, playerState, ballMesh, ballState);
+                handleCarBallCollision(aiCar, aiState, ballMesh, ballState);
+
+                checkGoals();
+            }
+
+            updateCamera(deltaTime);
+            composer.render(deltaTime);
+        }
+
+        init();
+    </script>
+</body>
+</html>
