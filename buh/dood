@@ -1,0 +1,640 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0, user-scalable=no">
+    <title>k8o5's Doodle Jumper</title>
+    <style>
+        html, body {
+            margin: 0;
+            padding: 0;
+            overflow: hidden; /* Prevent scrollbars */
+            width: 100%;
+            height: 100%;
+            background-color: #000; /* Fallback background */
+            font-family: 'Arial Rounded MT Bold', Arial, sans-serif;
+            touch-action: none; /* Prevent default touch behaviors like pinch-zoom */
+        }
+        canvas {
+            display: block; /* Remove extra space below canvas */
+            touch-action: none;
+        }
+        #uiLayer {
+            position: absolute;
+            top: 0;
+            left: 0;
+            width: 100%;
+            height: 100%;
+            pointer-events: none; /* Allow canvas interaction below */
+            display: flex;
+            flex-direction: column;
+            align-items: center;
+            color: white;
+            text-shadow: 1px 1px 3px rgba(0,0,0,0.7);
+        }
+        #instructions {
+            font-size: calc(10px + 1vmin); /* Responsive font size */
+            background-color: rgba(0,0,0,0.4);
+            padding: 0.5em 1em;
+            border-radius: 8px;
+            margin-top: 10px;
+            text-align: center;
+        }
+        #startButton {
+            position: absolute;
+            top: 50%;
+            left: 50%;
+            transform: translate(-50%, -50%);
+            font-size: calc(18px + 2vmin);
+            padding: 1em 2em;
+            background-color: #FFD700;
+            color: #333;
+            border: none;
+            border-radius: 10px;
+            cursor: pointer;
+            box-shadow: 0 5px 15px rgba(0,0,0,0.3);
+            pointer-events: all; /* Enable clicks on the button */
+        }
+        .hidden {
+            display: none !important;
+        }
+    </style>
+</head>
+<body>
+    <canvas id="gameCanvas"></canvas>
+    <div id="uiLayer">
+        <div id="instructions">Use Arrow Keys (Desktop) or Tilt Device (Mobile). Enter/Tap to Restart.</div>
+    </div>
+    <button id="startButton">Start Game</button>
+
+    <script>
+        const canvas = document.getElementById('gameCanvas');
+        const ctx = canvas.getContext('2d');
+        const startButton = document.getElementById('startButton');
+        const instructionsDiv = document.getElementById('instructions');
+
+        let canvasWidth = window.innerWidth;
+        let canvasHeight = window.innerHeight;
+        canvas.width = canvasWidth;
+        canvas.height = canvasHeight;
+
+        // --- Player Properties ---
+        const playerWidth = Math.min(canvasWidth * 0.09, 36);
+        const playerHeight = playerWidth; // Keep aspect ratio
+        let playerX = canvasWidth / 2 - playerWidth / 2;
+        let playerY = canvasHeight - playerHeight - 100;
+        let playerDY = 0;
+        let playerDX = 0;
+        const playerMoveSpeed = canvasWidth * 0.012 > 5 ? canvasWidth * 0.012 : 5; // Scale speed slightly
+        const gravity = 0.0006 * canvasHeight; // Scale gravity
+        const jumpStrength = -0.018 * canvasHeight; // Scale jump
+        let playerBlinkTimer = 0;
+        const playerBlinkInterval = 180;
+        const playerBlinkDuration = 7;
+
+        // --- Platform Properties ---
+        const basePlatformWidth = Math.max(canvasWidth * 0.15, 70);
+        const platformHeight = Math.max(canvasHeight * 0.02, 12);
+        const defaultPlatformColor = '#60D060';
+        const bouncyPlatformColor = '#6495ED';
+        const breakablePlatformColor = '#A0522D'; // Sienna (Brown)
+        let platforms = [];
+        const initialPlatforms = 7; // Adjusted for potentially taller screens
+        const platformSpawnThreshold = canvasHeight * 0.25;
+        let lastPlatformY = canvasHeight - 50;
+
+        const PLATFORM_TYPES = {
+            NORMAL: 'normal',
+            BOUNCY: 'bouncy',
+            BREAKABLE: 'breakable'
+        };
+
+        // --- Power-ups ---
+        const POWERUP_TYPES = { SUPER_SPRING: 'super_spring' };
+        let hasSuperJumpCharge = false;
+
+        // --- Particles ---
+        let particles = [];
+
+        // --- Game State ---
+        let score = 0;
+        let highScore = localStorage.getItem('superDoodleHighScore') || 0;
+        let cameraY = 0;
+        let gameState = 'PRE_GAME'; // PRE_GAME, PLAYING, GAME_OVER
+
+        // --- Background Stars ---
+        let stars = [];
+        function initializeStars() {
+            stars = [];
+            const numStars = Math.floor(canvasWidth * canvasHeight / 8000); // Scale num stars
+            for(let i = 0; i < numStars; i++) {
+                stars.push({
+                    x: Math.random(), y: Math.random(),
+                    size: Math.random() * 1.5 + 0.5,
+                    opacity: Math.random() * 0.4 + 0.2
+                });
+            }
+        }
+
+        // --- Gyroscope ---
+        let gyroAvailable = false;
+        let gyroPermissionGranted = false;
+        const gyroSensitivity = 0.5; // Adjust as needed
+        let baseGamma = null; // For calibration on first use
+
+        // --- Helper: Resize Canvas ---
+        function resizeCanvas() {
+            canvasWidth = window.innerWidth;
+            canvasHeight = window.innerHeight;
+            canvas.width = canvasWidth;
+            canvas.height = canvasHeight;
+
+            // Re-initialize or adjust elements that depend on canvas size
+            // Player size might need to be relative, or keep fixed for consistency
+            // playerX might need to be re-centered if width changes drastically mid-game (not typical)
+            // playerMoveSpeed, gravity, jumpStrength are already relative/scaled
+
+            initializeStars(); // Re-create stars for new dimensions
+            // Re-position UI or let CSS handle it
+            if (gameState === 'PLAYING' || gameState === 'GAME_OVER') {
+                // If game is active, might need to re-evaluate platform positions
+                // or accept that resizing during gameplay could be weird.
+                // For Doodle Jump, it's usually portrait, so width changes are less common.
+            }
+        }
+        window.addEventListener('resize', resizeCanvas);
+
+
+        // --- Platform Creation ---
+        function createPlatform(y, x) {
+            let type = PLATFORM_TYPES.NORMAL;
+            let color = defaultPlatformColor;
+            let jumpMod = 1;
+            let currentWidth = basePlatformWidth * (Math.random() * 0.3 + 0.85);
+            let isBreakable = false;
+
+            const randomType = Math.random();
+            if (randomType < 0.12 && y < cameraY + canvasHeight - 200) { // Bouncy
+                type = PLATFORM_TYPES.BOUNCY;
+                color = bouncyPlatformColor;
+                jumpMod = 1.9;
+            } else if (randomType < 0.27 && y < cameraY + canvasHeight - 150) { // Breakable (more frequent)
+                type = PLATFORM_TYPES.BREAKABLE;
+                color = breakablePlatformColor;
+                isBreakable = true;
+            }
+
+            let newPlatform = {
+                x: x !== undefined ? x : Math.random() * (canvasWidth - currentWidth),
+                y: y,
+                width: currentWidth,
+                height: platformHeight,
+                type: type,
+                color: color,
+                jumpModifier: jumpMod,
+                hasPowerUp: null,
+                isBreakable: isBreakable,
+                isBroken: false,
+                breakTimer: 0 // For animation if needed
+            };
+
+            if (newPlatform.type === PLATFORM_TYPES.NORMAL && Math.random() < 0.1 && y < cameraY + canvasHeight - 150) {
+                newPlatform.hasPowerUp = {
+                    type: POWERUP_TYPES.SUPER_SPRING,
+                    itemWidth: playerWidth * 0.6, itemHeight: playerWidth * 0.6,
+                    collected: false
+                };
+            }
+            return newPlatform;
+        }
+
+        function initializePlatforms() {
+            platforms = [];
+            platforms.push(createPlatform(canvasHeight - platformHeight * 4, canvasWidth / 2 - basePlatformWidth / 2));
+            for (let i = 1; i < initialPlatforms; i++) {
+                let newY = platforms[platforms.length - 1].y - (Math.random() * canvasHeight * 0.1 + canvasHeight * 0.12);
+                platforms.push(createPlatform(newY));
+            }
+            lastPlatformY = platforms[platforms.length - 1].y;
+        }
+
+        function spawnNewPlatforms() {
+            while (lastPlatformY > cameraY - platformSpawnThreshold - canvasHeight) {
+                let newY = lastPlatformY - (Math.random() * canvasHeight * 0.1 + canvasHeight * 0.13);
+                platforms.push(createPlatform(newY));
+                lastPlatformY = newY;
+            }
+            // Remove platforms way off screen OR broken ones
+            platforms = platforms.filter(p => p.y - cameraY < canvasHeight + 200 && !p.isBroken);
+        }
+
+        // --- Particle System ---
+        function createParticles(x, y, count = 8, pColor = 'rgba(255,255,255,0.8)', speedScale = 1, lifeScale = 1) {
+            for (let i = 0; i < count; i++) {
+                particles.push({
+                    x: x, y: y,
+                    vx: (Math.random() - 0.5) * (canvasWidth * 0.01) * speedScale,
+                    vy: (Math.random() * (-canvasHeight * 0.005) - (canvasHeight*0.0015)) * speedScale,
+                    size: Math.random() * (playerWidth*0.08) + (playerWidth*0.05),
+                    life: (Math.random() * 30 + 30) * lifeScale,
+                    color: pColor
+                });
+            }
+        }
+        function updateParticles() {
+            for (let i = particles.length - 1; i >= 0; i--) {
+                let p = particles[i];
+                p.x += p.vx; p.y += p.vy;
+                p.vy += gravity * 0.3;
+                p.life--;
+                if (p.life <= 0) particles.splice(i, 1);
+            }
+        }
+
+        function activatePowerUp(type) {
+            if (type === POWERUP_TYPES.SUPER_SPRING) hasSuperJumpCharge = true;
+        }
+
+        // --- Game Logic Update ---
+        function update() {
+            if (gameState !== 'PLAYING') return;
+
+            playerDY += gravity;
+            playerY += playerDY;
+            if (!gyroPermissionGranted || !gyroAvailable) { // Only use keyboard DX if gyro not active
+                 playerX += playerDX;
+            }
+
+
+            if (playerX + playerWidth < 0) playerX = canvasWidth;
+            else if (playerX > canvasWidth) playerX = -playerWidth;
+
+            platforms.forEach(platform => {
+                if (platform.isBroken) return;
+
+                if (playerDY > 0 &&
+                    playerX < platform.x + platform.width &&
+                    playerX + playerWidth > platform.x &&
+                    playerY + playerHeight > platform.y &&
+                    playerY + playerHeight < platform.y + platform.height + playerDY * 1.1
+                ) {
+                    playerY = platform.y - playerHeight;
+
+                    if (platform.hasPowerUp && !platform.hasPowerUp.collected) {
+                        activatePowerUp(platform.hasPowerUp.type);
+                        platform.hasPowerUp.collected = true;
+                        createParticles(platform.x + platform.width / 2, platform.y, 15, 'rgba(255,215,0,0.9)');
+                    }
+
+                    let currentJumpStrength = jumpStrength;
+                    if (hasSuperJumpCharge) {
+                        currentJumpStrength *= 2.4;
+                        hasSuperJumpCharge = false;
+                        createParticles(playerX + playerWidth / 2, playerY + playerHeight, 30, 'rgba(255,105,180,0.9)', 1.5);
+                    } else {
+                        currentJumpStrength *= platform.jumpModifier;
+                        createParticles(playerX + playerWidth / 2, playerY + playerHeight, platform.type === PLATFORM_TYPES.BOUNCY ? 15 : 8,
+                                        platform.type === PLATFORM_TYPES.BOUNCY ? 'rgba(100,149,237,0.9)' : 'rgba(220,220,220,0.7)');
+                    }
+                    playerDY = currentJumpStrength;
+
+                    if (platform.isBreakable) {
+                        platform.isBroken = true; // Mark for removal in next spawn/filter
+                        // Add breaking sound/animation later if desired
+                        createParticles(platform.x + platform.width / 2, platform.y + platform.height / 2, 20, 'rgba(139,69,19,0.7)', 0.8, 0.5); // Brownish particles
+                    }
+                }
+            });
+
+            const cameraThreshold = canvasHeight / 2.8;
+            if (playerY - cameraY < cameraThreshold) {
+                cameraY -= (cameraThreshold - (playerY - cameraY)) * 0.08;
+            }
+
+            let currentHeightScore = Math.max(0, Math.floor(-cameraY / (canvasHeight * 0.015)));
+            score = Math.max(score, currentHeightScore);
+
+            spawnNewPlatforms();
+            updateParticles();
+            playerBlinkTimer = (playerBlinkTimer + 1) % (playerBlinkInterval + playerBlinkDuration);
+
+            if (playerY - cameraY > canvasHeight + playerHeight * 2) { // Give more buffer
+                gameState = 'GAME_OVER';
+                if (score > highScore) {
+                    highScore = score;
+                    localStorage.setItem('superDoodleHighScore', highScore);
+                }
+            }
+        }
+
+        // --- Drawing Functions ---
+        function drawBackgroundAndStars() {
+            let topColorStop = Math.max(0, Math.min(1, (-cameraY / (canvasHeight * 20))));
+            const skyBlue = { r: 135, g: 206, b: 235 };
+            const deepSpace = { r: 10, g: 10, b: 40 };
+            let r = Math.round(skyBlue.r + (deepSpace.r - skyBlue.r) * topColorStop);
+            let g = Math.round(skyBlue.g + (deepSpace.g - skyBlue.g) * topColorStop);
+            let b = Math.round(skyBlue.b + (deepSpace.b - skyBlue.b) * topColorStop);
+
+            let gradient = ctx.createLinearGradient(0, 0, 0, canvasHeight);
+            gradient.addColorStop(0, `rgb(${r},${g},${b})`);
+            gradient.addColorStop(1, `rgb(${Math.max(30,r-50)},${Math.max(30,g-50)},${Math.max(50,b-50)})`);
+            ctx.fillStyle = gradient;
+            ctx.fillRect(0, 0, canvasWidth, canvasHeight);
+
+            let starVisibilityFactor = Math.min(1, Math.max(0, (-cameraY - canvasHeight*2.5) / (canvasHeight*15)));
+            if (starVisibilityFactor > 0) {
+                stars.forEach(s => {
+                    ctx.fillStyle = `rgba(255, 255, 255, ${s.opacity * starVisibilityFactor * (Math.sin(Date.now() * 0.001 + s.x * 10) * 0.2 + 0.8)})`;
+                    ctx.beginPath();
+                    ctx.arc(s.x * canvasWidth, s.y * canvasHeight, s.size * starVisibilityFactor, 0, Math.PI * 2);
+                    ctx.fill();
+                });
+            }
+        }
+
+        function drawPlayer() {
+            const centerX = playerX + playerWidth / 2;
+            const centerY = playerY + playerHeight / 2;
+            ctx.fillStyle = '#FFD700';
+            ctx.beginPath(); ctx.arc(centerX, centerY, playerWidth / 2, 0, Math.PI * 2); ctx.fill();
+            ctx.strokeStyle = '#CDAD00'; ctx.lineWidth = 2; ctx.stroke();
+
+            const eyeRadius = playerWidth / 7;
+            const eyeY = centerY - playerHeight * 0.05;
+            const eyeDist = playerWidth / 4.5;
+            let eyesClosed = playerBlinkTimer >= playerBlinkInterval;
+
+            ctx.fillStyle = 'white';
+            ctx.beginPath(); ctx.arc(centerX - eyeDist, eyeY, eyeRadius, 0, Math.PI * 2); ctx.fill();
+            ctx.beginPath(); ctx.arc(centerX + eyeDist, eyeY, eyeRadius, 0, Math.PI * 2); ctx.fill();
+
+            if (!eyesClosed) {
+                ctx.fillStyle = 'black';
+                const pupilRadius = eyeRadius / 2.2;
+                let pupilOffsetX = 0;
+                const currentDX = (gyroPermissionGranted && gyroAvailable) ? (rawGammaValueForPupils * 0.1) : playerDX; // Use raw gamma for pupil direction
+                if (currentDX > 0.1) pupilOffsetX = eyeRadius * 0.3;
+                if (currentDX < -0.1) pupilOffsetX = -eyeRadius * 0.3;
+                ctx.beginPath(); ctx.arc(centerX - eyeDist + pupilOffsetX, eyeY, pupilRadius, 0, Math.PI * 2); ctx.fill();
+                ctx.beginPath(); ctx.arc(centerX + eyeDist + pupilOffsetX, eyeY, pupilRadius, 0, Math.PI * 2); ctx.fill();
+            } else {
+                ctx.strokeStyle = 'black'; ctx.lineWidth = 2;
+                ctx.beginPath(); ctx.moveTo(centerX - eyeDist - eyeRadius*0.7, eyeY); ctx.lineTo(centerX - eyeDist + eyeRadius*0.7, eyeY); ctx.stroke();
+                ctx.beginPath(); ctx.moveTo(centerX + eyeDist - eyeRadius*0.7, eyeY); ctx.lineTo(centerX + eyeDist + eyeRadius*0.7, eyeY); ctx.stroke();
+            }
+            if (hasSuperJumpCharge) {
+                ctx.fillStyle = 'rgba(255, 100, 0, 0.5)';
+                ctx.beginPath(); ctx.arc(centerX, centerY, playerWidth / 2 + 4, 0, Math.PI * 2); ctx.fill();
+            }
+        }
+        let rawGammaValueForPupils = 0; // Store raw gamma for pupil direction
+
+
+        function drawPlatforms() {
+            platforms.forEach(platform => {
+                if (platform.isBroken) return; // Don't draw broken platforms
+                ctx.fillStyle = platform.color;
+                const cornerRadius = Math.min(platformHeight * 0.3, 5);
+                ctx.beginPath();
+                ctx.moveTo(platform.x + cornerRadius, platform.y);
+                ctx.lineTo(platform.x + platform.width - cornerRadius, platform.y);
+                ctx.arcTo(platform.x + platform.width, platform.y, platform.x + platform.width, platform.y + cornerRadius, cornerRadius);
+                ctx.lineTo(platform.x + platform.width, platform.y + platform.height - cornerRadius);
+                ctx.arcTo(platform.x + platform.width, platform.y + platform.height, platform.x + platform.width - cornerRadius, platform.y + platform.height, cornerRadius);
+                ctx.lineTo(platform.x + cornerRadius, platform.y + platform.height);
+                ctx.arcTo(platform.x, platform.y + platform.height, platform.x, platform.y + platform.height - cornerRadius, cornerRadius);
+                ctx.lineTo(platform.x, platform.y + cornerRadius);
+                ctx.arcTo(platform.x, platform.y, platform.x + cornerRadius, platform.y, cornerRadius);
+                ctx.closePath();
+                ctx.fill();
+
+                if (platform.type === PLATFORM_TYPES.BOUNCY) { // Visual for bouncy
+                    ctx.strokeStyle = 'rgba(255,255,255,0.6)'; ctx.lineWidth = 2;
+                    const springY = platform.y + platform.height / 2; const sW = platform.width*0.6; const sX = platform.x + platform.width*0.2;
+                    for(let i=0; i<3; i++) { ctx.beginPath(); ctx.arc(sX + (sW/3)*i + sW/6, springY, sW/7, Math.PI, 0); ctx.stroke(); }
+                }
+                 if (platform.type === PLATFORM_TYPES.BREAKABLE) { // Visual for breakable (e.g. cracks)
+                    ctx.strokeStyle = 'rgba(0,0,0,0.3)'; ctx.lineWidth = 1;
+                    ctx.beginPath(); ctx.moveTo(platform.x + platform.width * 0.2, platform.y + platform.height * 0.3); ctx.lineTo(platform.x + platform.width * 0.8, platform.y + platform.height * 0.7); ctx.stroke();
+                    ctx.beginPath(); ctx.moveTo(platform.x + platform.width * 0.3, platform.y + platform.height * 0.8); ctx.lineTo(platform.x + platform.width * 0.7, platform.y + platform.height * 0.2); ctx.stroke();
+                }
+
+                if (platform.hasPowerUp && !platform.hasPowerUp.collected) {
+                    const item = platform.hasPowerUp;
+                    const itemX = platform.x + platform.width / 2 - item.itemWidth / 2;
+                    const itemY = platform.y - item.itemHeight - 3;
+                    ctx.fillStyle = '#FF8C00'; ctx.fillRect(itemX, itemY, item.itemWidth, item.itemHeight);
+                    ctx.strokeStyle = '#A52A2A'; ctx.lineWidth = 1.5; ctx.strokeRect(itemX, itemY, item.itemWidth, item.itemHeight);
+                    ctx.beginPath(); for(let i=0; i<3; i++){ ctx.moveTo(itemX + 4, itemY + item.itemHeight*(0.2 + i*0.3)); ctx.lineTo(itemX + item.itemWidth - 4, itemY + item.itemHeight*(0.2 + i*0.3)); } ctx.stroke();
+                }
+            });
+        }
+
+        function drawParticles() {
+            particles.forEach(p => {
+                ctx.fillStyle = p.color; ctx.beginPath();
+                ctx.arc(p.x, p.y, p.size * (p.life / 60 + 0.2), 0, Math.PI * 2); ctx.fill();
+            });
+        }
+
+        function drawUI() {
+            const fontSizeSmall = Math.max(16, canvasHeight * 0.025);
+            const fontSizeMedium = Math.max(20, canvasHeight * 0.035);
+            const fontSizeLarge = Math.max(28, canvasHeight * 0.05);
+
+            ctx.fillStyle = '#FFF'; ctx.textShadow = '1px 1px 2px black';
+
+            ctx.font = `bold ${fontSizeMedium}px "Arial Rounded MT Bold", Arial, sans-serif`;
+            ctx.textAlign = 'left'; ctx.fillText('Score: ' + score, 15, fontSizeMedium + 5);
+            ctx.textAlign = 'right'; ctx.fillText('High: ' + highScore, canvasWidth - 15, fontSizeMedium + 5);
+
+            if (hasSuperJumpCharge && gameState === 'PLAYING') {
+                 ctx.fillStyle = '#FF8C00'; ctx.textAlign = 'center';
+                 ctx.font = `bold ${fontSizeSmall}px "Arial Rounded MT Bold", Arial, sans-serif`;
+                 ctx.fillText('SUPER JUMP!', canvasWidth/2, fontSizeMedium + 5);
+            }
+
+            if (gameState === 'GAME_OVER') {
+                ctx.fillStyle = 'rgba(0, 0, 0, 0.75)';
+                ctx.fillRect(canvasWidth / 2 - canvasWidth*0.35, canvasHeight / 2 - canvasHeight*0.15, canvasWidth*0.7, canvasHeight*0.3);
+                ctx.fillStyle = '#FFF';
+                ctx.font = `bold ${fontSizeLarge}px "Arial Rounded MT Bold", Arial, sans-serif`;
+                ctx.textAlign = 'center';
+                ctx.fillText('Game Over!', canvasWidth / 2, canvasHeight / 2 - canvasHeight*0.04);
+                ctx.font = `bold ${fontSizeMedium}px "Arial Rounded MT Bold", Arial, sans-serif`;
+                ctx.fillText('Score: ' + score, canvasWidth / 2, canvasHeight / 2 + canvasHeight*0.01);
+                ctx.font = `${fontSizeSmall}px "Arial Rounded MT Bold", Arial, sans-serif`;
+                ctx.fillText('Tap Screen or Press Enter to Restart', canvasWidth / 2, canvasHeight / 2 + canvasHeight*0.06);
+            }
+        }
+
+
+        function draw() {
+            ctx.clearRect(0, 0, canvasWidth, canvasHeight);
+            if (gameState === 'PRE_GAME') {
+                // Start button is HTML, background can be simple
+                ctx.fillStyle = '#222';
+                ctx.fillRect(0,0,canvasWidth, canvasHeight);
+                // Potentially draw a title or simple instructions
+                ctx.fillStyle = 'white';
+                ctx.font = `bold ${Math.max(24, canvasWidth*0.05)}px "Arial Rounded MT Bold"`;
+                ctx.textAlign = 'center';
+                ctx.fillText("Super Doodle Jumper FX", canvasWidth/2, canvasHeight*0.3);
+                return; // Don't draw game elements yet
+            }
+
+            drawBackgroundAndStars();
+            ctx.save(); ctx.translate(0, -cameraY);
+            drawPlatforms(); drawParticles(); drawPlayer();
+            ctx.restore();
+            drawUI();
+        }
+
+        // --- Event Handlers ---
+        function handleKeyDown(e) {
+            if (gameState === 'GAME_OVER' && e.key === 'Enter') {
+                resetGameAndStart(); return;
+            }
+            if (gameState !== 'PLAYING') return;
+
+            if (!gyroPermissionGranted || !gyroAvailable) { // Only use keyboard if gyro not active
+                if (e.key === 'ArrowLeft' || e.key === 'a') playerDX = -playerMoveSpeed;
+                else if (e.key === 'ArrowRight' || e.key === 'd') playerDX = playerMoveSpeed;
+            }
+        }
+
+        function handleKeyUp(e) {
+            if (gameState !== 'PLAYING') return;
+            if (!gyroPermissionGranted || !gyroAvailable) {
+                if ((e.key === 'ArrowLeft' || e.key === 'a') && playerDX < 0) playerDX = 0;
+                else if ((e.key === 'ArrowRight' || e.key === 'd') && playerDX > 0) playerDX = 0;
+            }
+        }
+
+        function handleDeviceOrientation(event) {
+            if (!gyroPermissionGranted || !event.gamma) { // gamma might be null initially
+                gyroAvailable = false;
+                return;
+            }
+            gyroAvailable = true;
+
+            if (baseGamma === null && event.gamma !== null) { // One-time "calibration" on first valid gamma
+                baseGamma = event.gamma;
+            }
+            
+            let tilt = event.gamma - (baseGamma || 0); // Use calibrated gamma
+            rawGammaValueForPupils = event.gamma; // For pupil direction
+
+            // Dead zone
+            const deadZone = 3; // degrees
+            if (Math.abs(tilt) < deadZone) {
+                playerX += 0; // Effectively playerDX = 0 from gyro
+            } else {
+                // Apply sensitivity and clamp max speed
+                let calculatedDX = (tilt - Math.sign(tilt) * deadZone) * gyroSensitivity;
+                calculatedDX = Math.max(-playerMoveSpeed, Math.min(playerMoveSpeed, calculatedDX));
+                playerX += calculatedDX; // Directly modify playerX for gyro
+            }
+            playerDX = 0; // Reset keyboard DX if gyro is active
+        }
+
+        function handleScreenTap() {
+            if (gameState === 'GAME_OVER') {
+                resetGameAndStart();
+            }
+            // Could add touch controls here if gyro fails (e.g. tap left/right side)
+        }
+
+        function requestGyroPermission() {
+            if (typeof DeviceOrientationEvent !== 'undefined' && typeof DeviceOrientationEvent.requestPermission === 'function') {
+                DeviceOrientationEvent.requestPermission()
+                    .then(permissionState => {
+                        if (permissionState === 'granted') {
+                            window.addEventListener('deviceorientation', handleDeviceOrientation);
+                            gyroPermissionGranted = true;
+                            instructionsDiv.textContent = "Tilt device to move! Tap screen to restart.";
+                        } else {
+                            gyroPermissionGranted = false;
+                            instructionsDiv.textContent = "Tilt control denied. Use Arrow Keys if on Desktop. Tap to restart.";
+                        }
+                        startGameFlow();
+                    })
+                    .catch(error => {
+                        console.error("Gyro permission request error:", error);
+                        gyroPermissionGranted = false;
+                        instructionsDiv.textContent = "Gyro not available. Use Arrow Keys. Tap to restart.";
+                        startGameFlow(); // Proceed without gyro
+                    });
+            } else {
+                // For browsers/devices not needing explicit permission (e.g., Android, or older iOS)
+                // or if served over HTTP (where permission API won't work for iOS)
+                window.addEventListener('deviceorientation', handleDeviceOrientation);
+                gyroPermissionGranted = true; // Assume it will work or fail silently
+                // Check if gyro actually provides data in the first few frames.
+                let initialGyroCheck = setTimeout(() => {
+                    if(!gyroAvailable && gameState === 'PLAYING') { // Check if gyro data came in
+                        console.log("Gyro seems unavailable after timeout.");
+                        // gyroPermissionGranted = false; // Can't rely on it
+                        // instructionsDiv.textContent = "Gyro not working. Use Arrow Keys. Tap to restart.";
+                    }
+                }, 1000);
+                instructionsDiv.textContent = "Tilt device to move (if available). Tap to restart.";
+                startGameFlow();
+            }
+        }
+
+        startButton.addEventListener('click', () => {
+            requestGyroPermission();
+        });
+
+
+        function startGameFlow() {
+            startButton.classList.add('hidden');
+            instructionsDiv.classList.remove('hidden'); // Ensure instructions are visible
+            resetGameAndStart();
+        }
+
+
+        // --- Game Management ---
+        function resetGameAndStart() {
+            playerX = canvasWidth / 2 - playerWidth / 2;
+            playerY = canvasHeight - playerHeight - canvasHeight * 0.15;
+            playerDY = 0; playerDX = 0;
+            score = 0;
+            cameraY = 0;
+            hasSuperJumpCharge = false;
+            particles = [];
+            baseGamma = null; // Recalibrate gyro on new game
+            rawGammaValueForPupils = 0;
+            initializePlatforms();
+            playerDY = jumpStrength * 1.2;
+            gameState = 'PLAYING';
+            if (!gameLoopRunning) gameLoop(); // Start loop if not already running
+        }
+
+        let gameLoopRunning = false;
+        function gameLoop() {
+            gameLoopRunning = true;
+            update();
+            draw();
+            if (gameState === 'PRE_GAME' || gameState === 'PLAYING') {
+                requestAnimationFrame(gameLoop);
+            } else {
+                gameLoopRunning = false; // Stop loop if game over and not restarting immediately
+                 draw(); // One final draw for game over screen
+            }
+        }
+
+        // --- Initial Setup ---
+        document.addEventListener('keydown', handleKeyDown);
+        document.addEventListener('keyup', handleKeyUp);
+        canvas.addEventListener('click', handleScreenTap); // For mobile restart / fallback controls
+
+        initializeStars();
+        resizeCanvas(); // Initial size setup
+        draw(); // Draw PRE_GAME screen initially
+        instructionsDiv.classList.add('hidden'); // Hide instructions until start
+    </script>
+</body>
+</html>
