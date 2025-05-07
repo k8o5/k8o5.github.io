@@ -1,0 +1,489 @@
+<!DOCTYPE html>
+<html>
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0, maximum-scale=1.0, user-scalable=no">
+    <title>Global Dominion (2D Enhanced)</title>
+    <script src="https://unpkg.com/topojson@3"></script>
+    <script src="https://d3js.org/d3.v7.min.js"></script>
+    <link href="https://fonts.googleapis.com/css2?family=Orbitron:wght@400;700&family=Roboto:wght@400;700&display=swap" rel="stylesheet">
+    <style>
+        body, html {
+            margin: 0; overflow: hidden;
+            background-color: #1a1a1a; /* Darker base for 2D focus */
+            color: #e8e8e8;
+            font-family: 'Roboto', sans-serif;
+            -webkit-tap-highlight-color: transparent;
+        }
+        svg { width: 100vw; height: 100vh; cursor: grab; display: block; }
+        svg:active { cursor: grabbing; }
+        #map-group { }
+
+        .ocean-2d { fill: #2c539e; /* Standard blue for 2D ocean */ }
+
+        .country {
+            stroke: #282828; /* Darker, subtle stroke for 2D */
+            stroke-width: 0.6px;
+            transition: fill 0.2s ease, stroke 0.2s ease, stroke-width 0.15s ease, filter 0.2s ease;
+        }
+        .country.player-owned { stroke: #f0f0f0; stroke-width: 1px; }
+        .country.selected {
+            stroke: #FFEB3B; stroke-width: 2.5px;
+            filter: drop-shadow(0 0 7px #FFEB3B) drop-shadow(0 0 3px #FFEB3B);
+        }
+        .country.player-owned.selected { stroke: #FFEB3B; stroke-width: 2.5px; }
+        .country.setup-selectable:hover {
+            stroke: #4CAF50; stroke-width: 1.8px;
+            filter: brightness(1.2) drop-shadow(0 0 4px #4CAF50);
+            cursor: pointer;
+        }
+        .country:hover:not(.selected):not(.valid-target):not(.setup-selectable) {
+             filter: brightness(1.15);
+             stroke: #cccccc;
+        }
+        .country.valid-target {
+            stroke: #03A9F4; stroke-width: 1.5px;
+            filter: brightness(1.1);
+        }
+        .country.valid-target:hover {
+            stroke: #29B6F6; stroke-width: 2px;
+            filter: brightness(1.3) drop-shadow(0 0 5px #29B6F6);
+            cursor: pointer;
+        }
+
+        .unit-text {
+            font-size: 9px; fill: white; text-anchor: middle; dominant-baseline: middle;
+            pointer-events: none; font-weight: bold;
+            paint-order: stroke; stroke: rgba(0,0,0,0.8); stroke-width: 2.5px;
+        }
+
+        .moving-unit-dots-group { pointer-events: none; }
+        .moving-unit-dot {
+            stroke: rgba(0,0,0,0.5);
+            stroke-width: 0.3px; /* Thin stroke for small dots */
+            opacity: 0.9;
+        }
+
+        .arrival-flash {
+            stroke-width: 2px; opacity: 0.7; pointer-events: none; mix-blend-mode: screen;
+        }
+
+        .ui-overlay {
+            position: absolute; padding: 10px 18px;
+            background-color: rgba(25, 28, 30, 0.9);
+            color: #f0f0f0; border: 1px solid #4a4a4a;
+            border-radius: 8px;
+            font-size: clamp(12px, 2.5vw, 15px);
+            white-space: nowrap;
+            box-shadow: 0 5px 15px rgba(0,0,0,0.5);
+            z-index: 5;
+            font-family: 'Orbitron', sans-serif;
+            text-shadow: 0 0 3px rgba(0,0,0,0.5);
+        }
+        #ui-info { bottom: 15px; left: 15px; padding: 12px 20px; }
+        #setup-info { top: 15px; left: 50%; transform: translateX(-50%); font-weight: bold; display: none; background-color: rgba(0, 123, 255, 0.85); border-color: #0056b3; }
+        #player-indicator { display: inline-block; width: 14px; height: 14px; border: 2px solid #ccc; margin-right: 6px; vertical-align: middle; border-radius: 3px; box-shadow: inset 0 0 3px rgba(0,0,0,0.5); }
+
+        .game-button { /* For restart button */
+            padding: 12px 20px;
+            font-size: clamp(13px, 2.5vw, 15px);
+            color: white; border: none; border-radius: 6px; cursor: pointer;
+            transition: background-color 0.2s ease, transform 0.1s ease, box-shadow 0.2s ease;
+            font-family: 'Orbitron', sans-serif;
+            background-color: #007bff; border: 1px solid #0056b3;
+            box-shadow: 0 2px 5px rgba(0,0,0,0.3), inset 0 -2px 0 rgba(0,0,0,0.2);
+            text-shadow: 0 0 2px rgba(0,0,0,0.5);
+        }
+        .game-button:hover { background-color: #0069d9; transform: translateY(-1px); box-shadow: 0 3px 7px rgba(0,0,0,0.4), inset 0 -2px 0 rgba(0,0,0,0.1); }
+        .game-button:active { transform: translateY(0px); background-color: #0056b3; box-shadow: 0 1px 3px rgba(0,0,0,0.3), inset 0 1px 0 rgba(0,0,0,0.2); }
+
+        #status-message-container {
+            position: absolute; top: 0; left: 0; width: 100%; height: 100%;
+            display: none; align-items: center; justify-content: center;
+            z-index: 10; background-color: rgba(0,0,0,0.6); backdrop-filter: blur(4px);
+        }
+        #status-message {
+            padding: 30px 40px; background-color: rgba(30, 30, 30, 0.95);
+            color: white; font-size: clamp(20px, 5vw, 34px); font-weight: bold;
+            border: 2px solid #888; border-radius: 12px; text-align: center;
+            box-shadow: 0 10px 30px rgba(0,0,0,0.7);
+            text-shadow: 1px 1px 0px #000, 0 0 10px rgba(255,255,255,0.3);
+            font-family: 'Orbitron', sans-serif;
+            transform: scale(0.95); opacity: 0;
+            animation: statusEntry 0.5s 0.2s forwards cubic-bezier(0.175, 0.885, 0.32, 1.275);
+            max-width: 90%;
+        }
+        @keyframes statusEntry { to { transform: scale(1); opacity: 1; } }
+        #status-message button { /* Uses .game-button */ display: block; margin: 25px auto 0; background-color: #4CAF50; border-color: #388E3C; }
+        #status-message button:hover { background-color: #45a049; border-color: #307c34; }
+
+        #tooltip {
+            position: absolute; display: none; padding: 8px 14px;
+            background-color: rgba(10, 10, 10, 0.92); border: 1px solid #666;
+            border-radius: 5px; color: #f0f0f0;
+            font-size: 13px; pointer-events: none; z-index: 100;
+            white-space: nowrap; font-family: 'Roboto', sans-serif;
+            box-shadow: 0 2px 8px rgba(0,0,0,0.4);
+            transition: opacity 0.1s ease;
+        }
+        #tooltip strong { color: #03A9F4; }
+    </style>
+</head>
+<body>
+    <svg id="map"><g id="map-group"></g></svg>
+    <div id="tooltip"></div>
+
+    <div id="setup-info" class="ui-overlay">Select your starting territory!</div>
+    <div id="ui-info" class="ui-overlay">
+         <span id="player-indicator"></span> <span id="player-name">Commander</span>: <span id="player-units">0</span> | <span id="player-status">Ready</span>
+    </div>
+    <!-- View toggle button removed -->
+    <div id="status-message-container">
+         <div id="status-message">
+             <span id="win-lose-text"></span>
+             <button id="restart-button" class="game-button">Restart Game</button>
+         </div>
+    </div>
+
+    <script>
+(async () => {
+    // --- D3 Setup ---
+    const svg = d3.select("svg#map");
+    const width = window.innerWidth; const height = window.innerHeight;
+    const mapGroup = svg.select("#map-group");
+
+    // --- 2D Projection ---
+    const projection = d3.geoMercator().fitSize([width, height], { type: "Sphere" }); // Fit world to screen
+    const pathGenerator = d3.geoPath(projection);
+
+    const world = await d3.json("https://cdn.jsdelivr.net/npm/world-atlas@2/countries-110m.json");
+    const countries = topojson.feature(world, world.objects.countries);
+
+    // --- Spiel-Konstanten & Variablen ---
+    const PLAYER_ID = 0; const AI_PLAYER_COUNT = 3;
+    const PLAYER_COLORS = ['#00A8FF', '#E84118', '#FBC531', '#4CD137', '#9C88FF', '#FD7E14', '#20C997'];
+    const AI_NAMES = ["Nova Corp", "Kree Imperium", "Skrull Empire", "Annihilation Wave", "Brood Collective", "Shi'ar Guard"];
+    let PLAYER_COLOR = PLAYER_COLORS[0];
+    const START_UNITS = 15; const NEUTRAL_START_UNITS_MIN = 1; const NEUTRAL_START_UNITS_MAX = 8;
+    const UNIT_GENERATION_INTERVAL = 1000; const PLAYER_UNIT_GENERATION_RATE = 1; const NEUTRAL_UNIT_GENERATION_RATE = 0.05;
+    const MAX_UNITS_PER_COUNTRY = 999; const MAX_NEUTRAL_UNITS = 50;
+    const MIN_UNITS_TO_MOVE = 2; const MIN_UNITS_FOR_AI_SOURCE = 10;
+    const TRAVEL_TIME_FACTOR = 50; // Original factor for 2D pixel distance
+    const NEUTRAL_COLOR = "#777777"; // Darker neutral (was #666666)
+
+    // --- Spielzustand ---
+    let gamePhase = 'setup';
+    let grid = {}; let players = []; let movingUnitGroups = [];
+    let selectedCountryId = null;
+    let animationFrameId = null; let lastUpdateTime = 0;
+    let unitGenerationTimer = 0; let aiDecisionTimer = 0;
+    const AI_DECISION_INTERVAL = 900; // AI thinks slightly faster
+
+    // --- UI Elemente Refs ---
+    const setupInfoDiv = document.getElementById('setup-info');
+    const uiInfoDiv = document.getElementById('ui-info');
+    const playerIndicatorSpan = document.getElementById('player-indicator');
+    const playerNameSpan = document.getElementById('player-name');
+    const playerUnitsUI = document.getElementById('player-units');
+    const playerStatusUI = document.getElementById('player-status');
+    const statusMessageContainerDiv = document.getElementById('status-message-container');
+    const statusMessageDiv = document.getElementById('status-message');
+    const winLoseTextSpan = document.getElementById('win-lose-text');
+    const restartButton = document.getElementById('restart-button');
+    const tooltipDiv = document.getElementById('tooltip');
+
+    // --- Nachbarschaftslogik & Zentroide Cache ---
+    let neighborsMap = new Map(); let countryIdMap = new Map(); let centroidCache = new Map();
+
+    function initializeNeighborData() { neighborsMap.clear(); countryIdMap.clear(); centroidCache.clear(); const cG = world.objects.countries.geometries; const idM = new Map(); cG.forEach((g, i) => { if(g.id) idM.set(g.id, i); }); const nI = topojson.neighbors(cG); countries.features.forEach(f => { if (!f.id) return; countryIdMap.set(f.id, f); const idx = idM.get(f.id); const nIdx = nI[idx] || []; const nIds = nIdx.map(i => cG[i]?.id).filter(id => id && id !== f.id); neighborsMap.set(f.id, nIds); }); }
+    function getNeighbors(countryId) { return neighborsMap.get(countryId) || []; }
+
+    function getScreenCentroid(countryId) {
+        if (centroidCache.has(countryId)) return centroidCache.get(countryId);
+        const feature = countryIdMap.get(countryId);
+        if (!feature) return [width * 2, height * 2]; // Off-screen
+
+        let c = pathGenerator.centroid(feature);
+        if (isNaN(c[0]) || isNaN(c[1])) { // Fallback for complex shapes or antimeridian issues
+            const b = pathGenerator.bounds(feature);
+            if (b && !isNaN(b[0][0]) && !isNaN(b[0][1]) && !isNaN(b[1][0]) && !isNaN(b[1][1])) {
+                c = [(b[0][0] + b[1][0]) / 2, (b[0][1] + b[1][1]) / 2];
+            } else { // Ultimate fallback
+                c = [width * 2, height * 2];
+            }
+        }
+        centroidCache.set(countryId, c);
+        return c;
+    }
+
+    // --- Spiel Initialisierung ---
+    function initializeGrid() { grid = {}; countries.features.forEach(c => { if(c.id) grid[c.id] = { owner: null, units: Math.floor(Math.random()*(NEUTRAL_START_UNITS_MAX - NEUTRAL_START_UNITS_MIN + 1)) + NEUTRAL_START_UNITS_MIN }; }); }
+    function definePlayers() { players = []; PLAYER_COLOR = PLAYER_COLORS[0]; players.push({ id: PLAYER_ID, name: "Commander", isAI: false, color: PLAYER_COLOR }); playerIndicatorSpan.style.backgroundColor = PLAYER_COLOR; playerNameSpan.textContent = "Commander"; let aN = [...AI_NAMES], pC = [...PLAYER_COLORS]; pC.shift(); for (let i=0; i<AI_PLAYER_COUNT; i++) { if (aN.length===0||pC.length===0) break; const nI = Math.floor(Math.random()*aN.length); const name = aN.splice(nI, 1)[0]; const color = pC.splice(Math.floor(Math.random()*pC.length), 1)[0]; players.push({ id: i + 1, name: name, isAI: true, color: color }); } }
+    function assignAiStartCountries(playerStartId) {
+        const availableCountries = Object.keys(grid).filter(id => id !== playerStartId && grid[id].owner === null);
+        const aiPlayers = players.filter(p => p.isAI);
+        aiPlayers.forEach(ai => {
+            if (availableCountries.length === 0) { console.warn(`No available start for ${ai.name}`); return; }
+            const randomIndex = Math.floor(Math.random() * availableCountries.length);
+            const randomCountryId = availableCountries.splice(randomIndex, 1)[0];
+            if (grid[randomCountryId]) {
+                grid[randomCountryId].owner = ai.id;
+                grid[randomCountryId].units = START_UNITS;
+                updateCountryVisual(randomCountryId);
+            }
+        });
+    }
+
+    // --- Spiel Logik ---
+    function initiateUnitMovement(sourceId, targetId) {
+        const sourceData = grid[sourceId]; const targetData = grid[targetId];
+        if (!sourceData || !targetData || sourceData.owner === null || sourceData.units < MIN_UNITS_TO_MOVE) { return; }
+        const unitsToSend = sourceData.units - 1; if (unitsToSend < 1) return;
+        sourceData.units = 1;
+
+        const sourcePos = getScreenCentroid(sourceId);
+        const targetPos = getScreenCentroid(targetId);
+        const distance = Math.sqrt(Math.pow(targetPos[0] - sourcePos[0], 2) + Math.pow(targetPos[1] - sourcePos[1], 2));
+        const travelTime = distance * TRAVEL_TIME_FACTOR;
+        const now = performance.now();
+
+        // Simple linear interpolator for 2D screen coordinates
+        const interpolator = (t) => [
+            sourcePos[0] + (targetPos[0] - sourcePos[0]) * t,
+            sourcePos[1] + (targetPos[1] - sourcePos[1]) * t
+        ];
+
+        const group = {
+            sourceId, targetId, units: unitsToSend, playerId: sourceData.owner,
+            progress: 0, startTime: now, endTime: now + travelTime,
+            interpolator: interpolator,
+            visualDots: []
+        };
+
+        const numVisualDots = unitsToSend; // One dot per unit
+        const spreadFactor = 10;
+        for (let i = 0; i < numVisualDots; i++) {
+            group.visualDots.push({ // Random offset for cluster effect
+                offsetX: (Math.random() - 0.5) * spreadFactor * Math.sqrt(15/Math.max(15, numVisualDots)),
+                offsetY: (Math.random() - 0.5) * spreadFactor * Math.sqrt(15/Math.max(15, numVisualDots)),
+            });
+        }
+        movingUnitGroups.push(group);
+        updateCountryVisual(sourceId);
+    }
+    function updateMovingUnits(currentTime) { for (let i = movingUnitGroups.length - 1; i >= 0; i--) { const g = movingUnitGroups[i]; if (currentTime >= g.endTime) { resolveUnitArrival(g.units, g.playerId, g.targetId); movingUnitGroups.splice(i, 1); } else { g.progress = (currentTime - g.startTime) / (g.endTime - g.startTime); } } }
+    function resolveUnitArrival(arrivingUnits, attackerPlayerId, targetCountryId) {
+        const targetData = grid[targetCountryId]; if (!targetData) return;
+        const wasHostileTakeover = targetData.owner !== null && targetData.owner !== attackerPlayerId && arrivingUnits > targetData.units;
+        const wasNeutralTakeover = targetData.owner === null && arrivingUnits > targetData.units;
+        const isAttack = targetData.owner !== attackerPlayerId;
+
+        if (targetData.owner === attackerPlayerId) { targetData.units = Math.min(MAX_UNITS_PER_COUNTRY, targetData.units + arrivingUnits); }
+        else { if (arrivingUnits > targetData.units) { targetData.owner = attackerPlayerId; targetData.units = Math.min(MAX_UNITS_PER_COUNTRY, arrivingUnits - targetData.units); } else { targetData.units -= arrivingUnits; } }
+        if (targetData.units < 0) targetData.units = 0;
+        updateCountryVisual(targetCountryId);
+
+        if (isAttack || wasHostileTakeover || wasNeutralTakeover) {
+            const centroid = getScreenCentroid(targetCountryId);
+            if(centroid[0] < width*1.5 && centroid[1] < height*1.5) { // Generous on-screen check
+                const flashColor = players.find(p => p.id === attackerPlayerId)?.color || NEUTRAL_COLOR;
+                mapGroup.append("circle").attr("class", "arrival-flash").attr("cx", centroid[0]).attr("cy", centroid[1])
+                    .attr("r", 5).style("fill", flashColor).style("stroke", d3.color(flashColor).brighter(1))
+                    .transition().duration(450).ease(d3.easeExpOut)
+                    .attr("r", Math.random()*15+25)
+                    .style("opacity", 0).remove();
+            }
+        }
+    }
+    function runAI() {
+        players.forEach(p => {
+            if (!p.isAI || gamePhase !== 'running') return;
+            const ownedCountries = Object.keys(grid).filter(id => grid[id].owner === p.id && grid[id].units >= MIN_UNITS_FOR_AI_SOURCE);
+            if (ownedCountries.length === 0) return;
+
+            const sourceId = ownedCountries[Math.floor(Math.random() * ownedCountries.length)];
+            const sourceData = grid[sourceId];
+            const neighbors = getNeighbors(sourceId);
+            const potentialTargets = neighbors.filter(tId => grid[tId] && grid[tId].owner !== p.id);
+
+            if (potentialTargets.length > 0) {
+                let targetId = null;
+                const enemyTargets = potentialTargets.filter(id => grid[id].owner !== null && grid[id].units < (sourceData.units-1));
+                const neutralTargets = potentialTargets.filter(id => grid[id].owner === null);
+                if (enemyTargets.length > 0 && Math.random() < 0.7) targetId = enemyTargets[Math.floor(Math.random()*enemyTargets.length)];
+                else if (neutralTargets.length > 0 && Math.random() < 0.85) targetId = neutralTargets[Math.floor(Math.random()*neutralTargets.length)];
+                else targetId = potentialTargets[Math.floor(Math.random()*potentialTargets.length)];
+                if (targetId) initiateUnitMovement(sourceId, targetId);
+            }
+        });
+    }
+    function checkWinCondition() { /* Unchanged */ if (gamePhase !== 'running') return; let actP = new Set(); let humA = false; for (const id in grid) { if (grid[id].owner !== null) { actP.add(grid[id].owner); if (grid[id].owner === PLAYER_ID) humA = true; } } movingUnitGroups.forEach(g => { actP.add(g.playerId); if (g.playerId === PLAYER_ID) humA = true; }); const pInG = players.some(p => p.id === PLAYER_ID); if (actP.size === 1 && humA) endGame(players.find(p => p.id === PLAYER_ID)); else if (actP.size >= 1 && !humA && pInG) { const win = actP.size === 1 ? players.find(p => actP.has(p.id)) : null; endGame(win); } else if (actP.size === 0 && pInG) endGame(null); }
+    function endGame(winner) { /* Unchanged */ if (gamePhase === 'ended') return; gamePhase = 'ended'; cancelAnimationFrame(animationFrameId); statusMessageContainerDiv.style.display = 'flex'; statusMessageDiv.style.opacity = '0'; if (winner && winner.id === PLAYER_ID) { winLoseTextSpan.textContent = "Global Dominion Achieved!"; statusMessageDiv.style.backgroundColor = 'rgba(76, 175, 80, 0.95)'; } else if (winner) { winLoseTextSpan.textContent = `${winner.name} Conquers All!`; statusMessageDiv.style.backgroundColor = 'rgba(232, 65, 24, 0.95)'; } else { winLoseTextSpan.textContent = "Commander Eliminated!"; statusMessageDiv.style.backgroundColor = 'rgba(108, 117, 125, 0.95)'; } }
+
+    // --- D3 Visualisierung & Update ---
+    function updateCountryVisual(countryId) {
+        const countryData = grid[countryId]; if (!countryData) return;
+        const pathElement = mapGroup.select("#c" + countryId); if (pathElement.empty()) return;
+
+        const player = players.find(p => p.id === countryData.owner);
+        const fillColor = player ? player.color : NEUTRAL_COLOR;
+        const isSelected = countryId === selectedCountryId;
+        const isPlayerOwned = countryData.owner !== null;
+
+        pathElement.attr("fill", fillColor)
+            .classed("selected", isSelected)
+            .classed("player-owned", isPlayerOwned)
+            .classed("setup-selectable", gamePhase === 'setup');
+
+        const unitText = mapGroup.select(".unit-text#t" + countryId);
+        if (countryData.units >= 1) {
+            const displayUnits = Math.floor(countryData.units);
+            const centroid = getScreenCentroid(countryId);
+            if (centroid[0] < width * 1.5 && centroid[1] < height * 1.5) { // Check if centroid is roughly on screen
+                if (unitText.empty()) {
+                    mapGroup.append("text").attr("class", "unit-text").attr("id", "t" + countryId)
+                        .text(displayUnits).attr("x", centroid[0]).attr("y", centroid[1]).style("display", "block");
+                } else {
+                    unitText.text(displayUnits).attr("x", centroid[0]).attr("y", centroid[1]).style("display", "block");
+                }
+            } else { if (!unitText.empty()) unitText.style("display", "none"); }
+        } else { if (!unitText.empty()) unitText.style("display", "none"); }
+    }
+
+    function drawMovingUnitGroups() {
+        mapGroup.selectAll(".moving-unit-dots-group").remove();
+
+        movingUnitGroups.forEach(group => {
+            const [screenX, screenY] = group.interpolator(group.progress);
+            const groupContainer = mapGroup.append("g").attr("class", "moving-unit-dots-group");
+            const playerColor = players.find(p => p.id === group.playerId)?.color || NEUTRAL_COLOR;
+            const dotRadius = 2.5;
+
+            group.visualDots.forEach(dotData => {
+                groupContainer.append("circle")
+                    .attr("class", "moving-unit-dot")
+                    .attr("cx", screenX + dotData.offsetX)
+                    .attr("cy", screenY + dotData.offsetY)
+                    .attr("r", dotRadius)
+                    .style("fill", playerColor);
+            });
+        });
+    }
+
+    // --- Haupt-Update & Draw Loop ---
+    function update(currentTime) { if (gamePhase !== 'running') return; const dT = currentTime - (lastUpdateTime || currentTime); lastUpdateTime = currentTime; unitGenerationTimer += dT; if (unitGenerationTimer >= UNIT_GENERATION_INTERVAL) { const gT = Math.floor(unitGenerationTimer / UNIT_GENERATION_INTERVAL); unitGenerationTimer %= UNIT_GENERATION_INTERVAL; let chC = new Set(); for (const id in grid) { const cD = grid[id]; let gen = 0; if (cD.owner !== null) { if (cD.units < MAX_UNITS_PER_COUNTRY) { gen = PLAYER_UNIT_GENERATION_RATE * gT; cD.units = Math.min(MAX_UNITS_PER_COUNTRY, cD.units + gen); } } else { if (cD.units < MAX_NEUTRAL_UNITS) { gen = NEUTRAL_UNIT_GENERATION_RATE * gT; cD.units = Math.min(MAX_NEUTRAL_UNITS, cD.units + gen); } } if (gen > 0) chC.add(id); } chC.forEach(id => updateCountryVisual(id)); } updateMovingUnits(currentTime); aiDecisionTimer += dT; if (aiDecisionTimer >= AI_DECISION_INTERVAL) { aiDecisionTimer %= AI_DECISION_INTERVAL; runAI(); } checkWinCondition(); updateUI(); }
+    function gameDraw() { if (gamePhase === 'running') { drawMovingUnitGroups(); } else { mapGroup.selectAll(".moving-unit-dots-group").remove(); } }
+    function updateUI() {
+        let playerTotalUnits = 0;
+        if (gamePhase !== 'setup') { for (const id in grid) { if (grid[id].owner === PLAYER_ID) playerTotalUnits += grid[id].units; } movingUnitGroups.forEach(group => { if (group.playerId === PLAYER_ID) playerTotalUnits += group.units; }); }
+        playerUnitsUI.textContent = Math.floor(playerTotalUnits);
+
+        mapGroup.selectAll("path.country.valid-target").classed("valid-target", false);
+
+        if (selectedCountryId && gamePhase === 'running') {
+            const countryData = grid[selectedCountryId]; const feature = countryIdMap.get(selectedCountryId);
+            const name = feature?.properties?.name || `Region ${selectedCountryId}`;
+            playerStatusUI.textContent = `Selected: ${name} (${Math.floor(countryData?.units || 0)})`;
+            if (grid[selectedCountryId].owner === PLAYER_ID) {
+                getNeighbors(selectedCountryId).forEach(nId => {
+                    if (grid[nId]) mapGroup.select("#c" + nId).classed("valid-target", true);
+                });
+            }
+        } else { playerStatusUI.textContent = (gamePhase === 'running') ? 'Ready' : (gamePhase === 'setup' ? 'Select Start' : 'Game Over'); }
+        setupInfoDiv.style.display = (gamePhase === 'setup') ? 'block' : 'none';
+        uiInfoDiv.style.visibility = (gamePhase !== 'setup') ? 'visible' : 'hidden';
+    }
+
+    // --- Event Handlers ---
+    function handleCountrySingleClick(event, feature) {
+        if (gamePhase === 'ended' || !feature || !feature.id || !grid[feature.id]) return;
+        const clickedCountryId = feature.id; const clickedData = grid[clickedCountryId];
+        if (gamePhase === 'setup') { grid[clickedCountryId].owner = PLAYER_ID; grid[clickedCountryId].units = START_UNITS; updateCountryVisual(clickedCountryId); assignAiStartCountries(clickedCountryId); gamePhase = 'running'; lastUpdateTime = performance.now(); unitGenerationTimer = 0; aiDecisionTimer = 0; updateUI(); if (animationFrameId) cancelAnimationFrame(animationFrameId); animationFrameId = requestAnimationFrame(gameLoop); return; }
+        if (gamePhase === 'running') {
+            if (selectedCountryId) {
+                const sourceData = grid[selectedCountryId];
+                if (sourceData && sourceData.owner === PLAYER_ID && clickedCountryId !== selectedCountryId && getNeighbors(selectedCountryId).includes(clickedCountryId)) {
+                    initiateUnitMovement(selectedCountryId, clickedCountryId);
+                    const prevSelected = selectedCountryId; selectedCountryId = null; updateCountryVisual(prevSelected);
+                } else if (clickedCountryId === selectedCountryId) {
+                    const prevSelected = selectedCountryId; selectedCountryId = null; updateCountryVisual(prevSelected);
+                } else if (clickedData.owner === PLAYER_ID && clickedData.units >= MIN_UNITS_TO_MOVE) {
+                    const prevSelected = selectedCountryId; selectedCountryId = clickedCountryId;
+                    if(prevSelected && grid[prevSelected]) updateCountryVisual(prevSelected); updateCountryVisual(clickedCountryId);
+                } else {
+                    const prevSelected = selectedCountryId; selectedCountryId = null; if(prevSelected && grid[prevSelected]) updateCountryVisual(prevSelected);
+                }
+            } else { if (clickedData.owner === PLAYER_ID && clickedData.units >= MIN_UNITS_TO_MOVE) { selectedCountryId = clickedCountryId; updateCountryVisual(clickedCountryId); } else { selectedCountryId = null; } }
+            updateUI();
+        }
+    }
+    function handleCountryMouseOver(event, d) { if (!d || !d.id || !grid[d.id] || 'ontouchstart' in window) return; tooltipDiv.style.opacity = '1'; tooltipDiv.style.display = 'block'; const countryData = grid[d.id]; const name = d.properties.name || `Region ${d.id}`; let ownerName = "Neutral Zone"; if (countryData.owner !== null) { const p = players.find(pl => pl.id === countryData.owner); ownerName = p ? p.name : "Unknown"; } tooltipDiv.innerHTML = `<strong>${name}</strong><br>Control: ${ownerName}<br>Forces: ${Math.floor(countryData.units)}`; }
+    function handleCountryMouseOut() { if ('ontouchstart' in window) return; tooltipDiv.style.opacity = '0'; setTimeout(() => { if (tooltipDiv.style.opacity === '0') tooltipDiv.style.display = 'none';}, 100); }
+    function handleCountryMouseMove(event) { if ('ontouchstart' in window) return; tooltipDiv.style.left = (event.pageX + 15) + 'px'; tooltipDiv.style.top = (event.pageY + 10) + 'px'; if (event.pageX + tooltipDiv.offsetWidth + 30 > window.innerWidth) { tooltipDiv.style.left = (event.pageX - tooltipDiv.offsetWidth - 15) + 'px';} if (event.pageY + tooltipDiv.offsetHeight + 30 > window.innerHeight) { tooltipDiv.style.top = (event.pageY - tooltipDiv.offsetHeight - 10) + 'px';} }
+
+    // --- Zoom Logic for 2D ---
+    const zoomBehavior = d3.zoom()
+        .scaleExtent([0.5, 15]) // Min/max zoom for 2D map
+        .translateExtent([[0,0],[width,height]]) // Constrain panning within map bounds
+        .on("zoom", zoomed2d);
+    svg.call(zoomBehavior).on("dblclick.zoom", null);
+
+    function zoomed2d(event) {
+        mapGroup.attr("transform", event.transform);
+        centroidCache.clear(); // Centroids are screen-dependent, clear on zoom/pan
+        // Redraw unit texts and potentially moving units as their screen positions change relative to fixed elements
+        Object.keys(grid).forEach(id => updateCountryVisual(id)); // Re-evaluate text positions
+        gameDraw(); // Redraw moving units
+    }
+
+    // --- Game Loop ---
+    function gameLoop(currentTime) { update(currentTime); gameDraw(); if (gamePhase === 'running' || gamePhase === 'ended') animationFrameId = requestAnimationFrame(gameLoop); }
+
+    // --- Spielstart Funktion ---
+    function startGame() {
+        console.log("Initializing Global Dominion (2D Enhanced)...");
+        if (animationFrameId) cancelAnimationFrame(animationFrameId);
+        gamePhase = 'setup'; selectedCountryId = null; movingUnitGroups = [];
+        lastUpdateTime = 0; unitGenerationTimer = 0; aiDecisionTimer = 0;
+        statusMessageContainerDiv.style.display = 'none'; statusMessageDiv.style.opacity = '0';
+        centroidCache.clear(); // Clear centroid cache on restart
+
+        initializeGrid(); definePlayers();
+        mapGroup.selectAll("*").remove(); // Clear previous map elements
+
+        // Add a simple ocean background for 2D
+        mapGroup.append("rect")
+            .attr("class", "ocean-2d")
+            .attr("x", 0).attr("y", 0)
+            .attr("width", width).attr("height", height);
+
+        mapGroup.selectAll("path.country")
+            .data(countries.features.filter(d => d.id && grid[d.id]))
+            .enter().append("path")
+            .attr("class", "country")
+            .attr("d", pathGenerator)
+            .attr("fill", NEUTRAL_COLOR)
+            .attr("id", d => "c" + d.id)
+            .on("click", function(event, d) { handleCountrySingleClick(event, d); })
+            .on("mouseover", function(event, d) { handleCountryMouseOver(event, d); })
+            .on("mouseout", handleCountryMouseOut)
+            .on("mousemove", handleCountryMouseMove)
+            .each(function(d) { updateCountryVisual(d.id); }); // Initial draw of country visuals
+
+        svg.call(zoomBehavior.transform, d3.zoomIdentity); // Reset D3 zoom transform
+        mapGroup.attr("transform", "translate(0,0) scale(1)"); // Explicitly reset group transform
+
+        Object.keys(grid).forEach(id => updateCountryVisual(id)); // Ensure all visuals are correct
+        updateUI();
+        console.log("System Online. Awaiting Commander's Initial Deployment.");
+    }
+
+    // --- Initialisierung ---
+    restartButton.addEventListener('click', startGame);
+    initializeNeighborData(); // Prepare neighbor data once
+    startGame(); // Start the game
+
+})();
+    </script>
+</body>
+</html>
