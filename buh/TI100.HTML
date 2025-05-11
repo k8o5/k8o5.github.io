@@ -1,1 +1,335 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Gemini Three.js Game Generator (Client-Side Key)</title>
+    <style>
+        body {
+            font-family: -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, Helvetica, Arial, sans-serif;
+            margin: 0;
+            padding: 20px;
+            background-color: #f4f7f6;
+            color: #333;
+            display: flex;
+            flex-direction: column;
+            align-items: center;
+        }
+        .container {
+            background-color: white;
+            padding: 25px;
+            border-radius: 8px;
+            box-shadow: 0 4px 15px rgba(0, 0, 0, 0.1);
+            width: 90%;
+            max-width: 1000px;
+        }
+        h1 {
+            text-align: center;
+            color: #2c3e50;
+            margin-bottom: 20px;
+        }
+        label {
+            display: block;
+            margin-bottom: 5px;
+            font-weight: bold;
+            color: #555;
+        }
+        input[type="text"],
+        input[type="password"],
+        textarea {
+            width: calc(100% - 22px);
+            padding: 10px;
+            margin-bottom: 15px;
+            border: 1px solid #ddd;
+            border-radius: 4px;
+            font-size: 1em;
+            box-sizing: border-box;
+        }
+        textarea {
+            min-height: 100px;
+            font-family: monospace;
+            resize: vertical;
+        }
+        button {
+            padding: 12px 20px;
+            background-color: #3498db;
+            color: white;
+            border: none;
+            border-radius: 4px;
+            cursor: pointer;
+            font-size: 1em;
+            transition: background-color 0.3s ease;
+            width: 100%;
+        }
+        button:hover {
+            background-color: #2980b9;
+        }
+        button:disabled {
+            background-color: #bdc3c7;
+            cursor: not-allowed;
+        }
+        .output-section {
+            margin-top: 25px;
+            padding-top: 20px;
+            border-top: 1px solid #eee;
+        }
+        .output-section h2 {
+            margin-top: 0;
+            color: #333;
+        }
+        #game-container {
+            width: 100%;
+            height: 500px;
+            border: 1px solid #ccc;
+            margin-top: 10px;
+            background-color: #222; /* Dark background for contrast */
+            overflow: hidden; /* Prevents scrollbars from iframe content if it's slightly too large */
+        }
+        .error-message {
+            color: #e74c3c;
+            background-color: #fbeae5;
+            padding: 10px;
+            border: 1px solid #e74c3c;
+            border-radius: 4px;
+            margin-bottom: 15px;
+            text-align: center;
+        }
+        .loading-message {
+            text-align: center;
+            font-style: italic;
+            color: #555;
+            margin: 15px 0;
+        }
+        .api-key-warning {
+            background-color: #fff3cd;
+            color: #856404;
+            padding: 10px;
+            border: 1px solid #ffeeba;
+            border-radius: 4px;
+            margin-bottom: 20px;
+            font-size: 0.9em;
+        }
+        .api-key-label-container {
+            display: flex;
+            justify-content: space-between;
+            align-items: center;
+            margin-bottom: 5px;
+        }
+        .api-key-label-container label {
+            margin-bottom: 0; /* Remove bottom margin from label as it's now in a flex container */
+        }
+        .get-api-key-link {
+            font-size: 0.85em;
+            color: #3498db;
+            text-decoration: none;
+        }
+        .get-api-key-link:hover {
+            text-decoration: underline;
+        }
+    </style>
+    <!--
+        Using ES Module Shims for environments that don't fully support import maps or bare module specifiers from CDNs
+        This allows us to use `import { GoogleGenerativeAI } from "@google/generative-ai"`
+    -->
+    <script async src="https://ga.jspm.io/npm:es-module-shims@1.8.3/dist/es-module-shims.js" crossorigin="anonymous"></script>
+    <script type="importmap">
+    {
+      "imports": {
+        "@google/generative-ai": "https://esm.run/@google/generative-ai"
+      }
+    }
+    </script>
+</head>
+<body>
+    <div class="container">
+        <h1>Gemini Three.js Game Generator</h1>
 
+        <div class="api-key-warning">
+            <strong>Important:</strong> You are entering your API key directly into this webpage.
+            Ensure you trust the source of this HTML file. The key is used only in your browser
+            to communicate with the Gemini API and is not sent to any other server by this script.
+            However, browser extensions or malicious scripts on other tabs (if browser security is compromised)
+            could potentially access it. Use a dedicated, restricted API key if possible.
+        </div>
+
+        <div>
+            <div class="api-key-label-container">
+                <label for="apiKey">Your Gemini API Key:</label>
+                <a href="https://aistudio.google.com/app/apikey" target="_blank" rel="noopener noreferrer" class="get-api-key-link">Get an API Key</a>
+            </div>
+            <input type="password" id="apiKey" placeholder="Enter your Gemini API Key">
+        </div>
+
+        <div>
+            <label for="prompt">Game Description:</label>
+            <textarea id="prompt" rows="4" placeholder="e.g., 'a red cube spinning', 'a simple car driving on a plane', 'a particle system explosion'"></textarea>
+        </div>
+
+        <button id="generateButton">Generate Game Code</button>
+
+        <div id="loadingMessage" class="loading-message" style="display: none;">AI is thinking... this might take a moment.</div>
+        <div id="errorMessage" class="error-message" style="display: none;"></div>
+
+        <div class="output-section">
+            <h2>Generated Code (HTML for Three.js):</h2>
+            <textarea id="generatedCode" rows="15" readonly placeholder="Generated Three.js HTML/JS code will appear here..."></textarea>
+        </div>
+
+        <div class="output-section" id="gamePreviewSection" style="display: none;">
+            <h2>Live Game Preview:</h2>
+            <p>
+                The game below is rendered in an iframe. If it doesn't work, the generated code might have issues.
+                You can copy the code above and test it in a separate HTML file.
+            </p>
+            <iframe id="game-container" title="Generated Three.js Game" sandbox="allow-scripts allow-same-origin"></iframe>
+        </div>
+    </div>
+
+    <script type="module">
+        // ESM import thanks to es-module-shims and importmap
+        import { GoogleGenerativeAI, HarmCategory, HarmBlockThreshold } from "@google/generative-ai";
+
+        const apiKeyInput = document.getElementById('apiKey');
+        const promptInput = document.getElementById('prompt');
+        const generateButton = document.getElementById('generateButton');
+        const generatedCodeTextarea = document.getElementById('generatedCode');
+        const gameIframe = document.getElementById('game-container');
+        const gamePreviewSection = document.getElementById('gamePreviewSection');
+        const loadingMessage = document.getElementById('loadingMessage');
+        const errorMessage = document.getElementById('errorMessage');
+
+        let genAI; // Will be initialized when API key is available
+        let model;
+
+        const safetySettings = [
+            { category: HarmCategory.HARM_CATEGORY_HARASSMENT, threshold: HarmBlockThreshold.BLOCK_MEDIUM_AND_ABOVE },
+            { category: HarmCategory.HARM_CATEGORY_HATE_SPEECH, threshold: HarmBlockThreshold.BLOCK_MEDIUM_AND_ABOVE },
+            { category: HarmCategory.HARM_CATEGORY_SEXUALLY_EXPLICIT, threshold: HarmBlockThreshold.BLOCK_MEDIUM_AND_ABOVE },
+            { category: HarmCategory.HARM_CATEGORY_DANGEROUS_CONTENT, threshold: HarmBlockThreshold.BLOCK_MEDIUM_AND_ABOVE },
+        ];
+
+        generateButton.addEventListener('click', async () => {
+            const apiKey = apiKeyInput.value.trim();
+            const userPrompt = promptInput.value.trim();
+
+            if (!apiKey) {
+                displayError("Please enter your Gemini API Key.");
+                return;
+            }
+            if (!userPrompt) {
+                displayError("Please enter a game description.");
+                return;
+            }
+
+            showLoading(true);
+            clearError();
+            generatedCodeTextarea.value = '';
+            gamePreviewSection.style.display = 'none';
+            gameIframe.src = 'about:blank';
+
+
+            try {
+                if (!genAI || genAI.apiKey !== apiKey) {
+                    genAI = new GoogleGenerativeAI(apiKey);
+                    model = genAI.getGenerativeModel({
+                        model: "gemini-2.5-pro-exp-03-25",
+                        safetySettings,
+                    });
+                }
+
+                const generationConfig = {
+                    temperature: 0.7,
+                    topK: 40,
+                    topP: 0.95,
+                    maxOutputTokens: 8192,
+                };
+
+                const fullPrompt = `
+You are an AI assistant that generates COMPLETE, SINGLE-FILE, RUNNABLE JaveScript game code.
+The output MUST be a single HTML file content string.
+This HTML file should:
+1. Be the most epic game ever created unique af
+2. Have a lot of mojo and let game have austin powers vibe
+3. Implement the game logic based on the user's request: "${userPrompt}".
+4. Include an animation loop (requestAnimationFrame).
+5. Be self-contained and immediately executable when pasted into an HTML file or used as iframe srcdoc.
+6. DO NOT include any markdown like \`\`\`html or \`\`\`javascript.
+7. DO NOT include any explanations, comments, or text outside the HTML code itself. Just the pure HTML code.
+8. The game should be rendered full-window or in a reasonably large canvas. Ensure CSS makes body/html 100% height/width and margin/padding 0 for the generated game if it's meant to be full screen.
+9. Ensure the camera is positioned to see the main elements of the game.
+10. Add some basic lighting (e.g., AmbientLight, DirectionalLight).
+11. Make sure all JavaScript code is within <script> tags in the HTML.
+
+User's game request: "${userPrompt}"
+
+Generate the HTML code now:
+                `;
+
+                const result = await model.generateContent(fullPrompt, generationConfig);
+                const response = result.response;
+                let text = response.text();
+
+                text = text.trim();
+                if (text.startsWith("```html")) {
+                    text = text.substring(7).trim();
+                } else if (text.startsWith("```")) {
+                    text = text.substring(3).trim();
+                }
+                if (text.endsWith("```")) {
+                    text = text.substring(0, text.length - 3).trim();
+                }
+
+                generatedCodeTextarea.value = text;
+                if (text) {
+                    gameIframe.srcdoc = text;
+                    gamePreviewSection.style.display = 'block';
+                }
+
+            } catch (e) {
+                console.error("Error calling Gemini API:", e);
+                let message = "Failed to generate game. ";
+                if (e.message) {
+                    message += e.message;
+                } else if (e.toString().includes("API key not valid")) {
+                    message += "Invalid API Key. Please check your key and try again. Also, ensure the Gemini API is enabled for your project in Google Cloud Console.";
+                } else {
+                    message += "Unknown error. Check the browser console for more details.";
+                }
+                displayError(message);
+            } finally {
+                showLoading(false);
+            }
+        });
+
+        function showLoading(isLoading) {
+            if (isLoading) {
+                loadingMessage.style.display = 'block';
+                generateButton.disabled = true;
+            } else {
+                loadingMessage.style.display = 'none';
+                generateButton.disabled = false;
+            }
+        }
+
+        function displayError(message) {
+            errorMessage.textContent = message;
+            errorMessage.style.display = 'block';
+        }
+
+        function clearError() {
+            errorMessage.textContent = '';
+            errorMessage.style.display = 'none';
+        }
+
+        const savedApiKey = localStorage.getItem('geminiApiKey');
+        if (savedApiKey) {
+            apiKeyInput.value = savedApiKey;
+        }
+
+        apiKeyInput.addEventListener('input', () => {
+            localStorage.setItem('geminiApiKey', apiKeyInput.value);
+        });
+
+    </script>
+</body>
+</html>
