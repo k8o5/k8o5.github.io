@@ -1,0 +1,531 @@
+<!DOCTYPE html>
+<html>
+<head>
+<title>Slot Machine with Free Spins</title>
+<style>
+body {
+  font-family: Arial, sans-serif;
+  background-color: #f0f0f0;
+  display: flex;
+  justify-content: center;
+  align-items: center;
+  height: 100vh;
+  margin: 0;
+}
+
+#gameCanvas {
+  background-color: #fff;
+  border: 2px solid #000;
+  box-shadow: 5px 5px 10px rgba(0, 0, 0, 0.2);
+}
+
+#ui {
+  position: absolute;
+  top: 10px;
+  left: 10px;
+  color: white;
+}
+
+</style>
+</head>
+<body>
+
+<canvas id="gameCanvas" width="600" height="400"></canvas>
+
+<script>
+const canvas = document.getElementById("gameCanvas");
+const ctx = canvas.getContext("2d");
+
+let audioContext;
+try {
+  audioContext = new (window.AudioContext || window.webkitAudioContext)();
+} catch (e) {
+  alert('Web Audio API is not supported in this browser');
+}
+
+let activeSources = [];
+
+// Sound Effects
+const playSlotMachineSpinSound = (audioContext) => {
+  const now = audioContext.currentTime;
+
+  // Create a series of short, percussive sounds
+  const numClicks = 5;
+  const clickInterval = 0.1;
+  const clickDuration = 0.05;
+
+  for (let i = 0; i < numClicks; i++) {
+    const osc = audioContext.createOscillator();
+    const gainNode = audioContext.createGain();
+
+    osc.type = 'square';
+    osc.frequency.value = 800 + (i * 50); // Slightly varying frequencies for each click
+
+    gainNode.gain.setValueAtTime(0, now + i * clickInterval);
+    gainNode.gain.linearRampToValueAtTime(0.5, now + i * clickInterval + 0.01);
+    gainNode.gain.linearRampToValueAtTime(0, now + i * clickInterval + clickDuration);
+
+    osc.connect(gainNode);
+    gainNode.connect(audioContext.destination);
+
+    osc.start(now + i * clickInterval);
+    osc.stop(now + i * clickInterval + clickDuration);
+  }
+
+  // Create a low rumble sound
+  const rumbleOsc = audioContext.createOscillator();
+  const rumbleGain = audioContext.createGain();
+  rumbleOsc.type = 'sine';
+  rumbleOsc.frequency.value = 100; // Low frequency for rumble
+
+  rumbleGain.gain.setValueAtTime(0, now);
+  rumbleGain.gain.linearRampToValueAtTime(0.1, now + 0.05); // Fade in rumble
+  rumbleGain.gain.linearRampToValueAtTime(0, now + numClicks * clickInterval + clickDuration + 0.1); // Fade out after clicks
+
+  rumbleOsc.connect(rumbleGain);
+  rumbleGain.connect(audioContext.destination);
+
+  rumbleOsc.start(now);
+  rumbleOsc.stop(now + numClicks * clickInterval + clickDuration + 0.2);
+};
+
+const playWinningJingle = (audioContext) => {
+  const now = audioContext.currentTime;
+  const gainNode = audioContext.createGain();
+  gainNode.gain.setValueAtTime(0.5, now);
+  gainNode.connect(audioContext.destination);
+
+  const o1 = audioContext.createOscillator();
+  o1.type = 'triangle';
+  o1.frequency.setValueAtTime(440, now);
+  o1.connect(gainNode);
+  o1.start(now);
+
+  const o2 = audioContext.createOscillator();
+  o2.type = 'triangle';
+  o2.frequency.setValueAtTime(660, now + 0.2);
+  o2.connect(gainNode);
+  o2.start(now + 0.2);
+
+  const o3 = audioContext.createOscillator();
+  o3.type = 'triangle';
+  o3.frequency.setValueAtTime(880, now + 0.4);
+  o3.connect(gainNode);
+  o3.start(now + 0.4);
+
+  const o4 = audioContext.createOscillator();
+  o4.type = 'triangle';
+  o4.frequency.setValueAtTime(1320, now + 0.6);
+  o4.connect(gainNode);
+  o4.start(now + 0.6);
+
+  const o5 = audioContext.createOscillator();
+  o5.type = 'triangle';
+  o5.frequency.setValueAtTime(1760, now + 0.8);
+  o5.connect(gainNode);
+  o5.start(now + 0.8);
+
+  o1.stop(now + 1);
+  o2.stop(now + 1);
+  o3.stop(now + 1);
+  o4.stop(now + 1);
+  o5.stop(now + 1);
+
+  setTimeout(() => {
+    gainNode.disconnect(audioContext.destination);
+  }, 1000);
+};
+
+const playFreeSpinsTriggerSound = (audioContext) => {
+  const now = audioContext.currentTime;
+  const gainNode = audioContext.createGain();
+  gainNode.gain.setValueAtTime(0.7, now); // Adjust overall volume
+
+  const filterNode = audioContext.createBiquadFilter();
+  filterNode.type = 'highpass';
+  filterNode.frequency.setValueAtTime(500, now); // Filter out some low frequencies
+
+  const oscillator1 = audioContext.createOscillator();
+  oscillator1.type = 'triangle';
+  oscillator1.frequency.setValueAtTime(440, now);
+
+  const oscillator2 = audioContext.createOscillator();
+  oscillator2.type = 'square';
+  oscillator2.frequency.setValueAtTime(660, now);
+
+  const oscillator3 = audioContext.createOscillator();
+  oscillator3.type = 'sawtooth';
+  oscillator3.frequency.setValueAtTime(880, now);
+
+  const gain1 = audioContext.createGain();
+  gain1.gain.setValueAtTime(0.2, now);
+
+  const gain2 = audioContext.createGain();
+  gain2.gain.setValueAtTime(0.15, now);
+
+  const gain3 = audioContext.createGain();
+  gain3.gain.setValueAtTime(0.1, now);
+
+  oscillator1.connect(gain1);
+  oscillator2.connect(gain2);
+  oscillator3.connect(gain3);
+
+  gain1.connect(gainNode);
+  gain2.connect(gainNode);
+  gain3.connect(gainNode);
+
+  gainNode.connect(filterNode);
+  filterNode.connect(audioContext.destination);
+
+  oscillator1.start(now);
+  oscillator2.start(now);
+  oscillator3.start(now);
+
+  activeSources.push(oscillator1);
+  activeSources.push(oscillator2);
+  activeSources.push(oscillator3);
+
+  // Add a quick upward sweep
+  const sweepOsc = audioContext.createOscillator();
+  sweepOsc.type = 'sine';
+  sweepOsc.frequency.setValueAtTime(220, now);
+  sweepOsc.frequency.linearRampToValueAtTime(880, now + 0.2);
+
+  const sweepGain = audioContext.createGain();
+  sweepGain.gain.setValueAtTime(0.2, now);
+  sweepGain.gain.linearRampToValueAtTime(0, now + 0.3);
+
+  sweepOsc.connect(sweepGain);
+  sweepGain.connect(filterNode);
+
+  sweepOsc.start(now);
+  sweepOsc.stop(now + 0.3);
+
+  // Add a delay before repeating
+  const delayTime = 1;
+
+  oscillator1.stop(now + 3);
+  oscillator2.stop(now + 3);
+  oscillator3.stop(now + 3);
+
+  activeSources.push(sweepOsc);
+
+  setTimeout(() => {
+      const now2 = audioContext.currentTime;
+      const oscillator1Loop = audioContext.createOscillator();
+      oscillator1Loop.type = 'triangle';
+      oscillator1Loop.frequency.setValueAtTime(440, now2);
+
+      const oscillator2Loop = audioContext.createOscillator();
+      oscillator2Loop.type = 'square';
+      oscillator2Loop.frequency.setValueAtTime(660, now2);
+
+      const oscillator3Loop = audioContext.createOscillator();
+      oscillator3Loop.type = 'sawtooth';
+      oscillator3Loop.frequency.setValueAtTime(880, now2);
+
+      const gain1Loop = audioContext.createGain();
+      gain1Loop.gain.setValueAtTime(0.2, now2);
+
+      const gain2Loop = audioContext.createGain();
+      gain2Loop.gain.setValueAtTime(0.15, now2);
+
+      const gain3Loop = audioContext.createGain();
+      gain3Loop.gain.setValueAtTime(0.1, now2);
+
+      oscillator1Loop.connect(gain1Loop);
+      oscillator2Loop.connect(gain2Loop);
+      oscillator3Loop.connect(gain3Loop);
+
+      gain1Loop.connect(gainNode);
+      gain2Loop.connect(gainNode);
+      gain3Loop.connect(gainNode);
+
+      oscillator1Loop.start(now2);
+      oscillator2Loop.start(now2);
+      oscillator3Loop.start(now2);
+
+      activeSources.push(oscillator1Loop);
+      activeSources.push(oscillator2Loop);
+      activeSources.push(oscillator3Loop);
+
+      oscillator1Loop.onended = () => {
+        oscillator1Loop.disconnect();
+        gain1Loop.disconnect();
+      }
+      oscillator2Loop.onended = () => {
+        oscillator2Loop.disconnect();
+        gain2Loop.disconnect();
+      }
+      oscillator3Loop.onended = () => {
+        oscillator3Loop.disconnect();
+        gain3Loop.disconnect();
+      }
+  }, 3000);
+};
+
+// SVG Assets
+const svgStrings = [
+  "<svg viewBox=\"0 0 10 10\" xmlns=\"http://www.w3.org/2000/svg\"><rect width=\"10\" height=\"10\" fill=\"red\"/><text x=\"1\" y=\"8\" font-size=\"5\" fill=\"white\">X</text></svg>",
+  "<svg width=\"200\" height=\"100\" viewBox=\"0 0 200 100\" xmlns=\"http://www.w3.org/2000/svg\">\n  <defs>\n    <linearGradient id=\"gradient\" x1=\"0%\" y1=\"0%\" x2=\"100%\" y2=\"0%\">\n      <stop offset=\"0%\" style=\"stop-color:#ffcc00;stop-opacity:1\" />\n      <stop offset=\"100%\" style=\"stop-color:#ff6600;stop-opacity:1\" />\n    </linearGradient>\n  </defs>\n\n  <rect width=\"100%\" height=\"100%\" fill=\"#333\"/>\n\n  <text x=\"50%\" y=\"40%\" dominant-baseline=\"middle\" text-anchor=\"middle\" font-size=\"20\" fill=\"url(#gradient)\" font-family=\"Arial, sans-serif\">\n    Free Spins\n  </text>\n\n  <text id=\"counter\" x=\"50%\" y=\"75%\" dominant-baseline=\"middle\" text-anchor=\"middle\" font-size=\"30\" fill=\"#fff\" font-family=\"Arial, sans-serif\">\n    10\n    <animate attributeName=\"textContent\" values=\"10;9;8;7;6;5;4;3;2;1;0;10\" dur=\"5s\" repeatCount=\"indefinite\" />\n  </text>\n\n  <circle cx=\"30\" cy=\"20\" r=\"8\" fill=\"yellow\">\n    <animate attributeName=\"opacity\" values=\"1;0.2;1\" dur=\"1s\" repeatCount=\"indefinite\" />\n  </circle>\n\n  <circle cx=\"170\" cy=\"20\" r=\"8\" fill=\"yellow\">\n    <animate attributeName=\"opacity\" values=\"1;0.2;1\" dur=\"1s\" begin=\"0.3s\" repeatCount=\"indefinite\" />\n  </circle>\n\n</svg>",
+  "<svg width=\"200\" height=\"100\" viewBox=\"0 0 200 100\" xmlns=\"http://www.w3.org/2000/svg\">\n  <rect width=\"190\" height=\"90\" x=\"5\" y=\"5\" rx=\"15\" ry=\"15\" fill=\"#4CAF50\" stroke=\"#388E3C\" stroke-width=\"4\"/>\n  <text x=\"50%\" y=\"50%\" dominant-baseline=\"middle\" text-anchor=\"middle\" font-size=\"40\" font-family=\"Arial, sans-serif\" fill=\"white\" font-weight=\"bold\">SPIN</text>\n  <path d=\"M150 25 L170 40 L150 55\" stroke=\"white\" stroke-width=\"4\" fill=\"none\" stroke-linecap=\"round\" stroke-linejoin=\"round\"/>\n</svg>",
+  "<svg width=\"200\" height=\"200\" viewBox=\"0 0 200 200\" xmlns=\"http://www.w3.org/2000/svg\">\n  <defs>\n    <linearGradient id=\"glowGradient\" x1=\"0%\" y1=\"0%\" x2=\"100%\" y2=\"0%\">\n      <stop offset=\"0%\" style=\"stop-color:yellow;stop-opacity:0.5\" />\n      <stop offset=\"50%\" style=\"stop-color:orange;stop-opacity:1\" />\n      <stop offset=\"100%\" style=\"stop-color:yellow;stop-opacity:0.5\" />\n    </linearGradient>\n  </defs>\n  <rect x=\"20\" y=\"20\" width=\"160\" height=\"160\" fill=\"none\" stroke=\"url(#glowGradient)\" stroke-width=\"10\" stroke-linecap=\"round\">\n    <animate attributeName=\"stroke-dasharray\" values=\"0 100; 100 0; 0 100\" dur=\"2s\" repeatCount=\"indefinite\" />\n  </rect>\n  <circle cx=\"50\" cy=\"50\" r=\"20\" fill=\"lightgrey\" />\n  <circle cx=\"100\" cy=\"50\" r=\"20\" fill=\"lightgrey\" />\n  <circle cx=\"150\" cy=\"50\" r=\"20\" fill=\"lightgrey\" />\n  <circle cx=\"50\" cy=\"100\" r=\"20\" fill=\"lightgrey\" />\n  <circle cx=\"100\" cy=\"100\" r=\"20\" fill=\"lightgrey\" />\n  <circle cx=\"150\" cy=\"100\" r=\"20\" fill=\"lightgrey\" />\n  <circle cx=\"50\" cy=\"150\" r=\"20\" fill=\"lightgrey\" />\n  <circle cx=\"100\" cy=\"150\" r=\"20\" fill=\"lightgrey\" />\n  <circle cx=\"150\" cy=\"150\" r=\"20\" fill=\"lightgrey\" />\n  <circle cx=\"50\" cy=\"50\" r=\"15\" fill=\"gold\">\n    <animate attributeName=\"opacity\" values=\"0.2;1;0.2\" dur=\"1s\" repeatCount=\"indefinite\" />\n  </circle>\n  <circle cx=\"100\" cy=\"100\" r=\"15\" fill=\"gold\">\n    <animate attributeName=\"opacity\" values=\"0.2;1;0.2\" dur=\"1s\" begin=\"0.2s\" repeatCount=\"indefinite\" />\n  </circle>\n  <circle cx=\"150\" cy=\"150\" r=\"15\" fill=\"gold\">\n    <animate attributeName=\"opacity\" values=\"0.2;1;0.2\" dur=\"1s\" begin=\"0.4s\" repeatCount=\"indefinite\" />\n  </circle>\n</svg>",
+  "<svg viewBox=\"0 0 24 24\" fill=\"currentColor\" xmlns=\"http://www.w3.org/2000/svg\">\n  <path d=\"M12 2C6.48 2 2 6.48 2 12s4.48 10 10 10 10-4.48 10-10S17.52 2 12 2zm0 14.5c-2.48 0-4.5-2.02-4.5-4.5s2.02-4.5 4.5-4.5 4.5 2.02 4.5 4.5-2.02 4.5-4.5 4.5zM12 7c-2.76 0-5 2.24-5 5s2.24 5 5 5 5-2.24 5-5-2.24-5-5-5z\"/>\n</svg>",
+  "<svg viewBox=\"0 0 100 100\" xmlns=\"http://www.w3.org/2000/svg\">\n  <circle cx=\"50\" cy=\"50\" r=\"40\" fill=\"yellow\" stroke=\"black\" stroke-width=\"3\">\n    <animate attributeName=\"r\" values=\"40;45;40\" dur=\"1s\" repeatCount=\"indefinite\" />\n  </circle>\n  <text x=\"50\" y=\"55\" font-size=\"30\" text-anchor=\"middle\" fill=\"black\">7</text>\n</svg>",
+  "<svg viewBox=\"0 0 100 100\" xmlns=\"http://www.w3.org/2000/svg\">\n  <rect x=\"10\" y=\"20\" width=\"80\" height=\"60\" fill=\"orange\" stroke=\"black\" stroke-width=\"3\">\n    <animate attributeName=\"y\" values=\"20;25;20\" dur=\"1s\" repeatCount=\"indefinite\" />\n  </rect>\n  <text x=\"50\" y=\"55\" font-size=\"30\" text-anchor=\"middle\" fill=\"black\">BAR</text>\n</svg>",
+  "<svg viewBox=\"0 0 100 100\" xmlns=\"http://www.w3.org/2000/svg\">\n  <ellipse cx=\"50\" cy=\"50\" rx=\"40\" ry=\"30\" fill=\"red\" stroke=\"black\" stroke-width=\"3\">\n    <animate attributeName=\"rx\" values=\"40;45;40\" dur=\"1s\" repeatCount=\"indefinite\" />\n  </ellipse>\n  <text x=\"50\" y=\"55\" font-size=\"30\" text-anchor=\"middle\" fill=\"black\">CH</text>\n</svg>",
+  "<svg viewBox=\"0 0 100 100\" xmlns=\"http://www.w3.org/2000/svg\">\n  <polygon points=\"50,10 90,40 90,60 50,90 10,60 10,40\" fill=\"green\" stroke=\"black\" stroke-width=\"3\">\n    <animate attributeName=\"points\" values=\"50,10 90,40 90,60 50,90 10,60 10,40;50,15 90,45 90,65 50,95 10,65 10,45;50,10 90,40 90,60 50,90 10,60 10,40\" dur=\"1.5s\" repeatCount=\"indefinite\" />\n  </polygon>\n  <text x=\"50\" y=\"55\" font-size=\"30\" text-anchor=\"middle\" fill=\"black\">LE</text>\n</svg>",
+  "<svg viewBox=\"0 0 100 100\" xmlns=\"http://www.w3.org/2000/svg\">\n  <rect x=\"20\" y=\"20\" width=\"60\" height=\"60\" fill=\"purple\" stroke=\"black\" stroke-width=\"3\">\n    <animate attributeName=\"x\" values=\"20;25;20\" dur=\"1s\" repeatCount=\"indefinite\" />\n  </rect>\n  <text x=\"50\" y=\"55\" font-size=\"30\" text-anchor=\"middle\" fill=\"white\">$$</text>\n</svg>"
+];
+
+const svgImages = [];
+let imagesLoaded = 0;
+
+function loadSvgImages() {
+  svgStrings.forEach((svgString, index) => {
+    const img = new Image();
+    img.onload = () => {
+      svgImages[index] = img;
+      imagesLoaded++;
+      if (imagesLoaded === svgStrings.length) {
+        console.log("All images loaded");
+        startGame();
+      }
+    };
+    img.onerror = () => {
+      console.error("Error loading SVG image at index: ", index);
+      imagesLoaded++; // Ensure the game starts even with errors.  Consider a retry mechanism in a real game.
+      if (imagesLoaded === svgStrings.length) {
+        console.log("All images loaded (with errors)");
+        startGame();
+      }
+    };
+    img.src = 'data:image/svg+xml;utf8,' + encodeURIComponent(svgString);
+  });
+}
+
+// Game Variables
+let reels = [
+  [5, 6, 7, 8, 9, 0, 1, 2, 3, 4], // Payout Symbols
+  [6, 7, 8, 9, 0, 1, 2, 3, 4, 5],
+  [7, 8, 9, 0, 1, 2, 3, 4, 5, 6]
+];
+let reelPositions = [0, 0, 0];
+let spinning = false;
+let spinButton;
+let freeSpins = 0;
+let freeSpinsDisplay;
+let winningHighlight;
+let balance = 100;
+const betAmount = 10;
+
+// UI Elements
+class Button {
+  constructor(x, y, width, height, svgIndex, onClick) {
+    this.x = x;
+    this.y = y;
+    this.width = width;
+    this.height = height;
+    this.svgIndex = svgIndex;
+    this.onClick = onClick;
+  }
+
+  draw() {
+    if (svgImages[this.svgIndex]) {
+      ctx.drawImage(svgImages[this.svgIndex], this.x, this.y, this.width, this.height);
+    } else {
+      ctx.fillStyle = "gray";
+      ctx.fillRect(this.x, this.y, this.width, this.height);
+      ctx.fillStyle = "white";
+      ctx.font = "20px Arial";
+      ctx.fillText("SPIN", this.x + this.width / 4, this.y + this.height / 2);
+    }
+  }
+
+  isClicked(x, y) {
+    return x >= this.x && x <= this.x + this.width && y >= this.y && y <= this.y + this.height;
+  }
+}
+
+class FreeSpinsDisplay {
+    constructor(x, y, width, height, svgIndex) {
+        this.x = x;
+        this.y = y;
+        this.width = width;
+        this.height = height;
+        this.svgIndex = svgIndex;
+        this.visible = false;
+    }
+
+    draw() {
+        if (this.visible && svgImages[this.svgIndex]) {
+            ctx.drawImage(svgImages[this.svgIndex], this.x, this.y, this.width, this.height);
+        }
+    }
+
+    show() {
+        this.visible = true;
+    }
+
+    hide() {
+        this.visible = false;
+    }
+}
+
+class WinningHighlight {
+  constructor(x, y, width, height, svgIndex) {
+    this.x = x;
+    this.y = y;
+    this.width = width;
+    this.height = height;
+    this.svgIndex = svgIndex;
+    this.visible = false;
+  }
+
+  draw() {
+    if (this.visible && svgImages[this.svgIndex]) {
+      ctx.drawImage(svgImages[this.svgIndex], this.x, this.y, this.width, this.height);
+    }
+  }
+
+  show() {
+    this.visible = true;
+  }
+
+  hide() {
+    this.visible = false;
+  }
+}
+
+function initializeGame() {
+  spinButton = new Button(250, 300, 100, 50, 2, spin);
+  freeSpinsDisplay = new FreeSpinsDisplay(400, 10, 190, 90, 1);
+  winningHighlight = new WinningHighlight(50, 50, 500, 200, 3);
+}
+
+// Spin Function
+function spin() {
+  if (!spinning && balance >= betAmount) {
+    playSlotMachineSpinSound(audioContext);
+    spinning = true;
+    balance -= betAmount;
+    winningHighlight.hide();
+    reelPositions = [0, 0, 0]; // Reset reel positions for a new spin
+    spinReels();
+  } else if (balance < betAmount) {
+    alert("Insufficient balance!");
+  }
+}
+
+function spinReels() {
+  const spinDuration = 2000 + Math.random() * 1000;
+  const startTime = Date.now();
+
+  function animateReels() {
+    const elapsedTime = Date.now() - startTime;
+    const progress = Math.min(1, elapsedTime / spinDuration);
+
+    // Calculate eased progress (example: easeInOutQuad)
+    const easedProgress = progress < 0.5 ? 2 * progress * progress : -1 + (4 - 2 * progress) * progress;
+
+    // Update reel positions based on eased progress
+    reelPositions = reelPositions.map((startPosition, index) => {
+      const totalSymbolsToMove = 10 + Math.floor(Math.random() * 10); // Adjusted for more symbols
+      const newPosition = (startPosition + easedProgress * totalSymbolsToMove) % reels[index].length;
+      return newPosition;
+    });
+
+    draw(); // Redraw the game
+
+    if (progress < 1) {
+      requestAnimationFrame(animateReels);
+    } else {
+      spinning = false;
+      checkWin();
+    }
+  }
+
+  requestAnimationFrame(animateReels);
+}
+
+// Check Win Function
+function checkWin() {
+    const symbols = reelPositions.map((position, index) => reels[index][Math.floor(position)]);
+    if (symbols[0] === symbols[1] && symbols[1] === symbols[2]) {
+        playWinningJingle(audioContext);
+        winningHighlight.show();
+        balance += betAmount * 5; // Example payout
+        if (symbols[0] === 9) { // If all symbols are the last one
+            freeSpins += 5;
+            freeSpinsDisplay.show();
+            playFreeSpinsTriggerSound(audioContext);
+        }
+    }
+}
+
+// Draw Function
+function draw() {
+  ctx.clearRect(0, 0, canvas.width, canvas.height);
+
+  // Draw reels
+  const reelWidth = 100;
+  const reelHeight = 100;
+  const reelSpacing = 150;
+  const startX = 50;
+  const startY = 50;
+
+  for (let i = 0; i < reels.length; i++) {
+    const position = Math.floor(reelPositions[i]);
+    const symbolIndex = reels[i][position];
+    const x = startX + i * reelSpacing;
+    const y = startY;
+
+    if (svgImages[symbolIndex]) {
+      ctx.drawImage(svgImages[symbolIndex], x, y, reelWidth, reelHeight);
+    } else {
+      ctx.fillStyle = "gray";
+      ctx.fillRect(x, y, reelWidth, reelHeight);
+      ctx.fillStyle = "white";
+      ctx.font = "20px Arial";
+      ctx.fillText("Symbol", x + reelWidth / 4, y + reelHeight / 2);
+    }
+  }
+
+  winningHighlight.draw();
+  spinButton.draw();
+  freeSpinsDisplay.draw();
+
+  // Display Balance
+  ctx.fillStyle = "black";
+  ctx.font = "20px Arial";
+  ctx.fillText("Balance: " + balance, 10, 30);
+}
+
+// Game Loop
+function gameLoop() {
+  draw();
+  requestAnimationFrame(gameLoop);
+}
+
+// Input Handling
+canvas.addEventListener("mousedown", (e) => {
+  const rect = canvas.getBoundingClientRect();
+  const x = e.clientX - rect.left;
+  const y = e.clientY - rect.top;
+
+  if (spinButton.isClicked(x, y)) {
+    spinButton.onClick();
+  }
+});
+
+function startGame() {
+  initializeGame();
+  gameLoop();
+}
+
+loadSvgImages();
+
+</script>
+
+</body>
+</html>
