@@ -1,0 +1,1405 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Solana Poker Table</title>
+    <style>
+        body {
+            margin: 0;
+            padding: 0;
+            background-color: #111;
+            color: white;
+            font-family: sans-serif;
+            display: flex;
+            flex-direction: column;
+            align-items: center;
+            justify-content: center;
+            min-height: 100vh;
+        }
+        canvas {
+            background-color: #000;
+            display: block;
+            margin: 0 auto;
+            max-width: 100%;
+        }
+        .controls {
+            margin-top: 10px;
+            display: flex;
+            gap: 10px;
+            flex-wrap: wrap;
+            justify-content: center;
+        }
+        button {
+            padding: 8px 15px;
+            font-size: 14px;
+            cursor: pointer;
+            background-color: #4CAF50;
+            color: white;
+            border: none;
+            border-radius: 4px;
+            min-width: 80px;
+        }
+        button:disabled {
+            background-color: #555;
+            cursor: not-allowed;
+        }
+        #statusMessage {
+            margin-top: 10px;
+            font-size: 16px;
+            min-height: 20px;
+            text-align: center;
+        }
+    </style>
+</head>
+<body>
+
+    <canvas id="pokerCanvas"></canvas>
+    <div id="statusMessage">Loading assets...</div>
+    <div class="controls">
+        <button id="connectWalletBtn">Connect Wallet</button>
+        <button id="checkBtn" disabled>Check</button>
+        <button id="callBtn" disabled>Call</button>
+        <button id="betBtn" disabled>Bet/Raise</button>
+        <button id="foldBtn" disabled>Fold</button>
+    </div>
+
+    <script>
+        // --- Global Variables ---
+        let canvas, ctx;
+        let audioContext;
+        let soundFunctions = {};
+        let loadedSVGs = {};
+        let svgLoadCounter = 0;
+        // Raw SVG code array
+        const svgSources = [
+            // 0: Poker Table
+            "<svg viewBox=\"0 0 200 120\" xmlns=\"http://www.w3.org/2000/svg\">\n  <ellipse cx=\"100\" cy=\"60\" rx=\"98\" ry=\"58\" fill=\"#5C3A21\"/>\n  <ellipse cx=\"100\" cy=\"60\" rx=\"95\" ry=\"55\" fill=\"#006400\"/>\n  <circle cx=\"100\" cy=\"60\" r=\"12\" fill=\"none\" stroke=\"#FFFFFF\" stroke-width=\"1\"/>\n  <circle cx=\"180\" cy=\"60\" r=\"6\" fill=\"#CCCCCC\"/>\n  <circle cx=\"157\" cy=\"92\" r=\"6\" fill=\"#CCCCCC\"/>\n  <circle cx=\"100\" cy=\"105\" r=\"6\" fill=\"#CCCCCC\"/>\n  <circle cx=\"43\" cy=\"92\" r=\"6\" fill=\"#CCCCCC\"/>\n  <circle cx=\"20\" cy=\"60\" r=\"6\" fill=\"#CCCCCC\"/>\n  <circle cx=\"43\" cy=\"28\" r=\"6\" fill=\"#CCCCCC\"/>\n  <circle cx=\"100\" cy=\"15\" r=\"6\" fill=\"#CCCCCC\"/>\n  <circle cx=\"157\" cy=\"28\" r=\"6\" fill=\"#CCCCCC\"/>\n</svg>",
+            // 1: Card Back
+            "<svg viewBox=\"0 0 70 100\" xmlns=\"http://www.w3.org/2000/svg\">\n  <defs>\n    <g id=\"motif\">\n      <!-- Pattern for top-left quadrant -->\n      <!-- Main curve from center towards corner -->\n      <path d=\"M 35,50 C 20,40 15,25 10,10\" stroke=\"#000080\" stroke-width=\"1.5\" fill=\"none\"/>\n      <!-- Second curve from center towards top edge -->\n      <path d=\"M 35,50 C 40,35 35,15 20,8\" stroke=\"#000080\" stroke-width=\"1.5\" fill=\"none\"/>\n      <!-- Third curve from center towards left edge -->\n      <path d=\"M 35,50 C 25,45 10,40 8,25\" stroke=\"#000080\" stroke-width=\"1.5\" fill=\"none\"/>\n      <!-- Small corner element -->\n      <path d=\"M 12,18 C 15,15 18,15 18,12\" stroke=\"#000080\" stroke-width=\"1\" fill=\"none\"/>\n      <circle cx=\"10\" cy=\"10\" r=\"1.5\" fill=\"#000080\"/>\n    </g>\n  </defs>\n  <rect width=\"70\" height=\"100\" fill=\"white\"/>\n  <rect x=\"3\" y=\"3\" width=\"64\" height=\"94\" fill=\"none\" stroke=\"#000080\" stroke-width=\"1\" rx=\"4\" ry=\"4\"/>\n  <use href=\"#motif\"/>\n  <use href=\"#motif\" transform=\"translate(70, 0) scale(-1, 1)\"/>\n  <use href=\"#motif\" transform=\"translate(0, 100) scale(1, -1)\"/>\n  <use href=\"#motif\" transform=\"translate(70, 100) scale(-1, -1)\"/>\n  <circle cx=\"35\" cy=\"50\" r=\"4\" fill=\"none\" stroke=\"#000080\" stroke-width=\"1\"/>\n</svg>",
+            // 2: Animated Chip (Replaced placeholder)
+            "<svg viewBox=\"0 0 30 30\" xmlns=\"http://www.w3.org/2000/svg\">\n  <defs>\n    <radialGradient id=\"shineGrad\" cx=\"0.3\" cy=\"0.3\" r=\"0.7\">\n      <stop offset=\"0%\" stop-color=\"white\" stop-opacity=\"0.7\"/>\n      <stop offset=\"40%\" stop-color=\"white\" stop-opacity=\"0.0\"/>\n      <stop offset=\"100%\" stop-color=\"white\" stop-opacity=\"0.0\"/>\n    </radialGradient>\n  </defs>\n  <circle cx=\"15\" cy=\"15\" r=\"14\" fill=\"#B71C1C\" stroke=\"#FDD835\" stroke-width=\"1.5\"/> <!-- Red chip, gold edge -->\n  <circle cx=\"15\" cy=\"15\" r=\"10\" fill=\"#E53935\"/> <!-- Lighter red inner -->\n  <text x=\"15\" y=\"19\" font-size=\"10\" fill=\"white\" text-anchor=\"middle\" font-family=\"sans-serif\" font-weight=\"bold\">10</text> <!-- Example value -->\n  <!-- Shine Animation -->\n  <ellipse cx=\"15\" cy=\"15\" rx=\"10\" ry=\"5\" fill=\"url(#shineGrad)\" transform=\"translate(-15, -15)\">\n     <animateTransform\n        attributeName=\"transform\"\n        attributeType=\"XML\"\n        type=\"translate\"\n        from=\"-15 -15\"\n        to=\"45 45\"\n        dur=\"3s\"\n        repeatCount=\"indefinite\" />\n      <animate\n        attributeName=\"opacity\"\n        values=\"0;0.6;0.6;0;0\"\n        keyTimes=\"0; 0.2; 0.4; 0.6; 1\"\n        dur=\"3s\"\n        repeatCount=\"indefinite\"\n        />\n  </ellipse>\n</svg>",
+            // 3: Wallet Icon
+            "<svg viewBox=\"0 0 32 32\" xmlns=\"http://www.w3.org/2000/svg\" fill=\"currentColor\">\n <path d=\"M28,7H4A2,2,0,0,0,2,9V23a2,2,0,0,0,2,2H28a2,2,0,0,0,2-2V9A2,2,0,0,0,28,7ZM4,9H28V23H4Z\"/>\n <path d=\"M9,13a1,1,0,0,0-1,1v4a1,1,0,0,0,1,1H23a1,1,0,0,0,1-1V14a1,1,0,0,0-1-1Zm12,4H11V15h10Z\"/>\n <circle cx=\"25\" cy=\"16\" r=\"1.5\"/>\n <!-- Simple Solana 'S' attempt -->\n <path d=\"M16 11.5 C 18 11.5 19 12.5 19 14 C 19 15.5 18 16.5 16 16.5 S 13 15.5 13 14 C 13 12.5 14 11.5 16 11.5 M16 16.5 C 18 16.5 19 17.5 19 19 C 19 20.5 18 21.5 16 21.5 S 13 20.5 13 19 C 13 17.5 14 16.5 16 16.5\" fill=\"none\" stroke=\"currentColor\" stroke-width=\"1.5\" stroke-linecap=\"round\"/>\n</svg>"
+        ];
+        // JS function bodies for sound effects
+        const soundEffectBodies = [
+            // 0: Deal Card Sound
+            `const bufferSize = audioContext.sampleRate * 0.2; // 200ms buffer
+            const noiseBuffer = audioContext.createBuffer(1, bufferSize, audioContext.sampleRate);
+            const output = noiseBuffer.getChannelData(0);
+            for (let i = 0; i < bufferSize; i++) {
+              output[i] = Math.random() * 2 - 1; // White noise
+            }
+
+            function dealCard(time) {
+              if (!audioContext || audioContext.state !== 'running') return;
+              const source = audioContext.createBufferSource();
+              source.buffer = noiseBuffer;
+              source.loop = false; // Play the buffer once per call
+
+              const filter = audioContext.createBiquadFilter();
+              filter.type = 'lowpass';
+              filter.frequency.setValueAtTime(7000, time);
+              filter.frequency.linearRampToValueAtTime(1500, time + 0.015);
+              filter.frequency.linearRampToValueAtTime(1200, time + 0.05);
+              filter.Q.setValueAtTime(1, time);
+
+              const envelope = audioContext.createGain();
+              envelope.gain.setValueAtTime(0, time);
+              envelope.gain.linearRampToValueAtTime(0.6, time + 0.005);
+              envelope.gain.linearRampToValueAtTime(0.2, time + 0.015);
+              envelope.gain.exponentialRampToValueAtTime(0.001, time + 0.1);
+
+              source.connect(filter);
+              filter.connect(envelope);
+              envelope.connect(audioContext.destination);
+
+              source.start(time);
+              source.stop(time + 0.2);
+            }
+            // Call the inner function to play the sound immediately when this outer function is called
+            dealCard(audioContext.currentTime);`,
+            // 1: Chips Clinking Sound
+            `const clinkInterval = 200 + Math.random() * 150; // ms between bursts of clinks
+            const chipsPerBurst = 4 + Math.floor(Math.random() * 5); // How many chips clink roughly together (3-7)
+            const burstSpread = 0.1; // Max time spread within a burst (seconds)
+
+            function playChipClink(startTime) {
+                if (!audioContext || audioContext.state !== 'running') return;
+                const osc = audioContext.createOscillator();
+                osc.type = 'triangle';
+                const baseFreq = 1500 + Math.random() * 2500;
+                osc.frequency.setValueAtTime(baseFreq + (Math.random() - 0.5) * 600, startTime);
+
+                const toneGain = audioContext.createGain();
+                toneGain.gain.setValueAtTime(0, startTime);
+                const peakToneGain = 0.08 + Math.random() * 0.12;
+                const toneDecayTime = 0.04 + Math.random() * 0.1;
+                toneGain.gain.linearRampToValueAtTime(peakToneGain, startTime + 0.005 + Math.random() * 0.01);
+                toneGain.gain.exponentialRampToValueAtTime(0.001, startTime + toneDecayTime);
+
+                const bufferSize = audioContext.sampleRate * 0.1;
+                const noiseBuffer = audioContext.createBuffer(1, bufferSize, audioContext.sampleRate);
+                const output = noiseBuffer.getChannelData(0);
+                for (let i = 0; i < bufferSize; i++) { output[i] = Math.random() * 2 - 1; }
+                const noiseSource = audioContext.createBufferSource();
+                noiseSource.buffer = noiseBuffer;
+
+                const bandpass = audioContext.createBiquadFilter();
+                bandpass.type = 'bandpass';
+                bandpass.frequency.setValueAtTime(2000 + Math.random() * 3000, startTime);
+                bandpass.Q.setValueAtTime(1.5 + Math.random() * 2, startTime);
+
+                const noiseGain = audioContext.createGain();
+                noiseGain.gain.setValueAtTime(0, startTime);
+                const peakNoiseGain = 0.05 + Math.random() * 0.08;
+                const noiseDecayTime = 0.02 + Math.random() * 0.03;
+                noiseGain.gain.linearRampToValueAtTime(peakNoiseGain, startTime + 0.002 + Math.random() * 0.005);
+                noiseGain.gain.exponentialRampToValueAtTime(0.001, startTime + noiseDecayTime);
+
+                osc.connect(toneGain);
+                toneGain.connect(audioContext.destination);
+                noiseSource.connect(bandpass);
+                bandpass.connect(noiseGain);
+                noiseGain.connect(audioContext.destination);
+
+                osc.start(startTime);
+                osc.stop(startTime + toneDecayTime + 0.1);
+                noiseSource.start(startTime);
+            }
+
+            function scheduleClinkBurst() {
+                 if (!audioContext || audioContext.state !== 'running') return;
+                const now = audioContext.currentTime;
+                const actualChipsInBurst = Math.floor(chipsPerBurst / 2 + Math.random() * chipsPerBurst / 2) + 1;
+                for (let i = 0; i < actualChipsInBurst; i++) {
+                    const timeOffset = Math.random() * burstSpread;
+                    playChipClink(now + timeOffset);
+                }
+            }
+            // Play one burst immediately when this outer function is called
+            scheduleClinkBurst();`,
+            // 2: UI Click Sound
+            `const now = audioContext.currentTime;
+            if (!audioContext || audioContext.state !== 'running') return;
+            const duration = 0.05;
+
+            const gainNode = audioContext.createGain();
+            gainNode.gain.setValueAtTime(0, now);
+            gainNode.gain.linearRampToValueAtTime(0.6, now + 0.005);
+            gainNode.gain.exponentialRampToValueAtTime(0.001, now + duration);
+            gainNode.connect(audioContext.destination);
+
+            const oscillator = audioContext.createOscillator();
+            oscillator.type = 'triangle';
+            oscillator.frequency.setValueAtTime(1800, now);
+            oscillator.frequency.exponentialRampToValueAtTime(1200, now + duration * 0.8);
+
+            oscillator.connect(gainNode);
+            oscillator.start(now);
+            oscillator.stop(now + duration + 0.01);`
+        ];
+        const totalSVGs = svgSources.length;
+        let gameAssetsLoaded = false;
+
+        let gameState = 'LOADING'; // LOADING, PRE_DEAL, BETTING_PREFLOP, FLOP, BETTING_FLOP, TURN, BETTING_TURN, RIVER, BETTING_RIVER, SHOWDOWN, GAME_OVER
+        let players = [];
+        let deck = [];
+        let communityCards = [];
+        let pot = 0;
+        let currentPlayerIndex = 0;
+        let currentBet = 0; // The highest bet amount placed in the current round
+        let dealerButtonIndex = 0;
+        let actionStartIndex = 0; // Index of player who starts the betting action
+        let lastAggressorIndex = -1; // Index of the last player who bet or raised
+
+        let mockWallet = { connected: false, publicKey: null, balance: 1000 }; // Mock SOL balance
+
+        // --- Constants ---
+        const PLAYER_COUNT = 6;
+        const CARD_WIDTH = 42; // Scaled from SVG viewbox 70x100
+        const CARD_HEIGHT = 60;
+        const CHIP_SIZE = 25; // Scaled from SVG viewbox 30x30
+        const WALLET_ICON_SIZE = 24;
+        const BASE_BET = 20; // Simplified bet/raise amount
+
+        // --- Asset Loading ---
+        function loadSVG(svgString, index) {
+            const img = new Image();
+            img.onload = () => {
+                svgLoadCounter++;
+                console.log(`SVG ${index + 1}/${totalSVGs} loaded.`);
+                if (svgLoadCounter === totalSVGs) {
+                    console.log("All SVGs loaded.");
+                    gameAssetsLoaded = true;
+                    // Don't start game here, wait for init call after window.onload
+                    if (window.initCalled) { // Check if init was already called
+                        startGame();
+                    }
+                }
+            };
+            img.onerror = (e) => {
+                console.error(`Error loading SVG ${index + 1}:`, e);
+                svgLoadCounter++; // Still increment
+                if (svgLoadCounter === totalSVGs) {
+                    console.warn("Starting game with potentially missing SVG assets.");
+                    gameAssetsLoaded = true;
+                     if (window.initCalled) {
+                        startGame();
+                    }
+                }
+            };
+            // Use base64 encoding for potentially better compatibility, especially with animations
+             img.src = 'data:image/svg+xml;base64,' + btoa(svgString);
+            // img.src = 'data:image/svg+xml;utf8,' + encodeURIComponent(svgString); // Alternative
+            loadedSVGs[index] = img;
+        }
+
+        function loadAssets() {
+            console.log("Loading assets...");
+            svgSources.forEach(loadSVG);
+        }
+
+        // --- Sound Functions ---
+        function setupAudio() {
+            // Don't create context here, wait for user interaction
+            // Define placeholder functions first
+            soundFunctions.playDealSound = () => console.log("Audio not ready: Deal");
+            soundFunctions.playChipsSound = () => console.log("Audio not ready: Chips");
+            soundFunctions.playClickSound = () => console.log("Audio not ready: Click");
+
+            // Attempt to define real functions if context exists (might be resumed later)
+             if (audioContext && audioContext.state === 'running') {
+                 try {
+                    soundFunctions.playDealSound = new Function('audioContext', soundEffectBodies[0]);
+                    soundFunctions.playChipsSound = new Function('audioContext', soundEffectBodies[1]);
+                    soundFunctions.playClickSound = new Function('audioContext', soundEffectBodies[2]);
+                 } catch (e) {
+                      console.error("Error creating sound functions:", e);
+                 }
+             }
+        }
+
+         function tryInitAudio() {
+            if (audioContext) return true; // Already initialized or failed previously
+            try {
+                audioContext = new (window.AudioContext || window.webkitAudioContext)();
+                if (audioContext.state === 'suspended') {
+                    console.log("AudioContext suspended. Needs user interaction to resume.");
+                    // Need to call resume() on a user gesture later
+                    return false; // Indicate it needs resuming
+                }
+                 console.log("AudioContext started successfully.");
+                 // Now that context is running, define the actual sound functions
+                 soundFunctions.playDealSound = new Function('audioContext', soundEffectBodies[0]);
+                 soundFunctions.playChipsSound = new Function('audioContext', soundEffectBodies[1]);
+                 soundFunctions.playClickSound = new Function('audioContext', soundEffectBodies[2]);
+                 return true;
+            } catch (e) {
+                console.error("Web Audio API is not supported or failed to initialize.", e);
+                // Keep dummy functions
+                return false;
+            }
+        }
+
+        function playSound(soundName) {
+            if (audioContext && audioContext.state === 'running' && soundFunctions[soundName]) {
+                try {
+                    soundFunctions[soundName](audioContext);
+                } catch (e) {
+                    console.error(`Error playing sound ${soundName}:`, e);
+                }
+            } else if (audioContext && audioContext.state === 'suspended') {
+                 console.log(`Cannot play sound '${soundName}', AudioContext suspended.`);
+            } else {
+                 // console.log(`Audio not ready or sound '${soundName}' missing.`);
+            }
+        }
+
+        // --- Solana Wallet (Mock) ---
+        function connectWallet() {
+             // Try to resume/init audio context on first user interaction
+             if (!audioContext || audioContext.state === 'suspended') {
+                 if (!audioContext) tryInitAudio(); // Try creating it now
+
+                 if (audioContext && audioContext.state === 'suspended') {
+                    audioContext.resume().then(() => {
+                        console.log("AudioContext resumed!");
+                        // Redefine functions now that context is running
+                        setupAudio();
+                        // Now proceed with wallet connection sound and logic
+                        playSound('playClickSound');
+                        finishWalletConnection();
+                    }).catch(e => console.error("Error resuming AudioContext:", e));
+                 } else if (audioContext && audioContext.state === 'running'){
+                     // Already running (maybe initialized without being suspended)
+                     playSound('playClickSound');
+                     finishWalletConnection();
+                 } else {
+                      // Audio failed to initialize or is not supported
+                      finishWalletConnection(); // Connect without sound
+                 }
+             } else {
+                 // Audio context already running
+                 playSound('playClickSound');
+                 finishWalletConnection();
+             }
+        }
+
+        function finishWalletConnection() {
+             if (!mockWallet.connected) {
+                mockWallet.connected = true;
+                mockWallet.publicKey = "SoLPoker" + Math.random().toString(16).substring(2, 8);
+                mockWallet.balance = 1000; // Reset balance on connect for demo
+                console.log("Wallet connected:", mockWallet.publicKey, "Balance:", mockWallet.balance);
+                updateUI();
+                updateStatus(`Wallet connected. ${players[currentPlayerIndex]?.name}'s turn.`);
+            } else {
+                console.log("Wallet already connected.");
+            }
+        }
+
+
+        function makeBet(player, amount) {
+            if (!mockWallet.connected && player.isHuman) {
+                updateStatus("Connect wallet to bet.");
+                return false;
+            }
+
+            const playerBalance = player.isHuman ? mockWallet.balance : player.balance;
+            const actualBet = Math.min(amount, playerBalance); // Cannot bet more than balance
+
+            if (actualBet <= 0) return false; // No bet to make
+
+            if (player.isHuman) {
+                mockWallet.balance -= actualBet;
+            } else {
+                 player.balance -= actualBet;
+            }
+
+            player.currentBet += actualBet;
+            pot += actualBet;
+            player.actedThisTurn = true; // Mark player as having acted
+
+             // Track if player is all-in
+             if (actualBet === playerBalance) {
+                 player.isAllIn = true;
+                 console.log(`${player.name} is ALL-IN for ${actualBet}!`);
+             }
+
+            console.log(`${player.name} bets ${actualBet}. ${player.isHuman ? `Wallet: ${mockWallet.balance}` : `Bal: ${player.balance}`}. Pot: ${pot}`);
+            playSound('playChipsSound');
+            updateUI(); // Update UI after balance change
+            return true;
+        }
+
+        function awardWinnings(winnerIndices, potAmount) {
+             if (winnerIndices.length === 0) return; // Should not happen if pot > 0
+
+             const amountPerWinner = Math.floor(potAmount / winnerIndices.length);
+             console.log(`Awarding pot of ${potAmount} to ${winnerIndices.length} winner(s). Amount per winner: ${amountPerWinner}`);
+
+             winnerIndices.forEach(index => {
+                 const player = players[index];
+                 if (!player) return;
+
+                 console.log(`${player.name} wins ${amountPerWinner}.`);
+                 if (player.isHuman) {
+                     if (!mockWallet.connected) return; // Safety check
+                     mockWallet.balance += amountPerWinner;
+                 } else {
+                     player.balance += amountPerWinner;
+                 }
+             });
+             // Clear the main pot after awarding
+             pot = 0;
+             updateUI(); // Update balances in UI
+             // Add a winning sound?
+        }
+
+
+        // --- Poker Logic ---
+        function createDeck() {
+            const suits = ['H', 'D', 'C', 'S']; // Hearts, Diamonds, Clubs, Spades
+            const ranks = ['2', '3', '4', '5', '6', '7', '8', '9', 'T', 'J', 'Q', 'K', 'A'];
+            deck = [];
+            for (const suit of suits) {
+                for (const rank of ranks) {
+                    deck.push({ suit, rank });
+                }
+            }
+        }
+
+        function shuffleDeck() {
+            for (let i = deck.length - 1; i > 0; i--) {
+                const j = Math.floor(Math.random() * (i + 1));
+                [deck[i], deck[j]] = [deck[j], deck[i]];
+            }
+        }
+
+        function dealCard() {
+            if (deck.length > 0) {
+                // Play sound slightly delayed to simulate dealing sequence
+                setTimeout(() => playSound('playDealSound'), Math.random() * 50);
+                return deck.pop();
+            }
+            console.error("Deck is empty!");
+            return null;
+        }
+
+        function dealHands() {
+            for (let i = 0; i < players.length; i++) {
+                players[i].hand = [];
+            }
+            // Deal one card at a time
+            for (let round = 0; round < 2; round++) {
+                for (let i = 0; i < players.length; i++) {
+                     const playerIndex = (dealerButtonIndex + 1 + i) % players.length; // Start dealing left of dealer
+                     if (players[playerIndex].active) {
+                         const card = dealCard();
+                         if (card) players[playerIndex].hand.push(card);
+                     }
+                }
+            }
+            console.log("Hands dealt:", players.map(p => ({ name: p.name, hand: p.hand })));
+        }
+
+        function dealCommunity(numCards) {
+            dealCard(); // Burn card (simulate)
+            for (let i = 0; i < numCards; i++) {
+                const card = dealCard();
+                if (card) communityCards.push(card);
+            }
+             // Play sound once for the group?
+             setTimeout(() => playSound('playDealSound'), 100);
+            console.log("Community cards:", communityCards);
+        }
+
+        // --- Hand Evaluation (VERY Simplified Placeholder) ---
+        function evaluateHand(hand, community) {
+            // Combines hand and community, finds highest card value.
+            const allCards = [...hand, ...community];
+            let bestRankValue = -1;
+            const rankValues = {'2': 2, '3': 3, '4': 4, '5': 5, '6': 6, '7': 7, '8': 8, '9': 9, 'T': 10, 'J': 11, 'Q': 12, 'K': 13, 'A': 14};
+            allCards.forEach(card => {
+                if (rankValues[card.rank] > bestRankValue) {
+                    bestRankValue = rankValues[card.rank];
+                }
+            });
+            // In a real game, return hand type (pair, flush, etc.) and kickers
+            return { value: bestRankValue, description: `High Card ${Object.keys(rankValues).find(key => rankValues[key] === bestRankValue) || ''}` };
+        }
+
+        function determineWinner() {
+            let winners = [];
+            let bestHandValue = -1;
+            let handDescription = "No valid hands";
+
+            players.forEach((player, index) => {
+                if (player.active && !player.folded) {
+                    const handResult = evaluateHand(player.hand, communityCards);
+                    player.evaluatedHand = handResult; // Store for display if needed
+
+                    if (handResult.value > bestHandValue) {
+                        bestHandValue = handResult.value;
+                        winners = [index]; // New best hand
+                        handDescription = handResult.description;
+                    } else if (handResult.value === bestHandValue) {
+                        winners.push(index); // Tie
+                    }
+                } else {
+                     player.evaluatedHand = null;
+                }
+            });
+
+            if (winners.length > 0) {
+                const winnerNames = winners.map(idx => players[idx].name).join(', ');
+                updateStatus(`${winnerNames} win${winners.length > 1 ? '' : 's'} the pot with ${handDescription}!`);
+                awardWinnings(winners, pot);
+            } else {
+                 // Everyone folded? Pot should carry over? (Simplified: Reset pot)
+                 updateStatus("Everyone folded. No winner for this pot.");
+                 pot = 0; // Reset pot
+            }
+        }
+        // --- End Simplified Evaluation ---
+
+        function setupPlayers() {
+            players = [];
+            const canvasCenterX = canvas.width / 2;
+            const canvasCenterY = canvas.height / 2;
+            // Adjust radius based on canvas size and table SVG proportions
+            const tableRadiusX = canvas.width * 0.4;
+            const tableRadiusY = canvas.height * 0.35;
+
+            for (let i = 0; i < PLAYER_COUNT; i++) {
+                // Calculate position around the oval table
+                const angle = (Math.PI * 2 / PLAYER_COUNT) * i - Math.PI / 2; // Start at top (12 o'clock)
+                // Place player 0 (human) at the bottom center (6 o'clock)
+                const displayAngle = (Math.PI * 2 / PLAYER_COUNT) * i + Math.PI / 2;
+                const x = canvasCenterX + tableRadiusX * Math.cos(displayAngle);
+                const y = canvasCenterY + tableRadiusY * Math.sin(displayAngle);
+
+                players.push({
+                    id: i,
+                    name: i === 0 ? "Player" : `Bot ${i}`,
+                    hand: [],
+                    balance: 1000, // Initial mock balance for bots
+                    currentBet: 0,
+                    active: true, // Participating in the current hand
+                    folded: false,
+                    isHuman: i === 0,
+                    position: { x, y },
+                    isTurn: false,
+                    actedThisTurn: false, // Has acted in the current betting sequence
+                    isAllIn: false,
+                    evaluatedHand: null, // Store result of hand evaluation
+                    revealHand: false // Control rendering face up/down
+                });
+            }
+            dealerButtonIndex = Math.floor(Math.random() * PLAYER_COUNT);
+        }
+
+        function nextTurn() {
+            if (!players[currentPlayerIndex]) return; // Safety check
+            players[currentPlayerIndex].isTurn = false;
+
+            let attempts = 0;
+            let nextPlayerFound = false;
+            let startingIndex = currentPlayerIndex;
+
+            do {
+                currentPlayerIndex = (currentPlayerIndex + 1) % players.length;
+                const nextPlayer = players[currentPlayerIndex];
+                // Player must be active, not folded, and not all-in (unless all-in players are the only ones left)
+                 if (nextPlayer.active && !nextPlayer.folded && !nextPlayer.isAllIn) {
+                     // Check if betting round is over - more robust check needed here
+                     if (isBettingRoundOver()) {
+                          endBettingRound();
+                          return; // Stop turn progression
+                     }
+                     nextPlayerFound = true;
+                     break;
+                 }
+                attempts++;
+            } while (currentPlayerIndex !== startingIndex && attempts <= players.length * 2); // Prevent infinite loop
+
+
+            if (nextPlayerFound) {
+                players[currentPlayerIndex].isTurn = true;
+                updateStatus(`${players[currentPlayerIndex].name}'s turn.`);
+                updateUI();
+
+                // Basic AI for opponents
+                if (!players[currentPlayerIndex].isHuman) {
+                    setTimeout(handleAIAction, 1200 + Math.random() * 800); // Simulate thinking time
+                }
+            } else {
+                 // If no player found to act (e.g., everyone else is all-in or folded), end the round.
+                 console.log("No active player found for next turn, ending round.");
+                 endBettingRound();
+            }
+        }
+
+        function handleAIAction() {
+             if (gameState === 'SHOWDOWN' || gameState === 'GAME_OVER') return; // No AI actions during showdown or game over
+
+            const player = players[currentPlayerIndex];
+            if (!player || player.isHuman || !player.isTurn || !player.active || player.folded || player.isAllIn) {
+                return; // Not AI's turn or cannot act
+            }
+
+            // Very basic AI: Call any bet, check if possible, never bet/raise. Folds sometimes if bet is large.
+            const betToCall = currentBet - player.currentBet;
+
+            if (betToCall === 0) {
+                handlePlayerAction('check'); // AI checks
+            } else {
+                 // Simple fold logic: Fold if call is > 20% of balance?
+                 if (betToCall > player.balance * 0.2 && Math.random() < 0.3) {
+                     handlePlayerAction('fold');
+                 } else {
+                     handlePlayerAction('call'); // AI calls
+                 }
+            }
+        }
+
+        function handlePlayerAction(action) {
+            const player = players[currentPlayerIndex];
+            if (!player || !player.isTurn || !player.active || player.folded || player.isAllIn) {
+                 console.log(`Action ${action} ignored for ${player?.name} (not turn/active/folded/allin).`);
+                 return; // Not this player's turn or cannot act
+            }
+
+             // Prevent manual actions for AI during its simulated turn (though AI calls this function itself)
+            // if (!player.isHuman && action !== 'check' && action !== 'call' && action !== 'fold' && action !== 'bet') {
+            //     console.log("Waiting for AI internal action.");
+            //     return;
+            // }
+
+            playSound('playClickSound');
+            console.log(`${player.name} action: ${action}`);
+
+            let betAmount = 0;
+            let betToCall = currentBet - player.currentBet;
+
+            switch (action) {
+                case 'fold':
+                    player.folded = true;
+                    player.actedThisTurn = true;
+                    updateStatus(`${player.name} folds.`);
+                    break;
+                case 'check':
+                    if (betToCall > 0) {
+                        updateStatus("Cannot check, must call or raise.");
+                        playSound('playClickSound'); // Error sound?
+                        return; // Invalid action
+                    }
+                    player.actedThisTurn = true;
+                    updateStatus(`${player.name} checks.`);
+                    break;
+                case 'call':
+                     if (betToCall <= 0) {
+                         // If betToCall is 0, treat Call as Check
+                         if (betToCall === 0) {
+                             player.actedThisTurn = true;
+                             updateStatus(`${player.name} checks.`);
+                             action = 'check'; // Effectively a check
+                         } else {
+                             updateStatus("Cannot call, can check or bet/raise.");
+                             playSound('playClickSound');
+                             return; // Invalid action if betToCall < 0 (shouldn't happen)
+                         }
+                     } else {
+                         betAmount = Math.min(betToCall, player.isHuman ? mockWallet.balance : player.balance); // Call amount or all-in
+                         if (makeBet(player, betAmount)) {
+                             updateStatus(`${player.name} calls ${betAmount}.`);
+                         } else {
+                             console.error("Call failed, insufficient funds?");
+                             // Should be handled by makeBet returning false if amount is 0 or less
+                             return; // Stop turn progression if bet fails unexpectedly
+                         }
+                     }
+                    break;
+                case 'bet': // Handles both initial Bet and subsequent Raises
+                    let raiseAmount = BASE_BET; // Example fixed raise/bet amount
+                    // In a real game, allow variable bet sizes (min bet, pot limit, no limit)
+                    betAmount = betToCall + raiseAmount; // Total amount to put in pot this action
+
+                    if (makeBet(player, betAmount)) {
+                         // Update the current bet level for others to call
+                         currentBet = player.currentBet;
+                         lastAggressorIndex = currentPlayerIndex; // This player made the last aggressive action
+                         updateStatus(`${player.name} ${betToCall > 0 ? 'raises' : 'bets'} to ${currentBet}.`);
+                    } else {
+                         console.error("Bet/Raise failed, insufficient funds?");
+                         // If bet fails (e.g., 0 balance), don't proceed turn
+                         return;
+                    }
+                    break;
+            }
+
+            // Check if betting round is over after the action
+            if (isBettingRoundOver()) {
+                endBettingRound();
+            } else {
+                nextTurn();
+            }
+        }
+
+        function isBettingRoundOver() {
+            let activePlayersCount = 0; // Not folded, still in hand
+            let playersYetToAct = 0; // Not folded, not all-in, and currentBet < highestBet OR hasn't acted since last raise
+            let highestBetInRound = 0;
+
+             players.forEach(p => {
+                 if (p.active && !p.folded) {
+                     activePlayersCount++;
+                     if (p.currentBet > highestBetInRound) {
+                         highestBetInRound = p.currentBet;
+                     }
+                 }
+             });
+
+
+            if (activePlayersCount <= 1) {
+                console.log("Betting round over: Only one player left.");
+                return true; // Round ends if only one player left
+            }
+
+            // Check if all remaining players (not folded, not all-in) have acted and matched the highest bet
+             let allMatchedOrAllIn = true;
+             let actionClosed = true; // Does the action return to the aggressor?
+
+             players.forEach((p, index) => {
+                 if (p.active && !p.folded && !p.isAllIn) {
+                      if (p.currentBet < highestBetInRound || !p.actedThisTurn) {
+                          // If a player hasn't matched the bet, or hasn't acted since the last raise/bet occurred
+                          allMatchedOrAllIn = false;
+                      }
+
+                      // More precise check: Has everyone had a chance to act since the last bet/raise?
+                      // If the current player is the last aggressor, and they are being checked to, the round ends.
+                      // If everyone has called the highest bet, the round ends.
+                 }
+             });
+
+            // Simple Check: If everyone active & not folded & not all-in has the same currentBet == highestBetInRound,
+            // AND everyone has acted at least once in this betting sequence.
+            let checkAllActedAndMatched = true;
+            players.forEach((p, index) => {
+                if (p.active && !p.folded && !p.isAllIn) {
+                    if (!p.actedThisTurn || p.currentBet < highestBetInRound) {
+                        checkAllActedAndMatched = false;
+                    }
+                }
+            });
+
+             // Special case: Big blind pre-flop can check or raise if action checks around.
+             // Need to handle the 're-opening' of betting.
+
+             // If highestBetInRound is 0 (everyone checked), and the action is back to the start, round over.
+             if (highestBetInRound === 0 && currentPlayerIndex === actionStartIndex && players[currentPlayerIndex]?.actedThisTurn) {
+                  console.log("Betting round over: Checked around.");
+                  return true;
+             }
+
+             // If there was betting, check if all non-folded, non-all-in players have matched the highest bet AND acted.
+             if (highestBetInRound > 0 && checkAllActedAndMatched) {
+                  console.log("Betting round over: All matched or folded/all-in.");
+                  return true;
+             }
+
+
+            return false; // Requires proper implementation based on poker rules
+        }
+
+        function endBettingRound() {
+            console.log(`Betting round ended (${gameState}). Pot: ${pot}`);
+            // Reset player 'acted' flags for the next round
+            players.forEach(p => {
+                 p.actedThisTurn = false;
+                 // Don't reset currentBet here, pot is accumulated. Reset it before next hand.
+                 // Pot is updated in makeBet.
+            });
+            // Reset currentBet for the *next* round's betting baseline
+            currentBet = 0;
+            lastAggressorIndex = -1; // Reset aggressor for next round
+
+             // Find the first active player to start the next round (usually left of dealer)
+             let nextRoundStartIndex = (dealerButtonIndex + 1) % players.length;
+             let attempts = 0;
+             while ((!players[nextRoundStartIndex].active || players[nextRoundStartIndex].folded || players[nextRoundStartIndex].isAllIn) && attempts < players.length) {
+                 nextRoundStartIndex = (nextRoundStartIndex + 1) % players.length;
+                 attempts++;
+             }
+             // If only all-in players remain, skip to showdown?
+              if (attempts >= players.length) {
+                  // Handle case where only all-in players might be left before showdown
+                  const activeNonFolded = players.filter(p => p.active && !p.folded);
+                  if (activeNonFolded.every(p => p.isAllIn)) {
+                      console.log("Only all-in players remain, proceeding to deal remaining cards.");
+                      // Need logic to deal turn/river immediately if pre-flop/flop all-in occurs
+                  } else {
+                       console.log("No player found to start next betting round.");
+                       // This might mean only one player is left - proceed to showdown/award pot?
+                       // Or handle error state.
+                  }
+              }
+
+
+            // Progress game state
+            switch (gameState) {
+                case 'BETTING_PREFLOP':
+                    gameState = 'FLOP';
+                    dealCommunity(3);
+                    if (shouldProceedDirectlyToShowdown()) {
+                         dealTurnRiverAndShowdown();
+                    } else {
+                         startNextBettingRound(nextRoundStartIndex, 'BETTING_FLOP');
+                    }
+                    break;
+                case 'BETTING_FLOP':
+                    gameState = 'TURN';
+                    dealCommunity(1); // Deal the turn card
+                     if (shouldProceedDirectlyToShowdown()) {
+                         dealTurnRiverAndShowdown();
+                    } else {
+                         startNextBettingRound(nextRoundStartIndex, 'BETTING_TURN');
+                    }
+                    break;
+                case 'BETTING_TURN':
+                    gameState = 'RIVER';
+                    dealCommunity(1); // Deal the river card
+                     if (shouldProceedDirectlyToShowdown()) {
+                         dealTurnRiverAndShowdown(); // Already at river, just showdown
+                    } else {
+                         startNextBettingRound(nextRoundStartIndex, 'BETTING_RIVER');
+                    }
+                    break;
+                case 'BETTING_RIVER':
+                    gameState = 'SHOWDOWN';
+                    showdown();
+                    break;
+                default:
+                    console.error("Unknown game state transition from:", gameState);
+                    // Attempt to recover or end hand
+                    showdown(); // Default to showdown if state is weird
+            }
+        }
+
+        function shouldProceedDirectlyToShowdown() {
+            // If only one player is not folded, or all remaining players are all-in
+            const activePlayers = players.filter(p => p.active && !p.folded);
+            if (activePlayers.length <= 1) {
+                 console.log("Proceeding to showdown: <= 1 active player.");
+                 return true;
+            }
+            const nonAllInPlayers = activePlayers.filter(p => !p.isAllIn);
+             if (nonAllInPlayers.length <= 1) {
+                 console.log("Proceeding to showdown: <= 1 player not all-in.");
+                 return true; // If 0 or 1 player can still bet, no more betting rounds needed
+             }
+            return false;
+        }
+
+        function dealTurnRiverAndShowdown() {
+             // Deal remaining community cards if needed
+             console.log("Dealing remaining community cards and going to showdown.");
+             while (communityCards.length < 5) {
+                  dealCommunity(1);
+             }
+             gameState = 'SHOWDOWN';
+             showdown();
+        }
+
+
+        function startNextBettingRound(startIndex, nextGameState) {
+            gameState = nextGameState;
+            currentPlayerIndex = startIndex;
+            actionStartIndex = startIndex; // Remember who starts this round
+            players[currentPlayerIndex].isTurn = true;
+            updateStatus(`${nextGameState.replace('BETTING_', '')} dealt. Betting starts with ${players[currentPlayerIndex].name}.`);
+            updateUI();
+            if (!players[currentPlayerIndex].isHuman) {
+                setTimeout(handleAIAction, 1200 + Math.random() * 800);
+            }
+        }
+
+
+        function showdown() {
+             gameState = 'SHOWDOWN';
+             console.log("Showdown!");
+             updateStatus("Showdown!");
+
+             // Reveal hands of players still in the pot
+             players.forEach(p => {
+                 if (p.active && !p.folded) {
+                     p.revealHand = true;
+                 }
+             });
+
+             determineWinner(); // Determine winner and award pot (uses simplified logic)
+
+             // Wait a bit before starting next hand
+             setTimeout(startNewHand, 6000); // 6 seconds delay
+        }
+
+        function startNewHand() {
+            console.log("Starting new hand...");
+            // Reset cards, community cards, deck
+            communityCards = [];
+            deck = [];
+
+            // Move dealer button (find next active player)
+            let nextDealerIndex = dealerButtonIndex;
+            let attempts = 0;
+            do {
+                 nextDealerIndex = (nextDealerIndex + 1) % players.length;
+                 attempts++;
+            } while (!players[nextDealerIndex].active && attempts < players.length);
+            dealerButtonIndex = nextDealerIndex;
+
+
+            // Reset player states for the new hand
+            players.forEach(p => {
+                // Check if player has balance, mark inactive if busted
+                // Note: Using mockWallet balance for the human player
+                if (p.isHuman) {
+                    if (mockWallet.balance <= 0) {
+                        p.active = false;
+                         updateStatus("Player is out of balance! Game Over?");
+                         // Could implement a rebuy or end game scenario
+                    } else {
+                         p.active = true; // Ensure active if balance > 0
+                    }
+                } else { // AI players
+                    if (p.balance <= 0) {
+                        // Simple reset for AI for now, or mark inactive
+                        // p.active = false;
+                         p.balance = 1000; // Give AI more chips
+                         p.active = true;
+                         console.log(`${p.name} ran out of chips, resetting to 1000.`);
+                    } else {
+                         p.active = true;
+                    }
+                }
+
+                // Reset hand-specific states only if player is active
+                if (p.active) {
+                    p.hand = [];
+                    p.currentBet = 0;
+                    p.folded = false;
+                    p.revealHand = false;
+                    p.isTurn = false;
+                    p.actedThisTurn = false;
+                    p.isAllIn = false;
+                    p.evaluatedHand = null;
+                }
+            });
+
+            // Reset pot AFTER awarding winnings from previous hand (done in determineWinner/awardWinnings)
+            pot = 0; // Ensure pot is zero for the new hand
+            currentBet = 0; // Reset betting level for pre-flop
+
+            // Check if enough active players remain
+            const activePlayersCount = players.filter(p => p.active).length;
+            if (activePlayersCount < 2) {
+                updateStatus("Not enough players to continue. Game Over!");
+                gameState = 'GAME_OVER';
+                setGameActionsEnabled(false);
+                document.getElementById('connectWalletBtn').disabled = true; // Disable connect too
+                return;
+            }
+
+            // Start the pre-deal sequence
+            gameState = 'PRE_DEAL';
+            createDeck();
+            shuffleDeck();
+            dealHands();
+
+            // Handle blinds (Simplified: Skip blinds for now)
+            // PostBlinds(); would go here, setting initial pot and currentBet
+
+            // Start first betting round
+            // Action starts left of BB (or dealer + 3 if no blinds)
+            actionStartIndex = (dealerButtonIndex + 1) % players.length; // Player left of dealer starts (simplified)
+            let attemptsStart = 0;
+             while (!players[actionStartIndex].active && attemptsStart < players.length) {
+                 actionStartIndex = (actionStartIndex + 1) % players.length;
+                 attemptsStart++;
+             }
+
+             if (attemptsStart >= players.length) {
+                  console.error("Could not find active player to start betting round.");
+                  gameState = 'GAME_OVER';
+                  updateStatus("Error: No active player to start round.");
+                  return;
+             }
+
+            startNextBettingRound(actionStartIndex, 'BETTING_PREFLOP');
+        }
+
+
+        // --- Game Loop ---
+        function update() {
+            // Game logic updates are primarily event-driven (player actions, timeouts)
+            // This loop is mainly for rendering smoothly
+        }
+
+        function render() {
+            if (!ctx) return; // Exit if canvas context not ready
+
+            // Clear canvas
+            ctx.clearRect(0, 0, canvas.width, canvas.height);
+
+            // Draw Table (use fallback color if SVG not loaded)
+            if (loadedSVGs[0] && gameAssetsLoaded) {
+                ctx.drawImage(loadedSVGs[0], 0, 0, canvas.width, canvas.height);
+            } else {
+                ctx.fillStyle = '#006400'; // Green fallback
+                ctx.fillRect(0, 0, canvas.width, canvas.height);
+                 if (!gameAssetsLoaded) {
+                     ctx.fillStyle = 'white';
+                     ctx.font = '20px Arial';
+                     ctx.textAlign = 'center';
+                     ctx.fillText("Loading Assets...", canvas.width / 2, canvas.height / 2);
+                 }
+            }
+
+             // Don't render game elements until assets are loaded
+             if (!gameAssetsLoaded) return;
+
+
+            // Draw Community Cards
+            const communityStartX = canvas.width / 2 - (5 * (CARD_WIDTH + 5)) / 2; // Center area for 5 cards
+            communityCards.forEach((card, index) => {
+                drawCard(card, communityStartX + index * (CARD_WIDTH + 5), canvas.height / 2 - CARD_HEIGHT / 2);
+            });
+
+            // Draw Pot
+            drawPot();
+
+            // Draw Players & Cards
+            players.forEach((player, index) => {
+                if (player.active) { // Only draw active players
+                     drawPlayer(player);
+                     // Draw Dealer Button near the dealer
+                     if (index === dealerButtonIndex) {
+                         drawDealerButton(player.position);
+                     }
+                }
+            });
+
+            // Draw Wallet Status Icon
+            drawWalletStatus();
+
+            // Highlight current player's turn
+            if (gameState.startsWith('BETTING') && players[currentPlayerIndex] && players[currentPlayerIndex].isTurn) {
+                const pos = players[currentPlayerIndex].position;
+                ctx.strokeStyle = 'yellow';
+                ctx.lineWidth = 3;
+                // Draw highlight around player area (adjust size/position as needed)
+                ctx.strokeRect(pos.x - CARD_WIDTH - 10, pos.y - CARD_HEIGHT/2 - 25, (CARD_WIDTH + 5) * 2 + 10 , CARD_HEIGHT + 75);
+                ctx.lineWidth = 1; // Reset line width
+            }
+        }
+
+        let lastTimestamp = 0;
+        function gameLoop(timestamp) {
+            // const deltaTime = (timestamp - lastTimestamp) / 1000; // Time in seconds
+            // lastTimestamp = timestamp;
+
+            update(); // Update game state if needed (mostly event-driven now)
+            render(); // Render the current state
+
+            requestAnimationFrame(gameLoop); // Continue the loop
+        }
+
+        // --- Rendering Functions ---
+        function drawCard(card, x, y, faceDown = false) {
+            const cardBackSVG = loadedSVGs[1];
+            const shouldShow = !faceDown;
+
+            if (!shouldShow && cardBackSVG) {
+                ctx.drawImage(cardBackSVG, x, y, CARD_WIDTH, CARD_HEIGHT);
+            } else if (shouldShow && card) {
+                // Draw simple card face representation
+                ctx.fillStyle = 'white';
+                ctx.strokeStyle = '#333';
+                ctx.lineWidth = 1;
+                ctx.fillRect(x, y, CARD_WIDTH, CARD_HEIGHT);
+                ctx.strokeRect(x, y, CARD_WIDTH, CARD_HEIGHT);
+
+                ctx.fillStyle = (card.suit === 'H' || card.suit === 'D') ? 'red' : 'black';
+                ctx.font = `${Math.floor(CARD_HEIGHT * 0.3)}px Arial`; // Scaled font size
+                ctx.textAlign = 'center';
+                ctx.textBaseline = 'middle';
+                const rankText = card.rank;
+                const suitSymbol = getSuitSymbol(card.suit);
+                ctx.fillText(rankText + suitSymbol, x + CARD_WIDTH / 2, y + CARD_HEIGHT / 2);
+
+                 // Small rank/suit in corners (optional)
+                 ctx.font = `${Math.floor(CARD_HEIGHT * 0.18)}px Arial`;
+                 ctx.textAlign = 'left';
+                 ctx.textBaseline = 'top';
+                 ctx.fillText(rankText, x + 3, y + 2);
+                 ctx.fillText(suitSymbol, x + 3, y + 2 + Math.floor(CARD_HEIGHT * 0.18));
+                 ctx.textAlign = 'right';
+                 ctx.textBaseline = 'bottom';
+                 ctx.fillText(rankText, x + CARD_WIDTH - 3, y + CARD_HEIGHT - 2);
+                 ctx.fillText(suitSymbol, x + CARD_WIDTH - 3, y + CARD_HEIGHT - 2 - Math.floor(CARD_HEIGHT * 0.18));
+
+            } else {
+                 // Fallback if card data is missing but should be shown
+                 ctx.fillStyle = 'gray';
+                 ctx.fillRect(x, y, CARD_WIDTH, CARD_HEIGHT);
+            }
+        }
+
+        function getSuitSymbol(suit) {
+            switch (suit) {
+                case 'H': return '♥';
+                case 'D': return '♦';
+                case 'C': return '♣';
+                case 'S': return '♠';
+                default: return '?';
+            }
+        }
+
+        function drawPlayer(player) {
+            const { x, y } = player.position;
+            // Determine if cards should be shown (player's own cards always, others only at showdown)
+            const revealHand = player.revealHand || (player.isHuman && gameState !== 'LOADING' && gameState !== 'PRE_DEAL');
+
+            // Draw player info box below cards
+            const infoBoxY = y + CARD_HEIGHT * 0.6;
+            const infoBoxHeight = 45;
+            ctx.fillStyle = 'rgba(0, 0, 0, 0.6)';
+            ctx.fillRect(x - CARD_WIDTH - 5, infoBoxY, (CARD_WIDTH + 3) * 2 + 4, infoBoxHeight);
+
+            ctx.fillStyle = player.isTurn ? 'yellow' : 'white';
+            ctx.font = '11px Arial';
+            ctx.textAlign = 'center';
+            ctx.fillText(player.name, x, infoBoxY + 10);
+
+            ctx.fillStyle = 'white';
+            const balanceText = player.isHuman ? `Wallet: ${mockWallet.balance}` : `Bal: ${player.balance}`;
+            ctx.fillText(balanceText, x, infoBoxY + 25);
+
+            if (player.currentBet > 0) {
+                ctx.fillStyle = '#66FF66'; // Light green for bet amount
+                ctx.fillText(`Bet: ${player.currentBet}`, x, infoBoxY + 40);
+            }
+            if (player.folded) {
+                ctx.fillStyle = 'red';
+                ctx.font = 'bold 12px Arial';
+                ctx.fillText('FOLDED', x, y - CARD_HEIGHT * 0.6 - 5); // Position above cards
+            }
+             if (player.isAllIn && !player.folded) {
+                ctx.fillStyle = 'orange';
+                ctx.font = 'bold 12px Arial';
+                ctx.fillText('ALL IN', x, y - CARD_HEIGHT * 0.6 - 5);
+            }
+
+
+            // Draw player hole cards (positioned above info box)
+            if (player.hand && player.hand.length > 0) {
+                const cardY = y - CARD_HEIGHT * 0.6; // Position cards above name/balance
+                const card1X = x - CARD_WIDTH - 3; // Left card
+                const card2X = x + 3;             // Right card
+                drawCard(player.hand[0], card1X, cardY, !revealHand);
+                if (player.hand.length > 1) {
+                    drawCard(player.hand[1], card2X, cardY, !revealHand);
+                }
+            }
+        }
+
+        function drawPot() {
+            const potX = canvas.width / 2;
+            const potY = canvas.height / 2 + CARD_HEIGHT * 0.6; // Below community cards area
+            const chipSVG = loadedSVGs[2]; // Animated Chip SVG
+
+            ctx.fillStyle = 'gold';
+            ctx.font = 'bold 16px Arial';
+            ctx.textAlign = 'center';
+            ctx.fillText(`Pot: ${pot}`, potX, potY);
+
+            // Draw some chips visually representing the pot
+            if (pot > 0 && chipSVG && gameAssetsLoaded) {
+                const numChips = Math.min(Math.ceil(pot / 50) +1, 15); // Max 15 chips visually
+                const chipStackX = potX - CHIP_SIZE / 2;
+                const chipStackStartY = potY + 15;
+                for (let i = 0; i < numChips; i++) {
+                     // Add slight random offset for a more natural pile
+                     const offsetX = (Math.random() - 0.5) * CHIP_SIZE * 0.5;
+                     const offsetY = (Math.random() - 0.5) * CHIP_SIZE * 0.2 - i * 2; // Stack upwards slightly
+                     try {
+                        ctx.drawImage(chipSVG, chipStackX + offsetX, chipStackStartY + offsetY, CHIP_SIZE, CHIP_SIZE);
+                     } catch (e) {
+                          // Ignore potential errors if SVG is complex or not fully loaded/supported
+                          // console.warn("Error drawing chip SVG:", e);
+                     }
+                }
+            } else if (pot > 0) { // Fallback circle chips if SVG fails
+                ctx.fillStyle = '#B71C1C'; // Red chip color
+                ctx.beginPath();
+                ctx.arc(potX, potY + 25, CHIP_SIZE * 0.6, 0, Math.PI * 2);
+                ctx.fill();
+                 ctx.strokeStyle = '#FDD835'; // Gold edge
+                 ctx.lineWidth = 2;
+                 ctx.stroke();
+                 ctx.lineWidth = 1;
+            }
+        }
+
+        function drawDealerButton(position) {
+            // Position dealer button slightly offset from the player
+            const btnX = position.x + CARD_WIDTH * 0.8;
+            const btnY = position.y - CARD_HEIGHT * 0.3;
+            const radius = 10;
+
+            ctx.fillStyle = 'rgba(255, 255, 255, 0.9)';
+            ctx.beginPath();
+            ctx.arc(btnX, btnY, radius, 0, Math.PI * 2);
+            ctx.fill();
+            ctx.strokeStyle = 'black';
+            ctx.lineWidth = 1;
+            ctx.stroke();
+
+            ctx.fillStyle = 'black';
+            ctx.font = 'bold 12px Arial';
+            ctx.textAlign = 'center';
+            ctx.textBaseline = 'middle';
+            ctx.fillText('D', btnX, btnY + 1); // Adjust text position slightly
+        }
+
+        function drawWalletStatus() {
+            const walletSVG = loadedSVGs[3];
+            const statusX = 15;
+            const statusY = canvas.height - 25; // Positioned at bottom left
+
+            ctx.fillStyle = 'rgba(0,0,0,0.5)';
+            ctx.fillRect(statusX - 5, statusY - 15, 200, 30); // Background rect
+
+            if (walletSVG && gameAssetsLoaded) {
+                 // Set color based on connection status before drawing SVG if using 'currentColor'
+                 ctx.fillStyle = mockWallet.connected ? 'lightgreen' : 'grey';
+                 // Note: fillStyle might not affect SVG if it has its own fill attributes.
+                 // For SVGs using 'currentColor', this *should* work.
+                 try {
+                     ctx.drawImage(walletSVG, statusX, statusY - WALLET_ICON_SIZE / 2, WALLET_ICON_SIZE, WALLET_ICON_SIZE);
+                 } catch(e) {
+                      // console.warn("Error drawing wallet SVG:", e);
+                       // Fallback square if drawImage fails
+                       ctx.fillRect(statusX, statusY - 10, 20, 20);
+                 }
+            } else { // Fallback square if SVG not loaded
+                 ctx.fillStyle = mockWallet.connected ? 'lightgreen' : 'grey';
+                 ctx.fillRect(statusX, statusY - 10, 20, 20);
+            }
+
+            // Reset fillStyle for text
+            ctx.fillStyle = 'white';
+            ctx.font = '12px Arial';
+            ctx.textAlign = 'left';
+            ctx.textBaseline = 'middle';
+            const statusText = mockWallet.connected ? `Connected: ${mockWallet.publicKey}` : 'Wallet Disconnected';
+            ctx.fillText(statusText, statusX + WALLET_ICON_SIZE + 8, statusY);
+        }
+
+        // --- UI ---
+        function setupUI() {
+            document.getElementById('connectWalletBtn').addEventListener('click', connectWallet); // connectWallet handles audio init/resume
+            document.getElementById('checkBtn').addEventListener('click', () => handlePlayerAction('check'));
+            document.getElementById('callBtn').addEventListener('click', () => handlePlayerAction('call'));
+            document.getElementById('betBtn').addEventListener('click', () => handlePlayerAction('bet'));
+            document.getElementById('foldBtn').addEventListener('click', () => handlePlayerAction('fold'));
+
+            // Initial UI state
+            setGameActionsEnabled(false);
+            updateStatus("Loading assets...");
+        }
+
+        function updateUI() {
+            if (!players || players.length === 0) return; // Don't update if players not set up
+
+            const humanPlayer = players.find(p => p.isHuman);
+            const isHumanTurn = humanPlayer && humanPlayer.isTurn && !humanPlayer.folded && !humanPlayer.isAllIn && gameState.startsWith('BETTING');
+            const canAffordBet = humanPlayer && (humanPlayer.isHuman ? mockWallet.balance : humanPlayer.balance) > 0;
+
+            setGameActionsEnabled(isHumanTurn && mockWallet.connected && canAffordBet);
+
+            // Update status message display (handled by updateStatus)
+
+            // Update wallet button text/state
+            const connectBtn = document.getElementById('connectWalletBtn');
+            connectBtn.textContent = mockWallet.connected ? 'Wallet Connected' : 'Connect Wallet';
+            connectBtn.disabled = mockWallet.connected;
+
+             // Update bet button text (Bet vs Raise) and amount
+             const betToCall = humanPlayer ? currentBet - humanPlayer.currentBet : 0;
+             const betBtn = document.getElementById('betBtn');
+             if (betToCall > 0) {
+                 betBtn.textContent = `Raise ${BASE_BET}`;
+             } else {
+                 betBtn.textContent = `Bet ${BASE_BET}`;
+             }
+             // Disable bet if player cannot afford the minimum bet/raise
+             const minBetAmount = betToCall > 0 ? betToCall + BASE_BET : BASE_BET;
+              if (humanPlayer && (humanPlayer.isHuman ? mockWallet.balance : humanPlayer.balance) < minBetAmount) {
+                 // Special case: Allow "bet" if it means going all-in
+                 if ((humanPlayer.isHuman ? mockWallet.balance : humanPlayer.balance) > 0) {
+                      betBtn.textContent = `All In (${humanPlayer.isHuman ? mockWallet.balance : humanPlayer.balance})`;
+                 } else {
+                      betBtn.disabled = true; // Cannot bet if balance is 0
+                 }
+             }
+
+
+            // Enable/disable check/call based on currentBet
+             const checkBtn = document.getElementById('checkBtn');
+             const callBtn = document.getElementById('callBtn');
+
+             if (isHumanTurn) {
+                 checkBtn.disabled = betToCall > 0; // Can only check if no bet to call
+                 callBtn.disabled = betToCall <= 0; // Can only call if there is a bet
+                 if (betToCall > 0) {
+                      const callAmount = Math.min(betToCall, humanPlayer.isHuman ? mockWallet.balance : humanPlayer.balance);
+                      callBtn.textContent = `Call ${callAmount}`;
+                      if (callAmount === (humanPlayer.isHuman ? mockWallet.balance : humanPlayer.balance)) {
+                           callBtn.textContent = `All In (${callAmount})`;
+                      }
+                 } else {
+                      callBtn.textContent = 'Call'; // Default text when disabled
+                 }
+             } else {
+                  // Disable if not human's turn
+                  checkBtn.disabled = true;
+                  callBtn.disabled = true;
+                  callBtn.textContent = 'Call';
+             }
+        }
+
+        function setGameActionsEnabled(enabled) {
+             // Base enabling/disabling
+             document.getElementById('checkBtn').disabled = !enabled;
+             document.getElementById('callBtn').disabled = !enabled;
+             document.getElementById('betBtn').disabled = !enabled;
+             document.getElementById('foldBtn').disabled = !enabled;
+             // Further refinement happens in updateUI based on game context (check vs call)
+        }
+
+        function updateStatus(message) {
+            document.getElementById('statusMessage').textContent = message;
+            // console.log("Status:", message); // Optional: Log status updates
+        }
+
+        // --- Initialization ---
+        function startGame() {
+            if (!gameAssetsLoaded) {
+                console.log("Waiting for assets to load before starting game...");
+                return;
+            }
+             if (gameState !== 'LOADING') {
+                  console.log("Game already started or starting.");
+                  return; // Prevent multiple starts
+             }
+            console.log("Starting game logic...");
+
+            setupAudio(); // Define sound functions (AudioContext might still be suspended)
+            setupPlayers();
+            startNewHand(); // Kicks off the first hand
+
+            // Start the rendering loop only AFTER assets are loaded and game setup begins
+            requestAnimationFrame(gameLoop);
+        }
+
+        function init() {
+             console.log("Initializing...");
+             window.initCalled = true; // Flag that init has been called
+             canvas = document.getElementById('pokerCanvas');
+             if (!canvas) { console.error("Canvas element not found!"); return; }
+             ctx = canvas.getContext('2d');
+             if (!ctx) { console.error("Failed to get 2D context!"); return; }
+
+             // Set canvas size (adjust as needed)
+             canvas.width = 900;
+             canvas.height = 600;
+
+
+             setupUI(); // Setup buttons and initial text
+             loadAssets(); // Start loading SVGs
+
+             // The game logic (startGame) will be called by the SVG loader callback
+             // once all assets are confirmed loaded.
+        }
+
+        // Make sure init runs after the DOM is fully loaded
+        window.addEventListener('load', init);
+
+    </script>
+
+</body>
+</html>
