@@ -1,0 +1,802 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>SVG Slot Machine</title>
+    <style>
+        body {
+            display: flex;
+            flex-direction: column; /* Stack elements vertically */
+            justify-content: center;
+            align-items: center;
+            height: 100vh;
+            margin: 0;
+            background-color: #f0f0f0;
+            font-family: Arial, sans-serif;
+        }
+        canvas {
+            border: 5px solid #333;
+            background-color: #fff;
+            display: block; /* Prevent extra space below canvas */
+        }
+        #game-info {
+            margin-top: 15px;
+            padding: 10px;
+            background-color: #ddd;
+            border-radius: 5px;
+            min-width: 300px;
+            text-align: center;
+        }
+        #loading {
+            position: absolute;
+            top: 50%;
+            left: 50%;
+            transform: translate(-50%, -50%);
+            font-size: 2em;
+            color: #555;
+        }
+        .info-line {
+            margin: 5px 0;
+            font-size: 1.1em;
+        }
+        strong { color: #006400; }
+        .message { font-weight: bold; color: #8B0000; min-height: 1.2em; } /* Reserve space */
+    </style>
+</head>
+<body>
+
+    <div id="loading">Loading Assets...</div>
+    <canvas id="slotCanvas" width="500" height="400"></canvas>
+    <div id="game-info">
+        <div class="info-line">Credits: <span id="credits">100</span></div>
+        <div class="info-line">Free Spins: <span id="free-spins">0</span></div>
+        <div class="info-line message"><span id="message">Click Spin!</span></div>
+    </div>
+
+    <script>
+        const canvas = document.getElementById('slotCanvas');
+        const ctx = canvas.getContext('2d');
+        const gameInfo = document.getElementById('game-info');
+        const creditsDisplay = document.getElementById('credits');
+        const freeSpinsDisplay = document.getElementById('free-spins');
+        const messageDisplay = document.getElementById('message');
+        const loadingDisplay = document.getElementById('loading');
+
+        // Game Configuration
+        const NUM_REELS = 3;
+        const SYMBOLS_VISIBLE = 3; // How many symbols are visible per reel
+        const SYMBOL_SIZE = 100; // Visual size on canvas
+        const REEL_WIDTH = SYMBOL_SIZE + 10; // Width including spacing
+        const SPIN_DURATION = 1500; // ms per reel
+        const REEL_DELAY = 250; // ms delay between reel stops
+        const SPIN_BUTTON_SIZE = { width: 100, height: 60 }; // Match SVG aspect ratio
+        const SPIN_BUTTON_POS = { x: canvas.width / 2 - SPIN_BUTTON_SIZE.width / 2, y: canvas.height - SYMBOL_SIZE / 2 - SPIN_BUTTON_SIZE.height / 2 };
+
+        // SVG Assets (Raw Strings)
+        const svgAssets = [
+            // 0: Cherry
+            `<svg viewBox="0 0 100 100" xmlns="http://www.w3.org/2000/svg">
+              <path d="M 50 15 Q 40 35 35 50 M 50 15 Q 60 35 65 50" stroke="#008000" stroke-width="8" stroke-linecap="round" fill="none"/>
+              <circle cx="35" cy="70" r="25" fill="#D90000"/>
+              <circle cx="65" cy="70" r="25" fill="#D90000"/>
+            </svg>`,
+            // 1: Bell
+            `<svg viewBox="0 0 100 100" xmlns="http://www.w3.org/2000/svg">
+              <circle cx="50" cy="12" r="6" fill="#FFD700"/>
+              <path d="M 25 25 Q 50 5, 75 25 L 85 70 Q 50 90, 15 70 L 25 25 Z" fill="#FFD700"/>
+              <circle cx="50" cy="75" r="7" fill="#DAA520"/>
+            </svg>`,
+            // 2: Seven
+            `<svg viewBox="0 0 60 100" xmlns="http://www.w3.org/2000/svg">
+              <text x="30" y="85" font-family="sans-serif" font-size="100" font-weight="bold" fill="red" text-anchor="middle">7</text>
+            </svg>`,
+            // 3: Free Spin
+             `<svg viewBox="0 0 100 100" xmlns="http://www.w3.org/2000/svg">
+                <defs>
+                    <filter id="subtleGlow" x="-50%" y="-50%" width="200%" height="200%">
+                        <feGaussianBlur stdDeviation="2.5" result="coloredBlur">
+                            <animate
+                                attributeName="stdDeviation"
+                                values="2; 3.5; 2"
+                                dur="1.8s"
+                                repeatCount="indefinite"
+                                calcMode="spline"
+                                keyTimes="0; 0.5; 1"
+                                keySplines="0.42 0 0.58 1; 0.42 0 0.58 1"
+                             />
+                        </feGaussianBlur>
+                        <feMerge>
+                            <feMergeNode in="coloredBlur"/>
+                            <feMergeNode in="SourceGraphic"/>
+                        </feMerge>
+                    </filter>
+                </defs>
+                <g filter="url(#subtleGlow)">
+                   <polygon
+                       points="50,10 64.7,35.9 92.4,35.9 70.8,54.1 80.9,80 50,65 19.1,80 29.2,54.1 7.6,35.9 35.3,35.9"
+                       fill="#FFD700"
+                       stroke="#FFA000"
+                       stroke-width="1"
+                   />
+                </g>
+                <text x="50" y="48"
+                      font-family="'Arial Black', Gadget, sans-serif"
+                      font-size="10"
+                      font-weight="900"
+                      fill="#FFFFFF"
+                      stroke="#800080"
+                      stroke-width="0.6"
+                      text-anchor="middle"
+                      dominant-baseline="middle">
+                    FREE
+                </text>
+                <text x="50" y="62"
+                      font-family="'Arial Black', Gadget, sans-serif"
+                      font-size="10"
+                      font-weight="900"
+                      fill="#FFFFFF"
+                      stroke="#800080"
+                      stroke-width="0.6"
+                      text-anchor="middle"
+                      dominant-baseline="middle">
+                    SPIN
+                </text>
+            </svg>`,
+            // 4: Spin Button
+            `<svg viewBox="0 0 100 60" xmlns="http://www.w3.org/2000/svg">
+              <rect x="5" y="5" width="90" height="50" rx="10" ry="10" fill="#4CAF50"/>
+              <text x="50" y="33" text-anchor="middle" dominant-baseline="middle" font-family="Arial, sans-serif" font-size="20" font-weight="bold" fill="white">SPIN</text>
+            </svg>`
+        ];
+        const assetKeys = ['cherry', 'bell', 'seven', 'freeSpin', 'spinButton'];
+
+        // Sound Effect JS Function Bodies
+        const soundEffectBodies = [
+            // 0: Reel Spin
+            `const now = audioContext.currentTime;
+            const duration = ${SPIN_DURATION / 1000 + (NUM_REELS - 1) * REEL_DELAY / 1000}; // Match visual spin duration
+
+            // --- Whirring Sound ---
+            const bufferSize = audioContext.sampleRate * 0.1;
+            const noiseBuffer = audioContext.createBuffer(1, bufferSize, audioContext.sampleRate);
+            const output = noiseBuffer.getChannelData(0);
+            for (let i = 0; i < bufferSize; i++) { output[i] = Math.random() * 2 - 1; }
+
+            const whirSource = audioContext.createBufferSource();
+            whirSource.buffer = noiseBuffer;
+            whirSource.loop = true;
+
+            const whirFilter = audioContext.createBiquadFilter();
+            whirFilter.type = 'bandpass';
+            whirFilter.frequency.setValueAtTime(900, now);
+            whirFilter.Q.setValueAtTime(10, now);
+            whirFilter.frequency.linearRampToValueAtTime(1200, now + duration * 0.4);
+            whirFilter.frequency.linearRampToValueAtTime(850, now + duration * 0.8);
+            whirFilter.frequency.linearRampToValueAtTime(1000, now + duration);
+
+            const whirGain = audioContext.createGain();
+            whirGain.gain.setValueAtTime(0, now);
+            whirGain.gain.linearRampToValueAtTime(0.18, now + 0.04);
+            whirGain.gain.linearRampToValueAtTime(0.15, now + duration * 0.5);
+            whirGain.gain.linearRampToValueAtTime(0.18, now + duration * 0.9);
+            whirGain.gain.linearRampToValueAtTime(0, now + duration); // Fade out
+
+            whirSource.connect(whirFilter);
+            whirFilter.connect(whirGain);
+            whirGain.connect(audioContext.destination);
+
+            whirSource.start(now);
+            // IMPORTANT: Store the source globally to stop it later
+            window.spinSoundSource = whirSource; // Store globally or pass back
+            whirSource.stop(now + duration + 0.1); // Schedule stop slightly after fade out
+
+
+            // --- Clicking Sound ---
+            function createClick(startTime, clickGainValue = 0.4) {
+                const clickEnv = audioContext.createGain();
+                clickEnv.gain.setValueAtTime(0, startTime);
+                clickEnv.gain.linearRampToValueAtTime(clickGainValue, startTime + 0.002);
+                clickEnv.gain.exponentialRampToValueAtTime(0.001, startTime + 0.04);
+                clickEnv.connect(audioContext.destination);
+
+                const clickBuffer = audioContext.createBuffer(1, 400, audioContext.sampleRate);
+                const clickOutput = clickBuffer.getChannelData(0);
+                for (let i = 0; i < 400; i++) { clickOutput[i] = Math.random() * 2 - 1; }
+                const clickSource = audioContext.createBufferSource();
+                clickSource.buffer = clickBuffer;
+
+                const clickFilter = audioContext.createBiquadFilter();
+                clickFilter.type = 'highpass';
+                clickFilter.frequency.setValueAtTime(1000, startTime);
+                clickFilter.Q.setValueAtTime(1, startTime);
+
+                clickSource.connect(clickFilter);
+                clickFilter.connect(clickEnv);
+
+                clickSource.start(startTime);
+                clickSource.stop(startTime + 0.05);
+            }
+
+            const numClicks = Math.floor(duration * 5); // More clicks for longer spin
+            for (let i = 0; i < numClicks; i++) {
+                const clickTime = now + (duration / (numClicks + 1)) * (i + 1) + (Math.random() - 0.5) * 0.06;
+                const clickVolume = 0.3 + Math.random() * 0.2;
+                if (clickTime < now + duration - 0.05) {
+                     createClick(clickTime, clickVolume);
+                }
+            }`,
+            // 1: Win
+            `const now = audioContext.currentTime;
+            const attackTime = 0.01;
+            const releaseTime = 0.1;
+            const shortNoteDuration = 0.08;
+            const longNoteDuration = 0.2;
+            const gap = 0.05;
+            const mainGain = 0.4;
+
+            const osc = audioContext.createOscillator();
+            const gainNode = audioContext.createGain();
+
+            osc.type = 'triangle';
+            osc.connect(gainNode);
+            gainNode.connect(audioContext.destination);
+            gainNode.gain.setValueAtTime(0, now);
+
+            const notes = [523.25, 659.25, 783.99, 1046.50]; // C5, E5, G5, C6
+            let time = now;
+
+            osc.frequency.setValueAtTime(notes[0], time);
+            gainNode.gain.linearRampToValueAtTime(mainGain, time + attackTime);
+            gainNode.gain.linearRampToValueAtTime(0, time + shortNoteDuration + releaseTime);
+            time += shortNoteDuration + gap;
+
+            osc.frequency.setValueAtTime(notes[1], time);
+            gainNode.gain.setValueAtTime(0, time);
+            gainNode.gain.linearRampToValueAtTime(mainGain, time + attackTime);
+            gainNode.gain.linearRampToValueAtTime(0, time + shortNoteDuration + releaseTime);
+            time += shortNoteDuration + gap;
+
+            osc.frequency.setValueAtTime(notes[2], time);
+            gainNode.gain.setValueAtTime(0, time);
+            gainNode.gain.linearRampToValueAtTime(mainGain, time + attackTime);
+            gainNode.gain.linearRampToValueAtTime(0, time + shortNoteDuration + releaseTime);
+            time += shortNoteDuration + gap;
+
+            osc.frequency.setValueAtTime(notes[3], time);
+            gainNode.gain.setValueAtTime(0, time);
+            gainNode.gain.linearRampToValueAtTime(mainGain * 1.2, time + attackTime);
+            gainNode.gain.linearRampToValueAtTime(0, time + longNoteDuration + releaseTime);
+            time += longNoteDuration + releaseTime + 0.1;
+
+            osc.start(now);
+            osc.stop(time);`,
+            // 2: Free Spin Trigger
+            `const now = audioContext.currentTime;
+            const startTime = now + 0.02;
+
+            const sweepStartFreq = 500;
+            const sweepEndFreq = 2000;
+            const sweepDuration = 0.15;
+            const shimmerDelay = sweepDuration;
+            const shimmerDuration = 0.6;
+            const totalDuration = shimmerDelay + shimmerDuration + 0.2;
+
+            const sweepOsc = audioContext.createOscillator();
+            sweepOsc.type = 'sawtooth';
+            sweepOsc.frequency.setValueAtTime(sweepStartFreq, startTime);
+            sweepOsc.frequency.exponentialRampToValueAtTime(sweepEndFreq, startTime + sweepDuration);
+
+            const sweepGain = audioContext.createGain();
+            sweepGain.gain.setValueAtTime(0, startTime);
+            sweepGain.gain.linearRampToValueAtTime(0.6, startTime + 0.01);
+            sweepGain.gain.exponentialRampToValueAtTime(0.001, startTime + sweepDuration + 0.1);
+
+            sweepOsc.connect(sweepGain);
+
+            const shimmerOsc1 = audioContext.createOscillator();
+            shimmerOsc1.type = 'triangle';
+            const shimmerFreq1 = sweepEndFreq * 1.005;
+            shimmerOsc1.frequency.setValueAtTime(shimmerFreq1, startTime + shimmerDelay);
+
+            const shimmerGain1 = audioContext.createGain();
+            shimmerGain1.gain.setValueAtTime(0, startTime + shimmerDelay);
+            shimmerGain1.gain.linearRampToValueAtTime(0.3, startTime + shimmerDelay + 0.05);
+            shimmerGain1.gain.exponentialRampToValueAtTime(0.001, startTime + shimmerDelay + shimmerDuration);
+
+            shimmerOsc1.connect(shimmerGain1);
+
+            const shimmerOsc2 = audioContext.createOscillator();
+            shimmerOsc2.type = 'triangle';
+            const shimmerFreq2 = sweepEndFreq * 0.995;
+            shimmerOsc2.frequency.setValueAtTime(shimmerFreq2, startTime + shimmerDelay);
+
+            const shimmerGain2 = audioContext.createGain();
+            shimmerGain2.gain.setValueAtTime(0, startTime + shimmerDelay);
+            shimmerGain2.gain.linearRampToValueAtTime(0.3, startTime + shimmerDelay + 0.05);
+            shimmerGain2.gain.exponentialRampToValueAtTime(0.001, startTime + shimmerDelay + shimmerDuration);
+
+            shimmerOsc2.connect(shimmerGain2);
+
+            const delay = audioContext.createDelay(0.5);
+            delay.delayTime.setValueAtTime(0.12, startTime);
+
+            const feedback = audioContext.createGain();
+            feedback.gain.setValueAtTime(0.35, startTime);
+
+            const wetGain = audioContext.createGain();
+            wetGain.gain.setValueAtTime(0.4, startTime);
+
+            const dryGain = audioContext.createGain();
+            dryGain.gain.setValueAtTime(0.7, startTime);
+
+            sweepGain.connect(dryGain);
+            shimmerGain1.connect(dryGain);
+            shimmerGain2.connect(dryGain);
+            dryGain.connect(audioContext.destination);
+
+            sweepGain.connect(delay);
+            shimmerGain1.connect(delay);
+            shimmerGain2.connect(delay);
+
+            delay.connect(feedback);
+            feedback.connect(delay);
+            delay.connect(wetGain);
+            wetGain.connect(audioContext.destination);
+
+            sweepOsc.start(startTime);
+            shimmerOsc1.start(startTime + shimmerDelay);
+            shimmerOsc2.start(startTime + shimmerDelay);
+
+            sweepOsc.stop(startTime + totalDuration);
+            shimmerOsc1.stop(startTime + totalDuration);
+            shimmerOsc2.stop(startTime + totalDuration);`
+        ];
+        const soundKeys = ['reelSpin', 'win', 'freeSpinTrigger'];
+
+        // Game State
+        let gameState = 'loading'; // loading, ready, spinning, result
+        let credits = 100;
+        let freeSpinsRemaining = 0;
+        let reels = []; // Array of reel objects { symbols: [], position: 0, speed: 0, targetPosition: 0, isSpinning: false, stopTime: 0 }
+        let symbolImages = {}; // Stores loaded Image objects { 'cherry': img, 'bell': img, ... }
+        let spinButtonImage = null;
+        let lastWinAmount = 0;
+        let lastUpdateTime = 0;
+
+        // Audio
+        let audioContext = null;
+        let soundFunctions = {};
+        window.spinSoundSource = null; // Global reference to stop the spin sound
+
+        // Reel Strips (Define the order and frequency of symbols on each reel)
+        // More common symbols appear more often
+        const reelStrips = [
+            ['cherry', 'bell', 'seven', 'cherry', 'bell', 'freeSpin', 'cherry', 'bell', 'cherry', 'seven'],
+            ['bell', 'cherry', 'freeSpin', 'seven', 'bell', 'cherry', 'bell', 'seven', 'cherry', 'bell'],
+            ['seven', 'cherry', 'bell', 'cherry', 'freeSpin', 'bell', 'seven', 'cherry', 'bell', 'cherry']
+        ];
+
+        // Payout Table (Symbol Key and Count -> Payout Multiplier)
+        // Using center line only for simplicity
+        const payouts = {
+            'cherry': { 2: 2, 3: 5 }, // Need 2 or 3 cherries
+            'bell': { 3: 15 },
+            'seven': { 3: 50 },
+            // Free spins are handled separately, not direct payout
+        };
+        const FREE_SPIN_AWARD = 5; // How many free spins awarded
+
+        // --- Asset Loading ---
+        function loadAssets(callback) {
+            let assetsLoadedCount = 0;
+            const totalAssetsToLoad = svgAssets.length;
+            loadingDisplay.textContent = `Loading Assets... (0/${totalAssetsToLoad})`;
+
+            svgAssets.forEach((svgString, index) => {
+                const img = new Image();
+                const key = assetKeys[index];
+
+                img.onload = () => {
+                    assetsLoadedCount++;
+                    loadingDisplay.textContent = `Loading Assets... (${assetsLoadedCount}/${totalAssetsToLoad})`;
+                    console.log(`Loaded asset: ${key}`);
+                    if (key === 'spinButton') {
+                        spinButtonImage = img;
+                    } else {
+                        symbolImages[key] = img;
+                    }
+
+                    if (assetsLoadedCount === totalAssetsToLoad) {
+                        console.log("All SVG assets loaded.");
+                        loadingDisplay.style.display = 'none';
+                        callback();
+                    }
+                };
+                img.onerror = (e) => {
+                    console.error(`Error loading asset: ${key}`, e);
+                    // Handle error - maybe show an error message instead of starting
+                    loadingDisplay.textContent = `Error loading ${key}! Cannot start game.`;
+                };
+                // Use encodeURIComponent for robustness
+                img.src = 'data:image/svg+xml;utf8,' + encodeURIComponent(svgString);
+            });
+        }
+
+        // --- Sound Initialization ---
+        function initializeAudio() {
+            if (!audioContext) {
+                try {
+                    audioContext = new (window.AudioContext || window.webkitAudioContext)();
+                    compileSounds();
+                    console.log("AudioContext initialized.");
+                } catch (e) {
+                    console.error("Web Audio API is not supported in this browser.", e);
+                    // Disable sound functionality gracefully
+                    soundFunctions = {}; // Ensure no attempts to play sound
+                }
+            }
+        }
+
+        function compileSounds() {
+            if (!audioContext) return; // Don't compile if context failed
+
+            soundEffectBodies.forEach((body, index) => {
+                const key = soundKeys[index];
+                try {
+                    // Pass audioContext. activeSources is not needed directly here
+                    // as the spin sound manages its source via window.spinSoundSource
+                    soundFunctions[key] = new Function('audioContext', body);
+                    console.log(`Compiled sound: ${key}`);
+                } catch (e) {
+                    console.error(`Error compiling sound function ${key}:`, e);
+                    soundFunctions[key] = () => { console.warn(`Sound ${key} failed to compile.`); };
+                }
+            });
+        }
+
+        function playSound(key) {
+           if (audioContext && audioContext.state === 'running' && soundFunctions[key]) {
+               try {
+                    soundFunctions[key](audioContext);
+               } catch (e) {
+                   console.error(`Error playing sound ${key}:`, e);
+               }
+           } else if (audioContext && audioContext.state === 'suspended') {
+               audioContext.resume().then(() => {
+                   console.log("AudioContext resumed.");
+                   playSound(key); // Try playing again after resume
+               }).catch(e => console.error("Error resuming AudioContext:", e));
+           } else if (!audioContext) {
+               console.warn(`AudioContext not initialized. Cannot play sound: ${key}`);
+           } else {
+                // console.log(`Sound ${key} not played. State: ${audioContext.state}`);
+           }
+        }
+
+        function stopSpinSound() {
+            if (window.spinSoundSource && audioContext && audioContext.state === 'running') {
+                try {
+                    // Fade out quickly before stopping
+                    const now = audioContext.currentTime;
+                    const gainParam = window.spinSoundSource.context.createGain().gain; // Need to access gain node if controlled externally
+                    // Simpler: just stop it. The compiled function already includes fade out.
+                    window.spinSoundSource.stop(now); // Stop immediately
+                    console.log("Spin sound stopped.");
+                } catch (e) {
+                    console.error("Error stopping spin sound:", e);
+                } finally {
+                    window.spinSoundSource = null; // Clear reference
+                }
+            }
+        }
+
+
+        // --- Game Initialization ---
+        function init() {
+            console.log("Initializing game...");
+            initializeAudio(); // Try to init audio early
+
+            // Initialize Reels
+            reels = [];
+            const startX = (canvas.width - (NUM_REELS * REEL_WIDTH) + (REEL_WIDTH - SYMBOL_SIZE)) / 2; // Center reels
+            for (let i = 0; i < NUM_REELS; i++) {
+                reels.push({
+                    symbols: reelStrips[i % reelStrips.length], // Use defined strips
+                    position: 0, // Index of the symbol at the top visible position
+                    visualOffset: 0, // Fine-grained offset for smooth animation (pixels)
+                    speed: 0,
+                    targetSymbolIndex: 0,
+                    isSpinning: false,
+                    stopTime: 0,
+                    x: startX + i * REEL_WIDTH,
+                    y: (canvas.height - (SYMBOLS_VISIBLE * SYMBOL_SIZE)) / 2 - SYMBOL_SIZE * 0.5 // Center vertically slightly above middle
+                });
+            }
+
+            updateUI();
+            gameState = 'ready';
+            setMessage("Click SPIN to start!");
+            lastUpdateTime = performance.now();
+            requestAnimationFrame(gameLoop);
+            console.log("Game ready.");
+        }
+
+        // --- Game Loop ---
+        function gameLoop(timestamp) {
+            const deltaTime = (timestamp - lastUpdateTime) / 1000; // Delta time in seconds
+            lastUpdateTime = timestamp;
+
+            update(deltaTime, timestamp);
+            render();
+
+            requestAnimationFrame(gameLoop);
+        }
+
+        // --- Update Logic ---
+        function update(deltaTime, timestamp) {
+            if (gameState !== 'spinning') return;
+
+            let allReelsStopped = true;
+            const now = performance.now();
+
+            reels.forEach((reel, index) => {
+                if (reel.isSpinning) {
+                    allReelsStopped = false;
+
+                    // Check if it's time for this reel to stop
+                    if (now >= reel.stopTime) {
+                        reel.isSpinning = false;
+                        reel.speed = 0;
+                        // Snap to the target symbol index precisely
+                        reel.visualOffset = (reel.targetSymbolIndex - reel.position) * SYMBOL_SIZE;
+                         // Ensure position wraps correctly after snapping
+                        reel.position = reel.targetSymbolIndex;
+                        reel.visualOffset = 0; // Reset visual offset after snapping
+
+                        console.log(`Reel ${index} stopped at symbol index ${reel.targetSymbolIndex} (${reel.symbols[reel.targetSymbolIndex]})`);
+
+
+                    } else {
+                        // Continue spinning
+                        reel.visualOffset += reel.speed * deltaTime;
+
+                        // Handle wrapping and update position index
+                        while (reel.visualOffset >= SYMBOL_SIZE) {
+                            reel.visualOffset -= SYMBOL_SIZE;
+                            reel.position = (reel.position + 1) % reel.symbols.length;
+                        }
+                         while (reel.visualOffset < 0) { // Should not happen with positive speed, but good practice
+                            reel.visualOffset += SYMBOL_SIZE;
+                            reel.position = (reel.position - 1 + reel.symbols.length) % reel.symbols.length;
+                        }
+                    }
+                }
+            });
+
+            if (allReelsStopped && gameState === 'spinning') {
+                gameState = 'result';
+                stopSpinSound(); // Ensure spin sound stops
+                console.log("All reels stopped. Checking results.");
+                checkWin();
+                updateUI();
+            }
+        }
+
+        // --- Rendering Logic ---
+        function render() {
+            ctx.clearRect(0, 0, canvas.width, canvas.height);
+
+            // Optional: Draw reel background areas
+            ctx.fillStyle = '#e0e0e0';
+            reels.forEach(reel => {
+                ctx.fillRect(reel.x, reel.y, SYMBOL_SIZE, SYMBOLS_VISIBLE * SYMBOL_SIZE);
+            });
+            ctx.strokeStyle = '#999';
+             ctx.lineWidth = 2;
+             reels.forEach(reel => {
+                ctx.strokeRect(reel.x, reel.y, SYMBOL_SIZE, SYMBOLS_VISIBLE * SYMBOL_SIZE);
+            });
+
+            // Draw Symbols
+            reels.forEach(reel => {
+                // Calculate index of the symbol visually at the top edge of the reel window
+                 const topSymbolIndex = (reel.position - 1 + reel.symbols.length) % reel.symbols.length;
+
+                for (let i = 0; i < SYMBOLS_VISIBLE + 2; i++) { // Draw extra symbols above/below for smooth scroll
+                    const symbolIndex = (topSymbolIndex + i) % reel.symbols.length;
+                    const symbolKey = reel.symbols[symbolIndex];
+                    const img = symbolImages[symbolKey];
+
+                    if (img) {
+                         const drawY = reel.y + (i - 1) * SYMBOL_SIZE - reel.visualOffset;
+
+                        // Clipping to prevent drawing outside the reel area
+                        ctx.save();
+                        ctx.beginPath();
+                        ctx.rect(reel.x, reel.y, SYMBOL_SIZE, SYMBOLS_VISIBLE * SYMBOL_SIZE);
+                        ctx.clip();
+
+                        ctx.drawImage(img, reel.x, drawY, SYMBOL_SIZE, SYMBOL_SIZE);
+
+                        ctx.restore();
+                    } else {
+                        // Fallback rendering if image not loaded (shouldn't happen after loading phase)
+                        ctx.fillStyle = 'grey';
+                        ctx.fillRect(reel.x, reel.y + (i-1) * SYMBOL_SIZE, SYMBOL_SIZE, SYMBOL_SIZE);
+                        ctx.fillStyle = 'black';
+                        ctx.fillText(symbolKey, reel.x + 10, reel.y + (i - 1) * SYMBOL_SIZE + SYMBOL_SIZE / 2);
+                    }
+                }
+            });
+
+             // Draw Payline (center line)
+            ctx.strokeStyle = 'rgba(255, 0, 0, 0.7)';
+            ctx.lineWidth = 3;
+            ctx.beginPath();
+            const paylineY = reels[0].y + (SYMBOLS_VISIBLE / 2) * SYMBOL_SIZE;
+            ctx.moveTo(reels[0].x - 5, paylineY);
+            ctx.lineTo(reels[NUM_REELS - 1].x + SYMBOL_SIZE + 5, paylineY);
+            ctx.stroke();
+
+
+            // Draw Spin Button
+            if (spinButtonImage && (gameState === 'ready' || gameState === 'result')) {
+                 ctx.drawImage(spinButtonImage, SPIN_BUTTON_POS.x, SPIN_BUTTON_POS.y, SPIN_BUTTON_SIZE.width, SPIN_BUTTON_SIZE.height);
+            } else if (spinButtonImage) {
+                 // Optionally draw a disabled state
+                 ctx.globalAlpha = 0.5;
+                 ctx.drawImage(spinButtonImage, SPIN_BUTTON_POS.x, SPIN_BUTTON_POS.y, SPIN_BUTTON_SIZE.width, SPIN_BUTTON_SIZE.height);
+                 ctx.globalAlpha = 1.0;
+            }
+        }
+
+        // --- Spin Action ---
+        function startSpin() {
+            if (gameState !== 'ready' && gameState !== 'result') return; // Prevent spinning while already spinning
+
+            let cost = 1; // Fixed bet cost
+            let isFreeSpin = false;
+
+            if (freeSpinsRemaining > 0) {
+                freeSpinsRemaining--;
+                cost = 0; // No cost for free spin
+                isFreeSpin = true;
+                setMessage(`Free Spin! ${freeSpinsRemaining} remaining.`);
+            } else if (credits >= cost) {
+                credits -= cost;
+                setMessage("Spinning...");
+            } else {
+                setMessage("Not enough credits!");
+                return;
+            }
+
+            gameState = 'spinning';
+            lastWinAmount = 0;
+            updateUI();
+            playSound('reelSpin');
+
+            const spinStartTime = performance.now();
+
+            reels.forEach((reel, index) => {
+                reel.isSpinning = true;
+                reel.speed = 1000 + Math.random() * 500; // Pixels per second, randomize slightly
+                reel.stopTime = spinStartTime + SPIN_DURATION + index * REEL_DELAY;
+                // Determine target symbol index randomly
+                reel.targetSymbolIndex = Math.floor(Math.random() * reel.symbols.length);
+                console.log(`Reel ${index} target: ${reel.targetSymbolIndex} (${reel.symbols[reel.targetSymbolIndex]})`);
+            });
+        }
+
+        // --- Win Checking ---
+        function checkWin() {
+            // Get symbols on the center payline (index 1 if SYMBOLS_VISIBLE is 3)
+            const centerLineIndexOffset = Math.floor(SYMBOLS_VISIBLE / 2);
+            const winningSymbols = reels.map(reel => {
+                 // The symbol index at the visual center
+                 const centerIndex = (reel.position + centerLineIndexOffset) % reel.symbols.length;
+                 return reel.symbols[centerIndex];
+            });
+
+            console.log("Center line symbols:", winningSymbols);
+
+            let currentWin = 0;
+            let winMessage = "Good luck next time!";
+            let freeSpinWin = 0;
+
+            // Check for standard payouts (only checking 3-of-a-kind for bell/seven, 2 or 3 for cherry)
+            const symbolCounts = {};
+            winningSymbols.forEach(symbol => {
+                symbolCounts[symbol] = (symbolCounts[symbol] || 0) + 1;
+            });
+
+            // Simple check for 3 of a kind (excluding freeSpin)
+            if (winningSymbols[0] !== 'freeSpin' && winningSymbols[0] === winningSymbols[1] && winningSymbols[1] === winningSymbols[2]) {
+                 const symbol = winningSymbols[0];
+                 if (payouts[symbol] && payouts[symbol][3]) {
+                     currentWin = payouts[symbol][3];
+                     winMessage = `3 x ${symbol}! Win: ${currentWin}`;
+                 }
+            }
+            // Check for 2 or 3 cherries (only if first 2 or 3 are cherries)
+            else if (winningSymbols[0] === 'cherry') {
+                if (winningSymbols[1] === 'cherry') {
+                    if (winningSymbols[2] === 'cherry') { // 3 cherries
+                         currentWin = payouts['cherry'][3];
+                         winMessage = `3 x Cherry! Win: ${currentWin}`;
+                    } else { // 2 cherries (on first 2 reels)
+                         currentWin = payouts['cherry'][2];
+                         winMessage = `2 x Cherry! Win: ${currentWin}`;
+                    }
+                }
+            }
+
+
+            // Check for Free Spin symbols (any position on the center line)
+            const freeSpinCount = winningSymbols.filter(s => s === 'freeSpin').length;
+            if (freeSpinCount >= 3) { // Need 3 scatter symbols
+                freeSpinWin = FREE_SPIN_AWARD;
+                freeSpinsRemaining += freeSpinWin;
+                 winMessage = (currentWin > 0 ? winMessage + " + " : "") + ` ${freeSpinWin} FREE SPINS!`;
+                playSound('freeSpinTrigger');
+            }
+
+            if (currentWin > 0) {
+                credits += currentWin;
+                lastWinAmount = currentWin;
+                if (!freeSpinWin) { // Don't play normal win sound if free spins triggered
+                     playSound('win');
+                }
+            }
+
+            setMessage(winMessage);
+            // If free spins remain or were just won, stay ready to spin again
+             if (freeSpinsRemaining > 0) {
+                 gameState = 'ready';
+             } else {
+                gameState = 'ready'; // Or could be 'result' briefly before becoming 'ready'
+             }
+        }
+
+        // --- UI Updates ---
+        function updateUI() {
+            creditsDisplay.textContent = credits;
+            freeSpinsDisplay.textContent = freeSpinsRemaining;
+        }
+
+        function setMessage(msg) {
+            messageDisplay.textContent = msg;
+        }
+
+        // --- Input Handling ---
+        function handleCanvasClick(event) {
+            // Resume audio context on first click
+            if (audioContext && audioContext.state === 'suspended') {
+                audioContext.resume().then(() => console.log("AudioContext resumed on user interaction."));
+            }
+
+            if (gameState !== 'ready' && gameState !== 'result') return; // Only allow clicks when ready
+
+            const rect = canvas.getBoundingClientRect();
+            const x = event.clientX - rect.left;
+            const y = event.clientY - rect.top;
+
+            // Check if click is within spin button bounds
+            if (x >= SPIN_BUTTON_POS.x && x <= SPIN_BUTTON_POS.x + SPIN_BUTTON_SIZE.width &&
+                y >= SPIN_BUTTON_POS.y && y <= SPIN_BUTTON_POS.y + SPIN_BUTTON_SIZE.height) {
+                console.log("Spin button clicked!");
+                startSpin();
+            }
+        }
+
+        // --- Initialization ---
+        window.addEventListener('DOMContentLoaded', () => {
+            console.log("DOM Loaded. Starting asset loading...");
+            canvas.addEventListener('click', handleCanvasClick);
+            loadAssets(init); // Start game initialization after assets are loaded
+        });
+
+    </script>
+
+</body>
+</html>
