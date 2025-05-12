@@ -148,7 +148,9 @@
             box-sizing: border-box;
         }
         .window-content input[type="color"] { height: 30px; padding: 1px; }
-        .window-content textarea { min-height: 80px; resize: vertical; flex-grow: 1; }
+        .window-content textarea { min-height: 60px; resize: vertical; flex-grow: 1; }
+        #gameGen_generatedCode { min-height: 60px; }
+        #gameGen_debugErrorInput, #gameErrorLog_errorsDisplay { min-height: 80px; background-color: var(--win95-white); font-family: "Courier New", monospace; font-size:11px; white-space: pre-wrap;}
         .window-content button {
             padding: 5px 10px;
             background-color: var(--win95-light-gray);
@@ -228,11 +230,9 @@
         .status-processing { border-left: 3px solid orange; }
         .status-completed { border-left: 3px solid green; }
         .status-error { border-left: 3px solid red; }
-        #gameGen_generatedCode { font-family: "Courier New", Courier, monospace; font-size: 11px; height: 100px; }
-        #gameGen_planDisplay { font-family: "Courier New", Courier, monospace; font-size: 11px; min-height: 80px; background-color: var(--win95-white); border: 1px inset var(--win95-dark-gray); padding: 5px; white-space: pre-wrap; margin-top: 5px; overflow-y: auto;}
+        #gameGen_planDisplay { font-family: "Courier New", Courier, monospace; font-size: 11px; min-height: 60px; background-color: var(--win95-white); border: 1px inset var(--win95-dark-gray); padding: 5px; white-space: pre-wrap; margin-top: 5px; overflow-y: auto;}
         #gameGen_svgStatus { font-size: 11px; margin-top: 5px; }
-        #gameGen_gamePreviewSection { margin-top: 10px; }
-        #gameGen_gameContainer, #gamePlayerWindow_iframe { width: 100%; height: 100%; flex-grow: 1; border: 1px inset var(--win95-dark-gray); background-color: #222; overflow: hidden; }
+        #gamePlayerWindow_iframe { width: 100%; height: 100%; flex-grow: 1; border: 1px inset var(--win95-dark-gray); background-color: #222; overflow: hidden; }
         #gamePlayerWindow .window-content { padding: 0; overflow: hidden; }
         #gameGen_loadingMessage, #gameGen_errorMessage { padding: 8px; margin-top: 8px; border: 1px solid var(--win95-dark-gray); text-align: center; }
         #gameGen_errorMessage { background-color: #FFCCCC; color: red; }
@@ -264,6 +264,8 @@
         .reboot-overlay p { margin: 5px; }
         .reboot-overlay .k8os-logo { font-size: 32px; font-weight: bold; color: #00FF00; margin-bottom: 20px; animation: pulse 1.5s infinite; }
         @keyframes pulse { 0% { opacity: 0.7; } 50% { opacity: 1; } 100% { opacity: 0.7; } }
+        .debug-section { border: 1px dotted var(--win95-dark-gray); padding: 8px; margin-top: 10px; }
+        .debug-section h4 { font-size: 12px; margin-top:0; margin-bottom:5px; }
     </style>
 </head>
 <body>
@@ -274,6 +276,8 @@
         <div class="desktop-icon" data-app-id="agent95Window"><div class="icon-placeholder">🤖</div><span>Agent 95</span></div>
         <div class="desktop-icon" data-app-id="gameGeneratorWindow"><div class="icon-placeholder">🕹️</div><span>Game Gen</span></div>
         <div class="desktop-icon" data-app-id="systemSettingsWindow"><div class="icon-placeholder">⚙️</div><span>Settings</span></div>
+        <div class="desktop-icon" data-app-id="gameErrorLogWindow"><div class="icon-placeholder">🐞</div><span>Game Log</span></div>
+
 
         <div id="apiKeySettingsWindow" class="window" style="width: 400px; height: 250px; top: 20px; left: 20px;">
             <div class="title-bar"><span class="title-bar-text">🔑 API Key Settings</span><div class="title-bar-controls"><button class="close-button" title="Close">r</button></div></div>
@@ -326,7 +330,7 @@
             </div>
         </div>
 
-        <div id="gameGeneratorWindow" class="window" style="width: 700px; height: 650px; top: 110px; left: 110px;">
+        <div id="gameGeneratorWindow" class="window" style="width: 700px; height: 680px; top: 110px; left: 110px;">
             <div class="title-bar"><span class="title-bar-text">🕹️ Game Generator</span><div class="title-bar-controls"><button class="close-button" title="Close">r</button></div></div>
             <div class="window-content">
                 <label for="gameGen_prompt">Describe your game idea:</label>
@@ -346,11 +350,16 @@
                     <label for="gameGen_generatedCode">Generated Game Code (HTML):</label>
                     <textarea id="gameGen_generatedCode" readonly placeholder="Generated HTML/JS code..."></textarea>
                 </div>
-                <div class="output-section" id="gameGen_gamePreviewSection" style="display: none; margin-top:10px; flex-grow: 1; display: flex; flex-direction: column; min-height:150px;">
-                    <h3 style="margin-bottom:5px; font-size: 13px;">Generator Preview:</h3>
-                    <iframe id="gameGen_gameContainer" title="Generated Game Preview"></iframe>
+                 <div id="gameGen_apiErrorDisplay" style="color:red; font-size:11px; margin-top:5px; flex-shrink: 0;"></div>
+
+                <div class="debug-section" id="gameGen_debugSection" style="display:none;">
+                    <h4>Assisted Debugging</h4>
+                    <label for="gameGen_debugErrorInput">Paste observed error message(s) from Game Error Log or Browser Console (F12):</label>
+                    <textarea id="gameGen_debugErrorInput" rows="3" placeholder="Paste error message here..."></textarea>
+                    <label for="gameGen_debugHintsInput">Optional: Provide hints for the AI to fix the error:</label>
+                    <textarea id="gameGen_debugHintsInput" rows="2" placeholder="e.g., 'The ball is not bouncing off the paddle correctly.'"></textarea>
+                    <button id="gameGen_debugAttemptButton">Attempt to Fix Error with AI</button>
                 </div>
-                <div id="gameGen_apiErrorDisplay" style="color:red; font-size:11px; margin-top:5px; flex-shrink: 0;"></div>
             </div>
         </div>
 
@@ -362,8 +371,19 @@
                     <button class="close-button" title="Close">r</button>
                 </div>
             </div>
-            <div class="window-content"><iframe id="gamePlayerWindow_iframe" sandbox="allow-scripts allow-same-origin"></iframe></div>
+            <div class="window-content"><iframe id="gamePlayerWindow_iframe" sandbox="allow-scripts allow-same-origin allow-popups"></iframe></div>
         </div>
+        
+        <div id="gameErrorLogWindow" class="window" style="width: 500px; height: 350px; top: 180px; left: 850px;">
+            <div class="title-bar"><span class="title-bar-text">🐞 Game Error Log</span><div class="title-bar-controls"><button class="close-button" title="Close">r</button></div></div>
+            <div class="window-content">
+                <label for="gameErrorLog_errorsDisplay">Runtime errors from the current game:</label>
+                <textarea id="gameErrorLog_errorsDisplay" readonly></textarea>
+                <button id="gameErrorLog_clearButton" style="margin-top:5px;">Clear Log</button>
+                <div class="status-bar">Errors from Game Player iframe. Copy to Game Gen Debugger.</div>
+            </div>
+        </div>
+
 
         <div id="systemSettingsWindow" class="window" style="width: 550px; height: 520px; top: 60px; left: 200px;">
             <div class="title-bar"><span class="title-bar-text">⚙️ System Settings</span><div class="title-bar-controls"><button class="close-button" title="Close">r</button></div></div>
@@ -465,7 +485,17 @@ The code must be self-contained within the single HTML file.
 DO NOT include any markdown (like \`\`\`html or \`\`\`javascript) or explanations outside the HTML code itself. The output must be ONLY the HTML code, starting with <!DOCTYPE html> or <html> and ending with </html>.
 Aim for a reasonably sized game canvas or a full-window experience if appropriate for the game type.
 Make sure the game is playable and demonstrates the core mechanics described and uses the provided SVG assets.`;
+    const DEFAULT_GAMEGEN_DEBUG_INSTRUCTION = `The following HTML/JS game code, based on the original idea "{USER_GAME_IDEA}", produced the error(s): "{ERROR_MESSAGES}".
+User provided hints: "{USER_HINTS}".
+Please analyze the code and the error(s) and provide a corrected version of the full HTML/JS game code.
+Focus on fixing the specified error(s) while preserving the game's original intent and functionality.
+Output ONLY the corrected, complete HTML/JS code, starting with <!DOCTYPE html> or <html> and ending with </html>. Do not include explanations or markdown.
 
+Original problematic code:
+\`\`\`html
+{PROBLEM_CODE}
+\`\`\`
+`;
 
     const globalApiKeyInput = document.getElementById('globalApiKeyInput');
     const saveApiKeyButton = document.getElementById('saveApiKeyButton');
@@ -488,16 +518,21 @@ Make sure the game is playable and demonstrates the core mechanics described and
     const gameGen_generateButton = document.getElementById('gameGen_generateButton');
     const gameGen_downloadHtmlButton = document.getElementById('gameGen_downloadHtmlButton');
     const gameGen_generatedCodeTextarea = document.getElementById('gameGen_generatedCode');
-    const gameGen_gameIframe = document.getElementById('gameGen_gameContainer');
-    const gameGen_gamePreviewSection = document.getElementById('gameGen_gamePreviewSection');
     const gameGen_loadingMessage = document.getElementById('gameGen_loadingMessage');
     const gameGen_errorMessage = document.getElementById('gameGen_errorMessage');
     const gameGen_apiErrorDisplay = document.getElementById('gameGen_apiErrorDisplay');
     const gameGen_planDisplay = document.getElementById('gameGen_planDisplay');
     const gameGen_svgStatus = document.getElementById('gameGen_svgStatus');
+    const gameGen_debugSection = document.getElementById('gameGen_debugSection');
+    const gameGen_debugErrorInput = document.getElementById('gameGen_debugErrorInput');
+    const gameGen_debugHintsInput = document.getElementById('gameGen_debugHintsInput');
+    const gameGen_debugAttemptButton = document.getElementById('gameGen_debugAttemptButton');
     const gamePlayerWindow = document.getElementById('gamePlayerWindow');
     const gamePlayerWindow_iframe = document.getElementById('gamePlayerWindow_iframe');
     const gamePlayerWindow_title = document.getElementById('gamePlayerWindow_title');
+    const gameErrorLogWindow = document.getElementById('gameErrorLogWindow');
+    const gameErrorLog_errorsDisplay = document.getElementById('gameErrorLog_errorsDisplay');
+    const gameErrorLog_clearButton = document.getElementById('gameErrorLog_clearButton');
     const fe_fileListElement = document.getElementById('fe_fileList');
     const fe_statusElement = document.getElementById('fe_status');
     const fe_folderNameDisplayElement = document.getElementById('fe_folderNameDisplay');
@@ -509,7 +544,6 @@ Make sure the game is playable and demonstrates the core mechanics described and
     const startMenuShutdown = document.getElementById('startMenuShutdown');
     const rebootOverlay = document.getElementById('rebootOverlay');
     const rebootProgressText = document.getElementById('rebootProgressText');
-
     const systemSettings_appearance_bgColorPicker = document.getElementById('systemSettings_appearance_bgColorPicker');
     const systemSettings_appearance_colorOptions = document.getElementById('systemSettings_appearance_colorOptions');
     const systemSettings_appearance_resetButton = document.getElementById('systemSettings_appearance_resetButton');
@@ -530,6 +564,7 @@ Make sure the game is playable and demonstrates the core mechanics described and
     let fe_allFetchedFiles = [];
     let agent95_lastPythonCode = null;
     let gameGen_lastHtmlCode = null;
+    let gameGen_lastUserIdea = "";
 
     const DEFAULT_BG_COLOR = '#008080';
     const PRESET_BG_COLORS = ['#008080', '#000000', '#808080', '#0000A0', '#3A6EA5', '#D3D3D3'];
@@ -571,6 +606,9 @@ Make sure the game is playable and demonstrates the core mechanics described and
             if (options.title) { const titleTextEl = windowEl.querySelector('.title-bar-text'); if (titleTextEl) titleTextEl.textContent = options.title; }
             bringToFront(windowEl);
             if (appId === 'fileExplorerWindow' && !windowEl.dataset.initialized) { fetchAndRenderFilesFE(); windowEl.dataset.initialized = "true"; }
+            if (appId === 'gameErrorLogWindow' && gameErrorLog_errorsDisplay) { 
+                // gameErrorLog_errorsDisplay.value = ''; // Optionally clear log on open
+            }
         }
         return windowEl;
     }
@@ -598,21 +636,22 @@ Make sure the game is playable and demonstrates the core mechanics described and
     async function fetchAndRenderFilesFE() { if (!fe_statusElement || !fe_fileListElement) return; fe_statusElement.textContent = 'Status: Fetching...'; fe_statusElement.style.color = 'inherit'; const apiUrl = `https://api.github.com/repos/${FE_GITHUB_USERNAME}/${FE_GITHUB_REPONAME}/contents/${FE_FOLDER_PATH}`; try { const response = await fetch(apiUrl); if (!response.ok) { throw new Error(`Fetch error (${response.status})`);} const data = await response.json(); if (!Array.isArray(data)) { throw new Error('Path not a folder.'); } fe_allFetchedFiles = data.filter(item => item.type === 'file' && item.name.toLowerCase().endsWith('.html') && item.name.toLowerCase() !== 'index.html'); renderFileListFE(fe_allFetchedFiles); fe_statusElement.textContent = `Status: ${fe_allFetchedFiles.length} HTML file(s).`; } catch (error) { console.error('FE Fetch Error:', error); fe_statusElement.textContent = `Error: ${error.message}`; fe_statusElement.style.color = 'red';} }
     function renderFileListFE(filesToRender) { if (!fe_fileListElement || !fe_searchInput) return; fe_fileListElement.innerHTML = ''; if (filesToRender.length === 0) { fe_fileListElement.innerHTML = `<li>${fe_searchInput.value.trim() ? 'No matches.' : 'No HTML files.'}</li>`; return; } filesToRender.sort((a, b) => a.name.localeCompare(b.name)); filesToRender.forEach(file => { const listItem = document.createElement('li'); const link = document.createElement('a'); link.href = FE_FOLDER_PATH ? `${FE_FOLDER_PATH}/${file.name}` : file.name; link.textContent = file.name.replace(/\.html$/i, ''); link.target = "_blank"; listItem.appendChild(link); fe_fileListElement.appendChild(listItem); }); }
 
-    let svg_genAI, svg_model; let svg_currentSvgContent = null;
+    let svg_genAI_internal_model; 
+    let svg_currentSvgContent = null;
     function initSvgGeneratorApp() {
         if (!window.GLOBAL_API_KEY) { if(svg_errorDisplay) svg_errorDisplay.textContent = "API Key not set."; if (svg_generateButton) svg_generateButton.disabled = true; return; }
         try {
-            svg_genAI = new GoogleGenerativeAI(window.GLOBAL_API_KEY);
-            svg_model = svg_genAI.getGenerativeModel({ model: getCurrentAiModel(), safetySettings: [{ category: HarmCategory.HARM_CATEGORY_HARASSMENT, threshold: HarmBlockThreshold.BLOCK_NONE },{ category: HarmCategory.HARM_CATEGORY_HATE_SPEECH, threshold: HarmBlockThreshold.BLOCK_NONE },{ category: HarmCategory.HARM_CATEGORY_SEXUALLY_EXPLICIT, threshold: HarmBlockThreshold.BLOCK_NONE },{ category: HarmCategory.HARM_CATEGORY_DANGEROUS_CONTENT, threshold: HarmBlockThreshold.BLOCK_NONE },], generationConfig: { temperature: 0.2, maxOutputTokens: 80000 } });
+            const genAI = new GoogleGenerativeAI(window.GLOBAL_API_KEY);
+            svg_genAI_internal_model = genAI.getGenerativeModel({ model: getCurrentAiModel(), safetySettings: [{ category: HarmCategory.HARM_CATEGORY_HARASSMENT, threshold: HarmBlockThreshold.BLOCK_NONE },{ category: HarmCategory.HARM_CATEGORY_HATE_SPEECH, threshold: HarmBlockThreshold.BLOCK_NONE },{ category: HarmCategory.HARM_CATEGORY_SEXUALLY_EXPLICIT, threshold: HarmBlockThreshold.BLOCK_NONE },{ category: HarmCategory.HARM_CATEGORY_DANGEROUS_CONTENT, threshold: HarmBlockThreshold.BLOCK_NONE },], generationConfig: { temperature: 0.2, maxOutputTokens: 80000 } });
             if (svg_generateButton) svg_generateButton.disabled = false; if (svg_errorDisplay) svg_errorDisplay.textContent = "";
         } catch (error) { console.error("SVG Gen AI Init Error:", error); if (svg_errorDisplay) svg_errorDisplay.textContent = `AI Init Error: ${error.message}.`; if (svg_generateButton) svg_generateButton.disabled = true; }
     }
     async function internal_generateSingleSvg(svgDescription) {
-        if (!svg_model) { console.error("SVG model not init for internal call"); return null; }
+        if (!svg_genAI_internal_model) { console.error("SVG model not init for internal call"); return null; }
         const baseInstruction = getAppInstruction('svg', DEFAULT_SVG_INSTRUCTION);
         const fullPrompt = baseInstruction.replace("{USER_PROMPT}", svgDescription);
         try {
-            const result = await svg_model.generateContent(fullPrompt);
+            const result = await svg_genAI_internal_model.generateContent(fullPrompt);
             const response = result.response;
             const text = response.text();
             const svgMatch = text.match(/<svg[\s\S]*?<\/svg>/im);
@@ -628,51 +667,46 @@ Make sure the game is playable and demonstrates the core mechanics described and
         } catch (error) { console.error("Error in internal_generateSingleSvg:", error); return null; }
     }
     async function svg_handleGenerateSvg() {
-        if (!svg_model) { if(svg_errorDisplay) svg_errorDisplay.textContent = "SVG AI model not init."; return; }
+        if (!svg_genAI_internal_model) { if(svg_errorDisplay) svg_errorDisplay.textContent = "SVG AI model not init."; return; }
         const userPrompt = svg_promptInput.value.trim();
         if (!userPrompt) { if(svg_errorDisplay) svg_errorDisplay.textContent = 'Enter description.'; return; }
         if (svg_generateButton) svg_generateButton.disabled = true; if (svg_downloadButton) svg_downloadButton.style.display = 'none';
         if (svg_svgContainer) svg_svgContainer.innerHTML = ''; if (svg_loadingIndicator) svg_loadingIndicator.style.display = 'block';
         svg_currentSvgContent = null; if(svg_errorDisplay) svg_errorDisplay.textContent = "";
-        
         svg_currentSvgContent = await internal_generateSingleSvg(userPrompt);
-
         if (svg_currentSvgContent) {
             const svgElement = new DOMParser().parseFromString(svg_currentSvgContent, "image/svg+xml").documentElement;
             if (!svgElement.getAttribute('xmlns')) svgElement.setAttribute('xmlns', 'http://www.w3.org/2000/svg');
             if (svgElement.getAttribute('viewBox')) { svgElement.removeAttribute('width'); svgElement.removeAttribute('height'); svgElement.style.width = '100%'; svgElement.style.height = 'auto';}
             if (svg_svgContainer) { svg_svgContainer.innerHTML = ''; svg_svgContainer.appendChild(svgElement); }
             if (svg_downloadButton) svg_downloadButton.style.display = 'block';
-        } else {
-            if(svg_errorDisplay) svg_errorDisplay.textContent = `Failed to generate valid SVG.`;
-            if(svg_svgContainer) svg_svgContainer.innerHTML = `<p style="color:red;">No valid SVG generated.</p>`;
-        }
+        } else { if(svg_errorDisplay) svg_errorDisplay.textContent = `Failed to generate valid SVG.`; if(svg_svgContainer) svg_svgContainer.innerHTML = `<p style="color:red;">No valid SVG generated.</p>`; }
         if (svg_generateButton) svg_generateButton.disabled = false; if (svg_loadingIndicator) svg_loadingIndicator.style.display = 'none';
     }
     function svg_handleDownloadSvg() { if (svg_currentSvgContent) { const fileName = svg_promptInput.value.trim().toLowerCase().replace(/[^\w\s-]/g, '').replace(/\s+/g, '_') || "vector_image"; downloadFile(svg_currentSvgContent, `${fileName}.svg`, "image/svg+xml;charset=utf-8"); } else { alert("No SVG to download."); } }
 
-    let agent95_genAI, agent95_model; let agent95_conversationHistory = []; const AGENT95_MAX_ITERATIONS = 10;
+    let agent95_genAI_model; let agent95_conversationHistory = []; const AGENT95_MAX_ITERATIONS = 10;
     class Agent95CustomHtmlRenderer extends MarkedRenderer { list(body, ordered, start) { return `<${ordered ? 'ol' : 'ul'} style="margin:0.3em 0;padding-left:20px;">${body}</${ordered ? 'ol' : 'ul'}>\n`; } listitem(text) { return `<li style="margin-bottom:0.1em;">${text}</li>\n`; } paragraph(text) { const safeText = typeof text === 'string' ? text : ''; if (safeText.trim().startsWith('<pre')) { return safeText + '\n'; } return `<p style="margin:0.2em 0;">${safeText}</p>\n`; } code(code, lang, esc) { return `<pre><code class="${lang || ''}">${(esc ? code : code.replace(/</g, '<').replace(/>/g, '>'))}</code></pre>\n`; } heading(text, level) { return `<p style="margin:0.5em 0 0.2em;"><strong>${text}</strong></p>\n`; } codespan(text) { return `<code>${text.replace(/</g, '<').replace(/>/g, '>')}</code>`; } }
     const agent95_customMarkedRenderer = new Agent95CustomHtmlRenderer();
-    function initAgent95App() { if (!window.GLOBAL_API_KEY) { if(agent95_errorDisplay) agent95_errorDisplay.textContent = "API Key not set."; if (agent95_startAgentButton) agent95_startAgentButton.disabled = true; agent95_updateAgentStatus("Error: API Key Missing"); return; } if (!agent95_consoleOutput || !agent95_goalInput || !agent95_startAgentButton || !agent95_agentStatusPanel || !agent95_currentTimePanel) { console.error("Agent 95 UI missing!"); if(agent95_errorDisplay) agent95_errorDisplay.textContent = "UI Error."; agent95_updateAgentStatus("Error: UI Missing"); return; } try { agent95_genAI = new GoogleGenerativeAI(window.GLOBAL_API_KEY); agent95_model = agent95_genAI.getGenerativeModel({ model: getCurrentAiModel(), systemInstruction: getAppInstruction('agent95', DEFAULT_AGENT95_INSTRUCTION), tools: [{ codeExecution: {} }], safetySettings: [{ category: HarmCategory.HARM_CATEGORY_HARASSMENT, threshold: HarmBlockThreshold.BLOCK_NONE },{ category: HarmCategory.HARM_CATEGORY_HATE_SPEECH, threshold: HarmBlockThreshold.BLOCK_NONE },{ category: HarmCategory.HARM_CATEGORY_SEXUALLY_EXPLICIT, threshold: HarmBlockThreshold.BLOCK_NONE },{ category: HarmCategory.HARM_CATEGORY_DANGEROUS_CONTENT, threshold: HarmBlockThreshold.BLOCK_NONE },], generationConfig: { temperature: 0.2, maxOutputTokens: 80000 } }); if (agent95_startAgentButton) agent95_startAgentButton.disabled = false; if (agent95_errorDisplay) agent95_errorDisplay.textContent = ""; agent95_updateAgentStatus("Idle"); agent95_updateTime(); if (agent95_currentTimePanel && !agent95_currentTimePanel.dataset.intervalSet) { setInterval(agent95_updateTime, 1000); agent95_currentTimePanel.dataset.intervalSet = "true"; } } catch (error) { console.error("Agent 95 AI Init Error:", error); if (agent95_errorDisplay) agent95_errorDisplay.textContent = `AI Init Error: ${error.message}.`; if (agent95_startAgentButton) agent95_startAgentButton.disabled = true; agent95_updateAgentStatus("Error: AI Init Failed"); } }
+    function initAgent95App() { if (!window.GLOBAL_API_KEY) { if(agent95_errorDisplay) agent95_errorDisplay.textContent = "API Key not set."; if (agent95_startAgentButton) agent95_startAgentButton.disabled = true; agent95_updateAgentStatus("Error: API Key Missing"); return; } if (!agent95_consoleOutput || !agent95_goalInput || !agent95_startAgentButton || !agent95_agentStatusPanel || !agent95_currentTimePanel) { console.error("Agent 95 UI missing!"); if(agent95_errorDisplay) agent95_errorDisplay.textContent = "UI Error."; agent95_updateAgentStatus("Error: UI Missing"); return; } try { const genAI = new GoogleGenerativeAI(window.GLOBAL_API_KEY); agent95_genAI_model = genAI.getGenerativeModel({ model: getCurrentAiModel(), systemInstruction: getAppInstruction('agent95', DEFAULT_AGENT95_INSTRUCTION), tools: [{ codeExecution: {} }], safetySettings: [{ category: HarmCategory.HARM_CATEGORY_HARASSMENT, threshold: HarmBlockThreshold.BLOCK_NONE },{ category: HarmCategory.HARM_CATEGORY_HATE_SPEECH, threshold: HarmBlockThreshold.BLOCK_NONE },{ category: HarmCategory.HARM_CATEGORY_SEXUALLY_EXPLICIT, threshold: HarmBlockThreshold.BLOCK_NONE },{ category: HarmCategory.HARM_CATEGORY_DANGEROUS_CONTENT, threshold: HarmBlockThreshold.BLOCK_NONE },], generationConfig: { temperature: 0.2, maxOutputTokens: 80000 } }); if (agent95_startAgentButton) agent95_startAgentButton.disabled = false; if (agent95_errorDisplay) agent95_errorDisplay.textContent = ""; agent95_updateAgentStatus("Idle"); agent95_updateTime(); if (agent95_currentTimePanel && !agent95_currentTimePanel.dataset.intervalSet) { setInterval(agent95_updateTime, 1000); agent95_currentTimePanel.dataset.intervalSet = "true"; } } catch (error) { console.error("Agent 95 AI Init Error:", error); if (agent95_errorDisplay) agent95_errorDisplay.textContent = `AI Init Error: ${error.message}.`; if (agent95_startAgentButton) agent95_startAgentButton.disabled = true; agent95_updateAgentStatus("Error: AI Init Failed"); } }
     function agent95_updateAgentStatus(status) { if (!agent95_agentStatusPanel) return; agent95_agentStatusPanel.textContent = `Status: ${status}`; agent95_agentStatusPanel.className = 'status-panel'; if (status.toLowerCase().includes('processing') || status.toLowerCase().includes('debugging')) agent95_agentStatusPanel.classList.add('status-processing'); else if (status.toLowerCase().includes('completed')) agent95_agentStatusPanel.classList.add('status-completed'); else if (status.toLowerCase().includes('error')) agent95_agentStatusPanel.classList.add('status-error'); else if (status.toLowerCase().includes('idle')) agent95_agentStatusPanel.classList.add('status-idle'); }
     function agent95_updateTime() { if (agent95_currentTimePanel) { agent95_currentTimePanel.textContent = `Time: ${new Date().toLocaleTimeString()}`; } }
     async function agent95_appendToConsole(type, ...messages) { if (!agent95_consoleOutput) return; const turnDiv = document.createElement('div'); turnDiv.className = 'turn'; const messageBlock = document.createElement('div'); messageBlock.className = 'message-block'; let titlePrefixHTML = ""; switch (type) { case 'user': titlePrefixHTML = "<strong>USER:</strong>"; messageBlock.classList.add('user-message'); break; case 'agent': titlePrefixHTML = "<strong>AGENT:</strong>"; messageBlock.classList.add('agent-message'); break; case 'info': titlePrefixHTML = "<strong>SYSTEM INFO:</strong>"; messageBlock.classList.add('info-message'); break; case 'error': titlePrefixHTML = "<strong>SYSTEM ERROR:</strong>"; messageBlock.classList.add('error-message'); break; case 'tool_code_proposal': titlePrefixHTML = "<strong class='agent-message'>AGENT (proposed code):</strong> "; break; case 'tool_execution_result': titlePrefixHTML = "<strong class='info-message'>SYSTEM (code output):</strong> "; break; case 'agent_debug': titlePrefixHTML = "<strong class='agent-message'>AGENT (debug):</strong> "; break; default: titlePrefixHTML = `<strong>${type.toUpperCase()}:</strong>`; } messageBlock.innerHTML = titlePrefixHTML; for (const msg of messages) { let processedMsgHTML = ""; const msgString = (typeof msg === 'string') ? msg : (msg instanceof Error ? msg.message : JSON.stringify(msg, null, 2)); if (type === 'tool_code_proposal' || type === 'tool_execution_result') { processedMsgHTML = `<pre><code>${(msgString || '').replace(/</g, "<").replace(/>/g, ">")}</code></pre>`; if (type === 'tool_code_proposal' && msgString) { agent95_lastPythonCode = msgString; if(agent95_downloadPyButton) agent95_downloadPyButton.style.display = 'block'; } } else if (msg instanceof Error) { processedMsgHTML = `<span class="error-text-segment">${marked(msgString || 'Error', { renderer: agent95_customMarkedRenderer })}</span>`; if (msg.stack) processedMsgHTML += `<br><pre><code>${(msg.stack || '').replace(/</g, '<').replace(/>/g, '>')}</code></pre>`; } else { processedMsgHTML = marked(msgString || '', { renderer: agent95_customMarkedRenderer }); } const contentDiv = document.createElement('div'); if (msg instanceof Error || type === 'error') { contentDiv.classList.add('error-text-segment'); } contentDiv.innerHTML = processedMsgHTML; messageBlock.appendChild(contentDiv); } turnDiv.appendChild(messageBlock); agent95_consoleOutput.appendChild(turnDiv); agent95_consoleOutput.scrollTop = agent95_consoleOutput.scrollHeight; }
-    async function agent95_runAgentWorkflow(initialGoal) { if (!agent95_startAgentButton || !agent95_goalInput || !agent95_consoleOutput || !agent95_errorDisplay) return; agent95_startAgentButton.disabled = true; agent95_startAgentButton.textContent = "Processing..."; if (agent95_goalInput) agent95_goalInput.disabled = true; if(agent95_downloadPyButton) agent95_downloadPyButton.style.display = 'none'; agent95_lastPythonCode = null; agent95_updateAgentStatus("Processing..."); agent95_consoleOutput.innerHTML = ''; agent95_errorDisplay.textContent = ""; await agent95_appendToConsole('info', "Agent 95 Init workflow..."); if (!agent95_model) { await agent95_appendToConsole('error', "Agent 95 AI Model not ready!"); agent95_startAgentButton.disabled = false; agent95_startAgentButton.textContent = "Start Task"; if(agent95_goalInput) agent95_goalInput.disabled = false; agent95_updateAgentStatus("Error: Model Not Ready"); return; } agent95_conversationHistory = [{ role: "user", parts: [{ text: initialGoal }] }]; await agent95_appendToConsole('user', initialGoal); for (let i = 0; i < AGENT95_MAX_ITERATIONS; i++) { const lastModelTurn = agent95_conversationHistory[agent95_conversationHistory.length -1]; agent95_updateAgentStatus((lastModelTurn?.role === 'model' && lastModelTurn.parts.some(p => p.text?.toLowerCase().includes("debugging:"))) ? "Debugging..." : "Processing..."); await agent95_appendToConsole('info', `Iteration: ${i + 1}`); try { const chat = agent95_model.startChat({ history: agent95_conversationHistory, tools: [{codeExecution: {}}]}); const result = await chat.sendMessage("Continue."); const response = result.response; const candidate = response.candidates?.[0]; if (!candidate || !candidate.content || !candidate.content.parts) { await agent95_appendToConsole('error', "No valid candidate response from AI."); agent95_conversationHistory.push({role: "model", parts: [{text: "Error: No valid response."}]}); agent95_updateAgentStatus("Error: No AI Response"); break; } agent95_conversationHistory.push(candidate.content); for (const part of candidate.content.parts) { if (part.text) { const currentAgentText = part.text.trim(); if (currentAgentText) { await agent95_appendToConsole(currentAgentText.toLowerCase().includes("debugging:") ? 'agent_debug' : 'agent', currentAgentText); }} else if (part.executableCode) { await agent95_appendToConsole('tool_code_proposal', part.executableCode.code || ''); } else if (part.toolExecutionResult || (part.functionResponse && part.functionResponse.response && part.functionResponse.response.content)) { let outputContent = "Code output (unknown)"; if (part.toolExecutionResult && part.toolExecutionResult.output) { outputContent = part.toolExecutionResult.output; } else if (part.functionResponse && part.functionResponse.response && part.functionResponse.response.content) { outputContent = part.functionResponse.response.content; } else { outputContent = JSON.stringify(part.toolExecutionResult || part.functionResponse, null, 2); } await agent95_appendToConsole('tool_execution_result', outputContent); } else { if (Object.keys(part).length > 0) { console.warn("Agent 95 - Unknown part:", JSON.stringify(part, null, 2)); await agent95_appendToConsole('info', `Unhandled part: ${JSON.stringify(part).substring(0, 100)}...`); }}} const finishReason = candidate.finishReason; const lastTextContent = candidate.content.parts.map(p => p.text || "").join("\n").toLowerCase(); if (finishReason === "STOP" && (lastTextContent.includes("final answer:") || lastTextContent.includes("goal achieved") || lastTextContent.includes("unable to resolve"))) { agent95_updateAgentStatus((lastTextContent.includes("final answer:") || lastTextContent.includes("goal achieved")) ? "Completed" : "Error: Unresolved"); break; } else if (finishReason === "SAFETY") { await agent95_appendToConsole('error', "Stopped: SAFETY settings."); agent95_updateAgentStatus("Error: Safety Stop"); break; } else if (finishReason === "MAX_TOKENS") { await agent95_appendToConsole('info', "Stopped: MAX_TOKENS."); } else if (finishReason !== "TOOL_CALLS" && finishReason !== "STOP" && finishReason !== "MODEL_LENGTH" && finishReason) { await agent95_appendToConsole('info', `Workflow stopped: ${finishReason}.`); agent95_updateAgentStatus(`Error: ${finishReason}`); break; } if (i === AGENT95_MAX_ITERATIONS - 1) { await agent95_appendToConsole('info', "Reached max iterations."); agent95_updateAgentStatus("Error: Max Iterations"); } } catch (e) { console.error("Agent 95 Iteration Error:", e); await agent95_appendToConsole('error', "Iteration Error:", e.message, e.stack ? e.stack.substring(0,300) : ""); agent95_conversationHistory.push({role: "model", parts: [{text: `Critical Error: ${e.message}`}]}); agent95_updateAgentStatus("Error: Iteration Failed"); break; } } await agent95_appendToConsole('info', `Workflow finished. Status: ${agent95_agentStatusPanel?.textContent || 'Unknown'}`); agent95_startAgentButton.disabled = false; agent95_startAgentButton.textContent = "Start New Task"; if (agent95_goalInput) agent95_goalInput.disabled = false; }
+    async function agent95_runAgentWorkflow(initialGoal) { if (!agent95_startAgentButton || !agent95_goalInput || !agent95_consoleOutput || !agent95_errorDisplay) return; agent95_startAgentButton.disabled = true; agent95_startAgentButton.textContent = "Processing..."; if (agent95_goalInput) agent95_goalInput.disabled = true; if(agent95_downloadPyButton) agent95_downloadPyButton.style.display = 'none'; agent95_lastPythonCode = null; agent95_updateAgentStatus("Processing..."); agent95_consoleOutput.innerHTML = ''; agent95_errorDisplay.textContent = ""; await agent95_appendToConsole('info', "Agent 95 Init workflow..."); if (!agent95_genAI_model) { await agent95_appendToConsole('error', "Agent 95 AI Model not ready!"); agent95_startAgentButton.disabled = false; agent95_startAgentButton.textContent = "Start Task"; if(agent95_goalInput) agent95_goalInput.disabled = false; agent95_updateAgentStatus("Error: Model Not Ready"); return; } agent95_conversationHistory = [{ role: "user", parts: [{ text: initialGoal }] }]; await agent95_appendToConsole('user', initialGoal); for (let i = 0; i < AGENT95_MAX_ITERATIONS; i++) { const lastModelTurn = agent95_conversationHistory[agent95_conversationHistory.length -1]; agent95_updateAgentStatus((lastModelTurn?.role === 'model' && lastModelTurn.parts.some(p => p.text?.toLowerCase().includes("debugging:"))) ? "Debugging..." : "Processing..."); await agent95_appendToConsole('info', `Iteration: ${i + 1}`); try { const chat = agent95_genAI_model.startChat({ history: agent95_conversationHistory, tools: [{codeExecution: {}}]}); const result = await chat.sendMessage("Continue."); const response = result.response; const candidate = response.candidates?.[0]; if (!candidate || !candidate.content || !candidate.content.parts) { await agent95_appendToConsole('error', "No valid candidate response from AI."); agent95_conversationHistory.push({role: "model", parts: [{text: "Error: No valid response."}]}); agent95_updateAgentStatus("Error: No AI Response"); break; } agent95_conversationHistory.push(candidate.content); for (const part of candidate.content.parts) { if (part.text) { const currentAgentText = part.text.trim(); if (currentAgentText) { await agent95_appendToConsole(currentAgentText.toLowerCase().includes("debugging:") ? 'agent_debug' : 'agent', currentAgentText); }} else if (part.executableCode) { await agent95_appendToConsole('tool_code_proposal', part.executableCode.code || ''); } else if (part.toolExecutionResult || (part.functionResponse && part.functionResponse.response && part.functionResponse.response.content)) { let outputContent = "Code output (unknown)"; if (part.toolExecutionResult && part.toolExecutionResult.output) { outputContent = part.toolExecutionResult.output; } else if (part.functionResponse && part.functionResponse.response && part.functionResponse.response.content) { outputContent = part.functionResponse.response.content; } else { outputContent = JSON.stringify(part.toolExecutionResult || part.functionResponse, null, 2); } await agent95_appendToConsole('tool_execution_result', outputContent); } else { if (Object.keys(part).length > 0) { console.warn("Agent 95 - Unknown part:", JSON.stringify(part, null, 2)); await agent95_appendToConsole('info', `Unhandled part: ${JSON.stringify(part).substring(0, 100)}...`); }}} const finishReason = candidate.finishReason; const lastTextContent = candidate.content.parts.map(p => p.text || "").join("\n").toLowerCase(); if (finishReason === "STOP" && (lastTextContent.includes("final answer:") || lastTextContent.includes("goal achieved") || lastTextContent.includes("unable to resolve"))) { agent95_updateAgentStatus((lastTextContent.includes("final answer:") || lastTextContent.includes("goal achieved")) ? "Completed" : "Error: Unresolved"); break; } else if (finishReason === "SAFETY") { await agent95_appendToConsole('error', "Stopped: SAFETY settings."); agent95_updateAgentStatus("Error: Safety Stop"); break; } else if (finishReason === "MAX_TOKENS") { await agent95_appendToConsole('info', "Stopped: MAX_TOKENS."); } else if (finishReason !== "TOOL_CALLS" && finishReason !== "STOP" && finishReason !== "MODEL_LENGTH" && finishReason) { await agent95_appendToConsole('info', `Workflow stopped: ${finishReason}.`); agent95_updateAgentStatus(`Error: ${finishReason}`); break; } if (i === AGENT95_MAX_ITERATIONS - 1) { await agent95_appendToConsole('info', "Reached max iterations."); agent95_updateAgentStatus("Error: Max Iterations"); } } catch (e) { console.error("Agent 95 Iteration Error:", e); await agent95_appendToConsole('error', "Iteration Error:", e.message, e.stack ? e.stack.substring(0,300) : ""); agent95_conversationHistory.push({role: "model", parts: [{text: `Critical Error: ${e.message}`}]}); agent95_updateAgentStatus("Error: Iteration Failed"); break; } } await agent95_appendToConsole('info', `Workflow finished. Status: ${agent95_agentStatusPanel?.textContent || 'Unknown'}`); agent95_startAgentButton.disabled = false; agent95_startAgentButton.textContent = "Start New Task"; if (agent95_goalInput) agent95_goalInput.disabled = false; }
 
-    let gameGen_genAI_model;
+    let gameGen_main_model;
     function initGameGeneratorApp() {
         if (!window.GLOBAL_API_KEY) { if(gameGen_apiErrorDisplay) gameGen_apiErrorDisplay.textContent = "API Key not set."; if (gameGen_generateButton) gameGen_generateButton.disabled = true; return; }
-        if (!gameGen_promptInput || !gameGen_generateButton || !gameGen_generatedCodeTextarea || !gameGen_gameIframe || !gameGen_gamePreviewSection || !gameGen_loadingMessage || !gameGen_errorMessage || !gameGen_apiErrorDisplay) { console.error("Game Gen UI missing!"); if(gameGen_apiErrorDisplay) gameGen_apiErrorDisplay.textContent = "UI Error."; return; }
+        if (!gameGen_promptInput || !gameGen_generateButton || !gameGen_generatedCodeTextarea || !gameGen_loadingMessage || !gameGen_errorMessage || !gameGen_apiErrorDisplay) { console.error("Game Gen UI missing!"); if(gameGen_apiErrorDisplay) gameGen_apiErrorDisplay.textContent = "UI Error."; return; }
         try {
             const genAI = new GoogleGenerativeAI(window.GLOBAL_API_KEY);
-            gameGen_genAI_model = genAI.getGenerativeModel({ model: getCurrentAiModel(), safetySettings: [{ category: HarmCategory.HARM_CATEGORY_HARASSMENT, threshold: HarmBlockThreshold.BLOCK_NONE },{ category: HarmCategory.HARM_CATEGORY_HATE_SPEECH, threshold: HarmBlockThreshold.BLOCK_NONE },{ category: HarmCategory.HARM_CATEGORY_SEXUALLY_EXPLICIT, threshold: HarmBlockThreshold.BLOCK_NONE },{ category: HarmCategory.HARM_CATEGORY_DANGEROUS_CONTENT, threshold: HarmBlockThreshold.BLOCK_NONE },], generationConfig: { temperature: 0.7, topK: 40, topP: 0.95, maxOutputTokens: 80000 } });
+            gameGen_main_model = genAI.getGenerativeModel({ model: getCurrentAiModel(), safetySettings: [{ category: HarmCategory.HARM_CATEGORY_HARASSMENT, threshold: HarmBlockThreshold.BLOCK_NONE },{ category: HarmCategory.HARM_CATEGORY_HATE_SPEECH, threshold: HarmBlockThreshold.BLOCK_NONE },{ category: HarmCategory.HARM_CATEGORY_SEXUALLY_EXPLICIT, threshold: HarmBlockThreshold.BLOCK_NONE },{ category: HarmCategory.HARM_CATEGORY_DANGEROUS_CONTENT, threshold: HarmBlockThreshold.BLOCK_NONE },], generationConfig: { temperature: 0.7, topK: 40, topP: 0.95, maxOutputTokens: 80000 } });
             if (gameGen_generateButton) gameGen_generateButton.disabled = false; if (gameGen_apiErrorDisplay) gameGen_apiErrorDisplay.textContent = "";
         } catch (error) { console.error("Game Gen AI Init Error:", error); if (gameGen_apiErrorDisplay) gameGen_apiErrorDisplay.textContent = `AI Init Error: ${error.message}.`; if (gameGen_generateButton) gameGen_generateButton.disabled = true; }
     }
-    function gameGen_showLoading(message) { if (!gameGen_loadingMessage || !gameGen_generateButton) return; gameGen_loadingMessage.textContent = message; gameGen_loadingMessage.style.display = 'block'; gameGen_generateButton.disabled = true; if(gameGen_downloadHtmlButton) gameGen_downloadHtmlButton.style.display = 'none'; gameGen_lastHtmlCode = null; }
+    function gameGen_showLoading(message) { if (!gameGen_loadingMessage || !gameGen_generateButton) return; gameGen_loadingMessage.textContent = message; gameGen_loadingMessage.style.display = 'block'; gameGen_generateButton.disabled = true; if(gameGen_downloadHtmlButton) gameGen_downloadHtmlButton.style.display = 'none'; gameGen_lastHtmlCode = null; if(gameGen_debugSection) gameGen_debugSection.style.display = 'none';}
     function gameGen_hideLoading() { if(gameGen_loadingMessage) gameGen_loadingMessage.style.display = 'none'; if(gameGen_generateButton) gameGen_generateButton.disabled = false;}
-    function gameGen_displayError(message) { if (!gameGen_errorMessage) return; gameGen_errorMessage.textContent = "Game Gen Error: " + message; gameGen_errorMessage.style.display = 'block'; }
+    function gameGen_displayError(message, isRuntimeError = false) { if (!gameGen_errorMessage) return; gameGen_errorMessage.textContent = "Game Gen Error: " + message + (isRuntimeError ? " Check Game Error Log or Browser Console (F12) for details." : ""); gameGen_errorMessage.style.display = 'block'; }
     function gameGen_clearError() { if (!gameGen_errorMessage) return; gameGen_errorMessage.textContent = ''; gameGen_errorMessage.style.display = 'none'; }
 
     function initSystemSettingsApp() {
@@ -687,7 +721,7 @@ Make sure the game is playable and demonstrates the core mechanics described and
         if (systemSettings_ai_agent95Instruction) systemSettings_ai_agent95Instruction.value = getAppInstruction('agent95', DEFAULT_AGENT95_INSTRUCTION);
         if (systemSettings_ai_gameGenInstruction) systemSettings_ai_gameGenInstruction.value = getAppInstruction('gameGen_final', DEFAULT_GAMEGEN_FINAL_INSTRUCTION);
         if (systemSettings_ai_saveModelButton) { systemSettings_ai_saveModelButton.addEventListener('click', () => { const newModel = systemSettings_ai_modelNameInput.value.trim(); if (newModel) { localStorage.setItem('k8os_globalAiModel', newModel); if (systemSettings_status) systemSettings_status.textContent = `AI Model set to: ${newModel}. Re-init AI apps...`; initAllAiApps(); } else { if (systemSettings_status) systemSettings_status.textContent = "AI Model name empty."; } }); }
-        if(systemSettings_ai_saveSvgInstructionButton) systemSettings_ai_saveSvgInstructionButton.addEventListener('click', () => { localStorage.setItem('k8os_instr_svg', systemSettings_ai_svgInstruction.value); if(systemSettings_status) systemSettings_status.textContent = "SVG instruction saved."; });
+        if(systemSettings_ai_saveSvgInstructionButton) systemSettings_ai_saveSvgInstructionButton.addEventListener('click', () => { localStorage.setItem('k8os_instr_svg', systemSettings_ai_svgInstruction.value); if(systemSettings_status) systemSettings_status.textContent = "SVG instruction saved."; initSvgGeneratorApp(); });
         if(systemSettings_ai_saveAgent95InstructionButton) systemSettings_ai_saveAgent95InstructionButton.addEventListener('click', () => { localStorage.setItem('k8os_instr_agent95', systemSettings_ai_agent95Instruction.value); if(systemSettings_status) systemSettings_status.textContent = "Agent 95 instruction saved. Re-init Agent..."; initAgent95App(); });
         if(systemSettings_ai_saveGameGenInstructionButton) systemSettings_ai_saveGameGenInstructionButton.addEventListener('click', () => { localStorage.setItem('k8os_instr_gameGen_final', systemSettings_ai_gameGenInstruction.value); if(systemSettings_status) systemSettings_status.textContent = "Game Gen (Final) instruction saved."; });
         const tabs = document.querySelectorAll('#systemSettingsWindow .settings-tab'); const tabContents = document.querySelectorAll('#systemSettingsWindow .settings-tab-content');
@@ -700,84 +734,202 @@ Make sure the game is playable and demonstrates the core mechanics described and
     if (svg_downloadButton) svg_downloadButton.addEventListener('click', svg_handleDownloadSvg);
     if(agent95_startAgentButton) agent95_startAgentButton.addEventListener('click', () => { const goal = agent95_goalInput.value.trim(); if (goal) { agent95_runAgentWorkflow(goal); } else { agent95_appendToConsole('error', "Please enter a goal."); if (agent95_errorDisplay) agent95_errorDisplay.textContent = "Goal empty."; } });
     if(agent95_downloadPyButton) { agent95_downloadPyButton.addEventListener('click', () => { if (agent95_lastPythonCode) { downloadFile(agent95_lastPythonCode, "agent95_script.py", "text/python"); } else { alert("No Python code generated yet."); } }); }
+    
+    if (gameErrorLog_clearButton) {
+        gameErrorLog_clearButton.addEventListener('click', () => {
+            if(gameErrorLog_errorsDisplay) gameErrorLog_errorsDisplay.value = "";
+        });
+    }
 
-    if (gameGen_generateButton) gameGen_generateButton.addEventListener('click', async () => {
-        const userGameIdea = gameGen_promptInput.value.trim();
-        if (!gameGen_genAI_model) { gameGen_displayError("AI Model not ready!"); return; }
-        if (!userGameIdea) { gameGen_displayError("Please describe the game."); return; }
-
-        gameGen_showLoading("Generating game plan..."); gameGen_clearError();
-        gameGen_generatedCodeTextarea.value = ''; if(gameGen_gameIframe) gameGen_gameIframe.srcdoc = '';
-        if(gameGen_planDisplay) gameGen_planDisplay.textContent = "Generating game plan...";
-        if(gameGen_svgStatus) gameGen_svgStatus.textContent = "";
-
-        try {
-            const planPrompt = DEFAULT_GAMEGEN_PLAN_INSTRUCTION.replace("{USER_GAME_IDEA}", userGameIdea);
-            const planResult = await gameGen_genAI_model.generateContent(planPrompt);
-            const planResponseText = planResult.response.text().trim();
-            
-            let gamePlan;
-            try {
-                const cleanedJsonString = planResponseText.replace(/```json\n?/g, "").replace(/```\n?/g, "");
-                gamePlan = JSON.parse(cleanedJsonString);
-                if (!gamePlan.game_mechanic || !Array.isArray(gamePlan.svg_assets) || gamePlan.svg_assets.length < 3) {
-                    throw new Error("Invalid plan structure received from AI.");
-                }
-            } catch (e) {
-                console.error("Error parsing game plan JSON:", e, "Raw response:", planResponseText);
-                gameGen_displayError(`Failed to parse game plan. AI Response: ${planResponseText.substring(0,200)}...`);
-                gameGen_hideLoading(); return;
+    window.addEventListener('message', (event) => {
+        if (event.source === gamePlayerWindow_iframe.contentWindow && event.data && event.data.type === 'game_error') {
+            if (gameErrorLog_errorsDisplay) {
+                const timestamp = new Date().toLocaleTimeString();
+                gameErrorLog_errorsDisplay.value += `[${timestamp}] ${event.data.message}\n  Source: ${event.data.source}:${event.data.lineno}:${event.data.colno}\n\n`;
+                gameErrorLog_errorsDisplay.scrollTop = gameErrorLog_errorsDisplay.scrollHeight;
+                openWindow('gameErrorLogWindow');
             }
-
-            if(gameGen_planDisplay) gameGen_planDisplay.textContent = `Game Mechanic: ${gamePlan.game_mechanic}\nSVG Assets to generate: ${gamePlan.svg_assets.join(', ')}`;
-            gameGen_showLoading("Generating SVG assets...");
-            
-            const generatedSvgs = [];
-            for (let i = 0; i < gamePlan.svg_assets.length; i++) {
-                const svgDesc = gamePlan.svg_assets[i];
-                if(gameGen_svgStatus) gameGen_svgStatus.textContent = `Generating SVG ${i+1}/${gamePlan.svg_assets.length}: ${svgDesc}...`;
-                const svgCode = await internal_generateSingleSvg(svgDesc); // Use the refactored SVG generator
-                if (svgCode) {
-                    generatedSvgs.push(svgCode);
-                } else {
-                    generatedSvgs.push(`<svg viewBox="0 0 10 10" xmlns="http://www.w3.org/2000/svg"><rect width="10" height="10" fill="red"/><text x="1" y="8" font-size="5" fill="white">X</text></svg>`); // Placeholder for failed SVG
-                    if(gameGen_svgStatus) gameGen_svgStatus.textContent += ` [Failed for: ${svgDesc}]`;
-                    console.warn(`Failed to generate SVG for: ${svgDesc}. Using placeholder.`);
-                }
-            }
-             if(gameGen_svgStatus) gameGen_svgStatus.textContent = `All ${generatedSvgs.length} SVGs processed. Generating game code...`;
-            gameGen_showLoading("Generating final game code with SVGs...");
-
-            const finalGamePromptInstruction = getAppInstruction('gameGen_final', DEFAULT_GAMEGEN_FINAL_INSTRUCTION);
-            const finalGamePrompt = finalGamePromptInstruction
-                .replace("{USER_GAME_IDEA}", userGameIdea)
-                .replace("{GAME_PLAN_JSON}", JSON.stringify(gamePlan))
-                .replace("{SVG_ASSETS_ARRAY_OF_STRINGS}", JSON.stringify(generatedSvgs));
-
-            const gameCodeResult = await gameGen_genAI_model.generateContent(finalGamePrompt);
-            let gameHtml = gameCodeResult.response.text().trim();
-            if (gameHtml.startsWith("```html")) gameHtml = gameHtml.substring(7).trim(); else if (gameHtml.startsWith("```")) gameHtml = gameHtml.substring(3).trim();
-            if (gameHtml.endsWith("```")) gameHtml = gameHtml.substring(0, gameHtml.length - 3).trim();
-            
-            gameGen_generatedCodeTextarea.value = gameHtml;
-            if (gameHtml && gameHtml.toLowerCase().includes("<html") && gameHtml.toLowerCase().includes("</html>")) {
-                gameGen_lastHtmlCode = gameHtml; if(gameGen_downloadHtmlButton) gameGen_downloadHtmlButton.style.display = 'block';
-                const gameTitle = userGameIdea.substring(0, 30) + (userGameIdea.length > 30 ? "..." : "") + " - Game";
-                openWindow('gamePlayerWindow', { title: gameTitle });
-                if (gamePlayerWindow_iframe) { gamePlayerWindow_iframe.srcdoc = gameHtml; }
-                if (gameGen_gameIframe) { gameGen_gameIframe.srcdoc = gameHtml; gameGen_gamePreviewSection.style.display = 'flex'; }
-            } else { gameGen_displayError("AI did not return valid HTML. Output: " + (gameHtml.length > 100 ? gameHtml.substring(0,100) + "..." : gameHtml) ); }
-
-        } catch (e) {
-            console.error("Game Generator Full Process Error:", e);
-            let message = "Full game generation process failed. ";
-            if (e.message) { if (e.message.includes("API key not valid")) message += "API Key invalid."; else if (e.message.includes("quota")) message += "API quota hit."; else if (e.message.includes("model") && e.message.includes("not found")) message += "AI model not found."; else message += e.message; } else message += "Unknown error.";
-            gameGen_displayError(message); if(gameGen_apiErrorDisplay) gameGen_apiErrorDisplay.textContent = message;
-        } finally {
-            gameGen_hideLoading();
         }
     });
-    if(gameGen_downloadHtmlButton) { gameGen_downloadHtmlButton.addEventListener('click', () => { if (gameGen_lastHtmlCode) { let fileName = gameGen_promptInput.value.trim().toLowerCase().replace(/[^\w\s-]/g, '').replace(/\s+/g, '_') || "generated_game"; downloadFile(gameGen_lastHtmlCode, `${fileName}.html`, "text/html"); } else { alert("No game HTML generated yet."); } }); }
+
+    function prepareGameHTMLWithLogger(htmlContent) {
+        const errorLoggerScript = `
+            <script>
+                window.onerror = function(message, source, lineno, colno, error) {
+                    window.parent.postMessage({
+                        type: 'game_error',
+                        message: message,
+                        source: source.substring(source.lastIndexOf('/') + 1), // Just filename
+                        lineno: lineno,
+                        colno: colno,
+                        error: error ? error.stack : 'N/A'
+                    }, '*');
+                    return false; // Let default handler run too
+                };
+                window.onunhandledrejection = function(event) {
+                     window.parent.postMessage({
+                        type: 'game_error',
+                        message: 'Unhandled Promise Rejection: ' + (event.reason ? (event.reason.message || event.reason) : 'Unknown reason'),
+                        source: 'Promise',
+                        lineno: 'N/A',
+                        colno: 'N/A',
+                        error: event.reason ? event.reason.stack : 'N/A'
+                    }, '*');
+                };
+            <\/script>
+        `;
+        if (htmlContent.includes("</head>")) {
+            return htmlContent.replace("</head>", errorLoggerScript + "</head>");
+        } else if (htmlContent.includes("<body>")) {
+             return htmlContent.replace("<body>", errorLoggerScript + "<body>");
+        }
+        return errorLoggerScript + htmlContent; // Fallback
+    }
+
+
+    async function executeGameGeneration(userGameIdea, isDebugAttempt = false, existingCode = "", errorMessages = "", userHints = "") {
+        if (!gameGen_main_model) { gameGen_displayError("AI Model not ready!"); return null; }
+        gameGen_clearError();
+        
+        if (isDebugAttempt) {
+            gameGen_showLoading("Attempting to debug game code...");
+            const debugInstruction = DEFAULT_GAMEGEN_DEBUG_INSTRUCTION
+                .replace("{USER_GAME_IDEA}", gameGen_lastUserIdea || "the previously described game")
+                .replace("{ERROR_MESSAGES}", errorMessages)
+                .replace("{USER_HINTS}", userHints)
+                .replace("{PROBLEM_CODE}", existingCode);
+
+            try {
+                const debugResult = await gameGen_main_model.generateContent(debugInstruction);
+                let fixedHtml = debugResult.response.text().trim();
+                if (fixedHtml.startsWith("```html")) fixedHtml = fixedHtml.substring(7).trim(); else if (fixedHtml.startsWith("```")) fixedHtml = fixedHtml.substring(3).trim();
+                if (fixedHtml.endsWith("```")) fixedHtml = fixedHtml.substring(0, fixedHtml.length - 3).trim();
+                return fixedHtml;
+            } catch (e) {
+                 console.error("Game Debugging Error:", e);
+                let message = "Failed to debug game. ";
+                if (e.message) { if (e.message.includes("API key not valid")) message += "API Key invalid."; else if (e.message.includes("quota")) message += "API quota hit."; else if (e.message.includes("model") && e.message.includes("not found")) message += "AI model not found."; else message += e.message; } else message += "Unknown error.";
+                gameGen_displayError(message);
+                if(gameGen_apiErrorDisplay) gameGen_apiErrorDisplay.textContent = message;
+                return null;
+            } finally {
+                gameGen_hideLoading();
+            }
+
+        } else { // Initial generation
+            gameGen_showLoading("Generating game plan...");
+            if(gameGen_planDisplay) gameGen_planDisplay.textContent = "Generating game plan...";
+            if(gameGen_svgStatus) gameGen_svgStatus.textContent = "";
+
+            try {
+                const planPrompt = DEFAULT_GAMEGEN_PLAN_INSTRUCTION.replace("{USER_GAME_IDEA}", userGameIdea);
+                const planResult = await gameGen_main_model.generateContent(planPrompt);
+                const planResponseText = planResult.response.text().trim();
+                
+                let gamePlan;
+                try {
+                    const cleanedJsonString = planResponseText.replace(/```json\n?/g, "").replace(/```\n?/g, "");
+                    gamePlan = JSON.parse(cleanedJsonString);
+                    if (!gamePlan.game_mechanic || !Array.isArray(gamePlan.svg_assets) || gamePlan.svg_assets.length < 3 || gamePlan.svg_assets.length > 5) {
+                        throw new Error("Invalid plan structure or SVG asset count (must be 3-5).");
+                    }
+                } catch (e) {
+                    console.error("Error parsing game plan JSON:", e, "Raw response:", planResponseText);
+                    gameGen_displayError(`Failed to parse game plan. AI Response: ${planResponseText.substring(0,200)}...`);
+                    return null;
+                }
+
+                if(gameGen_planDisplay) gameGen_planDisplay.textContent = `Game Mechanic: ${gamePlan.game_mechanic}\nSVG Assets to generate:\n - ${gamePlan.svg_assets.join('\n - ')}`;
+                gameGen_showLoading("Generating SVG assets...");
+                
+                const generatedSvgs = [];
+                for (let i = 0; i < gamePlan.svg_assets.length; i++) {
+                    const svgDesc = gamePlan.svg_assets[i];
+                    if(gameGen_svgStatus) gameGen_svgStatus.textContent = `Generating SVG ${i+1}/${gamePlan.svg_assets.length}: ${svgDesc}...`;
+                    const svgCode = await internal_generateSingleSvg(svgDesc);
+                    if (svgCode) {
+                        generatedSvgs.push(svgCode);
+                    } else {
+                        generatedSvgs.push(`<svg viewBox="0 0 10 10" xmlns="http://www.w3.org/2000/svg"><rect width="10" height="10" fill="red"/><text x="1" y="8" font-size="5" fill="white">X</text></svg>`); 
+                        if(gameGen_svgStatus) gameGen_svgStatus.textContent += ` [Failed for: ${svgDesc}]`;
+                        console.warn(`Failed to generate SVG for: ${svgDesc}. Using placeholder.`);
+                    }
+                }
+                if(gameGen_svgStatus) gameGen_svgStatus.textContent = `All ${generatedSvgs.length} SVGs processed. Generating game code...`;
+                gameGen_showLoading("Generating final game code with SVGs...");
+
+                const finalGamePromptInstruction = getAppInstruction('gameGen_final', DEFAULT_GAMEGEN_FINAL_INSTRUCTION);
+                const finalGamePrompt = finalGamePromptInstruction
+                    .replace("{USER_GAME_IDEA}", userGameIdea)
+                    .replace("{GAME_PLAN_JSON}", JSON.stringify(gamePlan))
+                    .replace("{SVG_ASSETS_ARRAY_OF_STRINGS}", JSON.stringify(generatedSvgs));
+
+                const gameCodeResult = await gameGen_main_model.generateContent(finalGamePrompt);
+                let gameHtml = gameCodeResult.response.text().trim();
+                if (gameHtml.startsWith("```html")) gameHtml = gameHtml.substring(7).trim(); else if (gameHtml.startsWith("```")) gameHtml = gameHtml.substring(3).trim();
+                if (gameHtml.endsWith("```")) gameHtml = gameHtml.substring(0, gameHtml.length - 3).trim();
+                return gameHtml;
+
+            } catch (e) {
+                console.error("Game Generator Full Process Error:", e);
+                let message = "Full game generation process failed. ";
+                if (e.message) { if (e.message.includes("API key not valid")) message += "API Key invalid."; else if (e.message.includes("quota")) message += "API quota hit."; else if (e.message.includes("model") && e.message.includes("not found")) message += "AI model not found."; else message += e.message; } else message += "Unknown error.";
+                gameGen_displayError(message);
+                if(gameGen_apiErrorDisplay) gameGen_apiErrorDisplay.textContent = message;
+                return null;
+            } finally {
+                gameGen_hideLoading();
+            }
+        }
+    }
+    
+    async function processAndDisplayGameCode(gameHtml, userGameIdea) {
+        if (gameGen_generatedCodeTextarea) gameGen_generatedCodeTextarea.value = gameHtml;
+        if (gameHtml && gameHtml.toLowerCase().includes("<html") && gameHtml.toLowerCase().includes("</html>")) {
+            gameGen_lastHtmlCode = gameHtml;
+            if(gameGen_downloadHtmlButton) gameGen_downloadHtmlButton.style.display = 'block';
+            if(gameGen_debugSection) gameGen_debugSection.style.display = 'block';
+            
+            const gameTitle = userGameIdea.substring(0, 30) + (userGameIdea.length > 30 ? "..." : "") + " - Game";
+            openWindow('gamePlayerWindow', { title: gameTitle });
+            
+            const htmlWithLogger = prepareGameHTMLWithLogger(gameHtml);
+
+            if (gamePlayerWindow_iframe) { 
+                gamePlayerWindow_iframe.srcdoc = htmlWithLogger;
+            }
+        } else { 
+            gameGen_displayError("AI did not return valid HTML. Output: " + (gameHtml ? gameHtml.substring(0,100) + "..." : "empty"), true); 
+            if(gameGen_debugSection) gameGen_debugSection.style.display = 'none';
+        }
+    }
+
+
+    if (gameGen_generateButton) gameGen_generateButton.addEventListener('click', async () => {
+        gameGen_lastUserIdea = gameGen_promptInput.value.trim();
+        if (!gameGen_lastUserIdea) { gameGen_displayError("Please describe the game."); return; }
+        
+        const gameHtml = await executeGameGeneration(gameGen_lastUserIdea);
+        if (gameHtml) {
+            await processAndDisplayGameCode(gameHtml, gameGen_lastUserIdea);
+        }
+    });
+
+    if (gameGen_debugAttemptButton) gameGen_debugAttemptButton.addEventListener('click', async () => {
+        const currentCode = gameGen_generatedCodeTextarea.value;
+        const errorMessages = gameGen_debugErrorInput.value.trim() || (gameErrorLog_errorsDisplay ? gameErrorLog_errorsDisplay.value.trim() : "");
+        const userHints = gameGen_debugHintsInput.value.trim();
+
+        if (!currentCode) { gameGen_displayError("No game code available to debug."); return; }
+        if (!errorMessages) { gameGen_displayError("Please provide an error message from the Game Log or Browser Console."); return; }
+        
+        const fixedHtml = await executeGameGeneration(gameGen_lastUserIdea, true, currentCode, errorMessages, userHints);
+        if (fixedHtml) {
+           await processAndDisplayGameCode(fixedHtml, gameGen_lastUserIdea);
+        }
+    });
+
+    if(gameGen_downloadHtmlButton) { gameGen_downloadHtmlButton.addEventListener('click', () => { if (gameGen_lastHtmlCode) { let fileName = (gameGen_lastUserIdea || "generated_game").trim().toLowerCase().replace(/[^\w\s-]/g, '').replace(/\s+/g, '_'); downloadFile(gameGen_lastHtmlCode, `${fileName}.html`, "text/html"); } else { alert("No game HTML generated yet."); } }); }
 
     if(startButton) startButton.addEventListener('click', (e) => { e.stopPropagation(); startMenu.style.display = startMenu.style.display === 'flex' ? 'none' : 'flex'; });
     if(startMenuShutdown) startMenuShutdown.addEventListener('click', () => { startMenu.style.display = 'none'; if (confirm("Are you sure you want to shut down k8OS?")) { document.body.innerHTML = '<div style="position:fixed;top:0;left:0;width:100%;height:100%;background:black;color:white;display:flex;justify-content:center;align-items:center;font-size:24px;">k8OS is shutting down... Goodbye!</div>'; setTimeout(() => { window.close(); }, 2000); } });
