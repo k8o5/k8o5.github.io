@@ -128,7 +128,7 @@
             background-color: var(--win95-light-gray);
             border: 1px outset var(--win95-light-gray);
             color: var(--win95-black);
-            font-family: "Marlett", "Webdings"; /* Using Marlett for symbols */
+            font-family: "Marlett", "Webdings"; 
             font-size: 12px;
             padding: 0;
             width: 16px;
@@ -555,7 +555,14 @@ Game Plan: {GAME_PLAN_JSON}.
 SVG assets (raw SVG code array): {SVG_ASSETS_ARRAY_OF_STRINGS}.
 Sound effect JS function bodies (JS code array, each function body takes 'audioContext' argument): {SOUND_EFFECTS_JS_ARRAY_OF_STRINGS}.
 
-Embed SVGs (inline, data URI, or JS vars).
+IMPORTANT: For SVGs, implement an asynchronous loading mechanism.
+1. Create Image objects for each SVG.
+2. Set their .src to the data URI ('data:image/svg+xml;utf8,' + encodeURIComponent(svgString)).
+3. Use onload/onerror handlers.
+4. Only start the game loop (e.g., call requestAnimationFrame) AFTER all SVG images are loaded. Use a counter or Promises.
+5. Store the loaded Image objects in your game entities (e.g., player.img, enemy.img).
+6. In your rendering functions, draw these pre-loaded Image objects using ctx.drawImage().
+
 Create JavaScript functions, one for each sound effect, using the provided JS code snippets. Name them descriptively (e.g., playShootSound, playExplosionSound).
 Integrate these sounds by calling their respective functions at appropriate game events (e.g., on shoot, on enemy defeat).
 Output ONLY the single HTML file string. Use pure JS/Canvas or CDN libraries.
@@ -563,7 +570,7 @@ Include game loop, rendering, input. Self-contained. No markdown/explanations ou
 Make game playable, fit description/plan, using all provided SVGs and triggering sound effects.`;
     const DEFAULT_GAMEGEN_DEBUG_INSTRUCTION = `The HTML/JS game code (original idea: "{USER_GAME_IDEA}") produced error(s) and/or the user has provided hints: "{ERRORS_AND_HINTS}".
 Analyze the code, errors, and hints. Provide a corrected version of the full HTML/JS game code.
-Focus on fixing specified issues while preserving the game's original intent.
+Focus on fixing specified issues while preserving the game's original intent. Pay close attention to asynchronous asset loading for SVGs if errors relate to drawing.
 Output ONLY the corrected, complete HTML/JS code, starting with <!DOCTYPE html> or <html> and ending with </html>. No explanations or markdown.
 
 Problematic code:
@@ -574,7 +581,7 @@ Problematic code:
     const DEFAULT_MUSICSTUDIO_INSTRUCTION = `Generate JavaScript code using the Web Audio API to create music based on the description: "{USER_PROMPT}".
 The code should be a self-contained function body.
 It will be executed within a function that receives 'audioContext' and 'activeSources' (an array to push created source nodes to for later stopping) as arguments, like so: new Function('audioContext', 'activeSources', YOUR_CODE_HERE)(audioContextInstance, activeSourcesArray);
-Your code should use the provided 'audioContext'. It should create and start all necessary audio nodes and push main/looping source nodes to the 'activeSources' array.
+Your code should use the provided 'audioContext'. It should create and start all necessary audio nodes and push main/looping source nodes to the 'activeSources' array if they are intended to be stopped later.
 If the description implies a loop or continuous music, structure your code to create and start the loop.
 If it's a one-shot piece, it should play through once.
 Generate ONLY the JavaScript function body. No explanations or markdown.`;
@@ -585,6 +592,7 @@ Python code:
 {PYTHON_CODE}
 \`\`\`
 Simulated output (or error description):`;
+
 
     const globalApiKeyInput = document.getElementById('globalApiKeyInput');
     const saveApiKeyButton = document.getElementById('saveApiKeyButton');
@@ -751,7 +759,7 @@ Simulated output (or error description):`;
     
     async function internal_generateSingleSoundJs(soundDescription) {
         if (!gameGen_main_model) { console.error("Game Gen model (used for sound) not init for internal call"); return null; } 
-        const baseInstruction = getAppInstruction('musicStudio', DEFAULT_MUSICSTUDIO_INSTRUCTION); // Using musicStudio prompt for sound effects now
+        const baseInstruction = getAppInstruction('musicStudio', DEFAULT_MUSICSTUDIO_INSTRUCTION); 
         const fullPrompt = baseInstruction.replace("{USER_PROMPT}", soundDescription);
         try {
             const result = await gameGen_main_model.generateContent(fullPrompt);
