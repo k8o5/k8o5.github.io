@@ -306,6 +306,62 @@
             margin-top: 2px;
             font-style: italic;
         }
+        
+        /* Assistant Styles */
+        #k8osAssistant {
+            position: fixed;
+            bottom: 35px; /* Above taskbar */
+            right: 10px;
+            z-index: 25000; /* Above start menu, below reboot overlay */
+            display: none; /* Initially hidden */
+            flex-direction: column;
+            align-items: flex-end;
+            user-select: none;
+        }
+
+        #k8osAssistant_avatarContainer {
+            width: 70px; 
+            height: 70px;
+            cursor: pointer;
+        }
+
+        #k8osAssistant_speechBubble {
+            background-color: #FFFFE1; 
+            border: 1px solid #F4E79A;
+            border-radius: 8px;
+            padding: 8px 12px;
+            font-family: var(--win95-font);
+            font-size: 12px;
+            color: var(--win95-black);
+            max-width: 220px;
+            min-width: 80px;
+            text-align: left;
+            box-shadow: 1px 1px 3px rgba(0,0,0,0.15);
+            position: relative;
+            margin-bottom: 8px;
+            opacity: 0;
+            transform: translateY(10px) scale(0.95);
+            transition: opacity 0.25s ease-out, transform 0.25s ease-out;
+            white-space: normal; 
+        }
+
+        #k8osAssistant_speechBubble.visible {
+            opacity: 1;
+            transform: translateY(0px) scale(1);
+        }
+
+        #k8osAssistant_speechBubble::after { 
+            content: '';
+            position: absolute;
+            bottom: -8px; 
+            right: 18px; 
+            width: 0;
+            height: 0;
+            border-left: 8px solid transparent;
+            border-right: 8px solid transparent;
+            border-top: 8px solid #FFFFE1; 
+        }
+         /* End Assistant Styles */
 
         @media (max-width: 768px) {
             .window.mobile-default-fullscreen {
@@ -320,6 +376,19 @@
             }
             .window.mobile-default-fullscreen .title-bar { cursor: default; }
             .window.mobile-default-fullscreen .title-bar-controls .fullscreen-button { display: none; }
+            
+            #k8osAssistant {
+                bottom: 32px; 
+                right: 5px;
+            }
+            #k8osAssistant_avatarContainer {
+                width: 60px;
+                height: 60px;
+            }
+            #k8osAssistant_speechBubble {
+                max-width: 180px;
+                font-size: 11px;
+            }
         }
 
     </style>
@@ -625,6 +694,56 @@
         </div>
     </div>
 
+    <!-- k8OS Assistant (Sparky) -->
+    <div id="k8osAssistant">
+        <div id="k8osAssistant_speechBubble"><span id="k8osAssistant_speechText">Hi there!</span></div>
+        <div id="k8osAssistant_avatarContainer">
+            <svg id="assistantAvatarSVG" viewBox="0 0 100 100" width="100%" height="100%">
+                <style>
+                    #sparkyBobbingGroup { animation: sparkyWander 10s ease-in-out infinite; transform-origin: 50% 50%;}
+                    @keyframes sparkyWander {
+                        0%   { transform: translate(0px, 0px) rotate(0deg); }
+                        15%  { transform: translate(4px, -3px) rotate(3deg); }
+                        30%  { transform: translate(-2px, 1px) rotate(-2deg); }
+                        45%  { transform: translate(5px, -2px) rotate(2deg); }
+                        60%  { transform: translate(0px, 2px) rotate(0deg); }
+                        75%  { transform: translate(-4px, -3px) rotate(-3deg); }
+                        90%  { transform: translate(2px, 0px) rotate(1deg); }
+                        100% { transform: translate(0px, 0px) rotate(0deg); }
+                    }
+                    
+                    #sparkyEyelid { animation: sparkyBlink 4.5s ease-in-out infinite; transform-origin: 50% 35%; /* Blink from top of eye */ }
+                    @keyframes sparkyBlink {
+                        0%, 90%, 100% { opacity: 0; transform: scaleY(0.1)} 
+                        93% { opacity: 1; transform: scaleY(1)}  
+                        96% { opacity: 0; transform: scaleY(0.1)} 
+                    }
+
+                    #sparkyMouth.talking { animation: sparkyTalk 0.25s infinite steps(2, end); }
+                    @keyframes sparkyTalk {
+                        0% { d: path("M 40 60 Q 50 63 60 60"); } 
+                        50% { d: path("M 40 60 Q 50 68 60 60"); } 
+                    }
+                </style>
+                <defs>
+                    <radialGradient id="sparkyBodyGradient" cx="50%" cy="50%" r="50%" fx="50%" fy="50%">
+                        <stop offset="0%" style="stop-color:#87CEFA;stop-opacity:1" /> 
+                        <stop offset="100%" style="stop-color:#4682B4;stop-opacity:1" /> 
+                    </radialGradient>
+                    <filter id="sparkyGlow"><feGaussianBlur stdDeviation="1.5" result="coloredBlur"/><feMerge><feMergeNode in="coloredBlur"/><feMergeNode in="SourceGraphic"/></feMerge></filter>
+                </defs>
+                <g id="sparkyBobbingGroup">
+                    <circle cx="50" cy="50" r="32" fill="url(#sparkyBodyGradient)" filter="url(#sparkyGlow)"/>
+                    <ellipse cx="50" cy="45" rx="14" ry="9" fill="white"/>
+                    <ellipse id="sparkyEyelid" cx="50" cy="45" rx="14.5" ry="9.5" fill="url(#sparkyBodyGradient)" opacity="0"/>
+                    <circle id="sparkyPupil" cx="50" cy="45" r="4.5" fill="#222"/>
+                    <path id="sparkyMouth" d="M 40 60 Q 50 63 60 60" stroke="#333" stroke-width="1.5" fill="none" stroke-linecap="round"/>
+                </g>
+            </svg>
+        </div>
+    </div>
+
+
 <script type="module">
     import { GoogleGenerativeAI, HarmCategory, HarmBlockThreshold } from "@google/generative-ai";
     import { marked, Renderer as MarkedRenderer } from 'marked';
@@ -779,10 +898,26 @@
     let gameGen_main_model;
     let musicStudio_genAI_model;
     let pythonPad_ai_model;
+    let assistant_gemini_model; 
 
     const PYTHONIZER_MAX_ITERATIONS = 10;
     const DEFAULT_BG_COLOR = '#008080';
     const PRESET_BG_COLORS = ['#008080', '#000000', '#808080', '#0000A0', '#3A6EA5', '#D3D3D3'];
+
+    // Assistant (Sparky) variables
+    let assistantContainer = null;
+    let assistantSpeechBubble = null;
+    let assistantSpeechText = null;
+    let assistantAvatarSVG = null;
+    let assistantSparkyMouth = null;
+    let assistantIsVisible = false;
+    let assistantSpeechTimeout;
+    let assistantIsThinking = false;
+    let k8osActivityLog = [];
+    const ACTIVITY_LOG_MAX_AGE = 5 * 60 * 1000; // Keep logs for 5 minutes
+    const ASSISTANT_SUMMARY_INTERVAL = 3 * 60 * 1000; // 3 minutes
+    let assistantSummaryIntervalId = null;
+
 
     function getStoredOrDefault(key, defaultValue) { return localStorage.getItem(key) || defaultValue; }
     function getCurrentGeminiModel() { return getStoredOrDefault('k8os_globalGeminiAiModel', DEFAULT_GEMINI_AI_MODEL); }
@@ -804,6 +939,11 @@
         initFileExplorerApp();
         initSystemSettingsApp();
         initWebBrowserApp();
+        
+        if (localStorage.getItem('k8os_assistant_enabled') === 'true' &&
+            (window.GLOBAL_GEMINI_API_KEY || window.GLOBAL_GROQ_API_KEY || window.GLOBAL_HF_TOKEN)) {
+            initAndShowAssistant();
+        }
     }
 
     function updateApiKeyUI() {
@@ -860,8 +1000,17 @@
             localStorage.setItem('k8os_apiProvider', selectedApiProvider);
             updateApiKeyUI();
             enableAppButtons();
-            initAllAiApps();
-            initSystemSettingsApp();
+            initAllAiApps(); 
+            initSystemSettingsApp(); 
+            if (assistantIsVisible) {
+                updateAssistantSpeech("Switched API provider!");
+                // Re-initialize assistant model if it's provider-specific (e.g., assistant_gemini_model)
+                if (selectedApiProvider === 'gemini' && window.GLOBAL_GEMINI_API_KEY) {
+                     // Potentially re-init assistant_gemini_model here if needed
+                } else {
+                    assistant_gemini_model = null; // Clear if not Gemini
+                }
+            }
         });
     }
 
@@ -895,15 +1044,293 @@
                 localStorage.setItem(storageKey, key);
                 apiKeyStatus.textContent = `Status: ${providerName} Key/Token Saved!`;
                 enableAppButtons();
-                initAllAiApps();
+                initAllAiApps(); 
+
+                localStorage.setItem('k8os_assistant_enabled', 'true');
+                initAndShowAssistant();
+                updateAssistantSpeech(`Hi! I'm Sparky. Ready to create!`);
+
             } else {
                 globalVarSetter(null);
                 localStorage.removeItem(storageKey);
                 apiKeyStatus.textContent = `Status: ${providerName} Key/Token cleared.`;
                 disableAppButtons();
+                
+                localStorage.removeItem('k8os_assistant_enabled');
+                hideAssistant();
+                stopAssistantSummaryTimer();
             }
         });
     }
+    
+    // --- Assistant (Sparky) Functions ---
+    function logK8osActivity(toolName, actionDescription) {
+        const now = Date.now();
+        k8osActivityLog = k8osActivityLog.filter(entry => now - entry.timestamp < ACTIVITY_LOG_MAX_AGE);
+        k8osActivityLog.push({ timestamp: now, tool: toolName, action: actionDescription.substring(0, 100) }); // Keep action desc short
+        // console.log("Activity logged:", toolName, actionDescription.substring(0,50));
+    }
+
+    function startAssistantSummaryTimer() {
+        if (assistantSummaryIntervalId) clearInterval(assistantSummaryIntervalId);
+        
+        assistantSummaryIntervalId = setInterval(async () => {
+            if (!assistantIsVisible || assistantIsThinking || !localStorage.getItem('k8os_assistant_enabled')) return;
+
+            const threeMinutesAgo = Date.now() - ASSISTANT_SUMMARY_INTERVAL;
+            const recentActivities = k8osActivityLog.filter(entry => entry.timestamp >= threeMinutesAgo);
+
+            if (recentActivities.length === 0) {
+                // Optionally: updateAssistantSpeech("All quiet... what's next?");
+                return; 
+            }
+
+            let activitySummaryForPrompt = "User's recent k8OS activities (last 3 mins):\n";
+            // Take last 3-4 distinct activities to keep prompt short
+            const distinctRecentActivities = [];
+            const activityTexts = new Set();
+            for (let i = recentActivities.length - 1; i >= 0 && distinctRecentActivities.length < 4; i--) {
+                const activityText = `In ${recentActivities[i].tool}: ${recentActivities[i].action}`;
+                if (!activityTexts.has(activityText)) {
+                    distinctRecentActivities.unshift(activityText); // Add to beginning to keep order
+                    activityTexts.add(activityText);
+                }
+            }
+            distinctRecentActivities.forEach(text => {
+                activitySummaryForPrompt += `- ${text}\n`;
+            });
+            if (recentActivities.length > distinctRecentActivities.length) {
+                 activitySummaryForPrompt += "- And perhaps a few more creative sparks!\n";
+            }
+
+
+            const summaryPrompt = `You are Sparky, a friendly k8OS assistant.
+${activitySummaryForPrompt}
+Give a very short, cheerful, and slightly playful summary of their recent activity (1-2 brief sentences, max 20 words). Be encouraging. Don't list items.
+Examples: "Wow, busy bee! Creating cool stuff!", "Looks like you're on a creative roll! Keep it up!", "Lots of awesome things happening! Nice work!"
+Output ONLY the summary, no extra formatting.`;
+            
+            assistantIsThinking = true;
+            updateAssistantSpeech("Thinking about your awesome work...", true, true); // isTemp = true
+
+            let summaryComment = "You've been busy!";
+            try {
+                const keyAvailable = (selectedApiProvider === 'gemini' && window.GLOBAL_GEMINI_API_KEY) ||
+                                     (selectedApiProvider === 'groq' && window.GLOBAL_GROQ_API_KEY) ||
+                                     (selectedApiProvider === 'huggingface' && window.GLOBAL_HF_TOKEN);
+                if (!keyAvailable) {
+                    throw new Error("API key for current provider not available for summary.");
+                }
+
+                if (selectedApiProvider === 'gemini') {
+                    if (!assistant_gemini_model) { 
+                        const genAI = new GoogleGenerativeAI(window.GLOBAL_GEMINI_API_KEY);
+                         assistant_gemini_model = genAI.getGenerativeModel({
+                            model: getCurrentGeminiModel(), 
+                            safetySettings: [ /* Standard Safety Settings */
+                                { category: HarmCategory.HARM_CATEGORY_HARASSMENT, threshold: HarmBlockThreshold.BLOCK_MEDIUM_AND_ABOVE },
+                                { category: HarmCategory.HARM_CATEGORY_HATE_SPEECH, threshold: HarmBlockThreshold.BLOCK_MEDIUM_AND_ABOVE },
+                                { category: HarmCategory.HARM_CATEGORY_SEXUALLY_EXPLICIT, threshold: HarmBlockThreshold.BLOCK_MEDIUM_AND_ABOVE },
+                                { category: HarmCategory.HARM_CATEGORY_DANGEROUS_CONTENT, threshold: HarmBlockThreshold.BLOCK_MEDIUM_AND_ABOVE },
+                            ],
+                            generationConfig: { temperature: 0.8, maxOutputTokens: 30 } // Low tokens for summary
+                        });
+                    }
+                    const result = await assistant_gemini_model.generateContent(summaryPrompt);
+                    summaryComment = result.response.text().trim();
+                } else if (selectedApiProvider === 'groq') {
+                    const messages = [{ role: "user", content: summaryPrompt }];
+                    summaryComment = await callGroqApi(messages, 0.8, 25); // Groq max tokens for summary
+                } else if (selectedApiProvider === 'huggingface') {
+                     summaryComment = await callHuggingFaceApi(summaryPrompt, { max_new_tokens: 25, temperature: 0.8 }); // HF max tokens
+                }
+            } catch (error) {
+                console.warn(`Assistant summary generation error:`, error);
+                summaryComment = "You're doing great things!";
+            } finally {
+                assistantIsThinking = false;
+            }
+            
+            summaryComment = summaryComment.replace(/^["']|["']$/g, '').replace(/\n/g, ' ').trim();
+            updateAssistantSpeech(summaryComment || "Keep up the great work!", false); // Not a temp message
+
+        }, ASSISTANT_SUMMARY_INTERVAL);
+    }
+
+    function stopAssistantSummaryTimer() {
+        if (assistantSummaryIntervalId) {
+            clearInterval(assistantSummaryIntervalId);
+            assistantSummaryIntervalId = null;
+        }
+    }
+
+    function initAndShowAssistant() {
+        if (!assistantContainer) {
+            assistantContainer = document.getElementById('k8osAssistant');
+            assistantSpeechBubble = document.getElementById('k8osAssistant_speechBubble');
+            assistantSpeechText = document.getElementById('k8osAssistant_speechText');
+            assistantAvatarSVG = document.getElementById('assistantAvatarSVG');
+            if (assistantAvatarSVG) {
+                 assistantSparkyMouth = assistantAvatarSVG.querySelector('#sparkyMouth');
+            }
+
+            if (assistantContainer && assistantAvatarSVG) {
+                 assistantAvatarSVG.addEventListener('click', () => {
+                    if (assistantSpeechBubble.classList.contains('visible')) {
+                        assistantSpeechBubble.classList.remove('visible');
+                        if(assistantSparkyMouth) assistantSparkyMouth.classList.remove('talking');
+                    } else {
+                         // Show last non-temp message or a default
+                        const lastMessage = assistantSpeechText.textContent;
+                        updateAssistantSpeech(lastMessage && lastMessage !== "Thinking about your awesome work..." ? lastMessage : "What's up?", false);
+                    }
+                });
+            }
+        }
+
+        if (assistantContainer) {
+            assistantContainer.style.display = 'flex';
+            assistantIsVisible = true;
+            if (!localStorage.getItem('k8os_assistant_has_greeted')) {
+                 updateAssistantSpeech("Sparky online! Let's create!", false);
+                 localStorage.setItem('k8os_assistant_has_greeted', 'true');
+            }
+            startAssistantSummaryTimer();
+        }
+    }
+
+    function hideAssistant() {
+        if (assistantContainer) {
+            assistantContainer.style.display = 'none';
+        }
+        assistantIsVisible = false;
+        if (assistantSpeechBubble) assistantSpeechBubble.classList.remove('visible');
+        if (assistantSparkyMouth) assistantSparkyMouth.classList.remove('talking');
+        clearTimeout(assistantSpeechTimeout);
+        stopAssistantSummaryTimer();
+    }
+
+    function updateAssistantSpeech(message, autoHide = true, isTemporaryThinkingMessage = false) {
+        if (!assistantIsVisible || !assistantSpeechBubble || !assistantSpeechText) return;
+
+        assistantSpeechText.textContent = message;
+        assistantSpeechBubble.classList.add('visible');
+
+        if (assistantSparkyMouth) {
+            if (!isTemporaryThinkingMessage && message.length > 0) { 
+                assistantSparkyMouth.classList.add('talking');
+            } else {
+                assistantSparkyMouth.classList.remove('talking');
+            }
+        }
+        
+        clearTimeout(assistantSpeechTimeout);
+        if (autoHide && !isTemporaryThinkingMessage) { 
+            assistantSpeechTimeout = setTimeout(() => {
+                assistantSpeechBubble.classList.remove('visible');
+                if (assistantSparkyMouth) assistantSparkyMouth.classList.remove('talking');
+            }, 7000); 
+        } else if (isTemporaryThinkingMessage) {
+            // "Thinking" message will be replaced by the actual comment or summary
+        }
+    }
+    
+    async function generateAssistantComment(userInput, toolName) {
+        if (!assistantIsVisible) return; // Don't generate if not visible
+        assistantIsThinking = true;
+        updateAssistantSpeech("Hmm...", true, true); 
+
+        const MAX_COMMENT_TOKENS_GEMINI = 30;
+        const MAX_COMMENT_TOKENS_GROQ = 20;
+        const MAX_COMMENT_TOKENS_HF = 20;
+
+        const promptTemplate = `You are Sparky, a friendly, witty, and encouraging k8OS assistant. The user typed the following into the "${toolName}" tool: "${userInput.substring(0, 80)}${userInput.length > 80 ? '...' : ''}".
+Respond with a very short, positive, and slightly playful comment (max 1-2 brief sentences, around 10-15 words). Be encouraging or curious. Do NOT repeat the user's input.
+Examples: "Ooh, ${toolName} time! This looks interesting!", "Let's see what awesome thing you make!", "That's a cool idea for ${toolName}!", "Sparky sense tingling... good stuff!", "Nice one! Go for it!"
+Output ONLY the comment itself, without any extra formatting or quotation marks.`;
+
+        let comment = "Cool!"; 
+        try {
+            const keyAvailable = (selectedApiProvider === 'gemini' && window.GLOBAL_GEMINI_API_KEY) ||
+                                 (selectedApiProvider === 'groq' && window.GLOBAL_GROQ_API_KEY) ||
+                                 (selectedApiProvider === 'huggingface' && window.GLOBAL_HF_TOKEN);
+            if (!keyAvailable) {
+                assistantIsThinking = false;
+                return "Let's get that API key set up first, friend!";
+            }
+
+            if (selectedApiProvider === 'gemini') {
+                if (!assistant_gemini_model) {
+                    const genAI = new GoogleGenerativeAI(window.GLOBAL_GEMINI_API_KEY);
+                    assistant_gemini_model = genAI.getGenerativeModel({
+                        model: getCurrentGeminiModel(), 
+                        safetySettings: [
+                            { category: HarmCategory.HARM_CATEGORY_HARASSMENT, threshold: HarmBlockThreshold.BLOCK_MEDIUM_AND_ABOVE },
+                            { category: HarmCategory.HARM_CATEGORY_HATE_SPEECH, threshold: HarmBlockThreshold.BLOCK_MEDIUM_AND_ABOVE },
+                            { category: HarmCategory.HARM_CATEGORY_SEXUALLY_EXPLICIT, threshold: HarmBlockThreshold.BLOCK_MEDIUM_AND_ABOVE },
+                            { category: HarmCategory.HARM_CATEGORY_DANGEROUS_CONTENT, threshold: HarmBlockThreshold.BLOCK_MEDIUM_AND_ABOVE },
+                        ],
+                        generationConfig: { temperature: 0.8, maxOutputTokens: MAX_COMMENT_TOKENS_GEMINI }
+                    });
+                }
+                const result = await assistant_gemini_model.generateContent(promptTemplate);
+                comment = result.response.text().trim();
+            } else if (selectedApiProvider === 'groq') {
+                const messages = [{ role: "user", content: promptTemplate }];
+                comment = await callGroqApi(messages, 0.8, MAX_COMMENT_TOKENS_GROQ);
+            } else if (selectedApiProvider === 'huggingface') {
+                const hfPrompt = `User input for ${toolName}: "${userInput.substring(0, 50)}...". Short, friendly, witty comment (max 15 words):`; // Shorter for HF due to input constraints sometimes
+                comment = await callHuggingFaceApi(hfPrompt, { max_new_tokens: MAX_COMMENT_TOKENS_HF, temperature: 0.8 });
+            }
+        } catch (error) {
+            console.warn(`Assistant comment generation error with ${selectedApiProvider}:`, error);
+            comment = "Hmm, that's a new one! Let's try it!"; 
+        } finally {
+            assistantIsThinking = false;
+        }
+        comment = comment.replace(/^["']|["']$/g, '').replace(/\n/g, ' ').trim(); 
+        return comment || "Let's go!"; 
+    }
+
+    const toolInputConfigs = [
+        { id: 'svg_promptInput', name: 'SVG Creator', buttonId: 'svg_generateButton' },
+        { id: 'gifCreator_promptInput', name: 'GIF Creator', buttonId: 'gifCreator_generateButton' },
+        { id: 'gifCreator_animationPromptInput', name: 'GIF Animator', buttonId: 'gifCreator_generateButton' }, // Shares button
+        { id: 'pythonizer_goalInput', name: 'Pythonizer', buttonId: 'pythonizer_startTaskButton' },
+        { id: 'gameGen_prompt', name: 'Game Generator', buttonId: 'gameGen_generateButton' },
+        { id: 'musicStudio_promptInput', name: 'Music Studio', buttonId: 'musicStudio_generateButton' },
+        { id: 'pythonPad_codeTextarea', name: 'PyPad', buttonId: 'pythonPad_runButton' }
+    ];
+
+    toolInputConfigs.forEach(config => {
+        const inputEl = document.getElementById(config.id);
+        const buttonEl = document.getElementById(config.buttonId);
+
+        if (inputEl && buttonEl) {
+            // Listen to button click for logging and immediate comment
+            buttonEl.addEventListener('click', async () => {
+                if (!assistantIsVisible || assistantIsThinking || !inputEl.value.trim()) return;
+                const userInput = inputEl.value.trim();
+                
+                // Log activity
+                logK8osActivity(config.name, userInput);
+
+                // Generate comment only if input is substantial enough
+                if (userInput.length < 5 && config.id !== 'pythonPad_codeTextarea') return; // Shorter threshold for PyPad
+                if (userInput.length < 10 && config.id === 'pythonPad_codeTextarea') return;
+
+
+                try {
+                    const comment = await generateAssistantComment(userInput, config.name);
+                    updateAssistantSpeech(comment, true, false); // autoHide true, not temp
+                } catch (error) { 
+                    updateAssistantSpeech("My circuits are buzzing! Let's try that!", true, false);
+                }
+            });
+        }
+    });
+    // --- End Assistant (Sparky) Functions ---
+
 
     function enableAppButtons() {
         let keyAvailable = false;
@@ -1320,8 +1747,10 @@
                     try {
                         const result = await pythonPad_ai_model.generateContent(execPrompt);
                         if (outputEl) outputEl.textContent = result.response.text();
+                        logK8osActivity("Pythonizer", `Ran code block (Gemini): ${code.substring(0,50)}...`);
                     } catch (err) {
                         if (outputEl) outputEl.textContent = `Execution Error (Gemini): ${err.message}`;
+                         logK8osActivity("Pythonizer", `Error running code block (Gemini)`);
                     }
                 });
             }
@@ -1671,7 +2100,7 @@
                  if (newModel) {
                      localStorage.setItem('k8os_globalGeminiAiModel', newModel);
                      if (systemSettings_status) systemSettings_status.textContent = `Gemini Model set: ${newModel}. Re-init AI apps...`;
-                     initAllAiApps();
+                     initAllAiApps(); 
                  } else {
                      if (systemSettings_status) systemSettings_status.textContent = "Gemini Model name cannot be empty.";
                  }
@@ -1702,10 +2131,10 @@
         if (systemSettings_ai_saveHfModelButton) {
              systemSettings_ai_saveHfModelButton.addEventListener('click', () => {
                  let newModelId = systemSettings_ai_hfModelIdInput.value.trim();
-                 if (newModelId.endsWith('.')) { // Trim trailing dot before saving
+                 if (newModelId.endsWith('.')) { 
                     newModelId = newModelId.substring(0, newModelId.length - 1);
                     console.warn("Trimmed trailing period from HF Model ID before saving. New ID:", newModelId);
-                    systemSettings_ai_hfModelIdInput.value = newModelId; // Update input field
+                    systemSettings_ai_hfModelIdInput.value = newModelId; 
                  }
                  if (newModelId) {
                      localStorage.setItem('k8os_globalHfModelId', newModelId);
@@ -2051,6 +2480,7 @@
                 musicStudio_activeSources = [];
                 const soundFunction = new Function('audioContext', 'activeSources', code);
                 soundFunction(musicStudio_currentAudioContext, musicStudio_activeSources);
+                logK8osActivity("Music Studio", `Played music: ${musicStudio_promptInput.value.trim().substring(0,50)}...`);
 
                 if(musicStudio_errorDisplay) musicStudio_errorDisplay.textContent = "";
                 musicStudio_stopButton.disabled = musicStudio_activeSources.length === 0;
@@ -2107,6 +2537,7 @@
         if (gameGen_lastHtmlCode && gamePlayerWindow_iframe) {
             const htmlWithLogger = prepareGameHTMLWithLogger(gameGen_lastHtmlCode);
             gamePlayerWindow_iframe.srcdoc = htmlWithLogger;
+             logK8osActivity("Game Player", `Refreshed game: ${gameGen_lastUserIdea.substring(0,50)}...`);
         } else {
             alert("No game loaded to refresh.");
         }
@@ -2117,7 +2548,7 @@
         if(webBrowser_addressBar) webBrowser_addressBar.addEventListener('keypress', (e) => { if (e.key === 'Enter') navigateToUrlInBrowser(webBrowser_addressBar.value.trim()); });
         if(webBrowser_backButton) webBrowser_backButton.addEventListener('click', () => webBrowserNavigate(-1));
         if(webBrowser_forwardButton) webBrowser_forwardButton.addEventListener('click', () => webBrowserNavigate(1));
-        if(webBrowser_refreshButton) webBrowser_refreshButton.addEventListener('click', () => { if (webBrowser_historyIndex > -1 && webBrowser_history[webBrowser_historyIndex]) { loadUrlInBrowser(webBrowser_history[webBrowser_historyIndex], false); }});
+        if(webBrowser_refreshButton) webBrowser_refreshButton.addEventListener('click', () => { if (webBrowser_historyIndex > -1 && webBrowser_history[webBrowser_historyIndex]) { loadUrlInBrowser(webBrowser_history[webBrowser_historyIndex], false);  logK8osActivity("Web Browser", `Refreshed: ${webBrowser_history[webBrowser_historyIndex].substring(0,50)}...`); }});
         updateWebBrowserNavButtons();
     }
     async function loadUrlInBrowser(url, addToHistory = true) {
@@ -2158,6 +2589,7 @@
                 webBrowser_history.push(url);
                 webBrowser_historyIndex = webBrowser_history.length - 1;
             }
+             logK8osActivity("Web Browser", `Navigated to: ${url.substring(0,50)}...`);
         } catch (error) {
             console.error("Error loading URL in browser app:", error);
             webBrowser_iframeContent.srcdoc = `<p style="color:red;padding:10px;">Error loading page: ${url}<br>${error.message}</p>`;
@@ -2171,6 +2603,7 @@
         if (newIndex >= 0 && newIndex < webBrowser_history.length) {
             webBrowser_historyIndex = newIndex;
             loadUrlInBrowser(webBrowser_history[webBrowser_historyIndex], false);
+            logK8osActivity("Web Browser", `Used ${direction > 0 ? 'Forward' : 'Back'} to: ${webBrowser_history[webBrowser_historyIndex].substring(0,50)}...`);
         }
     }
     function updateWebBrowserNavButtons() {
@@ -2180,7 +2613,7 @@
 
     if(startButton) startButton.addEventListener('click', (e) => { e.stopPropagation(); startMenu.style.display = startMenu.style.display === 'flex' ? 'none' : 'flex'; });
     if(startMenuShutdown) startMenuShutdown.addEventListener('click', () => { startMenu.style.display = 'none'; if (confirm("Are you sure you want to shut down k8OS?")) { document.body.innerHTML = '<div style="position:fixed;top:0;left:0;width:100%;height:100%;background:black;color:white;display:flex;justify-content:center;align-items:center;font-size:24px;">k8OS is shutting down...</div>'; setTimeout(() => { window.close(); }, 2000); } });
-    if(startMenuReboot) startMenuReboot.addEventListener('click', () => { startMenu.style.display = 'none'; if (confirm("Are you sure you want to reboot k8OS?")) { rebootOverlay.style.display = 'flex'; rebootProgressText.textContent = "Closing applications..."; document.querySelectorAll('.window').forEach(w => closeWindow(w)); const rebootSteps = [ { delay: 700, text: "System integrity check..." }, { delay: 1200, text: "Loading kernel modules..." }, { delay: 1000, text: "Initializing desktop..." }, { delay: 800, text: "Mounting file systems..." }, { delay: 600, text: "Starting services..." }, { delay: 500, text: "Finalizing..." }, { delay: 400, text: "System ready." } ]; let currentStepIndex = 0; function processNextStep() { if (currentStepIndex < rebootSteps.length) { rebootProgressText.textContent = rebootSteps[currentStepIndex].text; setTimeout(processNextStep, rebootSteps[currentStepIndex].delay); currentStepIndex++; } else { rebootOverlay.style.display = 'none'; document.querySelectorAll('.desktop-icon.selected').forEach(i => i.classList.remove('selected')); loadApiKey(); openWindow('apiKeySettingsWindow'); } } setTimeout(processNextStep, 500); } });
+    if(startMenuReboot) startMenuReboot.addEventListener('click', () => { startMenu.style.display = 'none'; if (confirm("Are you sure you want to reboot k8OS?")) { rebootOverlay.style.display = 'flex'; rebootProgressText.textContent = "Closing applications..."; document.querySelectorAll('.window').forEach(w => closeWindow(w)); const rebootSteps = [ { delay: 700, text: "System integrity check..." }, { delay: 1200, text: "Loading kernel modules..." }, { delay: 1000, text: "Initializing desktop..." }, { delay: 800, text: "Mounting file systems..." }, { delay: 600, text: "Starting services..." }, { delay: 500, text: "Finalizing..." }, { delay: 400, text: "System ready." } ]; let currentStepIndex = 0; function processNextStep() { if (currentStepIndex < rebootSteps.length) { rebootProgressText.textContent = rebootSteps[currentStepIndex].text; setTimeout(processNextStep, rebootSteps[currentStepIndex].delay); currentStepIndex++; } else { rebootOverlay.style.display = 'none'; document.querySelectorAll('.desktop-icon.selected').forEach(i => i.classList.remove('selected')); k8osActivityLog = []; /* Clear activity log on reboot */ loadApiKey(); openWindow('apiKeySettingsWindow'); } } setTimeout(processNextStep, 500); } });
 
     function initAllAiApps(){
         initSvgGeneratorApp();
@@ -2189,6 +2622,14 @@
         initMusicStudioApp();
         initPythonPadApp();
         initGifCreatorApp();
+        
+        // Clear or re-initialize assistant's specific Gemini model if provider changes
+        if (selectedApiProvider !== 'gemini' || !window.GLOBAL_GEMINI_API_KEY) {
+            assistant_gemini_model = null;
+        } else if (window.GLOBAL_GEMINI_API_KEY && !assistant_gemini_model) {
+            // If Gemini is selected and key exists, but model isn't set up yet (e.g. after key save)
+            // It will be lazy-loaded by generateAssistantComment or startAssistantSummaryTimer
+        }
     }
 
     loadApiKey();
