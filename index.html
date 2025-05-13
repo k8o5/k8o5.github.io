@@ -34,7 +34,11 @@
         }
         body {
             font-family: var(--win95-font);
-            background-color: var(--win95-bg);
+            background-color: var(--win95-bg); /* Fallback color */
+            background-image: none; /* Default no image */
+            background-size: cover; /* Default size */
+            background-repeat: no-repeat; /* Default repeat */
+            background-position: center center; /* Default position */
             margin: 0;
             padding: 0;
             overflow: hidden;
@@ -580,7 +584,7 @@
             <div class="window-content"><iframe id="gamePlayerWindow_iframe" sandbox="allow-scripts allow-same-origin allow-popups"></iframe></div>
         </div>
 
-        <div id="systemSettingsWindow" class="window" style="width: 550px; height: 620px; top: 60px; left: 200px;">
+        <div id="systemSettingsWindow" class="window" style="width: 550px; height: 720px; top: 60px; left: 200px;"> <!-- Increased height for new options -->
             <div class="title-bar"><span class="title-bar-text">⚙️ System Settings</span><div class="title-bar-controls"><button class="close-button" title="Close">r</button></div></div>
             <div class="window-content">
                 <div class="settings-tabs">
@@ -596,6 +600,31 @@
                     <label>Preset Colors:</label>
                     <div id="systemSettings_appearance_colorOptions"></div>
                     <button id="systemSettings_appearance_resetButton">Reset to Default Color</button>
+
+                    <h3 style="margin-top: 15px;">Image Background (URL)</h3>
+                    <p style="font-size:10px; margin-bottom:5px; color:var(--win95-dark-gray);"><em>Note: Direct access to your computer's wallpaper is not possible for security reasons. You can provide a URL to an image instead.</em></p>
+                    <label for="systemSettings_appearance_bgImageUrlInput">Image URL:</label>
+                    <input type="text" id="systemSettings_appearance_bgImageUrlInput" placeholder="https://example.com/image.png">
+
+                    <label for="systemSettings_appearance_bgSizeSelect">Background Size:</label>
+                    <select id="systemSettings_appearance_bgSizeSelect">
+                        <option value="cover">Cover</option>
+                        <option value="contain">Contain</option>
+                        <option value="auto">Auto (Original Size)</option>
+                        <option value="100% 100%">Stretch to Fit</option>
+                    </select>
+
+                    <label for="systemSettings_appearance_bgRepeatSelect">Background Repeat:</label>
+                    <select id="systemSettings_appearance_bgRepeatSelect">
+                        <option value="no-repeat">No Repeat</option>
+                        <option value="repeat">Repeat</option>
+                        <option value="repeat-x">Repeat Horizontally</option>
+                        <option value="repeat-y">Repeat Vertically</option>
+                    </select>
+                    <button id="systemSettings_appearance_applyBgImageButton" style="margin-top: 5px;">Apply Image URL</button>
+                    <button id="systemSettings_appearance_clearBgImageButton" style="margin-top: 5px;">Clear Image Background</button>
+
+
                     <h3 style="margin-top: 15px;">Icon Size</h3>
                     <label for="systemSettings_iconSizeSlider">Icon Scale: <span id="systemSettings_iconSizeSliderValue">1.0x</span></label>
                     <input type="range" id="systemSettings_iconSizeSlider" min="0.5" max="1.5" step="0.1" value="1.0">
@@ -845,6 +874,11 @@
     const systemSettings_appearance_bgColorPicker = document.getElementById('systemSettings_appearance_bgColorPicker');
     const systemSettings_appearance_colorOptions = document.getElementById('systemSettings_appearance_colorOptions');
     const systemSettings_appearance_resetButton = document.getElementById('systemSettings_appearance_resetButton');
+    const systemSettings_appearance_bgImageUrlInput = document.getElementById('systemSettings_appearance_bgImageUrlInput');
+    const systemSettings_appearance_bgSizeSelect = document.getElementById('systemSettings_appearance_bgSizeSelect');
+    const systemSettings_appearance_bgRepeatSelect = document.getElementById('systemSettings_appearance_bgRepeatSelect');
+    const systemSettings_appearance_applyBgImageButton = document.getElementById('systemSettings_appearance_applyBgImageButton');
+    const systemSettings_appearance_clearBgImageButton = document.getElementById('systemSettings_appearance_clearBgImageButton');
     const systemSettings_iconSizeSlider = document.getElementById('systemSettings_iconSizeSlider');
     const systemSettings_iconSizeSliderValue = document.getElementById('systemSettings_iconSizeSliderValue');
     const systemSettings_iconSizeResetButton = document.getElementById('systemSettings_iconSizeResetButton');
@@ -932,12 +966,23 @@
         window.GLOBAL_GROQ_API_KEY = localStorage.getItem('GlobalGroqApiKey');
         window.GLOBAL_HF_TOKEN = localStorage.getItem('GlobalHfToken');
 
+        // Apply initial background color & image
+        const initialBgColor = localStorage.getItem('desktopBgColor') || DEFAULT_BG_COLOR;
+        document.body.style.backgroundColor = initialBgColor;
+        const initialBgImageUrl = localStorage.getItem('desktopBgImageUrl');
+        const initialBgImageSize = localStorage.getItem('desktopBgImageSize') || 'cover';
+        const initialBgImageRepeat = localStorage.getItem('desktopBgImageRepeat') || 'no-repeat';
+        if (initialBgImageUrl) {
+            applyCustomImageBackground(initialBgImageUrl, initialBgImageSize, initialBgImageRepeat, false); // Don't update status here
+        }
+
+
         if (apiProviderSelect) apiProviderSelect.value = selectedApiProvider;
         updateApiKeyUI();
         enableAppButtons();
         initAllAiApps();
         initFileExplorerApp();
-        initSystemSettingsApp();
+        initSystemSettingsApp(); // This will also populate settings fields with stored values
         initWebBrowserApp();
         
         if (localStorage.getItem('k8os_assistant_enabled') === 'true' &&
@@ -2062,19 +2107,104 @@ Output ONLY the comment itself, without any extra formatting or quotation marks.
             if(pythonPad_runButton) pythonPad_runButton.disabled = true;
         }
     }
+    
+    function applyCustomImageBackground(url, size, repeat, updateStatus = true) {
+        if (url) {
+            document.body.style.backgroundImage = `url("${CSS.escape(url)}")`; // Use CSS.escape for safety
+            document.body.style.backgroundSize = size;
+            document.body.style.backgroundRepeat = repeat;
+            document.body.style.backgroundColor = 'transparent'; // Ensure color doesn't show under image
+            localStorage.setItem('desktopBgImageUrl', url);
+            localStorage.setItem('desktopBgImageSize', size);
+            localStorage.setItem('desktopBgImageRepeat', repeat);
+            if (systemSettings_status && updateStatus) systemSettings_status.textContent = `Image background applied.`;
+        } else {
+            clearCustomImageBackground(false, updateStatus); 
+            if (systemSettings_status && updateStatus) systemSettings_status.textContent = `Image URL is empty. Image cleared.`;
+        }
+    }
+
+    function clearCustomImageBackground(restoreColor = true, updateStatus = true) {
+        document.body.style.backgroundImage = 'none';
+        document.body.style.backgroundSize = 'auto'; // Or restore to a default like 'cover'
+        document.body.style.backgroundRepeat = 'repeat'; // Or restore to 'no-repeat'
+        localStorage.removeItem('desktopBgImageUrl');
+        localStorage.removeItem('desktopBgImageSize');
+        localStorage.removeItem('desktopBgImageRepeat');
+        if (restoreColor) {
+            const savedBgColor = localStorage.getItem('desktopBgColor') || DEFAULT_BG_COLOR;
+            document.body.style.backgroundColor = savedBgColor;
+        }
+        if (systemSettings_status && updateStatus) systemSettings_status.textContent = `Image background cleared.`;
+        if (systemSettings_appearance_bgImageUrlInput) systemSettings_appearance_bgImageUrlInput.value = '';
+        // Optionally reset selects to default
+        // if (systemSettings_appearance_bgSizeSelect) systemSettings_appearance_bgSizeSelect.value = 'cover';
+        // if (systemSettings_appearance_bgRepeatSelect) systemSettings_appearance_bgRepeatSelect.value = 'no-repeat';
+    }
 
     function applyIconScale(scaleFactor) { document.documentElement.style.setProperty('--desktop-icon-scale-factor', scaleFactor); if (systemSettings_iconSizeSliderValue) systemSettings_iconSizeSliderValue.textContent = `${Number(scaleFactor).toFixed(1)}x`; }
+    
     function initSystemSettingsApp() {
         if (systemSettings_about_version) systemSettings_about_version.textContent = `Version: ${K8OS_VERSION}`;
-        const savedBgColor = localStorage.getItem('desktopBgColor') || DEFAULT_BG_COLOR; document.body.style.backgroundColor = savedBgColor;
-        const savedIconScale = parseFloat(localStorage.getItem('desktopIconScaleFactor') || '1.0'); applyIconScale(savedIconScale); if(systemSettings_iconSizeSlider) systemSettings_iconSizeSlider.value = savedIconScale;
+        
+        // Color background is applied by loadApiKey initially.
+        // Here we just populate the picker and options.
+        const savedBgColor = localStorage.getItem('desktopBgColor') || DEFAULT_BG_COLOR;
         if (systemSettings_appearance_bgColorPicker) systemSettings_appearance_bgColorPicker.value = savedBgColor;
-        if (systemSettings_appearance_colorOptions) { systemSettings_appearance_colorOptions.innerHTML = ''; PRESET_BG_COLORS.forEach(color => { const button = document.createElement('button'); button.style.backgroundColor = color; button.title = color; button.addEventListener('click', () => { setDesktopBackground(color); if (systemSettings_appearance_bgColorPicker) systemSettings_appearance_bgColorPicker.value = color; }); systemSettings_appearance_colorOptions.appendChild(button); }); }
+
+        if (systemSettings_appearance_colorOptions) { 
+            systemSettings_appearance_colorOptions.innerHTML = ''; 
+            PRESET_BG_COLORS.forEach(color => { 
+                const button = document.createElement('button'); 
+                button.style.backgroundColor = color; 
+                button.title = color; 
+                button.addEventListener('click', () => { 
+                    setDesktopBackground(color); 
+                    if (systemSettings_appearance_bgColorPicker) systemSettings_appearance_bgColorPicker.value = color; 
+                }); 
+                systemSettings_appearance_colorOptions.appendChild(button); 
+            }); 
+        }
         if (systemSettings_appearance_bgColorPicker) { systemSettings_appearance_bgColorPicker.addEventListener('input', (e) => { setDesktopBackground(e.target.value); });}
-        if (systemSettings_appearance_resetButton) { systemSettings_appearance_resetButton.addEventListener('click', () => { setDesktopBackground(DEFAULT_BG_COLOR); if (systemSettings_appearance_bgColorPicker) systemSettings_appearance_bgColorPicker.value = DEFAULT_BG_COLOR; if (systemSettings_status) systemSettings_status.textContent = "Background reset."; }); }
+        if (systemSettings_appearance_resetButton) { systemSettings_appearance_resetButton.addEventListener('click', () => { setDesktopBackground(DEFAULT_BG_COLOR); if (systemSettings_appearance_bgColorPicker) systemSettings_appearance_bgColorPicker.value = DEFAULT_BG_COLOR; if (systemSettings_status) systemSettings_status.textContent = "Background color reset."; }); }
+
+        // Image Background - populate fields if values are stored
+        const savedBgImageUrl = localStorage.getItem('desktopBgImageUrl');
+        const savedBgImageSize = localStorage.getItem('desktopBgImageSize') || 'cover';
+        const savedBgImageRepeat = localStorage.getItem('desktopBgImageRepeat') || 'no-repeat';
+
+        if (systemSettings_appearance_bgImageUrlInput) systemSettings_appearance_bgImageUrlInput.value = savedBgImageUrl || '';
+        if (systemSettings_appearance_bgSizeSelect) systemSettings_appearance_bgSizeSelect.value = savedBgImageSize;
+        if (systemSettings_appearance_bgRepeatSelect) systemSettings_appearance_bgRepeatSelect.value = savedBgImageRepeat;
+
+        if (systemSettings_appearance_applyBgImageButton) {
+            systemSettings_appearance_applyBgImageButton.addEventListener('click', () => {
+                const imageUrl = systemSettings_appearance_bgImageUrlInput.value.trim();
+                const bgSize = systemSettings_appearance_bgSizeSelect.value;
+                const bgRepeat = systemSettings_appearance_bgRepeatSelect.value;
+                if (imageUrl) {
+                    applyCustomImageBackground(imageUrl, bgSize, bgRepeat);
+                } else {
+                    if (systemSettings_status) systemSettings_status.textContent = "Please enter an image URL.";
+                }
+            });
+        }
+
+        if (systemSettings_appearance_clearBgImageButton) {
+            systemSettings_appearance_clearBgImageButton.addEventListener('click', () => {
+                clearCustomImageBackground(true); // true to restore color
+            });
+        }
+
+
+        // Icon Scale
+        const savedIconScale = parseFloat(localStorage.getItem('desktopIconScaleFactor') || '1.0'); 
+        applyIconScale(savedIconScale); 
+        if(systemSettings_iconSizeSlider) systemSettings_iconSizeSlider.value = savedIconScale;
         if (systemSettings_iconSizeSlider) { systemSettings_iconSizeSlider.addEventListener('input', (e) => { const newScale = e.target.value; applyIconScale(newScale); localStorage.setItem('desktopIconScaleFactor', newScale); if(systemSettings_status) systemSettings_status.textContent = `Icon scale set to ${newScale}x.`; }); }
         if (systemSettings_iconSizeResetButton) { systemSettings_iconSizeResetButton.addEventListener('click', () => { applyIconScale(1.0); localStorage.setItem('desktopIconScaleFactor', '1.0'); if(systemSettings_iconSizeSlider) systemSettings_iconSizeSlider.value = 1.0; if(systemSettings_status) systemSettings_status.textContent = "Icon scale reset to 1.0x."; }); }
 
+        // AI Config
         if (systemSettings_ai_modelNameInput) systemSettings_ai_modelNameInput.value = getCurrentGeminiModel();
         if (systemSettings_ai_groqModelInput) systemSettings_ai_groqModelInput.value = getCurrentGroqModel();
         if (systemSettings_ai_groqMaxTokensInput) systemSettings_ai_groqMaxTokensInput.value = getCurrentGroqMaxTokens();
@@ -2091,8 +2221,7 @@ Output ONLY the comment itself, without any extra formatting or quotation marks.
         if (systemSettings_ai_gifCreatorAnimateInstruction) systemSettings_ai_gifCreatorAnimateInstruction.value = getAppInstruction('gifCreatorAnimate', DEFAULT_GIFCREATOR_ANIMATE_EXISTING_SVG_INSTRUCTION);
         if (systemSettings_ai_pypadAnalysisInstruction) systemSettings_ai_pypadAnalysisInstruction.value = getAppInstruction('pypadAnalysis', DEFAULT_PYTHONPAD_ANALYSIS_INSTRUCTION_GROQ_HF);
 
-        updateApiKeyUI();
-
+        updateApiKeyUI(); // This will show/hide provider specific model settings
 
         if (systemSettings_ai_saveModelButton) {
              systemSettings_ai_saveModelButton.addEventListener('click', () => {
@@ -2157,7 +2286,12 @@ Output ONLY the comment itself, without any extra formatting or quotation marks.
         const tabs = document.querySelectorAll('#systemSettingsWindow .settings-tab'); const tabContents = document.querySelectorAll('#systemSettingsWindow .settings-tab-content');
         tabs.forEach(tab => { tab.addEventListener('click', () => { tabs.forEach(t => t.classList.remove('active')); tab.classList.add('active'); const targetContentId = "settingsContent_" + tab.dataset.tab; tabContents.forEach(content => { content.classList.toggle('active', content.id === targetContentId); }); }); });
     }
-    function setDesktopBackground(color) { document.body.style.backgroundColor = color; localStorage.setItem('desktopBgColor', color); if (systemSettings_status) systemSettings_status.textContent = `Background set to ${color}.`; }
+    function setDesktopBackground(color) {
+        clearCustomImageBackground(false, false); // Clear image first, don't immediately restore color or update status
+        document.body.style.backgroundColor = color;
+        localStorage.setItem('desktopBgColor', color);
+        if (systemSettings_status) systemSettings_status.textContent = `Background color set to ${color}.`;
+    }
     function downloadFile(content, filename, contentType) { const blob = new Blob([content], { type: contentType }); const url = URL.createObjectURL(blob); const a = document.createElement('a'); a.href = url; a.download = filename; document.body.appendChild(a); a.click(); document.body.removeChild(a); URL.revokeObjectURL(url); }
 
     if (svg_generateButton) svg_generateButton.addEventListener('click', svg_handleGenerateSvg);
