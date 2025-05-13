@@ -99,11 +99,20 @@
             box-shadow: 2px 2px 5px rgba(0,0,0,0.5);
             min-width: 280px;
             min-height: 180px;
-            display: none;
+            display: none; /* Initially hidden, shown by JS */
             flex-direction: column;
             resize: both;
             overflow: hidden;
         }
+        /* Web Browser specific styling for its dynamic parts */
+        .webBrowserWindow .window-content { padding: 0; overflow: hidden; }
+        .webBrowserWindow_navControls { display:flex; align-items: center; padding: 5px; border-bottom: 1px solid var(--win95-dark-gray); background-color: var(--win95-button-face); flex-shrink: 0;}
+        .webBrowserWindow_navControls button { font-family: "Marlett", "Webdings"; font-size: 14px; width: 24px; height: 22px; line-height: 20px; margin-right: 3px;}
+        .webBrowserWindow_addressBar { flex-grow: 1; margin-left:5px; margin-right: 5px; height: 22px; padding: 2px 4px;}
+        .webBrowserWindow_iframeContent { width: 100%; height: 100%; flex-grow: 1; border: none; background-color: var(--win95-white); }
+        .webBrowserWindow_status { /* Already covered by .window-content .status-bar if added there */ }
+
+
         .window.fullscreen {
             top: 0 !important;
             left: 0 !important;
@@ -263,11 +272,10 @@
 
         #gameGen_planDisplay { font-family: "Courier New", Courier, monospace; font-size: 11px; min-height: 60px; background-color: var(--win95-white); border: 1px inset var(--win95-dark-gray); padding: 5px; white-space: pre-wrap; margin-top: 5px; overflow-y: auto;}
         #gameGen_assetStatus { font-size: 11px; margin-top: 5px; }
-        #gamePlayerWindow_iframe, #webBrowser_iframeContent { width: 100%; height: 100%; flex-grow: 1; border: none; background-color: var(--win95-white); }
-        #gamePlayerWindow .window-content, #webBrowserWindow .window-content { padding: 0; overflow: hidden; }
-        #webBrowser_navControls { display:flex; align-items: center; padding: 5px; border-bottom: 1px solid var(--win95-dark-gray); background-color: var(--win95-button-face); flex-shrink: 0;}
-        #webBrowser_navControls button { font-family: "Marlett", "Webdings"; font-size: 14px; width: 24px; height: 22px; line-height: 20px; margin-right: 3px;}
-        #webBrowser_addressBar { flex-grow: 1; margin-left:5px; margin-right: 5px; height: 22px; padding: 2px 4px;}
+        #gamePlayerWindow_iframe { width: 100%; height: 100%; flex-grow: 1; border: none; background-color: var(--win95-white); }
+        #gamePlayerWindow .window-content { padding: 0; overflow: hidden; }
+        /* Removed webBrowser_navControls, webBrowser_addressBar, webBrowser_iframeContent as they are now class-based for dynamic windows */
+
 
         #gameGen_loadingMessage, #gameGen_errorMessage { padding: 8px; margin-top: 8px; border: 1px solid var(--win95-dark-gray); text-align: center; }
         #gameGen_errorMessage { background-color: #FFCCCC; color: red; }
@@ -401,7 +409,7 @@
     <div class="desktop" id="desktop">
         <div class="desktop-icon" data-app-id="apiKeySettingsWindow"><div class="icon-placeholder">🔑</div><span>API Key</span></div>
         <div class="desktop-icon" data-app-id="fileExplorerWindow"><div class="icon-placeholder">📁</div><span>Buh</span></div>
-        <div class="desktop-icon" data-app-id="webBrowserWindow"><div class="icon-placeholder">🌐</div><span>Browser</span></div>
+        <div class="desktop-icon" id="desktopIconBrowser"><div class="icon-placeholder">🌐</div><span>Browser</span></div> <!-- Changed data-app-id to id for specific handling -->
         <div class="desktop-icon" data-app-id="svgGeneratorWindow"><div class="icon-placeholder">🎨</div><span>SVG Creator</span></div>
         <div class="desktop-icon" data-app-id="gifCreatorWindow"><div class="icon-placeholder">🎞️</div><span>GIF Creator</span></div>
         <div class="desktop-icon" data-app-id="pythonizerWindow"><div class="icon-placeholder">🐍</div><span>Pythonizer</span></div>
@@ -442,20 +450,7 @@
             </div>
         </div>
 
-        <div id="webBrowserWindow" class="window" style="width: 800px; height: 600px; top: 40px; left: 400px;">
-            <div class="title-bar"><span class="title-bar-text">🌐 Web Browser</span><div class="title-bar-controls"><button class="close-button" title="Close">r</button></div></div>
-            <div id="webBrowser_navControls">
-                <button id="webBrowser_backButton" title="Back" disabled>3</button>
-                <button id="webBrowser_forwardButton" title="Forward" disabled>4</button>
-                <button id="webBrowser_refreshButton" title="Refresh">Q</button>
-                <input type="text" id="webBrowser_addressBar" placeholder="Enter path or URL (e.g., buh/file.html)">
-                <button id="webBrowser_goButton" style="width:auto;padding-left:5px;padding-right:5px;">Go</button>
-            </div>
-            <div class="window-content">
-                <iframe id="webBrowser_iframeContent" sandbox="allow-scripts allow-forms allow-popups allow-same-origin"></iframe>
-            </div>
-             <div id="webBrowser_status" class="status-bar">Status: Idle</div>
-        </div>
+        <!-- Web Browser Window HTML is now dynamically generated -->
 
 
         <div id="svgGeneratorWindow" class="window" style="width: 500px; height: 450px; top: 50px; left: 50px;">
@@ -857,13 +852,8 @@
     const fe_statusElement = document.getElementById('fe_status');
     const fe_folderNameDisplayElement = document.getElementById('fe_folderNameDisplay');
     const fe_searchInput = document.getElementById('fe_fileSearchInput');
-    const webBrowser_backButton = document.getElementById('webBrowser_backButton');
-    const webBrowser_forwardButton = document.getElementById('webBrowser_forwardButton');
-    const webBrowser_refreshButton = document.getElementById('webBrowser_refreshButton');
-    const webBrowser_addressBar = document.getElementById('webBrowser_addressBar');
-    const webBrowser_goButton = document.getElementById('webBrowser_goButton');
-    const webBrowser_iframeContent = document.getElementById('webBrowser_iframeContent');
-    const webBrowser_status = document.getElementById('webBrowser_status');
+    // Removed webBrowser_... element consts as they are now dynamic per instance
+    const desktopIconBrowser = document.getElementById('desktopIconBrowser');
     const desktopElement = document.getElementById('desktop');
     const startButton = document.getElementById('startButton');
     const startMenu = document.getElementById('startMenu');
@@ -923,8 +913,10 @@
     let musicStudio_lastJsCode = "";
     let musicStudio_currentAudioContext = null;
     let musicStudio_activeSources = [];
-    let webBrowser_history = [];
-    let webBrowser_historyIndex = -1;
+    // Removed webBrowser_history & webBrowser_historyIndex global vars
+    let browserInstances = {}; // To store data for each browser window instance
+    let browserWindowCounter = 0; // To generate unique IDs for browser windows
+
     let gifCreator_currentAnimatedSvg = null;
     let gifCreator_genAI_model;
     let svg_genAI_internal_model;
@@ -983,7 +975,7 @@
         initAllAiApps();
         initFileExplorerApp();
         initSystemSettingsApp(); // This will also populate settings fields with stored values
-        initWebBrowserApp();
+        // initWebBrowserApp(); // No longer needed as browsers are dynamic
         
         if (localStorage.getItem('k8os_assistant_enabled') === 'true' &&
             (window.GLOBAL_GEMINI_API_KEY || window.GLOBAL_GROQ_API_KEY || window.GLOBAL_HF_TOKEN)) {
@@ -1526,20 +1518,127 @@ Output ONLY the comment itself, without any extra formatting or quotation marks.
             if (options.title) { const titleTextEl = windowEl.querySelector('.title-bar-text'); if (titleTextEl) titleTextEl.textContent = options.title; }
             bringToFront(windowEl);
             if (appId === 'fileExplorerWindow' && !windowEl.dataset.initialized) { fetchAndRenderFilesFE(); windowEl.dataset.initialized = "true"; }
-        } return windowEl;
+            return windowEl;
+        }
+        return null; // If window with appId not found (e.g. dynamic like browser)
     }
-    function closeWindow(windowEl) { if (windowEl) { windowEl.style.display = 'none'; if (windowEl.id === 'gamePlayerWindow' && gamePlayerWindow_iframe) { gamePlayerWindow_iframe.srcdoc = ''; gamePlayerWindow_iframe.src = 'about:blank'; } if (windowEl.id === 'webBrowserWindow' && webBrowser_iframeContent) { webBrowser_iframeContent.srcdoc = ''; webBrowser_iframeContent.src = 'about:blank'; webBrowser_addressBar.value = ''; webBrowser_history = []; webBrowser_historyIndex = -1; updateWebBrowserNavButtons(); } if (windowEl.classList.contains('fullscreen')) { windowEl.classList.remove('fullscreen'); } if (windowEl.classList.contains('mobile-default-fullscreen')) { windowEl.classList.remove('mobile-default-fullscreen');} } }
+
+    function closeWindow(windowEl) {
+        if (windowEl) {
+            const instanceId = windowEl.id;
+            if (instanceId.startsWith('webBrowserWindow-') && browserInstances[instanceId]) {
+                // Clean up browser instance data
+                browserInstances[instanceId].iframe.srcdoc = '';
+                browserInstances[instanceId].iframe.src = 'about:blank';
+                delete browserInstances[instanceId];
+                windowEl.remove(); // Remove the element from DOM
+            } else {
+                 windowEl.style.display = 'none';
+                 if (windowEl.id === 'gamePlayerWindow' && gamePlayerWindow_iframe) {
+                     gamePlayerWindow_iframe.srcdoc = '';
+                     gamePlayerWindow_iframe.src = 'about:blank';
+                 }
+            }
+            if (windowEl.classList.contains('fullscreen')) { windowEl.classList.remove('fullscreen'); }
+            if (windowEl.classList.contains('mobile-default-fullscreen')) { windowEl.classList.remove('mobile-default-fullscreen');}
+        }
+    }
+
     function bringToFront(windowEl) { if (!windowEl) return; if (activeWindow && activeWindow !== windowEl) { activeWindow.classList.remove('active'); } highestZIndex++; windowEl.style.zIndex = highestZIndex; windowEl.classList.add('active'); activeWindow = windowEl; }
-    document.querySelectorAll('.desktop-icon').forEach(icon => { icon.addEventListener('dblclick', () => { openWindow(icon.dataset.appId); }); icon.addEventListener('click', (e) => { document.querySelectorAll('.desktop-icon.selected').forEach(i => i.classList.remove('selected')); e.currentTarget.classList.add('selected'); if(startMenu) startMenu.style.display = 'none'; }); });
+    
+    document.querySelectorAll('.desktop-icon').forEach(icon => {
+        if (icon.id === 'desktopIconBrowser') { // Special handling for browser icon
+            icon.addEventListener('dblclick', () => openNewBrowserWindow());
+            icon.addEventListener('click', (e) => {
+                document.querySelectorAll('.desktop-icon.selected').forEach(i => i.classList.remove('selected'));
+                e.currentTarget.classList.add('selected');
+                if(startMenu) startMenu.style.display = 'none';
+            });
+        } else {
+            icon.addEventListener('dblclick', () => openWindow(icon.dataset.appId));
+            icon.addEventListener('click', (e) => {
+                document.querySelectorAll('.desktop-icon.selected').forEach(i => i.classList.remove('selected'));
+                e.currentTarget.classList.add('selected');
+                if(startMenu) startMenu.style.display = 'none';
+            });
+        }
+    });
+
     if(desktopElement) { desktopElement.addEventListener('click', (e) => { if (!e.target.closest('.start-button') && !e.target.closest('.start-menu')) { if(startMenu) startMenu.style.display = 'none'; } if (!e.target.closest('.desktop-icon')) { document.querySelectorAll('.desktop-icon.selected').forEach(i => i.classList.remove('selected')); } }); }
-    document.querySelectorAll('.window').forEach(windowEl => { const titleBar = windowEl.querySelector('.title-bar'); const closeButton = windowEl.querySelector('.close-button'); const fullscreenButton = windowEl.querySelector('.fullscreen-button'); windowEl.addEventListener('mousedown', () => bringToFront(windowEl), true); if (titleBar) { titleBar.addEventListener('mousedown', (e) => { if (e.target.classList.contains('close-button') || e.target.classList.contains('fullscreen-button') || e.target.id === 'gamePlayer_refreshButton' || e.target.tagName === 'BUTTON' || windowEl.classList.contains('fullscreen') || windowEl.classList.contains('mobile-default-fullscreen')) return; bringToFront(windowEl); const startX = e.clientX; const startY = e.clientY; const initialLeft = windowEl.offsetLeft; const initialTop = windowEl.offsetTop; function onMouseMove(moveEvent) { let newX = initialLeft + (moveEvent.clientX - startX); let newY = initialTop + (moveEvent.clientY - startY); const desktopRect = desktopElement.getBoundingClientRect(); const taskbarHeight = document.querySelector('.taskbar')?.offsetHeight || 30; newX = Math.max(0, Math.min(newX, desktopRect.width - windowEl.offsetWidth)); newY = Math.max(0, Math.min(newY, desktopRect.height - windowEl.offsetHeight - taskbarHeight + 20)); windowEl.style.left = newX + 'px'; windowEl.style.top = newY + 'px'; } function onMouseUp() { document.removeEventListener('mousemove', onMouseMove); document.removeEventListener('mouseup', onMouseUp); } document.addEventListener('mousemove', onMouseMove); document.addEventListener('mouseup', onMouseUp); }); } if (closeButton) { closeButton.addEventListener('click', () => closeWindow(windowEl)); } if (fullscreenButton) { fullscreenButton.addEventListener('click', () => { windowEl.classList.remove('mobile-default-fullscreen'); windowEl.classList.toggle('fullscreen'); bringToFront(windowEl); });} });
+    
+    // General window behavior needs to be attached after window creation for dynamic windows
+    function initializeWindowBehavior(windowEl) {
+        const titleBar = windowEl.querySelector('.title-bar');
+        const closeButton = windowEl.querySelector('.close-button');
+        const fullscreenButton = windowEl.querySelector('.fullscreen-button');
+
+        windowEl.addEventListener('mousedown', () => bringToFront(windowEl), true);
+
+        if (titleBar) {
+            titleBar.addEventListener('mousedown', (e) => {
+                if (e.target.classList.contains('close-button') ||
+                    e.target.classList.contains('fullscreen-button') ||
+                    e.target.closest('.title-bar-controls button') || // More general for any button in controls
+                    e.target.tagName === 'BUTTON' ||
+                    windowEl.classList.contains('fullscreen') ||
+                    windowEl.classList.contains('mobile-default-fullscreen')) return;
+
+                bringToFront(windowEl);
+                const startX = e.clientX; const startY = e.clientY;
+                const initialLeft = windowEl.offsetLeft; const initialTop = windowEl.offsetTop;
+                function onMouseMove(moveEvent) {
+                    let newX = initialLeft + (moveEvent.clientX - startX);
+                    let newY = initialTop + (moveEvent.clientY - startY);
+                    const desktopRect = desktopElement.getBoundingClientRect();
+                    const taskbarHeight = document.querySelector('.taskbar')?.offsetHeight || 30;
+                    newX = Math.max(0, Math.min(newX, desktopRect.width - windowEl.offsetWidth));
+                    newY = Math.max(0, Math.min(newY, desktopRect.height - windowEl.offsetHeight - taskbarHeight + 20));
+                    windowEl.style.left = newX + 'px'; windowEl.style.top = newY + 'px';
+                }
+                function onMouseUp() {
+                    document.removeEventListener('mousemove', onMouseMove);
+                    document.removeEventListener('mouseup', onMouseUp);
+                }
+                document.addEventListener('mousemove', onMouseMove);
+                document.addEventListener('mouseup', onMouseUp);
+            });
+        }
+        if (closeButton) { closeButton.addEventListener('click', () => closeWindow(windowEl)); }
+        if (fullscreenButton) { fullscreenButton.addEventListener('click', () => { windowEl.classList.remove('mobile-default-fullscreen'); windowEl.classList.toggle('fullscreen'); bringToFront(windowEl); });}
+    }
+    
+    // Apply to existing static windows
+    document.querySelectorAll('.window').forEach(windowEl => initializeWindowBehavior(windowEl));
+    
     function updateClock() { if (taskbarClock) taskbarClock.textContent = new Date().toLocaleTimeString(); }
     setInterval(updateClock, 1000); updateClock();
 
     const FE_GITHUB_USERNAME = 'k8o5'; const FE_GITHUB_REPONAME = 'k8o5.github.io'; const FE_FOLDER_PATH = 'buh';
     function initFileExplorerApp() { if (!fe_folderNameDisplayElement || !fe_searchInput || !fe_statusElement) { console.error("File Explorer UI missing!"); return; } fe_folderNameDisplayElement.textContent = `Folder: ${FE_FOLDER_PATH || '(Root)'}`; if (!FE_GITHUB_USERNAME || !FE_GITHUB_REPONAME) { fe_statusElement.textContent = 'Error: GitHub repo not set.'; fe_statusElement.style.color = 'red'; return; } fe_searchInput.addEventListener('input', (event) => { const searchTerm = event.target.value.toLowerCase().trim(); const filteredFiles = fe_allFetchedFiles.filter(file => file.name.toLowerCase().includes(searchTerm)); renderFileListFE(filteredFiles); }); }
     async function fetchAndRenderFilesFE() { if (!fe_statusElement || !fe_fileListElement) return; fe_statusElement.textContent = 'Status: Fetching...'; fe_statusElement.style.color = 'inherit'; const apiUrl = `https://api.github.com/repos/${FE_GITHUB_USERNAME}/${FE_GITHUB_REPONAME}/contents/${FE_FOLDER_PATH}`; try { const response = await fetch(apiUrl); if (!response.ok) { throw new Error(`Fetch error (${response.status})`);} const data = await response.json(); if (!Array.isArray(data)) { throw new Error('Path not a folder.'); } fe_allFetchedFiles = data.filter(item => item.type === 'file' && item.name.toLowerCase().endsWith('.html') && item.name.toLowerCase() !== 'index.html'); renderFileListFE(fe_allFetchedFiles); fe_statusElement.textContent = `Status: ${fe_allFetchedFiles.length} HTML file(s).`; } catch (error) { console.error('FE Fetch Error:', error); fe_statusElement.textContent = `Error: ${error.message}`; fe_statusElement.style.color = 'red';} }
-    function renderFileListFE(filesToRender) { if (!fe_fileListElement || !fe_searchInput) return; fe_fileListElement.innerHTML = ''; if (filesToRender.length === 0) { fe_fileListElement.innerHTML = `<li>${fe_searchInput.value.trim() ? 'No matches.' : 'No HTML files.'}</li>`; return; } filesToRender.sort((a, b) => a.name.localeCompare(b.name)); filesToRender.forEach(file => { const listItem = document.createElement('li'); const link = document.createElement('a'); link.href = `#`; link.textContent = file.name.replace(/\.html$/i, ''); const filePath = FE_FOLDER_PATH ? `${FE_FOLDER_PATH}/${file.name}` : file.name; link.dataset.filePath = filePath; link.addEventListener('click', (e) => { e.preventDefault(); openWindow('webBrowserWindow', { title: file.name }); navigateToUrlInBrowser(filePath); }); listItem.appendChild(link); fe_fileListElement.appendChild(listItem); }); }
+    function renderFileListFE(filesToRender) {
+        if (!fe_fileListElement || !fe_searchInput) return;
+        fe_fileListElement.innerHTML = '';
+        if (filesToRender.length === 0) {
+            fe_fileListElement.innerHTML = `<li>${fe_searchInput.value.trim() ? 'No matches.' : 'No HTML files.'}</li>`;
+            return;
+        }
+        filesToRender.sort((a, b) => a.name.localeCompare(b.name));
+        filesToRender.forEach(file => {
+            const listItem = document.createElement('li');
+            const link = document.createElement('a');
+            link.href = `#`;
+            link.textContent = file.name.replace(/\.html$/i, '');
+            const filePath = FE_FOLDER_PATH ? `${FE_FOLDER_PATH}/${file.name}` : file.name;
+            link.dataset.filePath = filePath;
+            link.addEventListener('click', (e) => {
+                e.preventDefault();
+                openNewBrowserWindow(filePath); // Open in a new browser instance
+            });
+            listItem.appendChild(link);
+            fe_fileListElement.appendChild(listItem);
+        });
+    }
 
     let svg_currentSvgContent = null;
     function initSvgGeneratorApp() {
@@ -2677,73 +2776,204 @@ Output ONLY the comment itself, without any extra formatting or quotation marks.
         }
     });
 
-    function initWebBrowserApp() {
-        if(webBrowser_goButton) webBrowser_goButton.addEventListener('click', () => navigateToUrlInBrowser(webBrowser_addressBar.value.trim()));
-        if(webBrowser_addressBar) webBrowser_addressBar.addEventListener('keypress', (e) => { if (e.key === 'Enter') navigateToUrlInBrowser(webBrowser_addressBar.value.trim()); });
-        if(webBrowser_backButton) webBrowser_backButton.addEventListener('click', () => webBrowserNavigate(-1));
-        if(webBrowser_forwardButton) webBrowser_forwardButton.addEventListener('click', () => webBrowserNavigate(1));
-        if(webBrowser_refreshButton) webBrowser_refreshButton.addEventListener('click', () => { if (webBrowser_historyIndex > -1 && webBrowser_history[webBrowser_historyIndex]) { loadUrlInBrowser(webBrowser_history[webBrowser_historyIndex], false);  logK8osActivity("Web Browser", `Refreshed: ${webBrowser_history[webBrowser_historyIndex].substring(0,50)}...`); }});
-        updateWebBrowserNavButtons();
+    // --- Web Browser App (Dynamic Instances) ---
+    function createBrowserWindowHTML(instanceId, initialTitle = "🌐 Web Browser") {
+        return `
+            <div class="title-bar">
+                <span class="title-bar-text" id="${instanceId}_titleBarText">${initialTitle}</span>
+                <div class="title-bar-controls">
+                    <button class="fullscreen-button" title="Toggle Fullscreen">1</button>
+                    <button class="close-button" title="Close">r</button>
+                </div>
+            </div>
+            <div id="${instanceId}_navControls" class="webBrowserWindow_navControls">
+                <button id="${instanceId}_backButton" title="Back" disabled>3</button>
+                <button id="${instanceId}_forwardButton" title="Forward" disabled>4</button>
+                <button id="${instanceId}_refreshButton" title="Refresh">Q</button>
+                <input type="text" id="${instanceId}_addressBar" class="webBrowserWindow_addressBar" placeholder="Enter path or URL">
+                <button id="${instanceId}_goButton" style="width:auto;padding-left:5px;padding-right:5px;">Go</button>
+            </div>
+            <div class="window-content">
+                <iframe id="${instanceId}_iframeContent" class="webBrowserWindow_iframeContent" sandbox="allow-scripts allow-forms allow-popups allow-same-origin"></iframe>
+            </div>
+            <div id="${instanceId}_status" class="status-bar">Status: Idle</div>
+        `;
     }
-    async function loadUrlInBrowser(url, addToHistory = true) {
-        if (!webBrowser_iframeContent || !webBrowser_status || !webBrowser_addressBar) return;
-        webBrowser_status.textContent = `Loading: ${url}...`;
-        webBrowser_addressBar.value = url;
+
+    function openNewBrowserWindow(initialUrl = null) {
+        browserWindowCounter++;
+        const instanceId = `webBrowserWindow-${browserWindowCounter}`;
+        const windowEl = document.createElement('div');
+        windowEl.id = instanceId;
+        windowEl.className = 'window webBrowserWindow'; // Add a specific class
+        // Position new windows slightly offset
+        const topOffset = 40 + (browserWindowCounter % 10) * 20;
+        const leftOffset = 300 + (browserWindowCounter % 10) * 20;
+        windowEl.style.width = '800px';
+        windowEl.style.height = '600px';
+        windowEl.style.top = `${topOffset}px`;
+        windowEl.style.left = `${leftOffset}px`;
+        
+        windowEl.innerHTML = createBrowserWindowHTML(instanceId);
+        desktopElement.appendChild(windowEl);
+        initializeWindowBehavior(windowEl); // Make it draggable, resizable, closable
+
+        const instance = {
+            id: instanceId,
+            windowElement: windowEl,
+            iframe: document.getElementById(`${instanceId}_iframeContent`),
+            addressBar: document.getElementById(`${instanceId}_addressBar`),
+            backButton: document.getElementById(`${instanceId}_backButton`),
+            forwardButton: document.getElementById(`${instanceId}_forwardButton`),
+            refreshButton: document.getElementById(`${instanceId}_refreshButton`),
+            goButton: document.getElementById(`${instanceId}_goButton`),
+            status: document.getElementById(`${instanceId}_status`),
+            titleBarTextElement: document.getElementById(`${instanceId}_titleBarText`),
+            history: [],
+            historyIndex: -1
+        };
+        browserInstances[instanceId] = instance;
+
+        instance.goButton.addEventListener('click', () => navigateToUrlInBrowserInstance(instanceId, instance.addressBar.value.trim()));
+        instance.addressBar.addEventListener('keypress', (e) => { if (e.key === 'Enter') navigateToUrlInBrowserInstance(instanceId, instance.addressBar.value.trim()); });
+        instance.backButton.addEventListener('click', () => webBrowserNavigateInstance(instanceId, -1));
+        instance.forwardButton.addEventListener('click', () => webBrowserNavigateInstance(instanceId, 1));
+        instance.refreshButton.addEventListener('click', () => {
+            if (instance.historyIndex > -1 && instance.history[instance.historyIndex]) {
+                loadUrlInBrowserInstance(instanceId, instance.history[instance.historyIndex], false);
+                logK8osActivity(`Browser (${instanceId})`, `Refreshed: ${instance.history[instance.historyIndex].substring(0,50)}...`);
+            }
+        });
+        
+        openWindow(instanceId); // This will handle display, z-index etc.
+        if (initialUrl) {
+            navigateToUrlInBrowserInstance(instanceId, initialUrl);
+        }
+        updateWebBrowserNavButtonsInstance(instanceId);
+        return windowEl;
+    }
+
+    async function loadUrlInBrowserInstance(instanceId, url, addToHistory = true) {
+        const instance = browserInstances[instanceId];
+        if (!instance || !instance.iframe || !instance.status || !instance.addressBar) {
+             console.error(`Browser instance ${instanceId} not found or incomplete.`);
+             return;
+        }
+
+        instance.status.textContent = `Loading: ${url}...`;
+        instance.addressBar.value = url;
+        instance.iframe.srcdoc = ''; // Clear previous content
+
         try {
             let fetchUrl = url;
-            if (!url.startsWith('http://') && !url.startsWith('https://') && !url.startsWith(FE_FOLDER_PATH + "/") && !url.startsWith('/')) {
-                 if (url.includes('.')) { fetchUrl = 'http://' + url; }
-            }
+            const isLikelyExternal = url.startsWith('http://') || url.startsWith('https://');
+            const isFileProtocol = url.startsWith('file:///');
+            const isK8osLocal = window.location.protocol === 'file:';
 
-            const response = await fetch(fetchUrl);
-            if (!response.ok) throw new Error(`HTTP error! status: ${response.status}`);
-            const htmlContent = await response.text();
+            // Try direct src assignment for file:/// URLs or if k8OS is local and path is relative (might be a local file)
+            if (isFileProtocol || (isK8osLocal && !isLikelyExternal)) {
+                instance.status.textContent = `Attempting to load (direct): ${url}`;
+                instance.iframe.src = url; // For file://, relative paths might work if k8OS is file://
+                                           // Or if k8OS is http and url is absolute file:// (likely blocked)
+                // Note: onload/onerror for iframe.src with file:// can be unreliable for status updates.
+                // We'll assume it loads if no immediate error, but can't easily confirm success/failure like fetch.
+                 setTimeout(() => { // Give it a moment to try loading
+                    if (instance.status.textContent.startsWith('Attempting')) { // If status hasn't changed due to fetch success/error
+                        instance.status.textContent = `Attempted direct load: ${url}`;
+                         logK8osActivity(`Browser (${instanceId})`, `Navigated (direct): ${url.substring(0,50)}...`);
+                    }
+                }, 1000);
+            } else { // HTTP(S) URLs, or relative paths when k8OS is on HTTP
+                if (!isLikelyExternal && !url.startsWith('/')) { // Possibly a relative path
+                    // Try to resolve relative to current k8OS location or GitHub base
+                    if (url.startsWith(FE_FOLDER_PATH + "/")) {
+                         // Assuming FE_FOLDER_PATH files are served relative to k8OS host
+                         // No change needed to fetchUrl if k8OS is http.
+                    } else if (!isLikelyExternal) {
+                        // This case is tricky. If it's not http and not file, and k8OS is http,
+                        // it might be a malformed relative path or intended for a base path not set.
+                        // For now, proceed, fetch might fail if not resolvable.
+                    }
+                }
+                
+                const response = await fetch(fetchUrl); // fetchUrl should be correctly formed for http/s
+                if (!response.ok) throw new Error(`HTTP error! status: ${response.status} for ${fetchUrl}`);
+                const htmlContent = await response.text();
 
-            let finalHtml = htmlContent;
-            const isBuhPath = fetchUrl.startsWith(FE_FOLDER_PATH + "/");
-            const hasSubDirs = isBuhPath && fetchUrl.substring(FE_FOLDER_PATH.length + 1).includes("/");
-
-            if (isBuhPath && hasSubDirs && !htmlContent.toLowerCase().includes("<base")) {
+                let finalHtml = htmlContent;
+                const isBuhPath = fetchUrl.includes(FE_FOLDER_PATH + "/"); // Simplified check
                 const pathSegments = fetchUrl.split('/');
-                pathSegments.pop();
-                const basePath = pathSegments.join('/') + '/';
-                 if (finalHtml.includes("<head>")) {
-                    finalHtml = finalHtml.replace("<head>", `<head>\n<base href="${window.location.origin}/${basePath}">`);
-                } else {
-                     finalHtml = `<head><base href="${window.location.origin}/${basePath}"></head>` + finalHtml;
+                const hasSubDirs = isBuhPath && pathSegments.length > (pathSegments.indexOf(FE_FOLDER_PATH.split('/').pop()) + 2); // check if path after buh has more segments
+
+                if (isBuhPath && hasSubDirs && !htmlContent.toLowerCase().includes("<base")) {
+                    pathSegments.pop(); // remove filename
+                    const basePath = pathSegments.join('/') + '/';
+                    const origin = window.location.origin === 'null' ? '' : window.location.origin; // Handle file:/// origin
+                    const baseHref = origin ? `${origin}/${basePath}` : basePath; // For file://, origin is not useful
+
+                    if (finalHtml.includes("<head>")) {
+                        finalHtml = finalHtml.replace("<head>", `<head>\n<base href="${baseHref}">`);
+                    } else {
+                        finalHtml = `<head><base href="${baseHref}"></head>` + finalHtml;
+                    }
                 }
+                instance.iframe.srcdoc = finalHtml;
+                instance.status.textContent = `Loaded: ${url}`;
+                logK8osActivity(`Browser (${instanceId})`, `Navigated (fetch): ${url.substring(0,50)}...`);
             }
 
-            webBrowser_iframeContent.srcdoc = finalHtml;
-            webBrowser_status.textContent = `Loaded: ${url}`;
             if (addToHistory) {
-                if (webBrowser_historyIndex < webBrowser_history.length - 1) {
-                    webBrowser_history = webBrowser_history.slice(0, webBrowser_historyIndex + 1);
+                if (instance.historyIndex < instance.history.length - 1) {
+                    instance.history = instance.history.slice(0, instance.historyIndex + 1);
                 }
-                webBrowser_history.push(url);
-                webBrowser_historyIndex = webBrowser_history.length - 1;
+                instance.history.push(url);
+                instance.historyIndex = instance.history.length - 1;
             }
-             logK8osActivity("Web Browser", `Navigated to: ${url.substring(0,50)}...`);
+            // Update browser window title
+            if (instance.titleBarTextElement) {
+                let pageTitle = url;
+                try {
+                    const tempDoc = instance.iframe.contentDocument || instance.iframe.contentWindow.document;
+                    if (tempDoc && tempDoc.title) {
+                        pageTitle = tempDoc.title;
+                    }
+                } catch (e) { /* Can fail due to cross-origin */ }
+                instance.titleBarTextElement.textContent = `🌐 ${pageTitle.substring(0, 50)}${pageTitle.length > 50 ? '...' : ''}`;
+            }
+
         } catch (error) {
-            console.error("Error loading URL in browser app:", error);
-            webBrowser_iframeContent.srcdoc = `<p style="color:red;padding:10px;">Error loading page: ${url}<br>${error.message}</p>`;
-            webBrowser_status.textContent = `Error: ${error.message}`;
+            console.error(`Error loading URL in browser app (${instanceId}):`, error, "URL:", url, "FetchURL:", fetchUrl);
+            instance.iframe.srcdoc = `<p style="color:red;padding:10px;">Error loading page: ${url}<br>${error.message}<br><small>Note: Loading local 'file:///' URLs directly has security restrictions. For best results with local files, serve k8OS and your files from a local HTTP server.</small></p>`;
+            instance.status.textContent = `Error: ${error.message}`;
         }
-        updateWebBrowserNavButtons();
+        updateWebBrowserNavButtonsInstance(instanceId);
     }
-    function navigateToUrlInBrowser(url) { if (url) loadUrlInBrowser(url, true); }
-    function webBrowserNavigate(direction) {
-        const newIndex = webBrowser_historyIndex + direction;
-        if (newIndex >= 0 && newIndex < webBrowser_history.length) {
-            webBrowser_historyIndex = newIndex;
-            loadUrlInBrowser(webBrowser_history[webBrowser_historyIndex], false);
-            logK8osActivity("Web Browser", `Used ${direction > 0 ? 'Forward' : 'Back'} to: ${webBrowser_history[webBrowser_historyIndex].substring(0,50)}...`);
+
+    function navigateToUrlInBrowserInstance(instanceId, url) {
+        if (url) loadUrlInBrowserInstance(instanceId, url, true);
+    }
+
+    function webBrowserNavigateInstance(instanceId, direction) {
+        const instance = browserInstances[instanceId];
+        if (!instance) return;
+        const newIndex = instance.historyIndex + direction;
+        if (newIndex >= 0 && newIndex < instance.history.length) {
+            instance.historyIndex = newIndex;
+            loadUrlInBrowserInstance(instanceId, instance.history[instance.historyIndex], false);
+            logK8osActivity(`Browser (${instanceId})`, `Used ${direction > 0 ? 'Forward' : 'Back'} to: ${instance.history[instance.historyIndex].substring(0,50)}...`);
         }
     }
-    function updateWebBrowserNavButtons() {
-        if(webBrowser_backButton) webBrowser_backButton.disabled = webBrowser_historyIndex <= 0;
-        if(webBrowser_forwardButton) webBrowser_forwardButton.disabled = webBrowser_historyIndex >= webBrowser_history.length - 1;
+
+    function updateWebBrowserNavButtonsInstance(instanceId) {
+        const instance = browserInstances[instanceId];
+        if (!instance) return;
+        instance.backButton.disabled = instance.historyIndex <= 0;
+        instance.forwardButton.disabled = instance.historyIndex >= instance.history.length - 1;
     }
+
+
+    // --- End Web Browser App ---
+
 
     if(startButton) startButton.addEventListener('click', (e) => { e.stopPropagation(); startMenu.style.display = startMenu.style.display === 'flex' ? 'none' : 'flex'; });
     if(startMenuShutdown) startMenuShutdown.addEventListener('click', () => { startMenu.style.display = 'none'; if (confirm("Are you sure you want to shut down k8OS?")) { document.body.innerHTML = '<div style="position:fixed;top:0;left:0;width:100%;height:100%;background:black;color:white;display:flex;justify-content:center;align-items:center;font-size:24px;">k8OS is shutting down...</div>'; setTimeout(() => { window.close(); }, 2000); } });
