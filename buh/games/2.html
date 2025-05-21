@@ -1,0 +1,155 @@
+<!DOCTYPE html>
+<html lang="de">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Neon Duellisten</title>
+    <style>
+        body {
+            margin: 0;
+            padding: 0;
+            background-color: #000;
+            overflow: hidden;
+            font-family: 'Arial', sans-serif;
+        }
+        #gameCanvas {
+            display: block;
+            margin: 0 auto;
+        }
+        #scoreBoard {
+            position: absolute;
+            top: 10px;
+            left: 50%;
+            transform: translateX(-50%);
+            color: #fff;
+            font-size: 24px;
+            text-align: center;
+        }
+    </style>
+</head>
+<body>
+    <canvas id="gameCanvas"></canvas>
+    <div id="scoreBoard">
+        <span id="player1Score">0</span> : <span id="player2Score">0</span>
+    </div>
+    <script>
+        const canvas = document.getElementById('gameCanvas');
+        const ctx = canvas.getContext('2d');
+        const scoreBoard = document.getElementById('scoreBoard');
+        const player1ScoreElement = document.getElementById('player1Score');
+        const player2ScoreElement = document.getElementById('player2Score');
+
+        canvas.width = window.innerWidth;
+        canvas.height = window.innerHeight;
+
+        const players = [
+            { x: 100, y: canvas.height / 2, radius: 20, color: '#ff00ff', speed: 5, score: 0, trail: [] },
+            { x: canvas.width - 100, y: canvas.height / 2, radius: 20, color: '#00ffff', speed: 5, score: 0, trail: [] }
+        ];
+
+        const keys = {
+            w: false, s: false, a: false, d: false,
+            ArrowUp: false, ArrowDown: false, ArrowLeft: false, ArrowRight: false
+        };
+
+        function drawCircle(x, y, radius, color) {
+            ctx.beginPath();
+            ctx.arc(x, y, radius, 0, Math.PI * 2);
+            ctx.fillStyle = color;
+            ctx.fill();
+            ctx.closePath();
+        }
+
+        function drawTrail(trail, color) {
+            ctx.beginPath();
+            ctx.strokeStyle = color;
+            ctx.lineWidth = 5;
+            for (let i = 0; i < trail.length; i++) {
+                if (i === 0) {
+                    ctx.moveTo(trail[i].x, trail[i].y);
+                } else {
+                    ctx.lineTo(trail[i].x, trail[i].y);
+                }
+            }
+            ctx.stroke();
+            ctx.closePath();
+        }
+
+        function updatePlayer(player, up, down, left, right) {
+            if (keys[up]) player.y -= player.speed;
+            if (keys[down]) player.y += player.speed;
+            if (keys[left]) player.x -= player.speed;
+            if (keys[right]) player.x += player.speed;
+
+            player.x = Math.max(player.radius, Math.min(canvas.width - player.radius, player.x));
+            player.y = Math.max(player.radius, Math.min(canvas.height - player.radius, player.y));
+
+            player.trail.push({ x: player.x, y: player.y });
+            if (player.trail.length > 100) player.trail.shift();
+        }
+
+        function checkCollision(player, otherPlayer) {
+            for (let i = 0; i < otherPlayer.trail.length; i++) {
+                const dx = player.x - otherPlayer.trail[i].x;
+                const dy = player.y - otherPlayer.trail[i].y;
+                const distance = Math.sqrt(dx * dx + dy * dy);
+                if (distance < player.radius) {
+                    return true;
+                }
+            }
+            return false;
+        }
+
+        function gameLoop() {
+            ctx.fillStyle = 'rgba(0, 0, 0, 0.1)';
+            ctx.fillRect(0, 0, canvas.width, canvas.height);
+
+            updatePlayer(players[0], 'w', 's', 'a', 'd');
+            updatePlayer(players[1], 'ArrowUp', 'ArrowDown', 'ArrowLeft', 'ArrowRight');
+
+            drawTrail(players[0].trail, players[0].color);
+            drawTrail(players[1].trail, players[1].color);
+
+            drawCircle(players[0].x, players[0].y, players[0].radius, players[0].color);
+            drawCircle(players[1].x, players[1].y, players[1].radius, players[1].color);
+
+            if (checkCollision(players[0], players[1])) {
+                players[1].score++;
+                resetRound();
+            }
+            if (checkCollision(players[1], players[0])) {
+                players[0].score++;
+                resetRound();
+            }
+
+            player1ScoreElement.textContent = players[0].score;
+            player2ScoreElement.textContent = players[1].score;
+
+            requestAnimationFrame(gameLoop);
+        }
+
+        function resetRound() {
+            players[0].x = 100;
+            players[0].y = canvas.height / 2;
+            players[1].x = canvas.width - 100;
+            players[1].y = canvas.height / 2;
+            players[0].trail = [];
+            players[1].trail = [];
+        }
+
+        document.addEventListener('keydown', (e) => {
+            if (e.key in keys) {
+                keys[e.key] = true;
+            }
+        });
+
+        document.addEventListener('keyup', (e) => {
+            if (e.key in keys) {
+                keys[e.key] = false;
+            }
+        });
+
+        gameLoop();
+    </script>
+</body>
+</html>

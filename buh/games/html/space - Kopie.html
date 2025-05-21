@@ -1,0 +1,434 @@
+<!DOCTYPE html>
+<html lang="de">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Wizard Kartenspiel - Digitale Version</title>
+    <style>
+        body {
+            font-family: Arial, sans-serif;
+            background-color: #f0f0f0;
+            margin: 0;
+            padding: 0;
+            display: flex;
+            justify-content: center;
+            align-items: center;
+            min-height: 100vh;
+        }
+        #game-container {
+            position: relative;
+            width: 900px;
+            height: 700px;
+            background-color: #2F4F4F; /* Dunkler, steiniger Ton */
+            border-radius: 15px;
+            box-shadow: 0 0 15px rgba(0,0,0,0.7);
+            overflow: hidden;
+        }
+        #game-container::before {
+            content: '';
+            position: absolute;
+            top: 0;
+            left: 0;
+            width: 100%;
+            height: 100%;
+            background: radial-gradient(circle, rgba(255,69,0,0.2) 0%, rgba(0,0,0,0.8) 100%);
+            pointer-events: none;
+        }
+        .card {
+            width: 60px;
+            height: 90px;
+            border: 2px solid #FFD700;
+            margin: 5px;
+            text-align: center;
+            line-height: 90px;
+            font-size: 28px;
+            background-color: #FFF8DC;
+            border-radius: 5px;
+            box-shadow: 0 2px 5px rgba(0,0,0,0.3);
+            cursor: pointer;
+            transition: transform 0.5s ease, opacity 0.5s ease;
+        }
+        .card:hover {
+            transform: scale(1.1) translateY(-5px);
+        }
+        .card-back {
+            background-color: #8B0000;
+            color: #FFD700;
+            font-size: 20px;
+            line-height: 90px;
+        }
+        #trump {
+            position: absolute;
+            top: 40%;
+            left: 50%;
+            transform: translate(-50%, -50%);
+            font-size: 32px;
+            color: #FFD700;
+            background-color: rgba(0,0,0,0.7);
+            padding: 15px;
+            border-radius: 10px;
+            border: 2px solid #FF4500;
+            animation: glow 2s infinite alternate;
+        }
+        @keyframes glow {
+            from { box-shadow: 0 0 5px #FF4500; }
+            to { box-shadow: 0 0 20px #FF4500; }
+        }
+        #opponents {
+            position: absolute;
+            top: 20px;
+            width: 100%;
+            display: flex;
+            justify-content: center;
+            flex-wrap: wrap;
+            gap: 20px;
+        }
+        .opponent-hand {
+            display: inline-flex;
+            flex-direction: column;
+            align-items: center;
+            color: #FFD700;
+        }
+        #trick-area {
+            position: absolute;
+            top: 55%;
+            left: 50%;
+            transform: translate(-50%, -50%);
+            display: flex;
+            gap: 10px;
+        }
+        #user-hand {
+            position: absolute;
+            bottom: 20px;
+            left: 50%;
+            transform: translateX(-50%);
+            display: flex;
+            gap: 10px;
+        }
+        #prediction-ui {
+            position: absolute;
+            top: 50%;
+            left: 50%;
+            transform: translate(-50%, -50%);
+            background-color: #FFF8DC;
+            padding: 20px;
+            border-radius: 10px;
+            box-shadow: 0 0 15px rgba(0,0,0,0.5);
+            display: none;
+            border: 2px solid #FFD700;
+        }
+        #prediction-buttons button {
+            margin: 5px;
+            padding: 10px;
+            font-size: 16px;
+            cursor: pointer;
+            background-color: #FF4500;
+            color: white;
+            border: none;
+            border-radius: 5px;
+            transition: background-color 0.3s;
+        }
+        #prediction-buttons button:hover {
+            background-color: #FF6347;
+        }
+        #scores {
+            position: absolute;
+            bottom: 10px;
+            right: 10px;
+            color: #FFD700;
+            font-size: 18px;
+            background-color: rgba(0,0,0,0.5);
+            padding: 10px;
+            border-radius: 5px;
+        }
+    </style>
+</head>
+<body>
+    <div id="game-container">
+        <div id="trump">Trumpf: <span id="trump-suit"></span></div>
+        <div id="opponents"></div>
+        <div id="trick-area"></div>
+        <div id="user-hand"></div>
+        <div id="prediction-ui">
+            <p>Ihre Vorhersage (0 bis <span id="max-prediction"></span>):</p>
+            <div id="prediction-buttons"></div>
+        </div>
+        <div id="scores"></div>
+    </div>
+
+    <script>
+        // Deck Definition
+        const suits = ['♥', '♦', '♣', '♠'];
+        const values = ['2', '3', '4', '5', '6', '7', '8', '9', '10', 'J', 'Q', 'K', 'A'];
+        const deck = [];
+        suits.forEach(suit => {
+            values.forEach(value => deck.push({ suit, value }));
+        });
+        for (let i = 0; i < 4; i++) {
+            deck.push({ type: 'Wizard' });
+            deck.push({ type: 'Jester' });
+        }
+
+        // Game State
+        const gameState = {
+            numberOfPlayers: 3, // Anpassbar: 2-6 (User + 1-5 KI)
+            players: [],
+            currentRound: 1,
+            maxRounds: null,
+            deck: [...deck],
+            trumpSuit: null,
+            currentTrick: [],
+            currentPlayerIndex: 0,
+            gamePhase: 'setup'
+        };
+
+        // Spieler initialisieren
+        function initializePlayers() {
+            gameState.maxRounds = Math.floor(60 / gameState.numberOfPlayers);
+            for (let i = 0; i < gameState.numberOfPlayers; i++) {
+                gameState.players.push({
+                    name: i === 0 ? 'Sie' : `KI${i}`,
+                    hand: [],
+                    prediction: null,
+                    tricksWon: 0,
+                    score: 0
+                });
+            }
+        }
+
+        // Deck mischen
+        function shuffleDeck(deck) {
+            for (let i = deck.length - 1; i > 0; i--) {
+                const j = Math.floor(Math.random() * (i + 1));
+                [deck[i], deck[j]] = [deck[j], deck[i]];
+            }
+        }
+
+        // Runde starten
+        function startRound() {
+            gameState.gamePhase = 'dealing';
+            gameState.players.forEach(p => { p.hand = []; p.tricksWon = 0; p.prediction = null; });
+            shuffleDeck(gameState.deck);
+            const cardsPerPlayer = gameState.currentRound;
+            let cardIndex = 0;
+            gameState.players.forEach(player => {
+                player.hand = gameState.deck.slice(cardIndex, cardIndex + cardsPerPlayer);
+                cardIndex += cardsPerPlayer;
+            });
+            const trumpCard = gameState.deck[cardIndex];
+            gameState.trumpSuit = trumpCard.type === 'Wizard' ? suits[Math.floor(Math.random() * suits.length)] :
+                                  trumpCard.type === 'Jester' ? null : trumpCard.suit;
+            document.getElementById('trump-suit').textContent = gameState.trumpSuit || 'Kein Trumpf';
+            renderGame();
+            gameState.gamePhase = 'predicting';
+            gameState.currentPlayerIndex = 0;
+            collectPrediction();
+        }
+
+        // Spiel rendern
+        function renderGame() {
+            // Benutzerhand
+            const userHandDiv = document.getElementById('user-hand');
+            userHandDiv.innerHTML = '';
+            gameState.players[0].hand.forEach((card, index) => {
+                const cardDiv = document.createElement('div');
+                cardDiv.className = 'card';
+                cardDiv.textContent = card.type || `${card.value}${card.suit}`;
+                cardDiv.style.color = card.suit === '♥' || card.suit === '♦' ? '#FF0000' : '#000000';
+                cardDiv.dataset.index = index;
+                if (gameState.gamePhase === 'playing' && gameState.currentPlayerIndex === 0) {
+                    cardDiv.addEventListener('click', () => playCard(0, index));
+                }
+                userHandDiv.appendChild(cardDiv);
+            });
+
+            // Gegnerhände
+            const opponentsDiv = document.getElementById('opponents');
+            opponentsDiv.innerHTML = '';
+            for (let i = 1; i < gameState.numberOfPlayers; i++) {
+                const opponentDiv = document.createElement('div');
+                opponentDiv.className = 'opponent-hand';
+                opponentDiv.innerHTML = `<p>${gameState.players[i].name}</p>`;
+                const cardsDiv = document.createElement('div');
+                gameState.players[i].hand.forEach(() => {
+                    const cardBack = document.createElement('div');
+                    cardBack.className = 'card card-back';
+                    cardBack.textContent = 'X';
+                    cardsDiv.appendChild(cardBack);
+                });
+                opponentDiv.appendChild(cardsDiv);
+                opponentsDiv.appendChild(opponentDiv);
+            }
+
+            // Stichbereich
+            const trickArea = document.getElementById('trick-area');
+            trickArea.innerHTML = '';
+            gameState.currentTrick.forEach(({ card }) => {
+                const cardDiv = document.createElement('div');
+                cardDiv.className = 'card';
+                cardDiv.textContent = card.type || `${card.value}${card.suit}`;
+                cardDiv.style.color = card.suit === '♥' || card.suit === '♦' ? '#FF0000' : '#000000';
+                trickArea.appendChild(cardDiv);
+            });
+
+            // Punktestand
+            const scoresDiv = document.getElementById('scores');
+            scoresDiv.innerHTML = gameState.players.map(p => `${p.name}: ${p.score}`).join('<br>');
+        }
+
+        // Vorhersage sammeln
+        function collectPrediction() {
+            const player = gameState.players[gameState.currentPlayerIndex];
+            if (player.name === 'Sie') {
+                const predictionUI = document.getElementById('prediction-ui');
+                document.getElementById('max-prediction').textContent = gameState.currentRound;
+                const buttonsDiv = document.getElementById('prediction-buttons');
+                buttonsDiv.innerHTML = '';
+                for (let i = 0; i <= gameState.currentRound; i++) {
+                    const button = document.createElement('button');
+                    button.textContent = i;
+                    button.onclick = () => {
+                        player.prediction = i;
+                        predictionUI.style.display = 'none';
+                        nextPrediction();
+                    };
+                    buttonsDiv.appendChild(button);
+                }
+                predictionUI.style.display = 'block';
+            } else {
+                player.prediction = Math.floor(Math.random() * (gameState.currentRound + 1));
+                nextPrediction();
+            }
+        }
+
+        function nextPrediction() {
+            gameState.currentPlayerIndex = (gameState.currentPlayerIndex + 1) % gameState.numberOfPlayers;
+            if (gameState.currentPlayerIndex === 0) {
+                gameState.gamePhase = 'playing';
+                gameState.currentTrick = [];
+                gameState.currentPlayerIndex = 0;
+                playCard();
+            } else {
+                collectPrediction();
+            }
+        }
+
+        // Karte spielen
+        function playCard(playerIndex, cardIndex) {
+            const player = gameState.players[gameState.currentPlayerIndex];
+            if (playerIndex !== undefined && gameState.currentPlayerIndex === 0) {
+                const card = player.hand[cardIndex];
+                if (isLegalCard(card, player.hand, gameState.currentTrick, gameState.trumpSuit)) {
+                    player.hand.splice(cardIndex, 1);
+                    gameState.currentTrick.push({ playerIndex: 0, card });
+                    renderGame();
+                    nextPlayer();
+                } else {
+                    alert('Diese Karte darf nicht gespielt werden!');
+                }
+            } else if (gameState.currentPlayerIndex !== 0) {
+                const legalCards = getLegalCards(player.hand, gameState.currentTrick, gameState.trumpSuit);
+                const card = legalCards[Math.floor(Math.random() * legalCards.length)];
+                player.hand = player.hand.filter(c => c !== card);
+                gameState.currentTrick.push({ playerIndex: gameState.currentPlayerIndex, card });
+                renderGame();
+                nextPlayer();
+            }
+        }
+
+        // Legale Karten bestimmen
+        function getLegalCards(hand, trick, trumpSuit) {
+            if (trick.length === 0) return hand;
+            const ledSuit = trick[0].card.suit;
+            if (ledSuit) {
+                const suitCards = hand.filter(card => card.suit === ledSuit);
+                return suitCards.length > 0 ? suitCards : hand;
+            }
+            return hand;
+        }
+
+        function isLegalCard(card, hand, trick, trumpSuit) {
+            if (trick.length === 0) return true;
+            const ledSuit = trick[0].card.suit;
+            if (ledSuit) {
+                const hasLedSuit = hand.some(c => c.suit === ledSuit);
+                return hasLedSuit ? card.suit === ledSuit : true;
+            }
+            return true;
+        }
+
+        // Nächster Spieler
+        function nextPlayer() {
+            gameState.currentPlayerIndex = (gameState.currentPlayerIndex + 1) % gameState.numberOfPlayers;
+            if (gameState.currentTrick.length === gameState.numberOfPlayers) {
+                setTimeout(() => {
+                    const winnerIndex = determineTrickWinner(gameState.currentTrick, gameState.trumpSuit);
+                    gameState.players[winnerIndex].tricksWon++;
+                    alert(`${gameState.players[winnerIndex].name} gewinnt den Stich!`);
+                    gameState.currentTrick = [];
+                    renderGame();
+                    gameState.currentPlayerIndex = winnerIndex;
+                    if (gameState.players[0].hand.length === 0) {
+                        scoreRound();
+                    } else {
+                        setTimeout(playCard, 500);
+                    }
+                }, 1000);
+            } else {
+                setTimeout(playCard, 500);
+            }
+        }
+
+        // Stichgewinner bestimmen
+        function determineTrickWinner(trick, trumpSuit) {
+            const wizardIndex = trick.findIndex(t => t.card.type === 'Wizard');
+            if (wizardIndex !== -1) return trick[wizardIndex].playerIndex;
+
+            const trumps = trick.filter(t => t.card.suit === trumpSuit);
+            if (trumps.length > 0) {
+                return trumps.reduce((prev, curr) =>
+                    values.indexOf(prev.card.value) > values.indexOf(curr.card.value) ? prev : curr
+                ).playerIndex;
+            }
+
+            const ledSuit = trick[0].card.suit;
+            const ledCards = ledSuit ? trick.filter(t => t.card.suit === ledSuit) : [];
+            if (ledCards.length > 0) {
+                return ledCards.reduce((prev, curr) =>
+                    values.indexOf(prev.card.value) > values.indexOf(curr.card.value) ? prev : curr
+                ).playerIndex;
+            }
+            return trick[0].playerIndex; // Nur Jester oder keine passenden Karten
+        }
+
+        // Runde bewerten
+        function scoreRound() {
+            gameState.gamePhase = 'scoring';
+            let scoreText = 'Rundenergebnis:\n';
+            gameState.players.forEach(p => {
+                if (p.tricksWon === p.prediction) {
+                    p.score += 20 + 10 * p.tricksWon;
+                    scoreText += `${p.name}: ${p.tricksWon} Stiche, Vorhersage ${p.prediction}, +${20 + 10 * p.tricksWon} Punkte\n`;
+                } else {
+                    const diff = Math.abs(p.tricksWon - p.prediction);
+                    p.score -= 10 * diff;
+                    scoreText += `${p.name}: ${p.tricksWon} Stiche, Vorhersage ${p.prediction}, -${10 * diff} Punkte\n`;
+                }
+            });
+            alert(scoreText);
+            renderGame();
+            gameState.currentRound++;
+            if (gameState.currentRound > gameState.maxRounds) {
+                const winner = gameState.players.reduce((prev, curr) => prev.score > curr.score ? prev : curr);
+                alert(`Spiel vorbei! Gewinner: ${winner.name} mit ${winner.score} Punkten!`);
+            } else {
+                startRound();
+            }
+        }
+
+        // Spiel starten
+        initializePlayers();
+        startRound();
+    </script>
+</body>
+</html>

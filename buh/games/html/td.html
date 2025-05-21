@@ -1,0 +1,549 @@
+<!DOCTYPE html>
+<html>
+<head>
+<title>Tower Defense</title>
+<style>
+body {
+  background-color: #333;
+  color: #eee;
+  font-family: sans-serif;
+  margin: 0;
+  overflow: hidden;
+}
+#gameContainer {
+  display: flex;
+  justify-content: center;
+  align-items: center;
+  height: 100vh;
+}
+canvas {
+  background-color: #070;
+  background-image: url("data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' width='40' height='40' viewBox='0 0 40 40'%3E%3Cg fill='%23090' fill-opacity='0.4'%3E%3Cpath fill-rule='evenodd' d='M0 0h40v40H0V0zm20 19v2h-2v-2h2zM1 19v2h20v-2H1zm22 0v2h17v-2H23zm-4 4v16h-2V23h2zm-18 0v16H1V23h2zm4 0v16h16v-16H7z'/%3E%3C/g%3E%3C/svg%3E"); /* Add a subtle tile pattern */
+  border: 1px solid #000;
+  box-shadow: 10px 10px 15px rgba(0, 0, 0, 0.5);
+}
+#infoPanel {
+  background-color: #222;
+  border: 1px solid #000;
+  padding: 10px;
+  margin-left: 20px;
+  box-shadow: 5px 5px 10px rgba(0, 0, 0, 0.5);
+}
+.infoLabel {
+  color: #ccc;
+  margin-bottom: 5px;
+}
+</style>
+</head>
+<body>
+
+<div id="gameContainer">
+  <canvas id="gameCanvas" width="800" height="600"></canvas>
+  <div id="infoPanel">
+    <div class="infoLabel">Money: <span id="moneyLabel">100</span></div>
+    <div class="infoLabel">Lives: <span id="livesLabel">10</span></div>
+    <div class="infoLabel">Wave: <span id="waveLabel">0</span></div>
+  </div>
+</div>
+
+<script>
+// Spielvariablen
+const canvas = document.getElementById('gameCanvas');
+const ctx = canvas.getContext('2d');
+const moneyLabel = document.getElementById('moneyLabel');
+const livesLabel = document.getElementById('livesLabel');
+const waveLabel = document.getElementById('waveLabel');
+
+let money = 100;
+let lives = 10;
+let waveNumber = 0;
+let enemies = [];
+let towers = [];
+let bullets = [];
+let isGameOver = false; // Variable, um zu prüfen, ob das Spiel vorbei ist
+
+// Spielschleife
+function gameLoop() {
+  if (!isGameOver) { // Aktualisiere das Spiel nur, wenn es nicht vorbei ist
+    update();
+    draw();
+  }
+  requestAnimationFrame(gameLoop);
+}
+
+// Pfad definieren (angepasst an die Canvasgröße)
+const path = [
+  { x: 0, y: 250 },
+  { x: 150, y: 250 },
+  { x: 150, y: 100 },
+  { x: 350, y: 100 },
+  { x: 350, y: 450 },
+  { x: 600, y: 450 },
+  { x: 600, y: 300 },
+  { x: 800, y: 300 },
+];
+
+// Pfad zeichnen
+function drawPath() {
+  ctx.strokeStyle = 'brown';
+  ctx.lineWidth = 40;
+  ctx.lineCap = 'round'; // Runde Linienenden für weichere Kurven
+  ctx.beginPath();
+  ctx.moveTo(path[0].x, path[0].y);
+  for (let i = 1; i < path.length; i++) {
+    ctx.lineTo(path[i].x, path[i].y);
+  }
+  ctx.stroke();
+}
+
+// Feind-Klasse
+class Enemy {
+  constructor(x, y, health, speed, color, radius) {
+    this.x = x;
+    this.y = y;
+    this.health = health;
+    this.maxHealth = health; // Volle Gesundheit für die Größenanpassung
+    this.speed = speed;
+    this.color = color;
+    this.radius = radius;
+    this.pathIndex = 0;
+    this.animationOffset = Math.random() * 10; // Zufälliger Start für Wackelanimation
+    this.opacity = 0; // Startet unsichtbar
+    this.fadeInRate = 0.02; // Geschwindigkeit des Einblendens
+  }
+
+  draw() {
+    // Wackelanimation
+    const wobble = Math.sin(Date.now() / 50 + this.animationOffset) * 2;
+
+    // Feind zeichnen
+    ctx.globalAlpha = this.opacity; // Setzt die Transparenz
+    ctx.fillStyle = this.color;
+    ctx.beginPath();
+    ctx.arc(this.x + wobble, this.y, this.radius, 0, Math.PI * 2);
+    ctx.fill();
+    ctx.globalAlpha = 1; // Setzt die Transparenz zurück
+
+    // Lebensbalken (kleiner Balken über dem Feind)
+    const healthBarWidth = 20;
+    const healthBarHeight = 3;
+    const healthRatio = this.health / this.maxHealth;
+    ctx.fillStyle = 'red';
+    ctx.fillRect(this.x - healthBarWidth / 2, this.y - this.radius - healthBarHeight - 2, healthBarWidth, healthBarHeight);
+    ctx.fillStyle = 'green';
+    ctx.fillRect(this.x - healthBarWidth / 2, this.y - this.radius - healthBarHeight - 2, healthBarWidth * healthRatio, healthBarHeight);
+  }
+
+  move() {
+    // Einblenden, wenn der Feind noch nicht vollständig sichtbar ist
+    if (this.opacity < 1) {
+      this.opacity += this.fadeInRate;
+      if (this.opacity > 1) {
+        this.opacity = 1;
+      }
+    }
+    
+    // Nächstes Ziel auf dem Pfad finden
+    const targetX = path[this.pathIndex].x;
+    const targetY = path[this.pathIndex].y;
+
+    // Richtung zum Ziel berechnen
+    const dx = targetX - this.x;
+    const dy = targetY - this.y;
+    const dist = Math.sqrt(dx * dx + dy * dy);
+
+    // Feind bewegen
+    if (dist > this.speed) {
+      this.x += (dx / dist) * this.speed;
+      this.y += (dy / dist) * this.speed;
+    } else {
+      // Ziel erreicht, zum nächsten Punkt bewegen
+      this.x = targetX;
+      this.y = targetY;
+      this.pathIndex++;
+
+      // Ende des Pfades erreicht?
+      if (this.pathIndex >= path.length) {
+        lives--;
+        livesLabel.textContent = lives;
+        enemies.splice(enemies.indexOf(this), 1); // Feind entfernen
+        if (lives <= 0) {
+          gameOver();
+        }
+      }
+    }
+  }
+}
+
+// Turm-Klasse
+class Tower {
+  constructor(x, y, range, damage, fireRate, color) {
+    this.x = x;
+    this.y = y;
+    this.range = range;
+    this.damage = damage;
+    this.fireRate = fireRate;
+    this.color = color || 'blue';
+    this.lastFired = 0;
+    this.angle = 0; // Aktueller Drehwinkel des Turms
+    this.target = null; // Aktueller Gegner, auf den der Turm zielt
+  }
+
+  draw() {
+    // Turm zeichnen
+    ctx.fillStyle = this.color;
+    ctx.beginPath();
+    ctx.arc(this.x, this.y, 15, 0, Math.PI * 2);
+    ctx.fill();
+
+    // Kanone zeichnen (Rechteck, das sich zum Gegner dreht)
+    ctx.save(); // Speichert den aktuellen Zustand des Canvas
+    ctx.translate(this.x, this.y); // Verschiebt den Ursprung zum Turmzentrum
+    ctx.rotate(this.angle); // Dreht den Canvas um den Winkel
+    ctx.fillStyle = 'gray';
+    ctx.fillRect(-5, -15, 10, 30); // Zeichnet die Kanone (relativ zum neuen Ursprung)
+    ctx.restore(); // Stellt den vorherigen Zustand des Canvas wieder her
+
+    // Reichweite zeichnen (optional)
+    /*
+    ctx.strokeStyle = 'rgba(0, 0, 255, 0.3)';
+    ctx.beginPath();
+    ctx.arc(this.x, this.y, this.range, 0, Math.PI * 2);
+    ctx.stroke();
+    */
+  }
+
+  findTarget() {
+    // Nächsten Feind in Reichweite finden
+    let closestEnemy = null;
+    let minDistance = this.range;
+
+    for (let i = 0; i < enemies.length; i++) {
+      const enemy = enemies[i];
+      const distance = Math.sqrt((this.x - enemy.x) ** 2 + (this.y - enemy.y) ** 2);
+      if (distance <= this.range && distance < minDistance) {
+        minDistance = distance;
+        closestEnemy = enemy;
+      }
+    }
+    this.target = closestEnemy;
+  }
+  
+  updateRotation() {
+    // Turm auf das aktuelle Ziel ausrichten
+    if (this.target) {
+      const dx = this.target.x - this.x;
+      const dy = this.target.y - this.y;
+      this.angle = Math.atan2(dy, dx);
+    }
+  }
+
+  shoot() {
+    // Auf das aktuelle Ziel schießen
+    if (this.target) {
+        const now = Date.now();
+        if (now - this.lastFired > 1000 / this.fireRate) {
+            bullets.push(new Bullet(this.x, this.y, this.target, this.damage, 'yellow')); // Farbe als Parameter
+            this.lastFired = now;
+        }
+    }
+  }
+}
+
+// Geschoss-Klasse
+class Bullet {
+  constructor(x, y, target, damage, color) {
+    this.x = x;
+    this.y = y;
+    this.target = target;
+    this.damage = damage;
+    this.speed = 8;
+    this.color = color;
+    this.radius = 3; // Größe des Geschosses
+  }
+
+  draw() {
+      // Partikeleffekt für das Geschoss
+      for (let i = 0; i < 3; i++) { // Anzahl der Partikel
+          const particleSize = this.radius * Math.random(); // Zufällige Größe
+          const particleX = this.x + (Math.random() - 0.5) * 5; // Zufällige Position um das Geschoss
+          const particleY = this.y + (Math.random() - 0.5) * 5;
+          
+          ctx.fillStyle = this.color;
+          ctx.beginPath();
+          ctx.arc(particleX, particleY, particleSize, 0, Math.PI * 2);
+          ctx.fill();
+      }
+  }
+
+  move() {
+    // Richtung zum Ziel berechnen
+    const dx = this.target.x - this.x;
+    const dy = this.target.y - this.y;
+    const dist = Math.sqrt(dx * dx + dy * dy);
+
+    // Geschoss bewegen
+    if (dist > this.speed) {
+      this.x += (dx / dist) * this.speed;
+      this.y += (dy / dist) * this.speed;
+    } else {
+      // Ziel getroffen
+      this.target.health -= this.damage;
+
+      // Explosionsanimation beim Treffer
+      this.createExplosion();
+
+      if (this.target.health <= 0) {
+        money += 10; // Geld für das Töten von Feinden hinzufügen
+        moneyLabel.textContent = money;
+
+        // Feind aus dem Array entfernen (Fehler behoben)
+        const index = enemies.indexOf(this.target);
+        if (index > -1) {
+          enemies.splice(index, 1);
+        }
+      }
+
+      // Geschoss entfernen
+      const bulletIndex = bullets.indexOf(this);
+      if (bulletIndex > -1) {
+          bullets.splice(bulletIndex, 1);
+      }
+    }
+  }
+  // Explosionsanimation erzeugen
+  createExplosion() {
+    const numParticles = 10; // Anzahl der Partikel
+    const particleSize = 3; // Größe der Partikel
+
+    for (let i = 0; i < numParticles; i++) {
+      const angle = Math.random() * Math.PI * 2; // Zufälliger Winkel
+      const speed = Math.random() * 4; // Zufällige Geschwindigkeit
+      const dx = Math.cos(angle) * speed;
+      const dy = Math.sin(angle) * speed;
+
+      // Partikel erzeugen und zeichnen
+      const particle = {
+        x: this.x,
+        y: this.y,
+        dx: dx,
+        dy: dy,
+        radius: particleSize,
+        color: 'orange', // Farbe der Explosion
+        life: 15 // Lebensdauer der Partikel (Anzahl der Frames)
+      };
+
+      // Partikel bewegen und zeichnen (für die Lebensdauer)
+      const drawParticle = () => {
+        ctx.fillStyle = particle.color;
+        ctx.beginPath();
+        ctx.arc(particle.x, particle.y, particle.radius, 0, Math.PI * 2);
+        ctx.fill();
+
+        particle.x += particle.dx;
+        particle.y += particle.dy;
+        particle.radius *= 0.9; // Partikel schrumpfen lassen
+        particle.life--;
+
+        if (particle.life > 0) {
+          requestAnimationFrame(drawParticle);
+        }
+      };
+
+      requestAnimationFrame(drawParticle);
+    }
+  }
+}
+
+// Feinde zeichnen
+function drawEnemies() {
+  enemies.forEach(enemy => {
+    enemy.draw();
+  });
+}
+
+// Türme zeichnen
+function drawTowers() {
+  towers.forEach(tower => {
+    tower.draw();
+  });
+}
+
+// Geschosse zeichnen
+function drawBullets() {
+  bullets.forEach(bullet => {
+    bullet.draw();
+  });
+}
+
+// Feinde bewegen
+function moveEnemies() {
+  enemies.forEach(enemy => {
+    enemy.move();
+  });
+}
+
+// Türme aktualisieren (Ziel finden, rotieren und schießen)
+function towersShoot() {
+  towers.forEach(tower => {
+    tower.findTarget();
+    tower.updateRotation();
+    tower.shoot();
+  });
+}
+
+// Geschosse bewegen
+function moveBullets() {
+  bullets.forEach(bullet => {
+    bullet.move();
+  });
+}
+
+// Kollisionen prüfen (hier: Geschoss trifft Feind)
+function checkCollisions() {
+  // (Kollisionsprüfung ist bereits in moveBullets() integriert)
+}
+
+// Neue Welle starten
+function spawnWave() {
+    waveNumber++;
+    waveLabel.textContent = waveNumber;
+
+    const baseEnemies = 5;
+    const increasePerWave = 5;
+    const numEnemies = baseEnemies + (waveNumber - 1) * increasePerWave;
+
+    for (let i = 0; i < numEnemies; i++) {
+      const health = 50 + waveNumber * 10;
+      const speed = 1 + waveNumber * 0.2;
+      const color = waveNumber < 5 ? 'red' : 'purple'; // Farbwechsel nach bestimmten Wellen
+      const radius = Math.max(5, 15 - waveNumber * 0.5); // Größe der Feinde anpassen
+      
+      // Verzögerung zwischen den Feinden hinzufügen
+      setTimeout(() => {
+        const enemy = new Enemy(0, 250, health, speed, color, radius);
+        enemies.push(enemy);
+      }, i * 500); // 500ms Verzögerung
+    }
+}
+
+// Überprüfen, ob die Welle beendet ist und die nächste starten
+function checkWave() {
+  if (enemies.length === 0) {
+    spawnWave();
+  }
+}
+
+// Spielende
+function gameOver() {
+  isGameOver = true; // Setze die Variable auf true, um das Spiel zu stoppen
+  alert('Game Over! Du hast Welle ' + waveNumber + ' erreicht.');
+  // Spiel zurücksetzen oder andere Aktionen...
+  resetGame(); // Rufe die Funktion zum Zurücksetzen des Spiels auf
+}
+
+// Spiel zurücksetzen
+function resetGame() {
+  money = 100;
+  lives = 10;
+  waveNumber = 0;
+  enemies = [];
+  towers = [];
+  bullets = [];
+  isGameOver = false; // Setze die Variable zurück, um das Spiel wieder zu starten
+  moneyLabel.textContent = money;
+  livesLabel.textContent = lives;
+  waveLabel.textContent = waveNumber;
+  spawnWave(); // Starte die erste Welle
+}
+
+// Event-Listener für Mausklicks (Türme platzieren)
+canvas.addEventListener('click', function(event) {
+  const x = event.offsetX;
+  const y = event.offsetY;
+
+  // Prüfen, ob ein Turm gebaut werden kann (nicht auf dem Pfad und genug Geld)
+  if (canPlaceTower(x, y) && money >= 50) {
+    towers.push(new Tower(x, y, 100, 10 + waveNumber * 2, 3, 'blue')); // Schaden basierend auf Wellenzahl
+    money -= 50; // Turmkosten abziehen
+    moneyLabel.textContent = money;
+  } else if (money < 50) {
+    alert("Nicht genug Geld, um einen Turm zu bauen!");
+  }
+});
+
+// Überprüfen, ob ein Turm an der Position platziert werden kann
+function canPlaceTower(x, y) {
+  // Prüfen, ob die Position auf dem Pfad liegt
+  let onPath = false;
+  for (let i = 0; i < path.length - 1; i++) {
+    const start = path[i];
+    const end = path[i + 1];
+
+    // Einfache Kollisionsprüfung mit dem Pfad (kann verbessert werden)
+    const distToStart = Math.sqrt((x - start.x) ** 2 + (y - start.y) ** 2);
+    const distToEnd = Math.sqrt((x - end.x) ** 2 + (y - end.y) ** 2);
+    const distStartToEnd = Math.sqrt((start.x - end.x) ** 2 + (start.y - end.y) ** 2);
+
+    if (distToStart + distToEnd < distStartToEnd + 20) { // Toleranzbereich
+      onPath = true;
+      break;
+    }
+  }
+
+  // Prüfen, ob die Position zu nah an einem anderen Turm ist
+  let tooCloseToOtherTower = false;
+  for (let i = 0; i < towers.length; i++) {
+    const distance = Math.sqrt((x - towers[i].x) ** 2 + (y - towers[i].y) ** 2);
+    if (distance < 40) { // Mindestabstand zwischen Türmen
+      tooCloseToOtherTower = true;
+      break;
+    }
+  }
+
+  return !onPath && !tooCloseToOtherTower;
+}
+
+// Spiel-Updates
+function update() {
+  // Feinde aktualisieren
+  moveEnemies();
+  
+  // Türme aktualisieren
+  towersShoot();
+  
+  // Geschosse aktualisieren
+  moveBullets();
+  
+  // Kollisionen prüfen
+  checkCollisions();
+  
+  // Welle prüfen
+  checkWave();
+}
+
+// Spiel zeichnen
+function draw() {
+  // Canvas löschen
+  ctx.clearRect(0, 0, canvas.width, canvas.height);
+
+  // Pfad zeichnen
+  drawPath();
+
+  // Feinde zeichnen
+  drawEnemies();
+  
+  // Türme zeichnen
+  drawTowers();
+
+  // Geschosse zeichnen
+  drawBullets();
+}
+
+// Spiel starten
+spawnWave(); // Erste Welle starten
+gameLoop();
+</script>
+
+</body>
+</html>

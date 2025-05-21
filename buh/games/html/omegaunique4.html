@@ -1,0 +1,352 @@
+﻿<!DOCTYPE html>
+<html lang="de">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Omega Endlos Spiel (Kein Sound)</title>
+    <style>
+        /* CSS zum Zentrieren und Stylen */
+        html, body {
+            margin: 0;
+            padding: 0;
+            overflow: hidden;
+            background-color: #111;
+            display: flex;
+            flex-direction: column; /* Elemente untereinander anordnen */
+            justify-content: center;
+            align-items: center;
+            height: 100vh;
+            font-family: 'Courier New', Courier, monospace;
+            color: #eee;
+            text-align: center;
+        }
+        canvas {
+            display: block;
+            border: 2px solid #0f0;
+            box-shadow: 0 0 15px #0f0;
+            margin-bottom: 15px; /* Etwas mehr Platz nach unten */
+        }
+         #info {
+            /* Optional: Kleiner Info-Text unten */
+            color: #aaa;
+            font-size: 14px;
+            position: absolute;
+            bottom: 10px;
+            width: 100%;
+        }
+    </style>
+    <!-- p5.js Kernbibliothek via CDN einbinden -->
+    <script src="https://cdnjs.cloudflare.com/ajax/libs/p5.js/1.7.0/p5.js"></script>
+    <!-- KEIN p5.sound mehr nötig -->
+</head>
+<body>
+    <!-- Canvas wird hier durch p5.js erstellt -->
+    <div id="info">Steuerung: W A S D | Neustart: ENTER</div>
+
+    <script>
+        // --- Globale Variablen ---
+        let player; // Wird in setup() initialisiert
+        let obstacles = [];
+        let score = 0;
+        let gameState = 'start'; // 'start', 'playing', 'gameOver'
+        let baseObstacleSpawnRate = 90; // Start-Frames zwischen Hindernissen
+        let baseSpeed = 3;          // Start-Geschwindigkeit der Hindernisse
+        let speedIncreaseFactor = 0.001; // Wie schnell die Geschwindigkeit ansteigt
+        let spawnRateDecreaseFactor = 0.05; // Wie schnell die Spawn-Rate sinkt
+
+        // Hintergrund
+        let bgOffset = 0;
+        let bgNoiseScale = 0.008;
+        let bgSpeed = 0.8;
+
+        // --- p5.js Hauptfunktionen ---
+
+        function setup() {
+            // Canvas erstellen, fast volle Größe
+            let cnv = createCanvas(windowWidth * 0.9, windowHeight * 0.9);
+             // Zentrieren (CSS sollte das meiste erledigen, dies ist ein Fallback)
+            cnv.position((windowWidth - width) / 2, (windowHeight - height) / 2);
+
+            player = new Player(); // Spieler-Objekt erstellen
+
+            // Modi setzen
+            rectMode(CENTER);
+            ellipseMode(CENTER);
+            textAlign(CENTER, CENTER);
+            textSize(20);
+            noStroke(); // Standardmäßig keinen Rand
+            colorMode(RGB); // Sicherstellen, dass RGB der Standard ist
+        }
+
+        function draw() {
+            // 1. Hintergrund zeichnen
+            drawDynamicBackground();
+
+            // 2. Spiel-Logik basierend auf dem Zustand
+            if (gameState === 'start') {
+                showStartScreen();
+            } else if (gameState === 'playing') {
+                runGame();
+            } else if (gameState === 'gameOver') {
+                showGameOverScreen();
+            }
+        }
+
+        // --- Spiel-Logik Funktionen ---
+
+        function runGame() {
+            // Punktzahl erhöhen und anzeigen
+            score++;
+            fill(255, 255, 0); // Gelbe Schrift für Score
+            textSize(32);
+            text("SCORE: " + score, width / 2, 40);
+
+            // Sicherstellen, dass Player existiert
+            if (!player) return;
+
+            // Spieler: Eingabe, Update, Anzeige
+            player.handleInput();
+            player.update();
+            player.display();
+
+            // Hindernisse: Geschwindigkeit & Spawnrate anpassen
+            let currentSpeed = baseSpeed + score * speedIncreaseFactor;
+            let currentSpawnRate = max(20, baseObstacleSpawnRate - score * spawnRateDecreaseFactor);
+
+            // Neues Hindernis erzeugen?
+            if (frameCount % floor(currentSpawnRate) === 0) {
+                obstacles.push(new Obstacle(currentSpeed));
+            }
+
+            // Hindernisse verwalten (rückwärts iterieren!)
+            for (let i = obstacles.length - 1; i >= 0; i--) {
+                obstacles[i].update(currentSpeed);
+                obstacles[i].display();
+
+                // Kollisionsprüfung
+                if (obstacles[i].hits(player)) {
+                    gameState = 'gameOver';
+                    // Keine Sound-Aktionen mehr hier
+                     document.getElementById('info').style.display = 'block'; // Info wieder anzeigen
+                }
+
+                // Außerhalb des Bildschirms? Entfernen.
+                if (obstacles[i].isOffscreen()) {
+                    obstacles.splice(i, 1);
+                }
+            }
+        }
+
+        function drawDynamicBackground() {
+            background(10, 0, 20, 150); // Leicht transparenter Hintergrund für Bewegungsschleier
+            let time = frameCount * bgSpeed; // Zeitfaktor für die Animation
+
+            for (let y = 0; y < height; y += 10) {
+                // Perlin Noise für Dicke, Farbe, Alpha und X-Offset der Linien
+                let noiseVal = noise(y * bgNoiseScale, time * 0.01);
+                let noiseColor = noise(y * bgNoiseScale * 0.5, time * 0.02 + 100);
+                let noiseXOffset = noise(y * bgNoiseScale * 0.8, time * 0.005 + 200);
+
+                let thickness = map(noiseVal, 0, 1, 0.5, 5); // Variierende Dicke
+                let lineAlpha = map(noiseVal, 0, 1, 20, 100); // Variierende Transparenz
+                let r = map(noiseColor, 0, 1, 50, 150);
+                let g = map(noiseColor, 0, 1, 20, 80);
+                let b = map(noiseColor, 0, 1, 100, 255);
+                let xOffset = map(noiseXOffset, 0, 1, -width * 0.3, width * 0.3); // Wellenbewegung
+
+                stroke(r, g, b, lineAlpha);
+                strokeWeight(thickness);
+                line(0 + xOffset, y, width + xOffset, y); // Horizontale, wellige Linie zeichnen
+            }
+            bgOffset += bgSpeed; // Offset für die nächste Frame-Animation erhöhen (nicht direkt verwendet, aber hält die Logik)
+            noStroke(); // Stroke für andere Elemente zurücksetzen
+        }
+
+         function showStartScreen() {
+            fill(255, 255, 255, 200); // Halbtransparente weiße Schrift
+            textSize(48);
+            text("OMEGA DODGE", width / 2, height / 2 - 50); // Titel leicht geändert
+            textSize(24);
+            text("Steuerung: W A S D", width / 2, height / 2 + 20);
+            textSize(20);
+            text("Drücke WASD zum Starten", width / 2, height / 2 + 60);
+            document.getElementById('info').style.display = 'none'; // Info im Startscreen ausblenden
+        }
+
+        function showGameOverScreen() {
+            // Halbtransparenter roter Überleger
+            fill(180, 0, 0, 180);
+            rect(width / 2, height / 2, width, height);
+
+            // Texte anzeigen
+            fill(255); // Weiße Schrift
+            textSize(64);
+            text("GAME OVER", width / 2, height / 2 - 60);
+            textSize(40);
+            text("Final Score: " + score, width / 2, height / 2 + 10);
+            textSize(28);
+            text("Drücke ENTER zum Neustarten", width / 2, height / 2 + 70);
+             document.getElementById('info').style.display = 'block'; // Info im GameOver Screen anzeigen
+        }
+
+        // Startet das Spiel (vereinfacht)
+        function startGame() {
+            if (gameState === 'start') {
+                gameState = 'playing';
+                 document.getElementById('info').style.display = 'block'; // Info anzeigen, wenn Spiel läuft
+            }
+        }
+
+        // Setzt das Spiel zurück
+        function resetGame() {
+            score = 0;
+            obstacles = []; // Hindernis-Array leeren
+             // Player zurücksetzen (Position und Farbe)
+             if (player) {
+                 player.x = width * 0.25;
+                 player.y = height / 2;
+                 player.colorHue = 0;
+             } else {
+                 player = new Player(); // Neu erstellen, falls nicht vorhanden
+             }
+            gameState = 'playing'; // Spielzustand auf 'playing'
+            frameCount = 0; // Framecount zurücksetzen für konsistentes Spawnen am Anfang
+             document.getElementById('info').style.display = 'block'; // Info anzeigen
+        }
+
+        // --- Event-Handler ---
+
+        function keyPressed() {
+             // Starten mit WASD aus dem Start-Screen
+             if (gameState === 'start' && (keyCode === 87 || keyCode === 65 || keyCode === 83 || keyCode === 68)) { // W, A, S, D
+                 startGame();
+             }
+             // Neustart bei Game Over mit ENTER
+             else if (gameState === 'gameOver' && (keyCode === ENTER || keyCode === RETURN)) {
+                resetGame();
+            }
+        }
+
+         // Optional: Starten auch durch Mausklick
+         function mousePressed() {
+             if (gameState === 'start') {
+                 startGame();
+             }
+         }
+
+
+        // --- Klassen (Objekt-Vorlagen) ---
+
+        // Klasse für den Spieler
+        class Player {
+            constructor() {
+                this.size = 35;
+                this.x = width * 0.25; // Startet etwas weiter rechts
+                this.y = height / 2;
+                this.ySpeed = 5;
+                this.xSpeed = 4;
+                this.colorHue = 0; // Für Farbwechsel
+                // colorMode(HSB) wird jetzt in display() gesetzt/zurückgesetzt
+            }
+
+            handleInput() {
+                if (keyIsDown(87)) { this.y -= this.ySpeed; } // W
+                if (keyIsDown(83)) { this.y += this.ySpeed; } // S
+                if (keyIsDown(65)) { this.x -= this.xSpeed; } // A
+                if (keyIsDown(68)) { this.x += this.xSpeed; } // D
+            }
+
+            update() {
+                // Spieler innerhalb der Canvas-Grenzen halten
+                this.y = constrain(this.y, this.size / 2, height - this.size / 2);
+                this.x = constrain(this.x, this.size / 2, width - this.size / 2);
+
+                // Farbton für den Effekt langsam ändern
+                this.colorHue = (this.colorHue + 0.5) % 360;
+            }
+
+            display() {
+                push(); // Isoliert Farbeinstellungen
+                colorMode(HSB); // Farbmode nur für den Spieler ändern
+                fill(this.colorHue, 200, 255); // HSB: Farbton, Sättigung, Helligkeit
+                stroke(255); // Weißer Rand
+                strokeWeight(2);
+                ellipse(this.x, this.y, this.size, this.size);
+                pop(); // Stellt vorherigen Zustand (inkl. colorMode RGB) wieder her
+            }
+        }
+
+        // Klasse für die Hindernisse
+        class Obstacle {
+            constructor(speed) {
+                this.w = random(25, 70); // Zufällige Breite
+                this.h = random(height * 0.1, height * 0.7); // Zufällige Höhe
+                this.x = width + this.w / 2; // Startet rechts außerhalb
+                this.y = random(this.h / 2, height - this.h / 2); // Zufällige Y-Position
+                this.baseSpeed = speed; // Übergebene Geschwindigkeit
+                this.speedVariance = random(-0.5, 1.0); // Leichte zufällige Abweichung
+
+                // Zufällige "glitchy" Neon-Farbe (RGB)
+                this.color = color(random(150, 255), random(0, 100), random(150, 255), 220);
+            }
+
+            update(currentSpeed) {
+                // Position aktualisieren
+                this.x -= (currentSpeed + this.speedVariance);
+            }
+
+            display() {
+                fill(this.color);
+                stroke(0, 180); // Leichter dunkler Rand
+                strokeWeight(1);
+                rect(this.x, this.y, this.w, this.h, 5); // Rechteck mit abgerundeten Ecken
+                noStroke(); // Rand wieder deaktivieren für andere Elemente
+            }
+
+            isOffscreen() {
+                // Prüfen, ob links aus dem Bild
+                return (this.x < -this.w / 2);
+            }
+
+            // Kollisionserkennung (Kreis vs. Rechteck)
+            hits(player) {
+                if (!player) return false; // Sicherheitscheck
+
+                // Nächsten Punkt auf dem Rechteck zum Kreismittelpunkt finden
+                let closestX = constrain(player.x, this.x - this.w / 2, this.x + this.w / 2);
+                let closestY = constrain(player.y, this.y - this.h / 2, this.y + this.h / 2);
+
+                // Distanz berechnen
+                let distance = dist(player.x, player.y, closestX, closestY);
+
+                // Kollision, wenn Distanz kleiner als Radius
+                return distance < player.size / 2;
+            }
+        }
+
+        // Funktion zum Anpassen der Canvas-Größe bei Fensteränderung
+        function windowResized() {
+            let oldWidth = width;
+            let oldHeight = height;
+
+            resizeCanvas(windowWidth * 0.9, windowHeight * 0.9); // Wieder volle Höhe
+
+            // Canvas neu zentrieren
+            let cnvElement = document.querySelector('canvas');
+            if (cnvElement) {
+                 cnvElement.style.left = `${(windowWidth - width) / 2}px`;
+                 cnvElement.style.top = `${(windowHeight - height) / 2}px`; // Wieder zentriert
+            }
+
+            // Player-Position anpassen, wenn vorhanden
+            if (player && oldWidth > 0 && oldHeight > 0) {
+                let relativeX = player.x / oldWidth;
+                let relativeY = player.y / oldHeight;
+                player.x = constrain(relativeX * width, player.size / 2, width - player.size / 2);
+                player.y = constrain(relativeY * height, player.size / 2, height - player.size / 2);
+            }
+        }
+
+    </script>
+</body>
+</html>

@@ -1,0 +1,374 @@
+﻿<!DOCTYPE html>
+<html lang="de">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Omega Unique - Chronomass Accumulator (Single File)</title>
+    <!-- 1. Include p5.js library -->
+    <script src="https://cdnjs.cloudflare.com/ajax/libs/p5.js/1.9.0/p5.js"></script>
+    <!-- Optional: Add the p5.sound library if you want sound later -->
+    <!-- <script src="https://cdnjs.cloudflare.com/ajax/libs/p5.js/1.9.0/addons/p5.sound.min.js"></script> -->
+
+    <!-- 2. CSS Styles -->
+    <style>
+        body {
+            margin: 0;
+            padding: 0;
+            display: flex;
+            justify-content: center;
+            align-items: center;
+            min-height: 100vh;
+            background-color: #111; /* Dunkler Hintergrund */
+            color: #eee;
+            font-family: sans-serif;
+            overflow: hidden; /* Verhindert Scrollbalken durch Canvas */
+        }
+        main {
+            /* Der Canvas wird hier durch p5.js eingefügt */
+        }
+        /* Optional: Ein kleiner Info-Text */
+        .info {
+            position: absolute;
+            top: 10px;
+            left: 10px;
+            background-color: rgba(0,0,0,0.6); /* Etwas dunklerer Infokasten */
+            padding: 8px 12px;
+            border-radius: 5px;
+            font-size: 0.9em;
+            line-height: 1.4;
+            max-width: 200px; /* Verhindert, dass es zu breit wird */
+            color: #f0f0f0; /* Hellerer Text */
+            border: 1px solid rgba(255, 255, 255, 0.1); /* Subtiler Rand */
+        }
+    </style>
+</head>
+<body>
+    <!-- 3. HTML Structure -->
+    <main>
+        <!-- p5.js Canvas wird hier automatisch erstellt -->
+    </main>
+    <div class="info">
+        <b>Omega Unique</b><br>
+        Bewege die Maus. Sammle Chronomass.<br>
+        Deine Form ist ein einzigartiges Artefakt dieser Reise. Kein Ende, nur Wandel.
+    </div>
+
+    <!-- 4. p5.js Sketch Code -->
+    <script>
+        let player;
+        let fragments = [];
+        let bgColor;
+        let time = 0; // Für Hintergrund-Evolution
+
+        // --- Omega Unique Kern: Spielerklasse ---
+        class Player {
+            constructor(x, y) {
+                this.pos = createVector(x, y);
+                this.baseRadius = 15;
+                // Startform: Ein einfacher Kreis (repräsentiert durch Vektoren relativ zum Zentrum)
+                this.vertices = [];
+                let numStartVertices = 8;
+                for (let i = 0; i < numStartVertices; i++) {
+                    let angle = map(i, 0, numStartVertices, 0, TWO_PI);
+                    this.vertices.push(p5.Vector.fromAngle(angle).mult(this.baseRadius));
+                }
+                // Startfarbe (HSB ist gut für Mischungen)
+                this.color = color(random(360), 80, 90);
+                this.complexity = 0; // Zähler für gesammelte Fragmente
+            }
+
+            update() {
+                // Spieler folgt der Maus (sanft)
+                let target = createVector(mouseX, mouseY);
+                // Verwende Delta-Time für gleichmäßigere Bewegung bei variabler Framerate (optional aber gut)
+                let lerpSpeed = constrain(1.0 - pow(0.02, deltaTime / 1000.0), 0, 1); // ca. 8% pro Sekunde
+                this.pos.lerp(target, lerpSpeed);
+
+
+                // Grenzen prüfen (optional, hier bleibt er auf dem Schirm)
+                this.pos.x = constrain(this.pos.x, 0, width);
+                this.pos.y = constrain(this.pos.y, 0, height);
+            }
+
+            // Der Kern der "Omega Unique" Evolution
+            absorb(fragment) {
+                // 1. Farbe mischen (HSB Lerp)
+                let targetColor = fragment.color;
+                let currentHue = hue(this.color);
+                let targetHue = hue(targetColor);
+                // Nimm den kürzeren Weg um den Farbkreis
+                let diff = targetHue - currentHue;
+                 if (abs(diff) > 180) {
+                    // Wenn der Unterschied > 180 ist, gehen wir in die andere Richtung
+                     targetHue += (diff < 0) ? 360 : -360;
+                 }
+                // Interpoliere langsam zur neuen Farbe
+                let newHue = lerp(currentHue, targetHue, 0.15);
+                let newSat = lerp(saturation(this.color), saturation(targetColor), 0.15);
+                let newBri = lerp(brightness(this.color), brightness(targetColor), 0.15);
+                this.color = color(newHue % 360, newSat, newBri); // Modulo 360 für Hue
+
+                // 2. Form ändern: Füge einen neuen Vertex hinzu oder modifiziere einen bestehenden
+                // Vektor vom Spielerzentrum zum Fragment
+                let delta = p5.Vector.sub(fragment.pos, this.pos);
+                let influenceRadius = fragment.size * 0.6 + random(-2, 2); // Wie stark beeinflusst das Fragment, mit Zufall
+
+                // Neuer Vertex zeigt in Richtung des Fragments, Länge basiert auf Basisradius, Komplexität und Einfluss
+                let newVertexMagnitude = this.baseRadius + this.complexity * 0.1 + influenceRadius;
+                let newVertex = delta.copy().normalize().mult(newVertexMagnitude);
+
+
+                // Finde den Winkel des neuen Vertex
+                 let newAngle = newVertex.heading();
+                 if (newAngle < 0) newAngle += TWO_PI; // Winkel in [0, 2PI]
+
+                 // Finde, wo der neue Vertex winkelmäßig eingefügt werden soll
+                 let insertIndex = this.vertices.length; // Standardmäßig am Ende
+                 for (let i = 0; i < this.vertices.length; i++) {
+                     let currentAngle = this.vertices[i].heading();
+                     if (currentAngle < 0) currentAngle += TWO_PI;
+                     let nextIndex = (i + 1) % this.vertices.length;
+                     let nextAngle = this.vertices[nextIndex].heading();
+                     if (nextAngle < 0) nextAngle += TWO_PI;
+
+                     // Spezialfall: Über den 0/2PI Übergang
+                     if (nextAngle < currentAngle) { // z.B. von 350 Grad zu 10 Grad
+                         if (newAngle > currentAngle || newAngle < nextAngle) {
+                             insertIndex = nextIndex;
+                             break;
+                         }
+                     } else { // Normaler Fall
+                         if (newAngle > currentAngle && newAngle < nextAngle) {
+                             insertIndex = nextIndex;
+                             break;
+                         }
+                     }
+                 }
+
+                // Füge den neuen Vertex an der berechneten Position ein
+                this.vertices.splice(insertIndex, 0, newVertex);
+
+
+                // Optional: Verhindern, dass die Form *zu* komplex/groß wird
+                const MAX_VERTICES = 150;
+                if (this.vertices.length > MAX_VERTICES) {
+                    // Entferne einen zufälligen Vertex (nicht den gerade hinzugefügten)
+                    let removeIndex = floor(random(this.vertices.length));
+                     if(removeIndex === insertIndex) {
+                         removeIndex = (removeIndex + 1) % this.vertices.length; // Nimm den nächsten
+                     }
+                    this.vertices.splice(removeIndex, 1);
+                }
+
+                // Leichte Normalisierung der Vertex-Magnitude, um extremes Wachstum zu dämpfen
+                let avgMag = 0;
+                this.vertices.forEach(v => avgMag += v.mag());
+                avgMag /= this.vertices.length;
+                let targetAvgMag = this.baseRadius + this.complexity * 0.08; // Zielgröße etwas langsamer anpassen
+                let scaleFactor = targetAvgMag / avgMag;
+                if (scaleFactor < 1.05 && scaleFactor > 0.95) { // Nur sanft skalieren
+                    this.vertices.forEach(v => v.mult(scaleFactor));
+                } else if (scaleFactor >= 1.05) {
+                     this.vertices.forEach(v => v.mult(1.05)); // Max. Zunahme begrenzen
+                } else if (scaleFactor <= 0.95) {
+                    this.vertices.forEach(v => v.mult(0.95)); // Max. Abnahme begrenzen
+                }
+
+
+                this.complexity++;
+            }
+
+            display() {
+                push(); // Isoliert Stileinstellungen
+                translate(this.pos.x, this.pos.y);
+                fill(this.color);
+                stroke(hue(this.color), saturation(this.color)*0.8, brightness(this.color)*1.2, 80); // Leichter, hellerer Rand
+                strokeWeight(1.5);
+
+                // Zeichne die komplexe Form
+                beginShape();
+                for (let v of this.vertices) {
+                   // curveVertex(v.x, v.y); // Alternative für weichere Formen, braucht mehr Punkte
+                   vertex(v.x, v.y);
+                }
+                endShape(CLOSE);
+                pop(); // Stellt vorherige Stile wieder her
+            }
+
+            // Kollisionsprüfung basierend auf der komplexen Form (vereinfacht)
+            checkCollision(fragment) {
+                // 1. Schnelle Distanzprüfung zum Zentrum
+                let dSq = p5.Vector.sub(this.pos, fragment.pos).magSq(); // Quadrat spart Wurzelberechnung
+
+                // 2. Dynamischer Radius basierend auf maximaler Vertex-Distanz
+                let maxRadiusSq = 0;
+                this.vertices.forEach(v => {
+                    let magSq = v.magSq();
+                    if (magSq > maxRadiusSq) maxRadiusSq = magSq;
+                });
+
+                let combinedRadius = sqrt(maxRadiusSq) + fragment.size / 2;
+
+                if (dSq < combinedRadius * combinedRadius) {
+                    // Optional: Genauere Prüfung (point-in-polygon) wäre aufwändiger.
+                    // Für dieses Spiel reicht die Annäherung oft aus, besonders bei konvexen Formen.
+                    // Man könnte hier noch prüfen, ob das Fragment *innerhalb* der Bounding Box liegt.
+                    return true;
+                }
+                return false;
+            }
+        }
+
+        // --- Omega Unique Element: Chronomass Fragment ---
+        class Fragment {
+            constructor() {
+                // Startet am Rand
+                let edge = floor(random(4));
+                let spawnMargin = 30; // Weiter außerhalb starten
+                if (edge === 0) { // Top
+                    this.pos = createVector(random(width), -spawnMargin);
+                    this.vel = createVector(random(-1.5, 1.5), random(0.8, 2.5));
+                } else if (edge === 1) { // Right
+                    this.pos = createVector(width + spawnMargin, random(height));
+                    this.vel = createVector(random(-2.5, -0.8), random(-1.5, 1.5));
+                } else if (edge === 2) { // Bottom
+                    this.pos = createVector(random(width), height + spawnMargin);
+                    this.vel = createVector(random(-1.5, 1.5), random(-2.5, -0.8));
+                } else { // Left
+                    this.pos = createVector(-spawnMargin, random(height));
+                    this.vel = createVector(random(0.8, 2.5), random(-1.5, 1.5));
+                }
+
+                this.size = random(10, 22); // Etwas größere Spanne
+                // Zufällige Farbe, hohe Sättigung/Helligkeit für Lebendigkeit
+                this.color = color(random(360), random(75, 100), random(85, 100));
+                this.lifespan = random(200, 300); // Variable Lebensdauer
+                this.initialLifespan = this.lifespan; // Für Alpha-Berechnung
+            }
+
+            update() {
+                this.pos.add(this.vel);
+                // Optional: Leichte Verlangsamung oder Kursänderung für mehr Dynamik
+                 this.vel.mult(0.995); // Sehr leichte Reibung
+                 // this.vel.rotate(random(-0.01, 0.01)); // Leichte zufällige Kursänderung
+
+                this.lifespan -= deltaTime / 16.66; // Zeitbasiertes Verblassen (ca. 1 pro Frame bei 60fps)
+            }
+
+            display() {
+                push();
+                // Transparenz basierend auf Lebensdauer (sanfteres Ein-/Ausblenden)
+                let alpha = 0;
+                if (this.lifespan > this.initialLifespan - 50) { // Fade in
+                    alpha = map(this.lifespan, this.initialLifespan, this.initialLifespan - 50, 0, 100);
+                } else if (this.lifespan < 50) { // Fade out
+                    alpha = map(this.lifespan, 50, 0, 100, 0);
+                } else {
+                    alpha = 100; // Volle Sichtbarkeit
+                }
+
+                let displayColor = color(hue(this.color), saturation(this.color), brightness(this.color), alpha);
+                fill(displayColor);
+                noStroke();
+                 // Leichter Glüheffekt (zwei Ellipsen)
+                 fill(hue(this.color), saturation(this.color)*0.5, 100, alpha * 0.5); // Äußeres Glühen
+                 ellipse(this.pos.x, this.pos.y, this.size * 1.5, this.size * 1.5);
+                 fill(displayColor); // Innerer Kern
+                 ellipse(this.pos.x, this.pos.y, this.size, this.size);
+
+                pop();
+            }
+
+            isOffscreen() {
+                let killMargin = 50; // Wann werden sie sicher entfernt
+                return (this.pos.x < -killMargin || this.pos.x > width + killMargin ||
+                        this.pos.y < -killMargin || this.pos.y > height + killMargin ||
+                        this.lifespan <= 0);
+            }
+        }
+
+        // --- p5.js Hauptfunktionen ---
+        function setup() {
+            createCanvas(windowWidth, windowHeight);
+            colorMode(HSB, 360, 100, 100, 100); // HSB-Modus für Farben
+            player = new Player(width / 2, height / 2);
+            bgColor = color(230, 30, 15); // Start-Hintergrundfarbe (dunkelblau/violett)
+            // Verhindert das Standard-Kontextmenü auf dem Canvas
+             for (let elt of document.getElementsByTagName('canvas')) {
+                 elt.addEventListener('contextmenu', (e) => e.preventDefault());
+             }
+             // Setzt die Framerate (optional)
+             // frameRate(60);
+        }
+
+        function draw() {
+            // Hintergrund-Evolution (Omega Aspekt)
+            time += deltaTime * 0.00001; // Langsamere Evolution basierend auf Zeit
+            let bgHueNoise = noise(time * 5);
+            let bgBriNoise = noise(time * 3 + 100);
+            let bgSatNoise = noise(time * 2 + 200);
+
+            let baseHue = 240; // Basis Blauton
+            let hueRange = 60; // Schwankungsbreite des Farbtons
+            let bgHue = (baseHue + map(bgHueNoise, 0, 1, -hueRange/2, hueRange/2)) % 360;
+            let bgBri = map(bgBriNoise, 0, 1, 8, 18); // Dunkler Bereich
+            let bgSat = map(bgSatNoise, 0, 1, 20, 50); // Entsättigter
+
+            bgColor = color(bgHue, bgSat, bgBri);
+
+            // Leichte Spur statt komplettem Löschen für "zeitlichen Fluss"
+            background(hue(bgColor), saturation(bgColor), brightness(bgColor), 25); // Geringe Alpha für Spuren
+
+
+            // --- Fragment Management ---
+            // Spawne neue Fragmente (Omega Unique: immer neue Möglichkeiten)
+            // Spawnrate abhängig von Zeit und Komplexität, aber begrenzt
+            let spawnRate = lerp(0.02, 0.1, constrain(player.complexity / 500, 0, 1)); // Erhöht sich bis Komplexität 500
+            if (random(1) < spawnRate * (deltaTime/16.66) && fragments.length < 120) { // Zeitbasiert + Limit
+               fragments.push(new Fragment());
+            }
+
+            // Aktualisiere und zeichne Fragmente, prüfe Kollisionen
+            for (let i = fragments.length - 1; i >= 0; i--) {
+                fragments[i].update();
+                fragments[i].display();
+
+                // Kollision prüfen
+                // Prüfe nur, wenn das Fragment nicht gerade verblasst (Performance)
+                if (fragments[i].lifespan > 10 && player.checkCollision(fragments[i])) {
+                    player.absorb(fragments[i]); // Spieler entwickelt sich weiter
+                    fragments.splice(i, 1); // Fragment entfernen
+                    // Optional: Kleiner Soundeffekt hier
+                } else if (fragments[i].isOffscreen()) {
+                    fragments.splice(i, 1); // Entferne alte/unsichtbare Fragmente
+                }
+            }
+
+            // --- Spieler Management ---
+            player.update();
+            player.display();
+
+            // Optional: Zeige Komplexität an
+             fill(0, 0, 100, 80); // Weiß, leicht transparent
+             textSize(16);
+             textAlign(RIGHT, TOP);
+             textFont('sans-serif');
+             text(`Complexity: ${player.complexity}`, width - 20, 20);
+        }
+
+        // Passt die Canvas-Größe an, wenn das Fenster verändert wird
+        function windowResized() {
+            resizeCanvas(windowWidth, windowHeight);
+            // Optional: Spieler neu zentrieren bei Resize? Oder bleibt er wo er ist?
+            // player.pos.set(width / 2, height / 2);
+        }
+
+        // Optional: Mouse Pressed für Interaktion (z.B. Pulsieren?)
+        // function mousePressed() {
+        //     // Kleine Reaktion vom Spieler?
+        // }
+
+    </script>
+
+</body>
+</html>

@@ -1,0 +1,128 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <title>3D Dodge Game</title>
+    <style>
+        body { margin: 0; overflow: hidden; }
+        #info {
+            position: absolute;
+            width: 100%;
+            color: #fff;
+            padding: 10px;
+            font-family: Arial, sans-serif;
+            text-align: center;
+            font-size: 24px;
+        }
+        canvas { display: block; }
+    </style>
+</head>
+<body>
+    <div id="info">Score: <span id="score">0</span></div>
+
+    <script src="https://cdnjs.cloudflare.com/ajax/libs/three.js/r128/three.min.js"></script>
+    <script>
+        let scene, camera, renderer;
+        let player, playerSize = 3;
+        let obstacles = [];
+        let obstacleSize = 4;
+        let speed = 0.1;
+        let score = 0;
+        let gameOver = false;
+
+        function init() {
+            scene = new THREE.Scene();
+            camera = new THREE.PerspectiveCamera(75, window.innerWidth / window.innerHeight, 0.1, 1000);
+            renderer = new THREE.WebGLRenderer();
+            renderer.setSize(window.innerWidth, window.innerHeight);
+            document.body.appendChild(renderer.domElement);
+
+            // Player setup
+            let playerGeometry = new THREE.BoxGeometry(playerSize, playerSize, playerSize);
+            let playerMaterial = new THREE.MeshPhongMaterial({ color: 0x44aa88 });
+            player = new THREE.Mesh(playerGeometry, playerMaterial);
+            scene.add(player);
+
+            // Light setup
+            let light = new THREE.PointLight(0xffffff, 1, 500);
+            light.position.set(10, 30, 20);
+            scene.add(light);
+            scene.add(new THREE.AmbientLight(0x404040));
+
+            // Initial camera position
+            camera.position.z = 50;
+			camera.position.y = 10;
+
+            // Handle keyboard controls
+            document.addEventListener('keydown', onDocumentKeyDown, false);
+
+            // Start the game loop
+            animate();
+        }
+
+        function onDocumentKeyDown(event) {
+            if (gameOver) return;
+
+            var keyCode = event.which;
+            if (keyCode == 37) {
+                player.position.x -= 1; // Move left
+            } else if (keyCode == 39) {
+                player.position.x += 1; // Move right
+            }
+        }
+
+        function addObstacle() {
+            let obstacleGeometry = new THREE.BoxGeometry(obstacleSize, obstacleSize, obstacleSize);
+            let obstacleMaterial = new THREE.MeshPhongMaterial({ color: 0x883333 });
+            let obstacle = new THREE.Mesh(obstacleGeometry, obstacleMaterial);
+
+            // Position the obstacle at a random x position and far enough away in the z plane
+            obstacle.position.x = (Math.random() - 0.5) * 20;
+            obstacle.position.z = camera.position.z - 100;
+
+            obstacles.push(obstacle);
+            scene.add(obstacle);
+        }
+
+        function animate() {
+            if (gameOver) return;
+
+            requestAnimationFrame(animate);
+
+            // Move the obstacles towards the camera
+            for (let i = 0; i < obstacles.length; i++) {
+                obstacles[i].position.z += speed;
+                if (obstacles[i].position.z > camera.position.z) {
+                    // If the obstacle is behind the camera, remove it
+                    scene.remove(obstacles[i]);
+                    obstacles.splice(i, 1);
+                    i--;
+
+                    // Increase score
+                    updateScore(1);
+                } else {
+                    // Check for collision
+                    if (obstacles[i].position.distanceTo(player.position) < (obstacleSize/2 + playerSize/2)) {
+                        gameOver = true;
+                        document.getElementById('info').innerHTML = 'Game Over! Score: ' + score;
+                    }
+                }
+            }
+
+            // Add a new obstacle randomly
+            if (Math.random() < 0.05) {
+                addObstacle();
+            }
+
+            renderer.render(scene, camera);
+        }
+
+        function updateScore(value) {
+            score += value;
+            document.getElementById('score').textContent = score;
+        }
+
+        init();
+    </script>
+</body>
+</html>

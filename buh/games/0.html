@@ -1,0 +1,194 @@
+<!DOCTYPE html>
+<html lang="de">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Air Hockey Deluxe</title>
+    <style>
+        body {
+            background-color: #f0f0f0;
+            display: flex;
+            justify-content: center;
+            align-items: center;
+            height: 100vh;
+            margin: 0;
+            font-family: Arial, sans-serif;
+        }
+        canvas {
+            border: 2px solid #333;
+            box-shadow: 0 0 20px rgba(0,0,0,0.3);
+        }
+    </style>
+</head>
+<body>
+    <canvas id="gameCanvas" width="800" height="400"></canvas>
+    <script>
+        const canvas = document.getElementById('gameCanvas');
+        const ctx = canvas.getContext('2d');
+
+        const player1 = { x: 50, y: 200, radius: 25, score: 0, color: '#ff6b6b', speed: 0 };
+        const player2 = { x: 750, y: 200, radius: 25, score: 0, color: '#4ecdc4', speed: 0 };
+        const puck = { x: 400, y: 200, radius: 15, dx: 5, dy: 5, color: '#f7fff7' };
+        const particles = [];
+
+        function drawCircle(x, y, radius, color) {
+            ctx.beginPath();
+            ctx.arc(x, y, radius, 0, Math.PI * 2, false);
+            ctx.fillStyle = color;
+            ctx.fill();
+            ctx.strokeStyle = '#333';
+            ctx.lineWidth = 2;
+            ctx.stroke();
+            ctx.closePath();
+        }
+
+        function drawScore() {
+            ctx.font = "30px Arial";
+            ctx.fillStyle = "#333";
+            ctx.textAlign = "center";
+            ctx.fillText(player1.score, 200, 50);
+            ctx.fillText(player2.score, 600, 50);
+        }
+
+        function movePuck() {
+            puck.x += puck.dx;
+            puck.y += puck.dy;
+
+            if (puck.y + puck.radius > canvas.height || puck.y - puck.radius < 0) {
+                puck.dy = -puck.dy;
+                createParticles(puck.x, puck.y, 10);
+            }
+
+            if (puck.x + puck.radius > canvas.width) {
+                player1.score++;
+                resetPuck();
+                createParticles(puck.x, puck.y, 30);
+            } else if (puck.x - puck.radius < 0) {
+                player2.score++;
+                resetPuck();
+                createParticles(puck.x, puck.y, 30);
+            }
+
+            if (distance(puck, player1) < puck.radius + player1.radius ||
+                distance(puck, player2) < puck.radius + player2.radius) {
+                puck.dx = -puck.dx * 1.1;
+                createParticles(puck.x, puck.y, 20);
+            }
+        }
+
+        function resetPuck() {
+            puck.x = canvas.width / 2;
+            puck.y = canvas.height / 2;
+            puck.dx = Math.random() > 0.5 ? 5 : -5;
+            puck.dy = Math.random() > 0.5 ? 5 : -5;
+        }
+
+        function distance(a, b) {
+            return Math.sqrt((a.x - b.x) ** 2 + (a.y - b.y) ** 2);
+        }
+
+        function createParticles(x, y, amount) {
+            for (let i = 0; i < amount; i++) {
+                particles.push({
+                    x: x,
+                    y: y,
+                    radius: Math.random() * 3 + 1,
+                    color: `hsl(${Math.random() * 360}, 50%, 50%)`,
+                    dx: Math.random() * 6 - 3,
+                    dy: Math.random() * 6 - 3,
+                    life: 30
+                });
+            }
+        }
+
+        function updateParticles() {
+            for (let i = particles.length - 1; i >= 0; i--) {
+                const p = particles[i];
+                p.x += p.dx;
+                p.y += p.dy;
+                p.life--;
+
+                if (p.life <= 0) {
+                    particles.splice(i, 1);
+                } else {
+                    drawCircle(p.x, p.y, p.radius, p.color);
+                }
+            }
+        }
+
+        function drawTable() {
+            ctx.fillStyle = '#1a535c';
+            ctx.fillRect(0, 0, canvas.width, canvas.height);
+            
+            ctx.strokeStyle = '#f7fff7';
+            ctx.lineWidth = 2;
+            ctx.beginPath();
+            ctx.moveTo(canvas.width / 2, 0);
+            ctx.lineTo(canvas.width / 2, canvas.height);
+            ctx.stroke();
+
+            ctx.beginPath();
+            ctx.arc(canvas.width / 2, canvas.height / 2, 50, 0, Math.PI * 2);
+            ctx.stroke();
+        }
+
+        function movePlayer(player) {
+            player.y += player.speed;
+            if (player.y < player.radius) {
+                player.y = player.radius;
+            } else if (player.y > canvas.height - player.radius) {
+                player.y = canvas.height - player.radius;
+            }
+        }
+
+        function gameLoop() {
+            ctx.clearRect(0, 0, canvas.width, canvas.height);
+
+            drawTable();
+            movePlayer(player1);
+            movePlayer(player2);
+            drawCircle(player1.x, player1.y, player1.radius, player1.color);
+            drawCircle(player2.x, player2.y, player2.radius, player2.color);
+            drawCircle(puck.x, puck.y, puck.radius, puck.color);
+            drawScore();
+            updateParticles();
+
+            movePuck();
+
+            requestAnimationFrame(gameLoop);
+        }
+
+        document.addEventListener('keydown', (e) => {
+            switch(e.key) {
+                case 'w':
+                    player1.speed = -5;
+                    break;
+                case 's':
+                    player1.speed = 5;
+                    break;
+                case 'ArrowUp':
+                    player2.speed = -5;
+                    break;
+                case 'ArrowDown':
+                    player2.speed = 5;
+                    break;
+            }
+        });
+
+        document.addEventListener('keyup', (e) => {
+            switch(e.key) {
+                case 'w':
+                case 's':
+                    player1.speed = 0;
+                    break;
+                case 'ArrowUp':
+                case 'ArrowDown':
+                    player2.speed = 0;
+                    break;
+            }
+        });
+
+        gameLoop();
+    </script>
+</body>
+</html>

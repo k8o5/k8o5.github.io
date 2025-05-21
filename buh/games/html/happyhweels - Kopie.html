@@ -1,0 +1,472 @@
+﻿<!DOCTYPE html>
+<html lang="de">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Symbiotische Barriere TD</title>
+    <style>
+        body {
+            display: flex; flex-direction: column; align-items: center;
+            font-family: 'Segoe UI', Tahoma, Geneva, Verdana, sans-serif;
+            background-color: #1a1a2e; /* Dunkelblau */
+            color: #e0e0fc; /* Helles Lavendel */
+            margin: 0; padding-top: 15px;
+        }
+        canvas {
+            border: 1px solid #4a4a6e;
+            background-color: #2a2a4e; /* Etwas helleres Dunkelblau */
+            cursor: cell; /* Passt zum Pflanzen-Thema */
+        }
+        #ui {
+            margin-top: 10px; padding: 10px; background-color: #1f1f3a;
+            border: 1px solid #4a4a6e; border-radius: 5px; min-width: 600px;
+            box-sizing: border-box; display: flex; justify-content: space-around;
+            align-items: center; color: #c0c0fc;
+        }
+         #ui span { font-weight: bold; }
+         button {
+             padding: 8px 15px; cursor: pointer; background-color: #5a5add; /* Violett-Blau */
+             color: #ffffff; border: none; border-radius: 3px; font-weight: bold;
+         }
+         button:hover { background-color: #7a7aff; }
+         button:disabled { background-color: #4a4a6e; color: #888; cursor: not-allowed; }
+         #message {
+             position: absolute; top: 50%; left: 50%; transform: translate(-50%, -50%);
+             background-color: rgba(10, 10, 20, 0.85); color: #ffcc66; /* Goldgelb */
+             padding: 25px 45px; border-radius: 10px; font-size: 2.2em;
+             text-align: center; display: none; z-index: 10; border: 1px solid #ffcc66;
+         }
+         .tooltip { /* Einfaches Tooltip für den Button */
+            position: relative; display: inline-block;
+         }
+         .tooltip .tooltiptext {
+            visibility: hidden; width: 140px; background-color: #555; color: #fff;
+            text-align: center; border-radius: 6px; padding: 5px 0;
+            position: absolute; z-index: 1; bottom: 125%; left: 50%; margin-left: -70px;
+            opacity: 0; transition: opacity 0.3s; font-size: 0.8em;
+         }
+        .tooltip:hover .tooltiptext { visibility: visible; opacity: 1; }
+    </style>
+</head>
+<body>
+
+    <h1>Symbiotische Barriere</h1>
+    <canvas id="gameCanvas" width="600" height="400"></canvas>
+    <div id="ui">
+        <span>Herz-Energie: <span id="health">100</span></span>
+        <span>Bio-Masse: <span id="biomass">50</span></span>
+        <span>Welle: <span id="wave">0</span></span>
+        <div class="tooltip">
+            <button id="plantSeedBtn">Samen pflanzen (K: 20)</button>
+            <span class="tooltiptext">Klicke auf das Feld, um zu pflanzen.</span>
+        </div>
+        <button id="startWaveBtn">Nährstofffluss starten</button>
+    </div>
+    <div id="message">System Kollabiert!</div>
+
+    <script>
+        const canvas = document.getElementById('gameCanvas');
+        const ctx = canvas.getContext('2d');
+        const uiHealth = document.getElementById('health');
+        const uiBiomass = document.getElementById('biomass');
+        const uiWave = document.getElementById('wave');
+        const startWaveBtn = document.getElementById('startWaveBtn');
+        const plantSeedBtn = document.getElementById('plantSeedBtn');
+        const messageDiv = document.getElementById('message');
+
+        // --- Spielkonfiguration ---
+        const TILE_SIZE = 40; // Für Rasterplatzierung
+        const SEED_COST = 20;
+        const STARTING_HEALTH = 100;
+        const STARTING_BIOMASS = 50;
+        const BASE_DECAY_RATE = 0.05; // Energieverlust pro Sekunde, wenn nichts absorbiert wird
+        const MAX_PLANT_ENERGY = 200;
+        const BASE_EFFECT_RADIUS = TILE_SIZE * 1.5;
+        const BASE_DAMAGE_AURA = 0.5; // Schaden pro Sekunde in Aura
+
+        // --- Pfaddefinition (wie zuvor, aber "Nährstoffkanal") ---
+        const nutrientPath = [ { x: 0, y: TILE_SIZE * 2.5 }, { x: TILE_SIZE * 4, y: TILE_SIZE * 2.5 }, { x: TILE_SIZE * 4, y: TILE_SIZE * 7.5 }, { x: TILE_SIZE * 9, y: TILE_SIZE * 7.5 }, { x: TILE_SIZE * 9, y: TILE_SIZE * 1.5 }, { x: canvas.width + TILE_SIZE, y: TILE_SIZE * 1.5 } ];
+
+        // --- Spielzustand ---
+        let baseHealth = STARTING_HEALTH;
+        let biomass = STARTING_BIOMASS; // Ressource zum Pflanzen
+        let wave = 0;
+        let nutrients = []; // Ankommende "Gegner"
+        let plants = [];    // Unsere "Türme"
+        let waveInProgress = false;
+        let gameOver = false;
+        let animationFrameId;
+        let lastTimestamp = 0;
+        let placingSeed = false;
+
+        // --- Spielobjekt-Definitionen ---
+        class Nutrient {
+            constructor(energyValue = 10, hp = 20, speed = 1) {
+                this.x = nutrientPath[0].x - TILE_SIZE;
+                this.y = nutrientPath[0].y;
+                this.energyValue = energyValue; // Wieviel Energie beim Absorbieren
+                this.health = hp;
+                this.maxHealth = hp;
+                this.speed = speed;
+                this.pathIndex = 0;
+                this.radius = 5;
+                this.color = `hsl(${120 + Math.random() * 60}, 100%, 70%)`; // Grün-Cyan Töne
+            }
+            // move() bleibt Standard
+             move() {
+                if (this.pathIndex >= nutrientPath.length - 1) return;
+                const targetPoint = nutrientPath[this.pathIndex + 1];
+                const dx = targetPoint.x - this.x; const dy = targetPoint.y - this.y;
+                const distance = Math.sqrt(dx * dx + dy * dy);
+                if (distance < this.speed) {
+                    this.x = targetPoint.x; this.y = targetPoint.y; this.pathIndex++;
+                } else {
+                    this.x += (dx / distance) * this.speed; this.y += (dy / distance) * this.speed;
+                }
+            }
+            draw() {
+                ctx.fillStyle = this.color;
+                ctx.beginPath(); ctx.arc(this.x, this.y, this.radius, 0, Math.PI * 2); ctx.fill();
+                // Mini-HP-Balken (optional)
+                if (this.health < this.maxHealth) {
+                    ctx.fillStyle = 'rgba(255,0,0,0.7)';
+                    ctx.fillRect(this.x - this.radius, this.y - this.radius - 4, this.radius * 2, 2);
+                    ctx.fillStyle = 'rgba(0,255,0,0.7)';
+                    ctx.fillRect(this.x - this.radius, this.y - this.radius - 4, this.radius * 2 * (this.health / this.maxHealth), 2);
+                }
+            }
+            takeDamage(amount) { this.health -= amount; return this.health <= 0; }
+        }
+
+        class SymbioticPlant {
+            constructor(x, y) {
+                this.x = x; this.y = y;
+                this.energy = 10; // Startenergie
+                this.maxEnergy = MAX_PLANT_ENERGY;
+                this.baseRadius = TILE_SIZE * 0.2; // Startgröße
+                this.currentRadius = this.baseRadius;
+                this.effectRadius = BASE_EFFECT_RADIUS;
+                this.damageAura = BASE_DAMAGE_AURA;
+                this.color = 'hsl(270, 70%, 60%)'; // Violett-Ton
+                this.lastAbsorptionTime = performance.now(); // Für Verfall
+            }
+
+            absorb(nutrient) {
+                this.energy = Math.min(this.maxEnergy, this.energy + nutrient.energyValue);
+                this.lastAbsorptionTime = performance.now(); // Reset Verfall-Timer
+            }
+
+            update(deltaTime) {
+                 // Skaliere Radius und Effekt basierend auf Energie
+                const energyRatio = Math.min(1, this.energy / (this.maxEnergy * 0.8)); // Voller Effekt schon bei 80% Energie
+                this.currentRadius = this.baseRadius + (TILE_SIZE * 0.25 * energyRatio); // Wird bis zu TILE_SIZE*0.45 groß
+                this.effectRadius = BASE_EFFECT_RADIUS * (0.5 + energyRatio * 0.7); // Radius skaliert weniger stark
+                this.damageAura = BASE_DAMAGE_AURA * (0.5 + energyRatio * 1.0); // Schaden skaliert stärker
+
+                // Verfall, wenn lange nichts absorbiert wurde
+                const timeSinceAbsorption = performance.now() - this.lastAbsorptionTime;
+                if (timeSinceAbsorption > 2000) { // Nach 2 Sek ohne Absorption beginnt Verfall
+                    const decayAmount = BASE_DECAY_RATE * (deltaTime / 1000) * (1 + timeSinceAbsorption / 5000); // Schnellerer Verfall über Zeit
+                    this.energy = Math.max(0, this.energy - decayAmount);
+                }
+
+                 // Aura-Effekt auf Nährstoffe anwenden
+                 nutrients.forEach(nutrient => {
+                     const dx = nutrient.x - this.x;
+                     const dy = nutrient.y - this.y;
+                     if (dx * dx + dy * dy <= this.effectRadius * this.effectRadius) {
+                          if (nutrient.takeDamage(this.damageAura * (deltaTime / 1000))) {
+                             // Nährstoff stirbt durch Aura -> Absorption
+                             this.absorb(nutrient);
+                             // Markiere Nährstoff zum Entfernen (wird in Hauptschleife gemacht)
+                         }
+                     }
+                 });
+
+                 return this.energy <= 0; // True zurückgeben, wenn Pflanze abgestorben ist
+            }
+
+            draw() {
+                 const energyRatio = this.energy / this.maxEnergy;
+                 // Leuchtende Aura (Effektradius)
+                 const auraGradient = ctx.createRadialGradient(this.x, this.y, this.currentRadius, this.x, this.y, this.effectRadius);
+                 const baseColor = this.color.match(/\d+/g); // Extract HSL values
+                 if (baseColor) {
+                     auraGradient.addColorStop(0, `hsla(${baseColor[0]}, ${baseColor[1]}%, ${baseColor[2]}%, 0.5)`); // Heller innen
+                     auraGradient.addColorStop(1, `hsla(${baseColor[0]}, ${baseColor[1]}%, ${baseColor[2]}%, 0)`); // Transparent außen
+                 }
+                 ctx.fillStyle = auraGradient;
+                 ctx.beginPath(); ctx.arc(this.x, this.y, this.effectRadius, 0, Math.PI * 2); ctx.fill();
+
+                 // Kern der Pflanze (wächst mit Energie)
+                 ctx.fillStyle = this.color;
+                 ctx.beginPath(); ctx.arc(this.x, this.y, this.currentRadius, 0, Math.PI * 2); ctx.fill();
+                 // Kleiner leuchtender Kern
+                 ctx.fillStyle = `hsla(${baseColor ? baseColor[0] : 270}, 100%, 85%, 0.8)`;
+                 ctx.beginPath(); ctx.arc(this.x, this.y, this.currentRadius * 0.3, 0, Math.PI * 2); ctx.fill();
+            }
+        }
+
+        // --- Spiel Logik ---
+        function updateGame(timestamp) {
+            if (gameOver) return;
+
+            const deltaTime = timestamp - lastTimestamp;
+            lastTimestamp = timestamp;
+            if (isNaN(deltaTime) || deltaTime <= 0) return;
+
+            // 1. Update Plants (Verfall, Aura-Effekt, Absorption bei Kill)
+            for (let i = plants.length - 1; i >= 0; i--) {
+                if (plants[i].update(deltaTime)) {
+                    // Pflanze ist abgestorben
+                    plants.splice(i, 1);
+                }
+            }
+
+            // 2. Update Nutrients (Bewegung, Sterben durch Aura)
+            let nutrientsReachedEnd = 0;
+            for (let i = nutrients.length - 1; i >= 0; i--) {
+                const nutrient = nutrients[i];
+
+                if (nutrient.health <= 0) {
+                    // Wurde von einer Pflanzen-Aura getötet (Absorption passierte in plant.update)
+                    nutrients.splice(i, 1);
+                    continue;
+                }
+
+                nutrient.move();
+
+                if (nutrient.pathIndex >= nutrientPath.length - 1) {
+                    // Nährstoff hat das Ende erreicht
+                    nutrientsReachedEnd++;
+                    nutrients.splice(i, 1);
+                    continue;
+                }
+            }
+
+            // 3. Schaden an der Basis
+            if (nutrientsReachedEnd > 0) {
+                baseHealth -= nutrientsReachedEnd * 5; // Jeder Nährstoff kostet 5 Energie
+            }
+
+            // 4. Check Game Over
+            if (baseHealth <= 0) {
+                baseHealth = 0; endGame();
+            }
+
+            // 5. Check Wave End
+            if (waveInProgress && nutrients.length === 0) {
+                waveInProgress = false;
+                startWaveBtn.disabled = false;
+                biomass += 10 + wave * 2; // Biomasse-Bonus für Abschluss
+            }
+
+            updateUI();
+        }
+
+        function drawGame() {
+            ctx.clearRect(0, 0, canvas.width, canvas.height);
+
+            // Pfad zeichnen (dezenter)
+            ctx.strokeStyle = 'rgba(74, 74, 110, 0.6)'; // #4a4a6e mit alpha
+            ctx.lineWidth = TILE_SIZE * 0.6;
+            ctx.lineCap = 'round'; ctx.lineJoin = 'round';
+            ctx.beginPath(); ctx.moveTo(nutrientPath[0].x, nutrientPath[0].y);
+            for (let i = 1; i < nutrientPath.length; i++) { ctx.lineTo(nutrientPath[i].x, nutrientPath[i].y); }
+            ctx.stroke(); ctx.lineWidth = 1;
+
+            // Pflanzen zeichnen
+            plants.forEach(plant => plant.draw());
+
+            // Nährstoffe zeichnen
+            nutrients.forEach(nutrient => nutrient.draw());
+
+            // Vorschau für Pflanzenplatzierung
+            if (placingSeed) {
+                 const pos = getMousePos(canvas, lastMouseEvent);
+                 if (pos) {
+                     const gridX = Math.floor(pos.x / TILE_SIZE) * TILE_SIZE + TILE_SIZE / 2;
+                     const gridY = Math.floor(pos.y / TILE_SIZE) * TILE_SIZE + TILE_SIZE / 2;
+                     const canPlace = canPlaceSeed(gridX, gridY);
+
+                     ctx.fillStyle = canPlace ? 'rgba(150, 250, 150, 0.4)' : 'rgba(250, 100, 100, 0.4)';
+                     ctx.beginPath();
+                     // Zeige den Basis-Effektradius
+                     ctx.arc(gridX, gridY, BASE_EFFECT_RADIUS, 0, Math.PI * 2);
+                     ctx.fill();
+                      // Zeige den Kern
+                     ctx.fillStyle = canPlace ? 'rgba(200, 255, 200, 0.7)' : 'rgba(255, 150, 150, 0.7)';
+                      ctx.beginPath();
+                      ctx.arc(gridX, gridY, TILE_SIZE * 0.2, 0, Math.PI * 2);
+                      ctx.fill();
+                 }
+             }
+        }
+
+        function gameLoop(timestamp) {
+            updateGame(timestamp);
+            drawGame();
+            if (!gameOver) {
+                animationFrameId = requestAnimationFrame(gameLoop);
+            }
+        }
+
+        function updateUI() {
+            uiHealth.textContent = Math.round(baseHealth);
+            uiBiomass.textContent = Math.round(biomass);
+            uiWave.textContent = wave;
+            startWaveBtn.disabled = waveInProgress || gameOver || placingSeed;
+            plantSeedBtn.disabled = biomass < SEED_COST || gameOver || placingSeed || waveInProgress;
+            plantSeedBtn.textContent = `Samen pflanzen (K: ${SEED_COST})`;
+
+            if (placingSeed) {
+                plantSeedBtn.textContent = "Pflanzen... (ESC)";
+                plantSeedBtn.classList.add("planting"); // Optional: Für CSS-Styling
+            } else {
+                plantSeedBtn.classList.remove("planting");
+            }
+        }
+
+        function startNextWave() {
+            if (waveInProgress || gameOver) return;
+            wave++; waveInProgress = true; startWaveBtn.disabled = true;
+
+            const numNutrients = 8 + wave * 3;
+            const nutrientHP = 20 + wave * 5;
+            const nutrientSpeed = 1 + wave * 0.05;
+            const nutrientEnergy = 10 + wave * 1;
+
+            for (let i = 0; i < numNutrients; i++) {
+                setTimeout(() => {
+                    if (!gameOver) nutrients.push(new Nutrient(nutrientEnergy, nutrientHP, nutrientSpeed));
+                }, i * 400); // Nährstoffe kommen gestaffelt
+            }
+            updateUI();
+        }
+
+        function canPlaceSeed(cx, cy) {
+             if (biomass < SEED_COST) return false;
+             // Kollisionsprüfung (vereinfacht, wie zuvor) - gegen Pfad und andere Pflanzen
+             if (cx < 0 || cx > canvas.width || cy < 0 || cy > canvas.height) return false;
+             // Pfadnähe-Prüfung (großzügiger, da Absorption wichtig ist)
+             const minDistSqToPath = TILE_SIZE * TILE_SIZE * 0.5; // Mindestabstand zum Pfad-Rand
+              for (let i = 0; i < nutrientPath.length - 1; i++) {
+                 const p1 = nutrientPath[i], p2 = nutrientPath[i+1];
+                 // Sehr einfache Box-Prüfung um den Pfad
+                 const pathWidth = TILE_SIZE * 0.6;
+                 const minX = Math.min(p1.x, p2.x) - pathWidth;
+                 const maxX = Math.max(p1.x, p2.x) + pathWidth;
+                 const minY = Math.min(p1.y, p2.y) - pathWidth;
+                 const maxY = Math.max(p1.y, p2.y) + pathWidth;
+                 if(cx > minX && cx < maxX && cy > minY && cy < maxY) {
+                    // Check if too close using a simple bounding box around the segment
+                     if (p1.x === p2.x) { // Vertical
+                         if (Math.abs(cx - p1.x) < pathWidth*0.8) return false; // Zu nah an vertikalem Segment
+                     } else if (p1.y === p2.y) { // Horizontal
+                         if (Math.abs(cy - p1.y) < pathWidth*0.8) return false; // Zu nah an horizontalem Segment
+                     } else {
+                        // Für diagonale Pfade (hier nicht vorhanden) wäre komplexere Distanz nötig
+                     }
+                 }
+             }
+
+             // Pflanzenkollision (Mindestabstand zwischen Kernen)
+             const minDistSqToPlant = TILE_SIZE * TILE_SIZE * 1.0; // Etwas Abstand halten
+             for (const p of plants) {
+                 const dx = p.x - cx; const dy = p.y - cy;
+                 if (dx*dx + dy*dy < minDistSqToPlant) return false;
+             }
+             return true;
+        }
+
+        function tryPlantSeed(canvasX, canvasY) {
+             if (gameOver || !placingSeed) return;
+
+             const gridX = Math.floor(canvasX / TILE_SIZE) * TILE_SIZE + TILE_SIZE / 2;
+             const gridY = Math.floor(canvasY / TILE_SIZE) * TILE_SIZE + TILE_SIZE / 2;
+
+             if (canPlaceSeed(gridX, gridY)) {
+                 biomass -= SEED_COST;
+                 plants.push(new SymbioticPlant(gridX, gridY));
+                 placingSeed = false; // Platzierungsmodus beenden
+                 canvas.style.cursor = 'cell';
+                 updateUI();
+             } else {
+                 console.log("Hier kann kein Samen gepflanzt werden.");
+                 // Optional: Visuelles Feedback (Aufblinken?)
+             }
+        }
+
+        function endGame() {
+             gameOver = true;
+             cancelAnimationFrame(animationFrameId);
+             messageDiv.textContent = `System Kollabiert! Welle ${wave} überstanden.`;
+             messageDiv.style.display = 'block';
+             startWaveBtn.disabled = true;
+             plantSeedBtn.disabled = true;
+             placingSeed = false;
+             canvas.style.cursor = 'default';
+        }
+
+        // --- Event Listener ---
+        startWaveBtn.addEventListener('click', startNextWave);
+
+        plantSeedBtn.addEventListener('click', () => {
+            if (biomass >= SEED_COST && !placingSeed && !gameOver && !waveInProgress) {
+                placingSeed = true;
+                canvas.style.cursor = 'copy'; // Anderer Cursor beim Platzieren
+                updateUI();
+            }
+        });
+
+        // Mausposition für Vorschau speichern
+         let lastMouseEvent = null;
+         canvas.addEventListener('mousemove', (evt) => {
+             lastMouseEvent = evt;
+         });
+
+        function getMousePos(canvas, evt) {
+            if (!evt) return null;
+            const rect = canvas.getBoundingClientRect();
+            return { x: evt.clientX - rect.left, y: evt.clientY - rect.top };
+        }
+
+        canvas.addEventListener('click', (evt) => {
+            if (gameOver) return;
+            if (placingSeed) {
+                const pos = getMousePos(canvas, evt);
+                tryPlantSeed(pos.x, pos.y);
+            }
+        });
+
+        // Abbruch mit Escape oder Rechtsklick
+         document.addEventListener('keydown', (evt) => {
+            if (evt.key === 'Escape' && placingSeed) {
+                placingSeed = false; canvas.style.cursor = 'cell'; updateUI();
+            }
+         });
+          canvas.addEventListener('contextmenu', (evt) => {
+              evt.preventDefault();
+              if (placingSeed) {
+                  placingSeed = false; canvas.style.cursor = 'cell'; updateUI();
+              }
+          });
+
+        // --- Spielstart ---
+        function initializeGame() {
+            baseHealth = STARTING_HEALTH; biomass = STARTING_BIOMASS; wave = 0;
+            nutrients = []; plants = [];
+            waveInProgress = false; gameOver = false; placingSeed = false;
+            messageDiv.style.display = 'none';
+            lastTimestamp = performance.now();
+            if (animationFrameId) cancelAnimationFrame(animationFrameId);
+            updateUI();
+            gameLoop(lastTimestamp);
+        }
+
+        window.onload = initializeGame;
+
+    </script>
+
+</body>
+</html>

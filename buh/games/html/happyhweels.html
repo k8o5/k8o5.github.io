@@ -1,0 +1,461 @@
+﻿<!DOCTYPE html>
+<html lang="de">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>p5.js Endless Cart Game v2</title>
+    <style>
+        body { margin: 0; overflow: hidden; display: flex; justify-content: center; align-items: center; min-height: 100vh; background-color: #333; }
+        canvas { border: 1px solid white; }
+    </style>
+    <script src="https://cdnjs.cloudflare.com/ajax/libs/p5.js/1.4.0/p5.js"></script>
+    <script src="https://cdnjs.cloudflare.com/ajax/libs/matter-js/0.18.0/matter.min.js"></script>
+</head>
+<body>
+    <script>
+        // Matter.js Module Aliases
+        const Engine = Matter.Engine;
+        const World = Matter.World;
+        const Bodies = Matter.Bodies;
+        const Body = Matter.Body;
+        const Constraint = Matter.Constraint;
+        const Composite = Matter.Composite;
+        const Runner = Matter.Runner;
+        const Events = Matter.Events;
+        const Vector = Matter.Vector;
+
+        let engine;
+        let world;
+        let runner;
+
+        // Spielobjekte
+        let ground;
+        let obstacles = [];
+        let character = {};
+
+        // Charakter-Parameter (inkl. Beine)
+        const charStartX = 150;
+        const charStartY = 400;
+        const headRadius = 15;
+        const torsoWidth = 15;
+        const torsoHeight = 45;
+        const seatWidth = 50;
+        const seatHeight = 15;
+        const wheelRadius = 25;
+        const wheelOffsetY = 5;
+        const wheelOffsetX = 20;
+        // Bein-Parameter
+        const legSegmentHeight = 25; // Länge eines Beinsegments
+        const legSegmentWidth = 10;  // Breite eines Beinsegments
+
+        // Steuerungsflags
+        let moveLeft = false;
+        let moveRight = false;
+        let tryJump = false;
+        let ejectKeyPressed = false;
+
+        // Gameplay-Zustand
+        let isPlayerInCart = true;
+        const reentryDistance = seatWidth * 1.5;
+
+        // Endlos-Runner Parameter
+        const scrollSpeed = 2.5; // Beibehalten oder an neue Physik anpassen
+        let nextObstacleSpawnX = 800;
+        const obstacleMinGap = 350; // Etwas größerer Abstand evtl. nötig
+        const obstacleMaxGap = 700;
+        const obstacleMinHeight = 30;
+        const obstacleMaxHeight = 120; // Auch etwas höher
+        const obstacleMinWidth = 50;
+        const obstacleMaxWidth = 150;
+
+        let score = 0;
+        let lastPlayerX = charStartX;
+
+        let gameOver = false;
+
+
+        function setup() {
+            createCanvas(800, 600);
+            rectMode(CENTER);
+            ellipseMode(CENTER);
+            textAlign(CENTER, CENTER);
+            textSize(24);
+
+            // Matter.js Initialisierung
+            engine = Engine.create();
+            world = engine.world;
+            engine.world.gravity.y = 1;
+
+            runner = Runner.create();
+            Runner.run(runner, engine);
+
+            // Level erstellen
+            const groundWidth = width * 10;
+            ground = Bodies.rectangle(0, height - 20, groundWidth, 40, {
+                isStatic: true,
+                friction: 1.0, // Hohe Reibung wichtig für Räder
+                label: 'ground'
+            });
+            let wallL = Bodies.rectangle(-groundWidth/2 + 10, height/2, 20, height, {isStatic: true});
+            let wallR = Bodies.rectangle(groundWidth/2 - 10, height/2, 20, height, {isStatic: true});
+            World.add(world, [ground, wallL, wallR]);
+
+            // Steuerungs-Listener
+            window.addEventListener('keydown', handleKeyDown);
+            window.addEventListener('keyup', handleKeyUp);
+
+            // Kollisions-Listener
+            Events.on(engine, 'collisionStart', handleCollisions);
+
+            // Initialen Reset
+            resetGame();
+        }
+
+        function createCartCharacter(x, y) {
+            const group = Body.nextGroup(true); // Interne Kollisionen verhindern
+
+            // Wagen-Teile
+            const seat = Bodies.rectangle(x, y, seatWidth, seatHeight, {
+                collisionFilter: { group: group }, density: 0.005, friction: 0.8, label: 'seat',
+                myWidth: seatWidth, myHeight: seatHeight
+            });
+            const wheelL = Bodies.circle(x - wheelOffsetX, y + wheelOffsetY + wheelRadius - seatHeight / 2, wheelRadius, {
+                collisionFilter: { group: group }, density: 0.01, // Schwerere Räder
+                friction: 0.95, // Sehr hohe Reibung für Grip
+                restitution: 0.1, label: 'wheel', myRadius: wheelRadius
+            });
+            const wheelR = Bodies.circle(x + wheelOffsetX, y + wheelOffsetY + wheelRadius - seatHeight / 2, wheelRadius, {
+                collisionFilter: { group: group }, density: 0.01, friction: 0.95, restitution: 0.1, label: 'wheel',
+                myRadius: wheelRadius
+            });
+
+            // Ragdoll-Teile (inkl. Beine)
+            const torso = Bodies.rectangle(x, y - seatHeight/2 - torsoHeight/2, torsoWidth, torsoHeight, {
+                collisionFilter: { group: group }, density: 0.0015, // Etwas dichter
+                label: 'torso', myWidth: torsoWidth, myHeight: torsoHeight
+            });
+            const head = Bodies.circle(x, y - seatHeight/2 - torsoHeight - headRadius, headRadius, {
+                collisionFilter: { group: group }, density: 0.0008, restitution: 0.1, friction: 0.5, label: 'head',
+                myRadius: headRadius
+            });
+
+             // Beine
+            const upperLegL = Bodies.rectangle(x - torsoWidth/4, y - seatHeight/2 + legSegmentHeight/2, legSegmentWidth, legSegmentHeight, { // Startposition relativ zum Sitz/Torso
+                collisionFilter: { group: group }, density: 0.001, label: 'leg', myWidth: legSegmentWidth, myHeight: legSegmentHeight });
+            const lowerLegL = Bodies.rectangle(x - torsoWidth/4, y - seatHeight/2 + legSegmentHeight*1.5, legSegmentWidth, legSegmentHeight, {
+                collisionFilter: { group: group }, density: 0.001, label: 'leg', myWidth: legSegmentWidth, myHeight: legSegmentHeight });
+            const upperLegR = Bodies.rectangle(x + torsoWidth/4, y - seatHeight/2 + legSegmentHeight/2, legSegmentWidth, legSegmentHeight, {
+                collisionFilter: { group: group }, density: 0.001, label: 'leg', myWidth: legSegmentWidth, myHeight: legSegmentHeight });
+            const lowerLegR = Bodies.rectangle(x + torsoWidth/4, y - seatHeight/2 + legSegmentHeight*1.5, legSegmentWidth, legSegmentHeight, {
+                collisionFilter: { group: group }, density: 0.001, label: 'leg', myWidth: legSegmentWidth, myHeight: legSegmentHeight });
+
+
+            // --- Constraints ---
+            // Wagen
+            const axleL = Constraint.create({ bodyA: seat, bodyB: wheelL, pointA: { x: -wheelOffsetX, y: wheelOffsetY }, pointB: { x: 0, y: 0 }, stiffness: 0.9, damping: 0.05, length: 0 });
+            const axleR = Constraint.create({ bodyA: seat, bodyB: wheelR, pointA: { x: wheelOffsetX, y: wheelOffsetY }, pointB: { x: 0, y: 0 }, stiffness: 0.9, damping: 0.05, length: 0 });
+
+            // Sitz-Verbindung (Attachment)
+             const sitConstraint1 = Constraint.create({ bodyA: seat, bodyB: torso, pointA: { x: -seatWidth/4 + 5, y: -seatHeight/2 + 5 }, pointB: { x: -torsoWidth/2, y: torsoHeight/2 - 10 }, stiffness: 0.9, length: 5, damping: 0.1 });
+             const sitConstraint2 = Constraint.create({ bodyA: seat, bodyB: torso, pointA: { x: seatWidth/4 - 5, y: -seatHeight/2 + 5 }, pointB: { x: torsoWidth/2, y: torsoHeight/2 - 10 }, stiffness: 0.9, length: 5, damping: 0.1 });
+
+            // Ragdoll Gelenke
+            const neck = Constraint.create({ bodyA: head, bodyB: torso, pointA: { x: 0, y: headRadius * 0.6 }, pointB: { x: 0, y: -torsoHeight / 2 }, stiffness: 0.6, damping: 0.2, length: 5 });
+            // Hüften
+            const hipL = Constraint.create({ bodyA: torso, bodyB: upperLegL, pointA: { x: -torsoWidth/4, y: torsoHeight/2 }, pointB: { x: 0, y: -legSegmentHeight/2 }, stiffness: 0.5, damping: 0.1, length: 0 });
+            const hipR = Constraint.create({ bodyA: torso, bodyB: upperLegR, pointA: { x: torsoWidth/4, y: torsoHeight/2 }, pointB: { x: 0, y: -legSegmentHeight/2 }, stiffness: 0.5, damping: 0.1, length: 0 });
+            // Knie
+            const kneeL = Constraint.create({ bodyA: upperLegL, bodyB: lowerLegL, pointA: { x: 0, y: legSegmentHeight/2 }, pointB: { x: 0, y: -legSegmentHeight/2 }, stiffness: 0.6, damping: 0.1, length: 0 });
+            const kneeR = Constraint.create({ bodyA: upperLegR, bodyB: lowerLegR, pointA: { x: 0, y: legSegmentHeight/2 }, pointB: { x: 0, y: -legSegmentHeight/2 }, stiffness: 0.6, damping: 0.1, length: 0 });
+
+
+            character = {
+                head: head, torso: torso, seat: seat, wheelL: wheelL, wheelR: wheelR,
+                upperLegL: upperLegL, lowerLegL: lowerLegL, // Beine hinzufügen
+                upperLegR: upperLegR, lowerLegR: lowerLegR,
+                sitConstraint1: sitConstraint1, sitConstraint2: sitConstraint2,
+                neck: neck, axleL: axleL, axleR: axleR,
+                hipL: hipL, hipR: hipR, kneeL: kneeL, kneeR: kneeR, // Beingelenke hinzufügen
+                // Teile für einfaches Hinzufügen/Entfernen
+                 parts: [seat, wheelL, wheelR, torso, head, upperLegL, lowerLegL, upperLegR, lowerLegR],
+                 // Constraints, die *immer* da sind (Achsen, Hals, Beine)
+                 permanentConstraints: [axleL, axleR, neck, hipL, hipR, kneeL, kneeR],
+                 // Constraints, die entfernt/hinzugefügt werden (Sitz)
+                 attachmentConstraints: [sitConstraint1, sitConstraint2]
+            };
+
+            World.add(world, character.parts);
+            World.add(world, character.permanentConstraints);
+            if (isPlayerInCart) {
+                 World.add(world, character.attachmentConstraints);
+            }
+
+            lastPlayerX = character.seat.position.x;
+            console.log("Character with legs created. In cart:", isPlayerInCart);
+        }
+
+        // --- generateObstacles & manageObstacles (unverändert) ---
+        function generateObstacles() {
+             let currentRightmostPoint = width;
+             if (character.seat) { currentRightmostPoint = character.seat.position.x + width / 2; }
+
+             if (nextObstacleSpawnX < currentRightmostPoint + width * 0.5) {
+                 let gap = random(obstacleMinGap, obstacleMaxGap);
+                 let obsX = nextObstacleSpawnX + gap;
+                 let obsH = random(obstacleMinHeight, obstacleMaxHeight);
+                 let obsW = random(obstacleMinWidth, obstacleMaxWidth);
+                 let obsY = height - 20 - obsH / 2;
+                 let newObstacle = Bodies.rectangle(obsX, obsY, obsW, obsH, {
+                     isStatic: false, friction: 0.7, label: 'obstacle',
+                     myWidth: obsW, myHeight: obsH });
+                 Body.setVelocity(newObstacle, { x: -scrollSpeed, y: 0 });
+                 if (random() > 0.6) { Body.setAngularVelocity(newObstacle, random(-0.04, 0.04)); } // Etwas weniger Drehung evtl.
+                 obstacles.push(newObstacle);
+                 World.add(world, newObstacle);
+                 nextObstacleSpawnX = obsX;
+             }
+         }
+        function manageObstacles() {
+             for (let i = obstacles.length - 1; i >= 0; i--) {
+                 let obs = obstacles[i];
+                 Body.setVelocity(obs, { x: -scrollSpeed, y: obs.velocity.y });
+                 let currentLeftmostPoint = -width/2;
+                 if (character.seat) { currentLeftmostPoint = character.seat.position.x - width / 2; }
+                 if (obs.position.x < currentLeftmostPoint - (obs.myWidth || 100)) {
+                     World.remove(world, obs);
+                     obstacles.splice(i, 1);
+                 }
+             }
+         }
+
+
+        function draw() {
+            background(51);
+
+            if (gameOver) {
+                 push(); resetMatrix(); fill(255, 0, 0);
+                 text("GAME OVER", width / 2, height / 2 - 30);
+                 text("Score: " + floor(score), width/2, height/2 + 10);
+                 text("Drücke R zum Neustart", width / 2, height / 2 + 50);
+                 pop(); return;
+            }
+
+            // --- Kamera & Score ---
+            push();
+            let camX = width / 2;
+            let playerBodyForCam = null;
+            if (isPlayerInCart && character.seat) playerBodyForCam = character.seat;
+            else if (!isPlayerInCart && character.torso) playerBodyForCam = character.torso;
+
+            if (playerBodyForCam) {
+                camX = playerBodyForCam.position.x;
+                 let distanceMoved = playerBodyForCam.position.x - lastPlayerX;
+                 // Score nur zählen, wenn *im Wagen* und vorwärts
+                 if (isPlayerInCart && distanceMoved > 0) { score += distanceMoved / 10; }
+                 lastPlayerX = playerBodyForCam.position.x;
+            }
+            translate(-camX + width / 2, 0);
+
+            // --- Zeichne Objekte ---
+            noStroke(); fill(100); drawBody(ground);
+            fill(0, 150, 150); obstacles.forEach(drawBody);
+
+            if (character.parts) {
+                strokeWeight(1); stroke(0);
+                // Wagen
+                fill(80); drawBody(character.wheelL); drawBody(character.wheelR);
+                drawWheelSpokes(character.wheelL); drawWheelSpokes(character.wheelR);
+                fill(150, 75, 0); drawBody(character.seat);
+                // Ragdoll
+                fill(0, 0, 200); drawBody(character.torso); // Torso
+                fill(255, 200, 150); drawBody(character.head); // Kopf
+                fill(50, 50, 150); // Beine (dunkleres Blau)
+                drawBody(character.upperLegL); drawBody(character.lowerLegL);
+                drawBody(character.upperLegR); drawBody(character.lowerLegR);
+            }
+             // Debug Constraints (optional)
+             // stroke(128, 128, 128, 100); strokeWeight(2);
+             // if(character.permanentConstraints) character.permanentConstraints.forEach(drawConstraint);
+             // if(isPlayerInCart && character.attachmentConstraints) character.attachmentConstraints.forEach(drawConstraint);
+
+            pop(); // Kamera Ende
+
+            // --- UI ---
+            fill(255); noStroke(); text("Score: " + floor(score), width - 100, 30);
+            if (!isPlayerInCart && character.torso && character.seat) {
+                 let dist = Vector.magnitude(Vector.sub(character.torso.position, character.seat.position));
+                 if (dist < reentryDistance) {
+                     fill(0, 255, 0, 150);
+                     text("Drücke 'X' zum Einsteigen", width / 2, 50);
+                 }
+             }
+
+            // --- Physik & Gameplay Updates ---
+             if (character.seat) {
+                 applyControls();
+                 generateObstacles();
+                 manageObstacles();
+                 // Game Over Check (Fallen)
+                 let bodyToCheck = isPlayerInCart ? character.seat : character.torso;
+                 if (bodyToCheck && bodyToCheck.position.y > height + 300) { // Größere Toleranz beim Fallen
+                     console.log("Game Over: Fell too far");
+                     gameOver = true;
+                 }
+             } else { resetGame(); }
+        }
+
+        // --- Hilfsfunktionen Zeichnen (drawBody, drawWheelSpokes, drawConstraint unverändert) ---
+         function drawBody(body) {
+             if (!body) return;
+             const pos = body.position; const angle = body.angle;
+             push(); translate(pos.x, pos.y); rotate(angle);
+             if (body.myRadius) { ellipse(0, 0, body.myRadius * 2); }
+             else if (body.myWidth && body.myHeight) { rect(0, 0, body.myWidth, body.myHeight); }
+             else { beginShape(); body.vertices.forEach(vert => { vertex(vert.x - pos.x, vert.y - pos.y); }); endShape(CLOSE); }
+             pop();
+         }
+         function drawWheelSpokes(wheel) {
+             if (!wheel) return;
+             const pos = wheel.position; const angle = wheel.angle; const radius = wheel.myRadius; const numSpokes = 6;
+             push(); translate(pos.x, pos.y); rotate(angle); stroke(50); strokeWeight(2);
+             for (let i = 0; i < numSpokes; i++) { let spokeAngle = (TWO_PI / numSpokes) * i; line(0, 0, cos(spokeAngle) * radius * 0.9, sin(spokeAngle) * radius * 0.9); }
+             pop();
+         }
+         function drawConstraint(constraint) {
+            if (!constraint || !constraint.bodyA || !constraint.bodyB) return;
+            const bodyA = constraint.bodyA; const bodyB = constraint.bodyB; const pointA = constraint.pointA; const pointB = constraint.pointB;
+            push(); strokeWeight(1.5);
+             let isActive = world.constraints.includes(constraint) || world.composites.some(c => c.constraints.includes(constraint)); // Check if active
+             stroke(isActive ? color(0, 255, 0, 150) : color(255, 0, 0, 100));
+            let posA = bodyA.position; if (pointA) posA = Vector.add(bodyA.position, Vector.rotate(pointA, bodyA.angle));
+            let posB = bodyB.position; if (pointB) posB = Vector.add(bodyB.position, Vector.rotate(pointB, bodyB.angle));
+            line(posA.x, posA.y, posB.x, posB.y);
+            pop();
+        }
+
+        // --- Steuerungslogik ---
+        function handleKeyDown(e) {
+            if ((e.key === 'r' || e.key === 'R') && gameOver) { resetGame(); return; }
+            if (gameOver) return;
+            if ((e.key === 'x' || e.key === 'X') && !ejectKeyPressed) { handleEjectToggle(); ejectKeyPressed = true; }
+            if (e.keyCode === LEFT_ARROW || e.key === 'a') moveLeft = true;
+            else if (e.keyCode === RIGHT_ARROW || e.key === 'd') moveRight = true;
+            else if (e.keyCode === UP_ARROW || e.key === 'w') tryJump = true;
+         }
+         function handleKeyUp(e) {
+             if (gameOver) return;
+             if ((e.key === 'x' || e.key === 'X')) ejectKeyPressed = false;
+             if (e.keyCode === LEFT_ARROW || e.key === 'a') moveLeft = false;
+             else if (e.keyCode === RIGHT_ARROW || e.key === 'd') moveRight = false;
+             else if (e.keyCode === UP_ARROW || e.key === 'w') tryJump = false;
+         }
+
+        function handleEjectToggle() {
+             if (!character.torso || !character.seat || !character.attachmentConstraints) return;
+             if (isPlayerInCart) {
+                 console.log("Ejecting!");
+                 World.remove(world, character.attachmentConstraints);
+                 isPlayerInCart = false;
+                 // Angepasster Impuls (mehr nach oben)
+                 let ejectForce = { x: random(-0.005, 0.005) * character.torso.mass, y: -0.06 * character.torso.mass }; // Stärker nach oben
+                 Body.applyForce(character.torso, character.torso.position, ejectForce);
+             } else {
+                 let dist = Vector.magnitude(Vector.sub(character.torso.position, character.seat.position));
+                 console.log("Trying re-entry. Distance:", dist);
+                 if (dist < reentryDistance) {
+                     console.log("Re-entering!");
+                     World.add(world, character.attachmentConstraints);
+                     isPlayerInCart = true;
+                     // Optional: Körper beim Einsteigen leicht über den Sitz positionieren und Geschwindigkeit anpassen
+                      Body.setPosition(character.torso, {x: character.seat.position.x, y: character.seat.position.y - torsoHeight});
+                      Body.setVelocity(character.torso, Vector.clone(character.seat.velocity));
+                      // Auch Beine neu positionieren? (komplexer)
+                 }
+             }
+         }
+
+        function applyControls() {
+            if (!character.parts) return;
+
+            // *** Erhöhte Kräfte ***
+             const ragdollForce = 0.008 * (character.torso ? character.torso.mass : 0.01); // Stärkere Ragdoll-Kontrolle
+             const driveForceMagnitude = 0.005; // Stärkerer Antrieb
+             const boostForceMagnitude = 0.1 * (character.seat ? character.seat.mass : 0.1); // Stärkerer Boost
+             const brakeForce = 0.0035; // Stärkere Bremse
+
+            if (isPlayerInCart && character.seat && character.wheelL && character.wheelR) {
+                // --- Wagen-Steuerung ---
+                if (moveRight) {
+                    Body.applyForce(character.wheelL, character.wheelL.position, {x: driveForceMagnitude, y:0});
+                    Body.applyForce(character.wheelR, character.wheelR.position, {x: driveForceMagnitude, y:0});
+                    // Evtl. leichtes Gegen-Drehmoment am Sitz, um Aufbäumen zu verhindern
+                    // Body.applyTorque(character.seat, -0.0001 * character.seat.mass);
+                }
+                if (moveLeft) {
+                    let avgVelX = (character.wheelL.velocity.x + character.wheelR.velocity.x) / 2;
+                    // Bremsen, wenn vorwärts fahrend
+                    if (avgVelX > 0.1) {
+                         Body.applyForce(character.wheelL, character.wheelL.position, {x: -brakeForce, y:0});
+                         Body.applyForce(character.wheelR, character.wheelR.position, {x: -brakeForce, y:0});
+                    }
+                     // Rückwärts fahren, wenn langsam oder stehend
+                    else if (avgVelX <= 0.1) {
+                         Body.applyForce(character.wheelL, character.wheelL.position, {x: -driveForceMagnitude * 0.6, y:0}); // Langsamer rückwärts
+                         Body.applyForce(character.wheelR, character.wheelR.position, {x: -driveForceMagnitude * 0.6, y:0});
+                    }
+                }
+                if (tryJump) {
+                    Body.applyForce(character.seat, character.seat.position, { x: 0, y: -boostForceMagnitude });
+                    Body.applyForce(character.seat, character.seat.position, { x: boostForceMagnitude * 0.15, y: 0 }); // Kleiner Vorwärts-Boost
+                    tryJump = false;
+                }
+            }
+            else if (!isPlayerInCart && character.torso) {
+                // --- Ragdoll-Steuerung ---
+                if (moveLeft) Body.applyForce(character.torso, character.torso.position, { x: -ragdollForce, y: 0 });
+                if (moveRight) Body.applyForce(character.torso, character.torso.position, { x: ragdollForce, y: 0 });
+            }
+        }
+
+        // --- Kollisionen & Reset ---
+        function handleCollisions(event) {
+             if (gameOver) return;
+             const pairs = event.pairs;
+             for (let i = 0; i < pairs.length; i++) {
+                 const pair = pairs[i];
+                 const bodyA = pair.bodyA; const bodyB = pair.bodyB;
+                 if ((bodyA.label === 'head' && (bodyB.label === 'ground' || bodyB.label === 'obstacle')) ||
+                     (bodyB.label === 'head' && (bodyA.label === 'ground' || bodyA.label === 'obstacle'))) {
+                     // *** Weniger empfindliche Kollisionserkennung ***
+                     if (pair.collision.depth > 1.0) { // Erst bei tieferer Kollision Game Over
+                          console.log("Game Over: Head collision");
+                          gameOver = true;
+                          break;
+                     }
+                 }
+             }
+        }
+
+        function resetGame() {
+             console.log("Resetting game...");
+             gameOver = false; score = 0;
+             World.remove(world, obstacles); obstacles = [];
+             // Alten Charakter komplett entfernen
+             if (character.parts) World.remove(world, character.parts);
+             if (character.permanentConstraints) World.remove(world, character.permanentConstraints);
+             if (character.attachmentConstraints) World.remove(world, character.attachmentConstraints); // Sicherstellen
+             character = {};
+             isPlayerInCart = true; // Startet im Wagen
+             // Neuen Charakter erstellen
+             createCartCharacter(charStartX, charStartY);
+             nextObstacleSpawnX = (character.seat ? character.seat.position.x : charStartX) + width;
+             if (runner && !runner.enabled) { Runner.run(runner, engine); }
+             lastPlayerX = charStartX;
+             console.log("Game reset complete.");
+        }
+
+        function windowResized() { /* Optional */ }
+
+    </script>
+</body>
+</html>

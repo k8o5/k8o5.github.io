@@ -1,0 +1,226 @@
+<!DOCTYPE html>
+<html lang="de">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>3D FPS Spiel mit ASCII-Art-Gegnern</title>
+    <style>
+        body {
+            margin: 0;
+            overflow: hidden;
+        }
+        canvas {
+            display: block;
+        }
+        #info {
+            position: absolute;
+            top: 10px;
+            left: 10px;
+            color: white;
+            font-family: Arial, sans-serif;
+            background: rgba(0, 0, 0, 0.5);
+            padding: 10px;
+        }
+    </style>
+</head>
+<body>
+    <div id="info">WASD: Bewegen | Maus: Zielen | Leertaste: Zeitlupe (Twist)</div>
+    <script src="https://cdnjs.cloudflare.com/ajax/libs/three.js/r128/three.min.js"></script>
+    <script>
+        // Szene einrichten
+        const scene = new THREE.Scene();
+        const camera = new THREE.PerspectiveCamera(75, window.innerWidth / window.innerHeight, 0.1, 1000);
+        const renderer = new THREE.WebGLRenderer();
+        renderer.setSize(window.innerWidth, window.innerHeight);
+        document.body.appendChild(renderer.domElement);
+
+        // Spieler
+        const player = {
+            speed: 0.1,
+            position: new THREE.Vector3(0, 0, 0),
+            velocity: new THREE.Vector3(),
+            rotation: new THREE.Euler(0, 0, 0, 'YXZ'),
+            isTimeSlowed: false,
+            timeSlowDuration: 300, // Zeitlupe für 5 Sekunden (in Frames, 60 FPS)
+            timeSlowCooldown: 600, // Abklingzeit von 10 Sekunden (in Frames)
+            timeSlowTimer: 0,
+            timeSlowCooldownTimer: 0
+        };
+
+        // Boden
+        const floorGeometry = new THREE.PlaneGeometry(100, 100);
+        const floorMaterial = new THREE.MeshBasicMaterial({ color: 0x555555, side: THREE.DoubleSide });
+        const floor = new THREE.Mesh(floorGeometry, floorMaterial);
+        floor.rotation.x = Math.PI / 2;
+        scene.add(floor);
+
+        // ASCII-Art-Designs für die Bots
+        const asciiArtDesigns = [
+            `
+       _____
+      /     \\
+     /_______\\
+     |  ***  | 
+     |  ***  | 
+     |_______|
+            `,
+            `
+       _____
+      /     \\
+     /_______\\
+     |  @@@  | 
+     |  @@@  | 
+     |_______|
+            `,
+            `
+       _____
+      /     \\
+     /_______\\
+     |  ###  | 
+     |  ###  | 
+     |_______|
+            `,
+            `
+       _____
+      /     \\
+     /_______\\
+     |  $$$  | 
+     |  $$$  | 
+     |_______|
+            `
+        ];
+
+        // Funktion zum Erstellen einer Textur aus ASCII-Art
+        function createAsciiTexture(asciiArt) {
+            const canvas = document.createElement('canvas');
+            canvas.width = 128;
+            canvas.height = 128;
+            const ctx = canvas.getContext('2d');
+            ctx.fillStyle = 'black';
+            ctx.fillRect(0, 0, canvas.width, canvas.height);
+            ctx.fillStyle = 'white';
+            ctx.font = '10px monospace';
+            const lines = asciiArt.trim().split('\n');
+            lines.forEach((line, index) => {
+                ctx.fillText(line, 10, 20 + index * 10);
+            });
+            return new THREE.CanvasTexture(canvas);
+        }
+
+        // Bots (KI-Gegner) als ASCII-Art-Sprites
+        const bots = [];
+        for (let i = 0; i < 5; i++) {
+            const asciiArt = asciiArtDesigns[Math.floor(Math.random() * asciiArtDesigns.length)];
+            const texture = createAsciiTexture(asciiArt);
+            const material = new THREE.SpriteMaterial({ map: texture });
+            const bot = new THREE.Sprite(material);
+            bot.position.set(
+                Math.random() * 50 - 25,
+                0.5,
+                Math.random() * 50 - 25
+            );
+            bot.scale.set(2, 2, 1); // Größe des Sprites
+            bot.speed = 0.05;
+            bots.push(bot);
+            scene.add(bot);
+        }
+
+        // Kamera-Setup
+        camera.position.y = 1;
+        camera.position.z = 5;
+
+        // Steuerung
+        const keys = {};
+        document.addEventListener('keydown', (event) => keys[event.code] = true);
+        document.addEventListener('keyup', (event) => keys[event.code] = false);
+
+        // Maussteuerung
+        let isLocked = false;
+        document.addEventListener('click', () => {
+            renderer.domElement.requestPointerLock();
+        });
+        document.addEventListener('pointerlockchange', () => {
+            isLocked = document.pointerLockElement === renderer.domElement;
+        });
+        document.addEventListener('mousemove', (event) => {
+            if (isLocked) {
+                const sensitivity = 0.002;
+                player.rotation.y -= event.movementX * sensitivity;
+                player.rotation.x -= event.movementY * sensitivity;
+                player.rotation.x = Math.max(-Math.PI / 2, Math.min(Math.PI / 2, player.rotation.x));
+                camera.rotation.copy(player.rotation);
+            }
+        });
+
+        // Zeitlupen-Feature (Twist)
+        function activateTimeSlow() {
+            if (player.timeSlowCooldownTimer <= 0) {
+                player.isTimeSlowed = true;
+                player.timeSlowTimer = player.timeSlowDuration;
+                player.timeSlowCooldownTimer = player.timeSlowCooldown;
+            }
+        }
+
+        // Bot-Bewegung und Billboard-Ausrichtung
+        function updateBots() {
+            const timeScale = player.isTimeSlowed ? 0.2 : 1; // Bots werden in Zeitlupe verlangsamt
+            bots.forEach(bot => {
+                const direction = player.position.clone().sub(bot.position).normalize();
+                bot.position.add(direction.multiplyScalar(bot.speed * timeScale));
+
+                // Billboard: Sprite zum Spieler ausrichten
+                bot.lookAt(camera.position);
+            });
+        }
+
+        // Spieler-Bewegung
+        function updatePlayer() {
+            player.velocity.set(0, 0, 0);
+            if (keys['KeyW']) player.velocity.z -= player.speed;
+            if (keys['KeyS']) player.velocity.z += player.speed;
+            if (keys['KeyA']) player.velocity.x -= player.speed;
+            if (keys['KeyD']) player.velocity.x += player.speed;
+            if (keys['Space']) activateTimeSlow();
+
+            // Zeitlupen-Timer
+            if (player.timeSlowTimer > 0) {
+                player.timeSlowTimer--;
+                if (player.timeSlowTimer <= 0) player.isTimeSlowed = false;
+            }
+            if (player.timeSlowCooldownTimer > 0) player.timeSlowCooldownTimer--;
+
+            // Bewegung relativ zur Kamerarotation
+            const moveDirection = player.velocity.clone().applyEuler(player.rotation);
+            player.position.add(moveDirection);
+            camera.position.copy(player.position);
+        }
+
+        // Kollisionserkennung
+        function checkCollisions() {
+            bots.forEach(bot => {
+                const distance = player.position.distanceTo(bot.position);
+                if (distance < 1) {
+                    alert('Game Over! Ein Bot hat dich erwischt.');
+                    location.reload(); // Spiel neu starten
+                }
+            });
+        }
+
+        // Spielschleife
+        function animate() {
+            requestAnimationFrame(animate);
+            updatePlayer();
+            updateBots();
+            checkCollisions();
+            renderer.render(scene, camera);
+        }
+        animate();
+
+        // Fenstergröße anpassen
+        window.addEventListener('resize', () => {
+            camera.aspect = window.innerWidth / window.innerHeight;
+            camera.updateProjectionMatrix();
+            renderer.setSize(window.innerWidth, window.innerHeight);
+        });
+    </script>
+</html>

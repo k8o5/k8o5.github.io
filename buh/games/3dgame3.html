@@ -1,0 +1,169 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <title>2-Player Space Battle</title>
+    <style>
+        body {
+            margin: 0;
+            overflow: hidden;
+            display: flex;
+            justify-content: center;
+            align-items: center;
+            height: 100vh;
+            background-color: #222;
+        }
+        canvas {
+            border: 2px solid white;
+            background-color: #444;
+        }
+        #info {
+            position: absolute;
+            top: 10px;
+            left: 10px;
+            color: white;
+            z-index: 100;
+        }
+    </style>
+</head>
+<body>
+    <div id="info">2-Player Space Battle: Player 1 (WASD + F) vs Player 2 (Arrow Keys + Enter)</div>
+    <canvas id="gameCanvas" width="800" height="600"></canvas>
+    <script>
+        const canvas = document.getElementById('gameCanvas');
+        const ctx = canvas.getContext('2d');
+
+        // Game settings
+        const playerSize = 20;
+        const bulletSize = 5;
+        const playerSpeed = 4;
+        const bulletSpeed = 6;
+        const obstacleSize = 30;
+        const numObstacles = 10;
+
+        // Player positions and states
+        const player1 = { x: 50, y: canvas.height / 2, vx: 0, vy: 0, bullets: [], score: 0 };
+        const player2 = { x: canvas.width - 70, y: canvas.height / 2, vx: 0, vy: 0, bullets: [], score: 0 };
+
+        // Obstacles
+        const obstacles = [];
+        for (let i = 0; i < numObstacles; i++) {
+            obstacles.push({
+                x: Math.random() * (canvas.width - obstacleSize),
+                y: Math.random() * (canvas.height - obstacleSize)
+            });
+        }
+
+        // Key states
+        const keys = {};
+
+        // Draw the game
+        function draw() {
+            // Clear canvas
+            ctx.clearRect(0, 0, canvas.width, canvas.height);
+
+            // Draw players
+            ctx.fillStyle = 'blue';
+            ctx.fillRect(player1.x, player1.y, playerSize, playerSize);
+            ctx.fillStyle = 'red';
+            ctx.fillRect(player2.x, player2.y, playerSize, playerSize);
+
+            // Draw bullets
+            ctx.fillStyle = 'white';
+            player1.bullets.forEach(bullet => ctx.fillRect(bullet.x, bullet.y, bulletSize, bulletSize));
+            player2.bullets.forEach(bullet => ctx.fillRect(bullet.x, bullet.y, bulletSize, bulletSize));
+
+            // Draw obstacles
+            ctx.fillStyle = 'gray';
+            obstacles.forEach(obstacle => ctx.fillRect(obstacle.x, obstacle.y, obstacleSize, obstacleSize));
+
+            // Draw scores
+            ctx.font = '20px Arial';
+            ctx.fillStyle = 'white';
+            ctx.fillText(`Player 1: ${player1.score}`, 20, 30);
+            ctx.fillText(`Player 2: ${player2.score}`, canvas.width - 150, 30);
+        }
+
+        // Update game state
+        function update() {
+            // Move players
+            if (keys['w'] && player1.y > 0) player1.y -= playerSpeed;
+            if (keys['s'] && player1.y < canvas.height - playerSize) player1.y += playerSpeed;
+            if (keys['a'] && player1.x > 0) player1.x -= playerSpeed;
+            if (keys['d'] && player1.x < canvas.width - playerSize) player1.x += playerSpeed;
+
+            if (keys['ArrowUp'] && player2.y > 0) player2.y -= playerSpeed;
+            if (keys['ArrowDown'] && player2.y < canvas.height - playerSize) player2.y += playerSpeed;
+            if (keys['ArrowLeft'] && player2.x > 0) player2.x -= playerSpeed;
+            if (keys['ArrowRight'] && player2.x < canvas.width - playerSize) player2.x += playerSpeed;
+
+            // Move bullets
+            player1.bullets.forEach(bullet => bullet.x += bullet.vx);
+            player2.bullets.forEach(bullet => bullet.x += bullet.vx);
+
+            // Remove off-screen bullets
+            player1.bullets = player1.bullets.filter(bullet => bullet.x >= 0 && bullet.x <= canvas.width);
+            player2.bullets = player2.bullets.filter(bullet => bullet.x >= 0 && bullet.x <= canvas.width);
+
+            // Check for bullet collisions with players
+            player1.bullets.forEach((bullet, index) => {
+                if (bullet.x < player2.x + playerSize && bullet.x + bulletSize > player2.x &&
+                    bullet.y < player2.y + playerSize && bullet.y + bulletSize > player2.y) {
+                    player1.score++;
+                    player1.bullets.splice(index, 1);
+                }
+            });
+
+            player2.bullets.forEach((bullet, index) => {
+                if (bullet.x < player1.x + playerSize && bullet.x + bulletSize > player1.x &&
+                    bullet.y < player1.y + playerSize && bullet.y + bulletSize > player1.y) {
+                    player2.score++;
+                    player2.bullets.splice(index, 1);
+                }
+            });
+
+            // Check for player collisions with obstacles
+            obstacles.forEach(obstacle => {
+                if (player1.x < obstacle.x + obstacleSize && player1.x + playerSize > obstacle.x &&
+                    player1.y < obstacle.y + obstacleSize && player1.y + playerSize > obstacle.y) {
+                    player1.vx = player1.vy = 0;
+                }
+                if (player2.x < obstacle.x + obstacleSize && player2.x + playerSize > obstacle.x &&
+                    player2.y < obstacle.y + obstacleSize && player2.y + playerSize > obstacle.y) {
+                    player2.vx = player2.vy = 0;
+                }
+            });
+        }
+
+        // Fire bullet
+        function fireBullet(player) {
+            const bullet = {
+                x: player.x + (player === player1 ? playerSize : -bulletSize),
+                y: player.y + playerSize / 2 - bulletSize / 2,
+                vx: player === player1 ? bulletSpeed : -bulletSpeed
+            };
+            player.bullets.push(bullet);
+        }
+
+        // Game loop
+        function gameLoop() {
+            update();
+            draw();
+            requestAnimationFrame(gameLoop);
+        }
+
+        // Keydown and keyup event listeners
+        document.addEventListener('keydown', (event) => {
+            keys[event.key] = true;
+            if (event.key === 'f') fireBullet(player1);
+            if (event.key === 'Enter') fireBullet(player2);
+        });
+        document.addEventListener('keyup', (event) => {
+            keys[event.key] = false;
+        });
+
+        // Start the game loop
+        gameLoop();
+    </script>
+</body>
+</html>

@@ -1,0 +1,333 @@
+<!DOCTYPE html>
+<html>
+<head>
+<title>Space Survival</title>
+<style>
+body {
+  margin: 0;
+  overflow: hidden; /* Hide scrollbars */
+  background-color: black;
+}
+canvas {
+  display: block;
+}
+</style>
+</head>
+<body>
+
+<canvas id="gameCanvas"></canvas>
+
+<script>
+const canvas = document.getElementById('gameCanvas');
+const ctx = canvas.getContext('2d');
+
+canvas.width = window.innerWidth;
+canvas.height = window.innerHeight;
+
+// Game Variables
+let player = {
+  x: canvas.width / 2,
+  y: canvas.height - 50,
+  size: 20,
+  speed: 5,
+  color: 'white',
+  bullets: [],
+  trail: [], // For the exhaust trail
+  trailLength: 15, // Length of the trail
+  lastX: canvas.width / 2, // For smoother movement
+  lastY: canvas.height - 50  // For smoother movement
+};
+
+let enemies = [];
+let enemySpawnRate = 1200; // Initial spawn rate
+let lastEnemySpawned = Date.now();
+let enemySpeed = 2;
+let score = 0;
+let gameOver = false;
+let difficultyIncreaseInterval = 8000; // Increase difficulty more frequently
+let lastDifficultyIncrease = Date.now();
+let maxEnemySpeed = 6; // Limit for enemy speed
+
+// --- Animation Variables ---
+let playerThrusting = false; // Is the player moving?
+
+// --- Smoother Movement Variables ---
+let movementSmoothing = 0.5; // Adjust for desired smoothness (0.1 to 0.9)
+
+// Functions
+
+// --- Drawing Functions ---
+function drawPlayer() {
+  ctx.fillStyle = player.color;
+  ctx.save(); // Save the current state of the context
+
+  // Translate to the player's position for easier rotation
+  ctx.translate(player.x, player.y);
+
+  // Rotate the canvas based on horizontal movement
+  if (player.x !== player.lastX) {
+    let rotation = (player.x - player.lastX) * 0.05; // Adjust the rotation factor as needed
+    ctx.rotate(rotation);
+  }
+
+  // Draw the spaceship (triangle)
+  ctx.beginPath();
+  ctx.moveTo(0, -player.size / 2); // Top point
+  ctx.lineTo(-player.size / 2, player.size / 2); // Bottom-left
+  ctx.lineTo(player.size / 2, player.size / 2); // Bottom-right
+  ctx.closePath();
+  ctx.fill();
+
+  // Draw exhaust trail when thrusting
+  if (playerThrusting) {
+    drawPlayerTrail();
+  }
+
+  ctx.restore(); // Restore the context to its original state
+}
+
+function drawPlayerTrail() {
+  ctx.fillStyle = 'orange'; // Adjust trail color as needed
+
+  // Draw a flickering exhaust
+  for (let i = 0; i < player.trail.length; i++) {
+      let particle = player.trail[i];
+      let size = (Math.random() * 3 + 1) * (i / player.trail.length); // Varying particle size
+
+      // Draw the exhaust particle relative to the player
+      ctx.beginPath();
+      ctx.arc(particle.x - player.x, particle.y - player.y, size, 0, 2 * Math.PI);
+      ctx.closePath();
+      ctx.fill();
+  }
+}
+
+function drawEnemies() {
+  for (let i = 0; i < enemies.length; i++) {
+    let enemy = enemies[i];
+    let gradient = ctx.createRadialGradient(enemy.x, enemy.y, 0, enemy.x, enemy.y, enemy.size / 2);
+    gradient.addColorStop(0, 'red');
+    gradient.addColorStop(0.5, 'darkred');
+    gradient.addColorStop(1, 'black');
+
+    ctx.fillStyle = gradient;
+
+    // Draw the enemy (glowing circle)
+    ctx.beginPath();
+    ctx.arc(enemy.x, enemy.y, enemy.size / 2, 0, 2 * Math.PI);
+    ctx.closePath();
+    ctx.fill();
+
+    // Add a pulsating effect
+    let glowSize = enemy.size / 2 + Math.sin(Date.now() * 0.005) * 2; // Adjust pulsating effect
+    let glowGradient = ctx.createRadialGradient(enemy.x, enemy.y, 0, enemy.x, enemy.y, glowSize);
+    glowGradient.addColorStop(0, 'rgba(255, 0, 0, 0.5)'); // Adjust glow color and opacity
+    glowGradient.addColorStop(1, 'rgba(255, 0, 0, 0)');
+
+    ctx.fillStyle = glowGradient;
+    ctx.beginPath();
+    ctx.arc(enemy.x, enemy.y, glowSize, 0, 2 * Math.PI);
+    ctx.closePath();
+    ctx.fill();
+  }
+}
+
+function drawBullets() {
+  ctx.fillStyle = 'yellow';
+  for (let i = 0; i < player.bullets.length; i++) {
+    ctx.fillRect(player.bullets[i].x, player.bullets[i].y, player.bullets[i].size, player.bullets[i].size * 2);
+  }
+}
+
+// --- Update Functions ---
+function updatePlayer() {
+    // Add to the trail when the player is moving
+    if (playerThrusting) {
+        player.trail.push({ x: player.x, y: player.y + player.size / 2 });
+    }
+
+    // Limit trail length
+    while (player.trail.length > player.trailLength) {
+        player.trail.shift();
+    }
+
+    // Smooth out the player's movement
+    player.x = player.x * (1 - movementSmoothing) + player.lastX * movementSmoothing;
+    player.y = player.y * (1 - movementSmoothing) + player.lastY * movementSmoothing;
+}
+
+function updateBullets() {
+  for (let i = 0; i < player.bullets.length; i++) {
+    player.bullets[i].y -= 10;
+
+    // Remove bullets that go off-screen
+    if (player.bullets[i].y < 0) {
+      player.bullets.splice(i, 1);
+      i--;
+    }
+  }
+}
+
+function spawnEnemy() {
+  let size = 20;
+  let x = Math.random() * (canvas.width - size);
+  let y = -size;
+
+  enemies.push({
+    x: x,
+    y: y,
+    size: size,
+    speed: enemySpeed,
+    color: 'red'
+  });
+}
+
+function updateEnemies() {
+  for (let i = 0; i < enemies.length; i++) {
+    enemies[i].y += enemies[i].speed;
+
+    // Remove enemies that go off-screen
+    if (enemies[i].y > canvas.height) {
+      enemies.splice(i, 1);
+      i--;
+    }
+  }
+}
+
+function checkCollisions() {
+    // Bullet-Enemy collision
+    for (let i = 0; i < player.bullets.length; i++) {
+        for (let j = 0; j < enemies.length; j++) {
+            if (isColliding(player.bullets[i], enemies[j])) {
+                // Add explosion or effect when an enemy is hit
+                enemies.splice(j, 1);
+                player.bullets.splice(i, 1);
+                i--;
+                j--;
+                score++;
+                break;
+            }
+        }
+    }
+    
+    // Player-Enemy collision
+    for (let i = 0; i < enemies.length; i++) {
+        if (isColliding(player, enemies[i])) {
+            gameOver = true;
+        }
+    }
+}
+
+function isColliding(obj1, obj2) {
+  return !(
+    obj1.x + obj1.size / 2 < obj2.x - obj2.size / 2 ||
+    obj1.x - obj1.size / 2 > obj2.x + obj2.size / 2 ||
+    obj1.y + obj1.size / 2 < obj2.y - obj2.size / 2 ||
+    obj1.y - obj1.size / 2 > obj2.y + obj2.size / 2
+  );
+}
+
+function increaseDifficulty() {
+    enemySpawnRate *= 0.85; // Increase spawn rate
+    enemySpeed += 0.25; // Increase enemy speed
+
+    // Limit enemy spawn rate and speed
+    if (enemySpawnRate < 100) {
+        enemySpawnRate = 100;
+    }
+    if (enemySpeed > maxEnemySpeed) {
+        enemySpeed = maxEnemySpeed;
+    }
+}
+
+function drawScore() {
+  ctx.fillStyle = 'white';
+  ctx.font = '20px Arial';
+  ctx.fillText('Score: ' + score, 10, 30);
+}
+
+function drawGameOver() {
+  ctx.fillStyle = 'white';
+  ctx.font = '40px Arial';
+  ctx.textAlign = 'center';
+  ctx.fillText('GAME OVER', canvas.width / 2, canvas.height / 2 - 50);
+  ctx.font = '20px Arial';
+  ctx.fillText('Press R to restart', canvas.width / 2, canvas.height / 2);
+}
+
+// Event Listeners
+window.addEventListener('keydown', (event) => {
+    if (event.code === 'ArrowLeft' && player.x > player.size / 2) {
+        player.lastX -= player.speed;
+        playerThrusting = true;
+    } else if (event.code === 'ArrowRight' && player.x < canvas.width - player.size / 2) {
+        player.lastX += player.speed;
+        playerThrusting = true;
+    } else if (event.code === 'Space') {
+        player.bullets.push({
+            x: player.x,
+            y: player.y - player.size / 2,
+            size: 4
+        });
+    } else if (event.code === 'KeyR' && gameOver) {
+        // Reset the game
+        player.x = canvas.width / 2;
+        player.y = canvas.height - 50;
+        player.lastX = player.x;
+        player.lastY = player.y;
+        player.bullets = [];
+        player.trail = [];
+        enemies = [];
+        enemySpawnRate = 1200;
+        lastEnemySpawned = Date.now();
+        enemySpeed = 2;
+        score = 0;
+        gameOver = false;
+        lastDifficultyIncrease = Date.now();
+    }
+});
+
+window.addEventListener('keyup', (event) => {
+    if (event.code === 'ArrowLeft' || event.code === 'ArrowRight') {
+        playerThrusting = false;
+    }
+});
+
+// Game Loop
+function gameLoop() {
+  ctx.clearRect(0, 0, canvas.width, canvas.height); // Clear the canvas
+
+  if (!gameOver) {
+    // Difficulty increase over time
+    if (Date.now() - lastDifficultyIncrease > difficultyIncreaseInterval) {
+      increaseDifficulty();
+      lastDifficultyIncrease = Date.now();
+    }
+
+    // Spawn enemies
+    if (Date.now() - lastEnemySpawned > enemySpawnRate) {
+      spawnEnemy();
+      lastEnemySpawned = Date.now();
+    }
+
+    updatePlayer();
+    updateBullets();
+    updateEnemies();
+    checkCollisions();
+
+    drawPlayer();
+    drawEnemies();
+    drawBullets();
+    drawScore();
+  } else {
+    drawGameOver();
+  }
+
+  requestAnimationFrame(gameLoop);
+}
+
+gameLoop();
+</script>
+
+</body>
+</html>

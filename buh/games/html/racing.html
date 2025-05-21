@@ -1,0 +1,147 @@
+﻿<!DOCTYPE html>
+<html>
+<head>
+    <title>WASD Rennspiel</title>
+    <style>
+        canvas {
+            border: 2px solid black;
+            background: #2c3e50;
+        }
+        body {
+            display: flex;
+            flex-direction: column;
+            align-items: center;
+            background: #34495e;
+            color: white;
+            font-family: Arial, sans-serif;
+        }
+    </style>
+</head>
+<body>
+    <h1>WASD Rennspiel</h1>
+    <div id="score">Score: 0</div>
+    <canvas id="gameCanvas" width="600" height="400"></canvas>
+
+    <script>
+        const canvas = document.getElementById('gameCanvas');
+        const ctx = canvas.getContext('2d');
+        const scoreElement = document.getElementById('score');
+
+        let score = 0;
+        let gameSpeed = 3;
+        let isGameOver = false;
+
+        // Auto-Objekt
+        const car = {
+            x: canvas.width / 2,
+            y: canvas.height - 50,
+            width: 30,
+            height: 50,
+            speed: 5
+        };
+
+        // Streckengenerierung
+        let roadSegments = [];
+        const roadWidth = 200;
+        const segmentHeight = 20;
+
+        function generateRoad() {
+            let centerX = canvas.width / 2;
+            for (let i = 0; i < 50; i++) {
+                centerX += Math.random() * 6 - 3;
+                centerX = Math.max(roadWidth/2, Math.min(canvas.width - roadWidth/2, centerX));
+                roadSegments.push({
+                    y: canvas.height + i * segmentHeight,
+                    centerX: centerX
+                });
+            }
+        }
+
+        // Tastatursteuerung
+        const keys = {};
+        window.addEventListener('keydown', e => keys[e.key.toLowerCase()] = true);
+        window.addEventListener('keyup', e => keys[e.key.toLowerCase()] = false);
+
+        function update() {
+            if (isGameOver) return;
+
+            // Auto bewegen
+            if (keys['a']) car.x -= car.speed;
+            if (keys['d']) car.x += car.speed;
+            if (keys['w']) gameSpeed = Math.min(8, gameSpeed + 0.1);
+            if (keys['s']) gameSpeed = Math.max(2, gameSpeed - 0.1);
+
+            // Strecke bewegen
+            roadSegments.forEach(segment => segment.y -= gameSpeed);
+            
+            // Neue Segmente hinzufügen
+            while (roadSegments[roadSegments.length - 1].y < canvas.height) {
+                const lastSegment = roadSegments[roadSegments.length - 1];
+                const newCenterX = lastSegment.centerX + (Math.random() * 4 - 2);
+                roadSegments.push({
+                    y: lastSegment.y + segmentHeight,
+                    centerX: Math.max(roadWidth/2, Math.min(canvas.width - roadWidth/2, newCenterX))
+                });
+            }
+
+            // Alte Segmente entfernen
+            while (roadSegments[0].y + segmentHeight < 0) {
+                roadSegments.shift();
+            }
+
+            // Kollisionserkennung
+            const currentSegment = roadSegments.find(s => 
+                s.y <= car.y + car.height && 
+                s.y + segmentHeight >= car.y
+            );
+
+            if (currentSegment) {
+                const roadLeft = currentSegment.centerX - roadWidth/2;
+                const roadRight = currentSegment.centerX + roadWidth/2;
+                
+                if (car.x < roadLeft || car.x + car.width > roadRight) {
+                    isGameOver = true;
+                }
+            }
+
+            // Score aktualisieren
+            score += gameSpeed;
+            scoreElement.textContent = `Score: ${Math.floor(score)}`;
+
+            draw();
+            requestAnimationFrame(update);
+        }
+
+        function draw() {
+            // Canvas löschen
+            ctx.clearRect(0, 0, canvas.width, canvas.height);
+
+            // Strecke zeichnen
+            roadSegments.forEach(segment => {
+                ctx.fillStyle = '#666';
+                ctx.fillRect(
+                    segment.centerX - roadWidth/2, 
+                    segment.y, 
+                    roadWidth, 
+                    segmentHeight
+                );
+            });
+
+            // Auto zeichnen
+            ctx.fillStyle = '#e74c3c';
+            ctx.fillRect(car.x, car.y, car.width, car.height);
+
+            if (isGameOver) {
+                ctx.fillStyle = 'white';
+                ctx.font = '48px Arial';
+                ctx.textAlign = 'center';
+                ctx.fillText('GAME OVER', canvas.width/2, canvas.height/2);
+            }
+        }
+
+        // Spiel initialisieren
+        generateRoad();
+        update();
+    </script>
+</body>
+</html>

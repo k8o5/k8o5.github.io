@@ -1,0 +1,268 @@
+<!DOCTYPE html>
+<html>
+<head>
+    <title>Minecraft 3D</title>
+    <style>
+        body { margin: 0; overflow: hidden; }
+        #toolbar {
+            position: fixed;
+            bottom: 20px;
+            left: 50%;
+            transform: translateX(-50%);
+            background: rgba(0,0,0,0.5);
+            padding: 10px;
+            border-radius: 5px;
+            display: flex;
+            gap: 10px;
+        }
+        .block {
+            width: 40px;
+            height: 40px;
+            cursor: pointer;
+            border: 2px solid transparent;
+        }
+        .block.selected { border-color: white; }
+        #crosshair {
+            position: fixed;
+            top: 50%;
+            left: 50%;
+            transform: translate(-50%, -50%);
+            color: white;
+            font-size: 20px;
+        }
+    </style>
+</head>
+<body>
+    <div id="crosshair">+</div>
+    <div id="toolbar">
+        <div class="block" style="background: #4CAF50" data-block="grass"></div>
+        <div class="block" style="background: #8B4513" data-block="wood"></div>
+        <div class="block" style="background: #808080" data-block="stone"></div>
+    </div>
+
+<script type="module">
+import * as THREE from 'https://cdn.jsdelivr.net/npm/three@0.132.2/build/three.module.js';
+import { PointerLockControls } from 'https://cdn.jsdelivr.net/npm/three@0.132.2/examples/jsm/controls/PointerLockControls.js';
+
+let camera, scene, renderer, controls;
+let moveForward = false;
+let moveBackward = false;
+let moveLeft = false;
+let moveRight = false;
+let canJump = false;
+
+const objects = [];
+let raycaster;
+
+let moveVelocity = new THREE.Vector3();
+let direction = new THREE.Vector3();
+let prevTime = performance.now();
+
+const worldSize = 20;
+const blocks = {};
+let selectedBlock = 'grass';
+
+// Definiere Blockfarben
+const BLOCK_COLORS = {
+    grass: 0x4CAF50,  // Grün
+    wood: 0x8B4513,   // Braun
+    stone: 0x808080   // Grau
+};
+
+init();
+animate();
+
+function init() {
+    scene = new THREE.Scene();
+    scene.background = new THREE.Color(0x87CEEB); // Hellblauer Himmel
+
+    camera = new THREE.PerspectiveCamera(75, window.innerWidth / window.innerHeight, 0.1, 1000);
+    camera.position.y = 10;
+
+    renderer = new THREE.WebGLRenderer({ antialias: true });
+    renderer.setSize(window.innerWidth, window.innerHeight);
+    document.body.appendChild(renderer.domElement);
+
+    // Beleuchtung
+    const light = new THREE.HemisphereLight(0xeeeeff, 0x777788, 0.75);
+    light.position.set(0.5, 1, 0.75);
+    scene.add(light);
+
+    // Direktionales Licht für bessere Schatten
+    const dirLight = new THREE.DirectionalLight(0xffffff, 0.5);
+    dirLight.position.set(1, 1.75, 1);
+    scene.add(dirLight);
+
+    controls = new PointerLockControls(camera, document.body);
+
+    document.addEventListener('click', function() {
+        controls.lock();
+    });
+
+    document.addEventListener('keydown', onKeyDown);
+    document.addEventListener('keyup', onKeyUp);
+
+    raycaster = new THREE.Raycaster();
+
+    // Erstelle Boden
+    createGround();
+
+    // Block Auswahl
+    document.querySelectorAll('.block').forEach(block => {
+        block.addEventListener('click', () => {
+            document.querySelector('.selected')?.classList.remove('selected');
+            block.classList.add('selected');
+            selectedBlock = block.dataset.block;
+        });
+    });
+
+    window.addEventListener('click', onMouseClick);
+}
+
+function createGround() {
+    const geometry = new THREE.BoxGeometry(1, 1, 1);
+    
+    for(let x = -worldSize; x < worldSize; x++) {
+        for(let z = -worldSize; z < worldSize; z++) {
+            const material = new THREE.MeshLambertMaterial({ color: BLOCK_COLORS.grass });
+            const cube = new THREE.Mesh(geometry, material);
+            cube.position.set(x, -1, z);
+            scene.add(cube);
+            objects.push(cube);
+            blocks[`${x},${-1},${z}`] = cube;
+        }
+    }
+}
+
+function onMouseClick(event) {
+    if(!controls.isLocked) return;
+
+    raycaster.setFromCamera(new THREE.Vector2(), camera);
+    const intersects = raycaster.intersectObjects(objects);
+
+    if(intersects.length > 0) {
+        const intersect = intersects[0];
+        
+        if(event.button === 2) { // Rechtsklick zum Entfernen
+            const position = intersect.object.position;
+            scene.remove(intersect.object);
+            objects.splice(objects.indexOf(intersect.object), 1);
+            delete blocks[`${position.x},${position.y},${position.z}`];
+        }
+        else { // Linksklick zum Platzieren
+            const position = intersect.point.add(intersect.face.normal);
+            const geometry = new THREE.BoxGeometry(1, 1, 1);
+            const material = new THREE.MeshLambertMaterial({ color: BLOCK_COLORS[selectedBlock] });
+            const cube = new THREE.Mesh(geometry, material);
+            cube.position.copy(position).floor().addScalar(0.5);
+            scene.add(cube);
+            objects.push(cube);
+            blocks[`${cube.position.x},${cube.position.y},${cube.position.z}`] = cube;
+        }
+    }
+}
+
+function onKeyDown(event) {
+    switch(event.code) {
+        case 'ArrowUp':
+        case 'KeyW':
+            moveForward = true;
+            break;
+        case 'ArrowDown':
+        case 'KeyS':
+            moveBackward = true;
+            break;
+        case 'ArrowLeft':
+        case 'KeyA':
+            moveLeft = true;
+            break;
+        case 'ArrowRight':
+        case 'KeyD':
+            moveRight = true;
+            break;
+        case 'Space':
+            if(canJump) {
+                moveVelocity.y += 350;
+                canJump = false;
+            }
+            break;
+    }
+}
+
+function onKeyUp(event) {
+    switch(event.code) {
+        case 'ArrowUp':
+        case 'KeyW':
+            moveForward = false;
+            break;
+        case 'ArrowDown':
+        case 'KeyS':
+            moveBackward = false;
+            break;
+        case 'ArrowLeft':
+        case 'KeyA':
+            moveLeft = false;
+            break;
+        case 'ArrowRight':
+        case 'KeyD':
+            moveRight = false;
+            break;
+    }
+}
+
+function animate() {
+    requestAnimationFrame(animate);
+
+    if(controls.isLocked) {
+        const time = performance.now();
+        const delta = (time - prevTime) / 1000;
+
+        moveVelocity.x -= moveVelocity.x * 10.0 * delta;
+        moveVelocity.z -= moveVelocity.z * 10.0 * delta;
+
+        const speed = 100.0;
+
+        direction.z = Number(moveForward) - Number(moveBackward);
+        direction.x = Number(moveRight) - Number(moveLeft);
+        direction.normalize();
+
+        if(moveForward || moveBackward) moveVelocity.z -= direction.z * speed * delta;
+        if(moveLeft || moveRight) moveVelocity.x -= direction.x * speed * delta;
+
+        // Bewegung
+        controls.moveRight(-moveVelocity.x * delta);
+        controls.moveForward(-moveVelocity.z * delta);
+
+        // Gravitation und Springen
+        if(camera.position.y > 1) {
+            moveVelocity.y -= 9.8 * 100.0 * delta; // Gravitation
+            camera.position.y += moveVelocity.y * delta;
+        } else {
+            moveVelocity.y = 0;
+            camera.position.y = 1;
+            canJump = true;
+        }
+
+        prevTime = time;
+    }
+
+    renderer.render(scene, camera);
+}
+
+// Fenster-Größenänderung
+window.addEventListener('resize', onWindowResize, false);
+
+function onWindowResize() {
+    camera.aspect = window.innerWidth / window.innerHeight;
+    camera.updateProjectionMatrix();
+    renderer.setSize(window.innerWidth, window.innerHeight);
+}
+
+// Verhindere Kontextmenü bei Rechtsklick
+document.addEventListener('contextmenu', (event) => event.preventDefault());
+
+// Füge erste Block-Auswahl hinzu
+document.querySelector('.block').classList.add('selected');
+</script>
+</body>
+</html>

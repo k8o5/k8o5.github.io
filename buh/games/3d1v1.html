@@ -1,0 +1,259 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Tron Game vs AI</title>
+    <style>
+        body {
+            display: flex;
+            flex-direction: column;
+            justify-content: center;
+            align-items: center;
+            height: 100vh;
+            margin: 0;
+            background-color: black;
+        }
+        canvas {
+            border: 4px solid white;
+        }
+        #menu {
+            margin-bottom: 20px;
+            display: flex;
+            flex-direction: column;
+            align-items: center;
+        }
+        #menu button {
+            margin: 5px;
+            padding: 10px 20px;
+            font-size: 16px;
+        }
+        #menu span {
+            color: white;
+            font-size: 20px;
+        }
+    </style>
+</head>
+<body>
+    <div id="menu">
+        <button id="solo">Solo vs AI</button>
+        <button id="local">Local Multiplayer</button>
+    </div>
+    <canvas id="tronCanvas" width="800" height="600" style="display: none;"></canvas>
+    <script>
+        const canvas = document.getElementById('tronCanvas');
+        const ctx = canvas.getContext('2d');
+
+        const WIDTH = canvas.width;
+        const HEIGHT = canvas.height;
+        const CELL_SIZE = 10;
+        const FPS = 15;
+
+        const DIRECTIONS = {
+            UP: { x: 0, y: -1 },
+            DOWN: { x: 0, y: 1 },
+            LEFT: { x: -1, y: 0 },
+            RIGHT: { x: 1, y: 0 }
+        };
+
+        const COLORS = {
+            PLAYER1: 'blue',
+            PLAYER2: 'green',
+            AI: 'red',
+            TRAIL: 'white',
+            BACKGROUND: 'black'
+        };
+
+        let isSoloGame = true;
+        let gameRunning = false;
+
+        const player1 = {
+            color: COLORS.PLAYER1,
+            trail: [{ x: 100, y: 100 }],
+            direction: DIRECTIONS.RIGHT,
+            crashed: false
+        };
+
+        const player2 = {
+            color: COLORS.PLAYER2,
+            trail: [{ x: 200, y: 200 }],
+            direction: DIRECTIONS.LEFT,
+            crashed: false
+        };
+
+        const ai = {
+            color: COLORS.AI,
+            trail: [{ x: 700, y: 500 }],
+            direction: DIRECTIONS.LEFT,
+            crashed: false,
+            turnCooldown: 0
+        };
+
+        function resetGame() {
+            player1.trail = [{ x: 100, y: 100 }];
+            player1.direction = DIRECTIONS.RIGHT;
+            player1.crashed = false;
+
+            player2.trail = [{ x: 200, y: 200 }];
+            player2.direction = DIRECTIONS.LEFT;
+            player2.crashed = false;
+
+            ai.trail = [{ x: 700, y: 500 }];
+            ai.direction = DIRECTIONS.LEFT;
+            ai.crashed = false;
+            ai.turnCooldown = 0;
+
+            gameRunning = true;
+            gameLoop();
+        }
+
+        function drawTrail(trail, color) {
+            ctx.fillStyle = color;
+            trail.forEach(cell => {
+                ctx.fillRect(cell.x, cell.y, CELL_SIZE, CELL_SIZE);
+            });
+        }
+
+        function updateTrail(entity) {
+            if (!entity.crashed) {
+                const newHead = {
+                    x: entity.trail[0].x + entity.direction.x * CELL_SIZE,
+                    y: entity.trail[0].y + entity.direction.y * CELL_SIZE
+                };
+
+                if (isCollision(newHead, entity.trail) || isOutOfBounds(newHead)) {
+                    entity.crashed = true;
+                } else {
+                    entity.trail.unshift(newHead);
+                }
+            }
+        }
+
+        function isCollision(head, trail) {
+            return trail.some(cell => cell.x === head.x && cell.y === head.y) ||
+                   player1.trail.some(cell => cell.x === head.x && cell.y === head.y) ||
+                   player2.trail.some(cell => cell.x === head.x && cell.y === head.y) ||
+                   ai.trail.some(cell => cell.x === head.x && cell.y === head.y);
+        }
+
+        function isOutOfBounds(cell) {
+            return cell.x < 0 || cell.y < 0 || cell.x >= WIDTH || cell.y >= HEIGHT;
+        }
+
+        function aiLogic() {
+            if (ai.crashed || ai.turnCooldown > 0) {
+                ai.turnCooldown--;
+                return;
+            }
+
+            const possibleDirections = Object.values(DIRECTIONS).filter(dir => {
+                const newHead = {
+                    x: ai.trail[0].x + dir.x * CELL_SIZE,
+                    y: ai.trail[0].y + dir.y * CELL_SIZE
+                };
+                return !isCollision(newHead, ai.trail) && !isOutOfBounds(newHead);
+            });
+
+            if (possibleDirections.length > 0) {
+                ai.direction = possibleDirections[Math.floor(Math.random() * possibleDirections.length)];
+            }
+
+            ai.turnCooldown = 3; // Reduces the frequency of AI turns
+        }
+
+        window.addEventListener('keydown', (e) => {
+            switch (e.key) {
+                case 'ArrowUp':
+                    if (player1.direction !== DIRECTIONS.DOWN) player1.direction = DIRECTIONS.UP;
+                    break;
+                case 'ArrowDown':
+                    if (player1.direction !== DIRECTIONS.UP) player1.direction = DIRECTIONS.DOWN;
+                    break;
+                case 'ArrowLeft':
+                    if (player1.direction !== DIRECTIONS.RIGHT) player1.direction = DIRECTIONS.LEFT;
+                    break;
+                case 'ArrowRight':
+                    if (player1.direction !== DIRECTIONS.LEFT) player1.direction = DIRECTIONS.RIGHT;
+                    break;
+                case 'w':
+                    if (player2.direction !== DIRECTIONS.DOWN) player2.direction = DIRECTIONS.UP;
+                    break;
+                case 's':
+                    if (player2.direction !== DIRECTIONS.UP) player2.direction = DIRECTIONS.DOWN;
+                    break;
+                case 'a':
+                    if (player2.direction !== DIRECTIONS.RIGHT) player2.direction = DIRECTIONS.LEFT;
+                    break;
+                case 'd':
+                    if (player2.direction !== DIRECTIONS.LEFT) player2.direction = DIRECTIONS.RIGHT;
+                    break;
+            }
+        });
+
+        function gameLoop() {
+            ctx.fillStyle = COLORS.BACKGROUND;
+            ctx.fillRect(0, 0, WIDTH, HEIGHT);
+
+            if (gameRunning) {
+                if (!player1.crashed) {
+                    updateTrail(player1);
+                }
+                if (!player2.crashed && !isSoloGame) {
+                    updateTrail(player2);
+                }
+                if (!ai.crashed && isSoloGame) {
+                    aiLogic();
+                    updateTrail(ai);
+                }
+            }
+
+            drawTrail(player1.trail, player1.color);
+            if (!isSoloGame) drawTrail(player2.trail, player2.color);
+            if (isSoloGame) drawTrail(ai.trail, ai.color);
+
+            let winnerMessage = "";
+
+            if (player1.crashed) {
+                winnerMessage = isSoloGame ? "AI Wins!" : "Player 2 Wins!";
+                gameRunning = false;
+            } else if (player2.crashed && !isSoloGame) {
+                winnerMessage = "Player 1 Wins!";
+                gameRunning = false;
+            } else if (ai.crashed && isSoloGame) {
+                winnerMessage = "Player Wins!";
+                gameRunning = false;
+            }
+
+            if (!gameRunning && winnerMessage) {
+                ctx.fillStyle = COLORS.TRAIL;
+                ctx.font = '30px Arial';
+                ctx.fillText(winnerMessage, WIDTH / 2 - 70, HEIGHT / 2);
+                setTimeout(showMenu, 2000);
+            } else {
+                setTimeout(gameLoop, 1000 / FPS);
+            }
+        }
+
+        function showMenu() {
+            document.getElementById('menu').style.display = 'block';
+            canvas.style.display = 'none';
+        }
+
+        document.getElementById('solo').addEventListener('click', () => {
+            isSoloGame = true;
+            document.getElementById('menu').style.display = 'none';
+            canvas.style.display = 'block';
+            resetGame();
+        });
+
+        document.getElementById('local').addEventListener('click', () => {
+            isSoloGame = false;
+            document.getElementById('menu').style.display = 'none';
+            canvas.style.display = 'block';
+            resetGame();
+        });
+
+        showMenu();
+    </script>
+</body>
+</html>

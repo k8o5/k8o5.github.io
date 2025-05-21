@@ -1,0 +1,328 @@
+<!DOCTYPE html>
+<html lang="de">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Texas Hold'em Poker</title>
+    <style>
+        body {
+            font-family: Arial, sans-serif;
+            text-align: center;
+        }
+        .card {
+            display: inline-block;
+            margin: 5px;
+            padding: 10px;
+            border: 1px solid black;
+            border-radius: 5px;
+        }
+        .hidden {
+            background-color: gray;
+        }
+        #community-cards, #player-hand, #ai-hand {
+            margin: 20px;
+        }
+        #game-info {
+            margin: 20px;
+        }
+        button {
+            margin: 5px;
+            padding: 10px;
+        }
+    </style>
+</head>
+<body>
+    <h1>Texas Hold'em Poker</h1>
+    <div id="game-info">
+        <p>Pot: <span id="pot">0</span></p>
+        <p>Deine Chips: <span id="player-chips">1000</span></p>
+        <p>KI-Chips: <span id="ai-chips">1000</span></p>
+        <p>Aktueller Einsatz: <span id="current-bet">0</span></p>
+    </div>
+    <div id="community-cards">
+        <h2>Gemeinschaftskarten</h2>
+        <div id="community"></div>
+    </div>
+    <div id="player-hand">
+        <h2>Deine Hand</h2>
+        <div id="player"></div>
+    </div>
+    <div id="ai-hand">
+        <h2>KI-Hand</h2>
+        <div id="ai"></div>
+    </div>
+    <div id="actions">
+        <button id="check-btn">Check</button>
+        <button id="bet-btn">Bet 10</button>
+        <button id="raise-btn">Raise 20</button>
+        <button id="fold-btn">Fold</button>
+    </div>
+    <div id="message"></div>
+
+    <script>
+        // Kartenwerte und Definitionen
+        const suits = ['♠', '♥', '♦', '♣'];
+        const ranks = ['2', '3', '4', '5', '6', '7', '8', '9', '10', 'J', 'Q', 'K', 'A'];
+        let deck = [];
+        let playerHand = [];
+        let aiHand = [];
+        let communityCards = [];
+        let pot = 0;
+        let playerChips = 1000;
+        let aiChips = 1000;
+        let currentBet = 0;
+        let gameStage = 'pre-flop'; // pre-flop, flop, turn, river, showdown
+        let playerTurn = true;
+
+        // Deck erstellen und mischen
+        function createDeck() {
+            deck = [];
+            for (let suit of suits) {
+                for (let rank of ranks) {
+                    deck.push({ suit, rank });
+                }
+            }
+            shuffle(deck);
+        }
+
+        // Fisher-Yates Mischen
+        function shuffle(array) {
+            for (let i = array.length - 1; i > 0; i--) {
+                const j = Math.floor(Math.random() * (i + 1));
+                [array[i], array[j]] = [array[j], array[i]];
+            }
+        }
+
+        // Karten austeilen
+        function dealCards() {
+            playerHand = [deck.pop(), deck.pop()];
+            aiHand = [deck.pop(), deck.pop()];
+            communityCards = [];
+            updateUI();
+        }
+
+        // UI aktualisieren
+        function updateUI() {
+            document.getElementById('pot').textContent = pot;
+            document.getElementById('player-chips').textContent = playerChips;
+            document.getElementById('ai-chips').textContent = aiChips;
+            document.getElementById('current-bet').textContent = currentBet;
+
+            // Spielerhand
+            const playerDiv = document.getElementById('player');
+            playerDiv.innerHTML = '';
+            playerHand.forEach(card => {
+                const cardDiv = document.createElement('div');
+                cardDiv.className = 'card';
+                cardDiv.textContent = card.rank + card.suit;
+                playerDiv.appendChild(cardDiv);
+            });
+
+            // KI-Hand (versteckt)
+            const aiDiv = document.getElementById('ai');
+            aiDiv.innerHTML = '';
+            aiHand.forEach(() => {
+                const cardDiv = document.createElement('div');
+                cardDiv.className = 'card hidden';
+                cardDiv.textContent = '??';
+                aiDiv.appendChild(cardDiv);
+            });
+
+            // Gemeinschaftskarten
+            const communityDiv = document.getElementById('community');
+            communityDiv.innerHTML = '';
+            communityCards.forEach(card => {
+                const cardDiv = document.createElement('div');
+                cardDiv.className = 'card';
+                cardDiv.textContent = card.rank + card.suit;
+                communityDiv.appendChild(cardDiv);
+            });
+        }
+
+        // Einfache Handbewertung (gibt eine Punktzahl zurück)
+        function evaluateHand(hand) {
+            const allCards = hand.concat(communityCards);
+            const ranks = allCards.map(card => ranks.indexOf(card.rank));
+            const suits = allCards.map(card => card.suit);
+
+            // Paare prüfen
+            const rankCounts = {};
+            ranks.forEach(rank => {
+                rankCounts[rank] = (rankCounts[rank] || 0) + 1;
+            });
+            const pairs = Object.values(rankCounts).filter(count => count >= 2).length;
+
+            // Flush prüfen
+            const suitCounts = {};
+            suits.forEach(suit => {
+                suitCounts[suit] = (suitCounts[suit] || 0) + 1;
+            });
+            const flush = Object.values(suitCounts).some(count => count >= 5);
+
+            // Straße prüfen
+            const sortedRanks = [...new Set(ranks)].sort((a, b) => a - b);
+            let straight = false;
+            for (let i = 0; i < sortedRanks.length - 4; i++) {
+                if (sortedRanks[i + 4] - sortedRanks[i] === 4) {
+                    straight = true;
+                    break;
+                }
+            }
+
+            if (flush && straight) return 8; // Straight Flush
+            if (pairs >= 2) return 6;       // Zwei Paare
+            if (pairs === 1) return 2;      // Ein Paar
+            return 1;                       // Höchste Karte
+        }
+
+        // KI-Entscheidung
+        function aiDecide() {
+            const handStrength = evaluateHand(aiHand);
+            if (handStrength > 5) {
+                return 'raise';
+            } else if (handStrength > 2) {
+                return 'call';
+            } else {
+                return 'fold';
+            }
+        }
+
+        // Spieleraktionen
+        function playerAction(action) {
+            if (!playerTurn) return;
+            playerTurn = false;
+            if (action === 'fold') {
+                document.getElementById('message').textContent = 'Du hast gefoldet. KI gewinnt den Pot.';
+                aiChips += pot;
+                pot = 0;
+                updateUI();
+                setTimeout(startNewHand, 2000);
+            } else if (action === 'check') {
+                if (currentBet === 0) {
+                    aiAction();
+                } else {
+                    document.getElementById('message').textContent = 'Du musst callen, raisen oder folden.';
+                    playerTurn = true;
+                }
+            } else if (action === 'bet') {
+                if (currentBet === 0 && playerChips >= 10) {
+                    playerChips -= 10;
+                    pot += 10;
+                    currentBet = 10;
+                    updateUI();
+                    aiAction();
+                } else {
+                    document.getElementById('message').textContent = 'Ungültige Aktion.';
+                    playerTurn = true;
+                }
+            } else if (action === 'raise') {
+                if (currentBet > 0 && playerChips >= currentBet + 10) {
+                    playerChips -= currentBet + 10;
+                    pot += currentBet + 10;
+                    currentBet += 10;
+                    updateUI();
+                    aiAction();
+                } else {
+                    document.getElementById('message').textContent = 'Ungültige Aktion.';
+                    playerTurn = true;
+                }
+            }
+        }
+
+        // KI-Aktion
+        function aiAction() {
+            const decision = aiDecide();
+            if (decision === 'fold') {
+                document.getElementById('message').textContent = 'KI hat gefoldet. Du gewinnst den Pot.';
+                playerChips += pot;
+                pot = 0;
+                updateUI();
+                setTimeout(startNewHand, 2000);
+            } else if (decision === 'call') {
+                if (currentBet > 0 && aiChips >= currentBet) {
+                    aiChips -= currentBet;
+                    pot += currentBet;
+                    currentBet = 0;
+                    updateUI();
+                    proceedToNextStage();
+                } else {
+                    aiAction('fold');
+                }
+            } else if (decision === 'raise') {
+                if (aiChips >= currentBet + 10) {
+                    aiChips -= currentBet + 10;
+                    pot += currentBet + 10;
+                    currentBet += 10;
+                    updateUI();
+                    playerTurn = true;
+                } else {
+                    aiAction('call');
+                }
+            }
+        }
+
+        // Zur nächsten Phase wechseln
+        function proceedToNextStage() {
+            if (gameStage === 'pre-flop') {
+                gameStage = 'flop';
+                communityCards = [deck.pop(), deck.pop(), deck.pop()];
+                updateUI();
+                playerTurn = true;
+            } else if (gameStage === 'flop') {
+                gameStage = 'turn';
+                communityCards.push(deck.pop());
+                updateUI();
+                playerTurn = true;
+            } else if (gameStage === 'turn') {
+                gameStage = 'river';
+                communityCards.push(deck.pop());
+                updateUI();
+                playerTurn = true;
+            } else if (gameStage === 'river') {
+                gameStage = 'showdown';
+                showdown();
+            }
+        }
+
+        // Showdown
+        function showdown() {
+            const playerScore = evaluateHand(playerHand);
+            const aiScore = evaluateHand(aiHand);
+            if (playerScore > aiScore) {
+                document.getElementById('message').textContent = 'Du gewinnst den Pot!';
+                playerChips += pot;
+            } else if (aiScore > playerScore) {
+                document.getElementById('message').textContent = 'KI gewinnt den Pot.';
+                aiChips += pot;
+            } else {
+                document.getElementById('message').textContent = 'Unentschieden. Pot wird geteilt.';
+                playerChips += pot / 2;
+                aiChips += pot / 2;
+            }
+            pot = 0;
+            updateUI();
+            setTimeout(startNewHand, 2000);
+        }
+
+        // Neues Spiel starten
+        function startNewHand() {
+            createDeck();
+            dealCards();
+            pot = 0;
+            currentBet = 0;
+            gameStage = 'pre-flop';
+            playerTurn = true;
+            document.getElementById('message').textContent = '';
+        }
+
+        // Event-Listener für Buttons
+        document.getElementById('check-btn').addEventListener('click', () => playerAction('check'));
+        document.getElementById('bet-btn').addEventListener('click', () => playerAction('bet'));
+        document.getElementById('raise-btn').addEventListener('click', () => playerAction('raise'));
+        document.getElementById('fold-btn').addEventListener('click', () => playerAction('fold'));
+
+        // Spiel starten
+        startNewHand();
+    </script>
+</body>
+</html>

@@ -1,0 +1,297 @@
+﻿<!DOCTYPE html>
+<html lang="de">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Omega Endlos Spiel</title>
+    <style>
+        /* Einfaches CSS, um den Canvas zu zentrieren und Ränder zu entfernen */
+        html, body {
+            margin: 0;
+            padding: 0;
+            overflow: hidden; /* Verhindert Scrollbalken */
+            background-color: #111; /* Dunkler Hintergrund für die Seite */
+            display: flex;
+            justify-content: center;
+            align-items: center;
+            height: 100vh; /* Volle Höhe des Viewports */
+            font-family: 'Courier New', Courier, monospace; /* Retro-Schriftart */
+            color: #eee;
+        }
+        canvas {
+            display: block; /* Verhindert zusätzliche Abstände unter dem Canvas */
+            border: 2px solid #0f0; /* Neongrüner Rand */
+            box-shadow: 0 0 15px #0f0; /* Leuchteffekt */
+        }
+    </style>
+    <!-- p5.js Bibliothek via CDN einbinden -->
+    <script src="https://cdnjs.cloudflare.com/ajax/libs/p5.js/1.7.0/p5.js"></script>
+    <!-- Optional: p5.sound für Soundeffekte (hier nicht verwendet, aber oft nützlich) -->
+    <!-- <script src="https://cdnjs.cloudflare.com/ajax/libs/p5.js/1.7.0/addons/p5.sound.min.js"></script> -->
+</head>
+<body>
+    <script>
+        // --- Globale Variablen ---
+        let player;
+        let obstacles = [];
+        let score = 0;
+        let gameState = 'playing'; // 'playing', 'gameOver'
+        let baseObstacleSpawnRate = 90; // Start-Frames zwischen Hindernissen
+        let baseSpeed = 3;          // Start-Geschwindigkeit der Hindernisse
+        let speedIncreaseFactor = 0.001; // Wie schnell die Geschwindigkeit ansteigt
+        let spawnRateDecreaseFactor = 0.05; // Wie schnell die Spawn-Rate sinkt (schnelleres Spawnen)
+
+        // Für den "unique" Hintergrund
+        let bgOffset = 0;
+        let bgNoiseScale = 0.008;
+        let bgSpeed = 0.8;
+
+        // --- p5.js Hauptfunktionen ---
+
+        function setup() {
+            // Canvas erstellen, der fast den ganzen Bildschirm einnimmt
+            let cnv = createCanvas(windowWidth * 0.9, windowHeight * 0.9);
+            // Zentriert den Canvas, falls das CSS nicht ausreicht
+            cnv.position((windowWidth - width) / 2, (windowHeight - height) / 2);
+
+            player = new Player(); // Spieler-Objekt erstellen
+
+            // Modi für einfacheres Zeichnen setzen
+            rectMode(CENTER);
+            ellipseMode(CENTER);
+            textAlign(CENTER, CENTER);
+            textSize(20);
+            noStroke(); // Standardmäßig keinen Rand zeichnen
+        }
+
+        function draw() {
+            // 1. Hintergrund zeichnen ("Unique" Part)
+            drawDynamicBackground();
+
+            // 2. Spiel-Logik basierend auf dem Zustand ausführen
+            if (gameState === 'playing') {
+                runGame();
+            } else if (gameState === 'gameOver') {
+                showGameOverScreen();
+            }
+        }
+
+        // --- Spiel-Logik Funktionen ---
+
+        function runGame() {
+            // Punktzahl erhöhen und anzeigen
+            score++;
+            fill(255, 255, 0); // Gelbe Schrift für Score
+            textSize(32);
+            text("SCORE: " + score, width / 2, 40);
+
+            // Spieler: Eingabe verarbeiten, Position aktualisieren, zeichnen
+            player.handleInput();
+            player.update();
+            player.display();
+
+            // Hindernisse:
+            // - Dynamische Geschwindigkeit und Spawnrate berechnen
+            let currentSpeed = baseSpeed + score * speedIncreaseFactor;
+            // Die Spawnrate wird kleiner (schneller), aber nicht unter einen Mindestwert fallen
+            let currentSpawnRate = max(20, baseObstacleSpawnRate - score * spawnRateDecreaseFactor);
+
+            // - Neues Hindernis erzeugen (basierend auf Framecount und Rate)
+            if (frameCount % floor(currentSpawnRate) === 0) {
+                obstacles.push(new Obstacle(currentSpeed));
+            }
+
+            // - Hindernisse aktualisieren, zeichnen, Kollision prüfen, entfernen
+            //   (Rückwärts iterieren, um sicheres Entfernen während der Iteration zu gewährleisten)
+            for (let i = obstacles.length - 1; i >= 0; i--) {
+                obstacles[i].update(currentSpeed); // Geschwindigkeit übergeben
+                obstacles[i].display();
+
+                // Kollisionsprüfung
+                if (obstacles[i].hits(player)) {
+                    gameState = 'gameOver';
+                    // Optional: Soundeffekt hier abspielen
+                }
+
+                // Entfernen, wenn außerhalb des Bildschirms
+                if (obstacles[i].isOffscreen()) {
+                    obstacles.splice(i, 1); // Hindernis aus dem Array entfernen
+                }
+            }
+        }
+
+        function drawDynamicBackground() {
+            background(10, 0, 20); // Dunkler lila/blauer Basishintergrund
+            let time = frameCount * bgSpeed; // Zeitfaktor für die Animation
+
+            for (let y = 0; y < height; y += 10) {
+                // Perlin Noise für Dicke und Farbe der Linien
+                let noiseVal = noise(y * bgNoiseScale, time * 0.01);
+                let noiseColor = noise(y * bgNoiseScale * 0.5, time * 0.02 + 100);
+                let noiseXOffset = noise(y * bgNoiseScale * 0.8, time * 0.005 + 200);
+
+                let thickness = map(noiseVal, 0, 1, 0.5, 5); // Variierende Dicke
+                let lineAlpha = map(noiseVal, 0, 1, 30, 150); // Variierende Transparenz
+                let r = map(noiseColor, 0, 1, 50, 150);
+                let g = map(noiseColor, 0, 1, 20, 80);
+                let b = map(noiseColor, 0, 1, 100, 255);
+                let xOffset = map(noiseXOffset, 0, 1, -width * 0.3, width * 0.3); // Wellenbewegung
+
+                stroke(r, g, b, lineAlpha);
+                strokeWeight(thickness);
+                line(0 + xOffset, y, width + xOffset, y); // Horizontale, wellige Linie
+            }
+            bgOffset += bgSpeed; // Offset für die nächste Frame-Animation erhöhen
+            noStroke(); // Stroke für andere Elemente zurücksetzen
+        }
+
+        function showGameOverScreen() {
+            // Halbtransparenter roter Überleger
+            fill(180, 0, 0, 180);
+            rect(width / 2, height / 2, width, height);
+
+            // Texte anzeigen
+            fill(255); // Weiße Schrift
+            textSize(64);
+            text("GAME OVER", width / 2, height / 2 - 60);
+            textSize(40);
+            text("Final Score: " + score, width / 2, height / 2 + 10);
+            textSize(28);
+            text("Drücke ENTER zum Neustarten", width / 2, height / 2 + 70);
+        }
+
+        function resetGame() {
+            score = 0;
+            obstacles = []; // Hindernis-Array leeren
+            player = new Player(); // Spieler zurücksetzen
+            gameState = 'playing'; // Spielzustand auf 'playing'
+            frameCount = 0; // Framecount zurücksetzen für konsistentes Spawnen am Anfang
+            // Optional: Basiswerte auch zurücksetzen, falls sie sich ändern könnten
+            // baseSpeed = 3;
+            // baseObstacleSpawnRate = 90;
+        }
+
+        // --- Event-Handler ---
+
+        function keyPressed() {
+            // Neustart bei Game Over mit ENTER
+            if ((keyCode === ENTER || keyCode === RETURN) && gameState === 'gameOver') {
+                resetGame();
+            }
+
+            // Beispiel für eine Sprungfunktion mit Leertaste (nicht in dieser Version aktiv)
+            // if (key === ' ' && gameState === 'playing') {
+            //     player.jump(); // Benötigt eine jump() Methode in der Player-Klasse
+            // }
+        }
+
+        // --- Klassen (Objekt-Vorlagen) ---
+
+        // Klasse für den Spieler
+        class Player {
+            constructor() {
+                this.size = 35; // Größe des Spielerkreises
+                this.x = width * 0.15; // Feste X-Position am linken Rand
+                this.y = height / 2; // Startet in der Mitte
+                this.ySpeed = 6; // Geschwindigkeit der vertikalen Bewegung
+                this.colorHue = 0; // Farbton für den Farbwechseleffekt (0-360)
+                colorMode(HSB); // Farbmode auf HSB ändern für einfachen Farbwechsel
+            }
+
+            handleInput() {
+                // Prüfen, ob W oder S gedrückt gehalten wird
+                if (keyIsDown(87)) { // 87 ist der KeyCode für 'W'
+                    this.y -= this.ySpeed;
+                }
+                if (keyIsDown(83)) { // 83 ist der KeyCode für 'S'
+                    this.y += this.ySpeed;
+                }
+                // A (65) und D (68) werden hier nicht verwendet
+            }
+
+            update() {
+                // Spieler innerhalb der Canvas-Grenzen halten
+                this.y = constrain(this.y, this.size / 2, height - this.size / 2);
+
+                // Farbton für den "unique" Effekt langsam ändern
+                this.colorHue = (this.colorHue + 0.5) % 360;
+            }
+
+            display() {
+                // Spieler zeichnen
+                fill(this.colorHue, 200, 255); // HSB: Farbton, Sättigung, Helligkeit
+                stroke(255); // Weißer Rand
+                strokeWeight(2);
+                ellipse(this.x, this.y, this.size, this.size);
+                noStroke(); // Rand wieder deaktivieren
+                colorMode(RGB); // Zurück zu RGB für andere Zeichnungen (wichtig!)
+            }
+        }
+
+        // Klasse für die Hindernisse
+        class Obstacle {
+            constructor(speed) {
+                this.w = random(25, 70); // Zufällige Breite
+                 // Zufällige Höhe, kann auch sehr hoch sein
+                this.h = random(height * 0.1, height * 0.7);
+                this.x = width + this.w / 2; // Startet rechts außerhalb des Bildschirms
+                // Zufällige Y-Position, stellt sicher, dass das ganze Rechteck sichtbar ist
+                this.y = random(this.h / 2, height - this.h / 2);
+                this.baseSpeed = speed;
+                this.speedVariance = random(-0.5, 1.0); // Kleine zufällige Geschwindigkeitsabweichung
+
+                // Zufällige "glitchy" Farbe im Neon-Bereich
+                this.color = color(random(150, 255), random(0, 100), random(150, 255), 220);
+            }
+
+            update(currentSpeed) {
+                // Position basierend auf aktueller Basisgeschwindigkeit + Varianz aktualisieren
+                this.x -= (this.baseSpeed + this.speedVariance);
+            }
+
+            display() {
+                fill(this.color);
+                 // Leichter Rand für besseren Kontrast
+                stroke(0, 180);
+                strokeWeight(1);
+                // Rechteck mit leicht abgerundeten Ecken zeichnen
+                rect(this.x, this.y, this.w, this.h, 5);
+                noStroke();
+            }
+
+            isOffscreen() {
+                // Prüfen, ob das Hindernis links komplett aus dem Bild ist
+                return (this.x < -this.w / 2);
+            }
+
+            // Kollisionserkennung (Kreis vs. Rechteck)
+            hits(player) {
+                // Findet den Punkt auf dem Rechteck, der dem Mittelpunkt des Kreises am nächsten ist
+                let closestX = constrain(player.x, this.x - this.w / 2, this.x + this.w / 2);
+                let closestY = constrain(player.y, this.y - this.h / 2, this.y + this.h / 2);
+
+                // Berechnet die Distanz zwischen dem Kreismittelpunkt und diesem nächsten Punkt
+                let distance = dist(player.x, player.y, closestX, closestY);
+
+                // Wenn die Distanz kleiner als der Radius des Kreises ist, gibt es eine Kollision
+                return distance < player.size / 2;
+            }
+        }
+
+        // Funktion zum Anpassen der Canvas-Größe, falls das Fenster verändert wird
+        function windowResized() {
+          resizeCanvas(windowWidth * 0.9, windowHeight * 0.9);
+          // Canvas neu zentrieren
+           let cnvElement = document.querySelector('canvas');
+            if (cnvElement) {
+                 cnvElement.style.left = `${(windowWidth - width) / 2}px`;
+                 cnvElement.style.top = `${(windowHeight - height) / 2}px`;
+            }
+           // Spielerposition anpassen, falls nötig (optional)
+           player.x = width * 0.15; // X bleibt relativ
+           player.y = constrain(player.y, player.size / 2, height - player.size / 2); // Y begrenzen
+        }
+
+    </script>
+</body>
+</html>

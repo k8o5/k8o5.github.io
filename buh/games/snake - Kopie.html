@@ -1,0 +1,165 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Advanced QWOP-like Game</title>
+    <style>
+        body { display: flex; justify-content: center; align-items: center; height: 100vh; margin: 0; background-color: #87CEEB; }
+        #gameCanvas { border: 2px solid black; }
+    </style>
+</head>
+<body>
+    <canvas id="gameCanvas" width="800" height="400"></canvas>
+    <script>
+        const canvas = document.getElementById('gameCanvas');
+        const ctx = canvas.getContext('2d');
+
+        let runner = {
+            x: 100,
+            y: 300,
+            vx: 0,
+            vy: 0,
+            leftThigh: -Math.PI/4,
+            rightThigh: Math.PI/4,
+            leftCalf: 0,
+            rightCalf: 0,
+            leftThighVel: 0,
+            rightThighVel: 0,
+            leftCalfVel: 0,
+            rightCalfVel: 0,
+            balance: 0,
+            distance: 0
+        };
+
+        const GRAVITY = 0.5;
+        const GROUND_FRICTION = 0.8;
+        const AIR_RESISTANCE = 0.99;
+        const LIMB_STRENGTH = 0.01;
+
+        let keys = {q: false, w: false, o: false, p: false};
+
+        document.addEventListener('keydown', (e) => keys[e.key] = true);
+        document.addEventListener('keyup', (e) => keys[e.key] = false);
+
+        function drawRunner() {
+            ctx.save();
+            ctx.translate(runner.x, runner.y);
+            ctx.rotate(runner.balance);
+
+            // Body
+            ctx.fillStyle = 'red';
+            ctx.fillRect(-10, -50, 20, 50);
+
+            // Legs
+            ctx.strokeStyle = 'black';
+            ctx.lineWidth = 5;
+
+            // Left leg
+            ctx.beginPath();
+            ctx.moveTo(0, 0);
+            ctx.lineTo(Math.cos(runner.leftThigh) * 30, Math.sin(runner.leftThigh) * 30);
+            ctx.lineTo(
+                Math.cos(runner.leftThigh) * 30 + Math.cos(runner.leftThigh + runner.leftCalf) * 30,
+                Math.sin(runner.leftThigh) * 30 + Math.sin(runner.leftThigh + runner.leftCalf) * 30
+            );
+            ctx.stroke();
+
+            // Right leg
+            ctx.beginPath();
+            ctx.moveTo(0, 0);
+            ctx.lineTo(Math.cos(runner.rightThigh) * 30, Math.sin(runner.rightThigh) * 30);
+            ctx.lineTo(
+                Math.cos(runner.rightThigh) * 30 + Math.cos(runner.rightThigh + runner.rightCalf) * 30,
+                Math.sin(runner.rightThigh) * 30 + Math.sin(runner.rightThigh + runner.rightCalf) * 30
+            );
+            ctx.stroke();
+
+            ctx.restore();
+        }
+
+        function updateRunner() {
+            // Apply limb forces
+            if (keys.q) runner.leftThighVel -= LIMB_STRENGTH;
+            if (keys.w) runner.leftThighVel += LIMB_STRENGTH;
+            if (keys.o) runner.leftCalfVel -= LIMB_STRENGTH;
+            if (keys.p) runner.leftCalfVel += LIMB_STRENGTH;
+
+            // Update limb positions
+            runner.leftThigh += runner.leftThighVel;
+            runner.rightThigh += runner.rightThighVel;
+            runner.leftCalf += runner.leftCalfVel;
+            runner.rightCalf += runner.rightCalfVel;
+
+            // Apply limits to limb angles
+            runner.leftThigh = Math.max(Math.min(runner.leftThigh, Math.PI/2), -Math.PI/2);
+            runner.rightThigh = Math.max(Math.min(runner.rightThigh, Math.PI/2), -Math.PI/2);
+            runner.leftCalf = Math.max(Math.min(runner.leftCalf, 0), -Math.PI);
+            runner.rightCalf = Math.max(Math.min(runner.rightCalf, 0), -Math.PI);
+
+            // Apply gravity
+            runner.vy += GRAVITY;
+
+            // Apply air resistance
+            runner.vx *= AIR_RESISTANCE;
+            runner.vy *= AIR_RESISTANCE;
+
+            // Update position
+            runner.x += runner.vx;
+            runner.y += runner.vy;
+
+            // Ground collision
+            let leftFootY = runner.y + Math.sin(runner.leftThigh) * 30 + Math.sin(runner.leftThigh + runner.leftCalf) * 30;
+            let rightFootY = runner.y + Math.sin(runner.rightThigh) * 30 + Math.sin(runner.rightThigh + runner.rightCalf) * 30;
+            let lowestPoint = Math.max(leftFootY, rightFootY);
+
+            if (lowestPoint > 350) {
+                runner.y -= lowestPoint - 350;
+                runner.vy = 0;
+                runner.vx *= GROUND_FRICTION;
+            }
+
+            // Update balance
+            runner.balance += (runner.leftThigh - runner.rightThigh) * 0.001;
+            runner.balance = Math.max(Math.min(runner.balance, Math.PI/4), -Math.PI/4);
+
+            // Update velocity based on leg movement
+            runner.vx += (Math.sin(runner.leftThigh) - Math.sin(runner.rightThigh)) * 0.1;
+
+            // Update distance
+            runner.distance = runner.x - 100;
+
+            // Apply damping to limb velocities
+            runner.leftThighVel *= 0.9;
+            runner.rightThighVel *= 0.9;
+            runner.leftCalfVel *= 0.9;
+            runner.rightCalfVel *= 0.9;
+
+            // Mirror right leg movements
+            runner.rightThighVel = -runner.leftThighVel;
+            runner.rightCalfVel = -runner.leftCalfVel;
+        }
+
+        function drawScene() {
+            ctx.fillStyle = '#4CAF50';
+            ctx.fillRect(0, 350, canvas.width, 50);
+        }
+
+        function gameLoop() {
+            ctx.clearRect(0, 0, canvas.width, canvas.height);
+            
+            drawScene();
+            updateRunner();
+            drawRunner();
+
+            ctx.fillStyle = 'black';
+            ctx.font = '20px Arial';
+            ctx.fillText(`Distance: ${runner.distance.toFixed(1)} meters`, 10, 30);
+
+            requestAnimationFrame(gameLoop);
+        }
+
+        gameLoop();
+    </script>
+</body>
+</html>

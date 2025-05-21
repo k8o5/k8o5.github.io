@@ -1,0 +1,466 @@
+﻿<!DOCTYPE html>
+<html lang="de">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Omega Unique - Symbiotic Shaper</title>
+    <!-- 1. Include p5.js library -->
+    <script src="https://cdnjs.cloudflare.com/ajax/libs/p5.js/1.9.0/p5.js"></script>
+
+    <!-- 2. CSS Styles -->
+    <style>
+        body {
+            margin: 0;
+            padding: 0;
+            display: flex;
+            justify-content: center;
+            align-items: center;
+            min-height: 100vh;
+            background-color: #050508; /* Noch dunklerer Hintergrund */
+            color: #eee;
+            font-family: 'Segoe UI', Tahoma, Geneva, Verdana, sans-serif;
+            overflow: hidden;
+        }
+        main {
+            /* Canvas container */
+        }
+        .info {
+            position: absolute;
+            bottom: 15px; /* Info unten */
+            left: 15px;
+            background-color: rgba(20, 20, 30, 0.75); /* Dunkelblau-grau transparent */
+            padding: 10px 15px;
+            border-radius: 8px;
+            font-size: 0.9em;
+            line-height: 1.5;
+            max-width: 250px;
+            color: #c0c0d0; /* Blasseres Lila/Grau */
+            border: 1px solid rgba(100, 100, 120, 0.5);
+            backdrop-filter: blur(3px); /* Leichter Blur-Effekt */
+        }
+         .complexity-display {
+            position: absolute;
+            top: 15px;
+            right: 15px;
+            font-size: 1.2em;
+            color: rgba(200, 200, 220, 0.8);
+            text-shadow: 0 0 5px rgba(150, 150, 255, 0.5);
+         }
+    </style>
+</head>
+<body>
+    <!-- 3. HTML Structure -->
+    <main>
+        <!-- p5.js Canvas wird hier automatisch erstellt -->
+    </main>
+    <div class="info">
+        <b>Omega Unique II: Symbiotic Shaper</b><br>
+        Führe den Kern mit der Maus.<br>
+        Sporen heften sich an und leben.<br>
+        Werde zu einem einzigartigen Ökosystem.
+    </div>
+    <div class="complexity-display" id="complexity-counter">Symbiotes: 0</div>
+
+    <!-- 4. p5.js Sketch Code -->
+    <script>
+        let core;
+        let spores = [];
+        let bgColor;
+        let time = 0;
+        let noiseSeedBase = Math.random() * 1000; // Unique noise seed per session
+
+        // --- Core Class ---
+        class Core {
+            constructor(x, y) {
+                this.pos = createVector(x, y);
+                this.baseRadius = 20;
+                this.color = color(180, 50, 80); // Startfarbe (Cyan-ish)
+                this.symbiotes = [];
+                this.coreVertices = []; // For subtle core shape changes
+                this.numCoreVertices = 16;
+                this.noiseOffset = random(1000);
+                 this.updateCoreShape(); // Initialize shape
+            }
+
+             updateCoreShape() {
+                 this.coreVertices = [];
+                 let timeFactor = millis() * 0.0002;
+                 for (let i = 0; i < this.numCoreVertices; i++) {
+                     let angle = map(i, 0, this.numCoreVertices, 0, TWO_PI);
+                     // Noise basierend auf Winkel und Zeit für organisches Wabern
+                     let noiseVal = noise(this.noiseOffset + cos(angle) * 0.5 + 10, this.noiseOffset + sin(angle) * 0.5 + 20, timeFactor);
+                     let r = this.baseRadius + map(noiseVal, 0, 1, -3, 3); // Subtile Variation
+                     // Symbiotes can slightly push the radius outwards locally (more complex to implement perfectly)
+                     this.coreVertices.push(p5.Vector.fromAngle(angle).mult(r));
+                 }
+             }
+
+
+            update() {
+                // Smooth follow mouse
+                let target = createVector(mouseX, mouseY);
+                 let lerpAmt = constrain(1.0 - pow(0.01, deltaTime / 1000.0), 0, 1); // Smoother lerp
+                this.pos.lerp(target, lerpAmt);
+                this.pos.x = constrain(this.pos.x, 0, width);
+                this.pos.y = constrain(this.pos.y, 0, height);
+
+                 // Update core shape subtly
+                 if (frameCount % 3 === 0) { // Update shape less frequently for performance
+                    this.updateCoreShape();
+                 }
+
+                // Update all attached symbiotes
+                let totalSymbioteInfluence = createVector(0, 0, 0); // For color influence H, S, B
+                let influenceCount = 0;
+
+                for (let i = this.symbiotes.length - 1; i >= 0; i--) {
+                    let alive = this.symbiotes[i].update();
+                    if (!alive) {
+                        // Optional: Leave a 'scar' or effect when one dies?
+                        this.symbiotes.splice(i, 1);
+                    } else {
+                         // Accumulate color influence from living symbiotes
+                         let symColor = this.symbiotes[i].color;
+                         totalSymbioteInfluence.add(hue(symColor), saturation(symColor), brightness(symColor));
+                         influenceCount++;
+                    }
+                }
+
+                 // Slowly shift core color based on average symbiote color
+                 if (influenceCount > 0) {
+                    let avgSymHue = (totalSymbioteInfluence.x / influenceCount) % 360;
+                     let avgSymSat = totalSymbioteInfluence.y / influenceCount;
+                     let avgSymBri = totalSymbioteInfluence.z / influenceCount;
+
+                     let currentHue = hue(this.color);
+                     let targetHue = avgSymHue;
+                     // Hue lerp shortest path
+                      let diff = targetHue - currentHue;
+                      if (abs(diff) > 180) targetHue += (diff < 0) ? 360 : -360;
+
+                     let lerpFactor = 0.005; // Very slow color shift
+                     this.color = color(
+                         lerp(currentHue, targetHue, lerpFactor) % 360,
+                         lerp(saturation(this.color), avgSymSat, lerpFactor),
+                         lerp(brightness(this.color), avgSymBri, lerpFactor)
+                     );
+                 }
+
+                 // Update complexity display
+                 document.getElementById('complexity-counter').innerText = `Symbiotes: ${this.symbiotes.length}`;
+            }
+
+            attach(spore, collisionPoint) {
+                 // Calculate attachment position relative to core center
+                 let relativePos = p5.Vector.sub(collisionPoint, this.pos);
+
+                 // Prevent attaching exactly at the center (push it outwards slightly if needed)
+                 if (relativePos.magSq() < 1) {
+                     relativePos = p5.Vector.random2D().mult(this.baseRadius * 0.5);
+                 }
+                 // Clamp attachment to be roughly on the 'surface' defined by core vertices
+                  let angle = relativePos.heading();
+                  let closestVertDist = this.baseRadius;
+                  // Find approximate radius at this angle (simplification)
+                  // Note: A more accurate method would interpolate between vertices
+                  let minAngleDiff = TWO_PI;
+                  for(let v of this.coreVertices) {
+                      let angleDiff = abs(angle - v.heading());
+                      if (angleDiff < minAngleDiff) {
+                          minAngleDiff = angleDiff;
+                          closestVertDist = v.mag();
+                      }
+                  }
+                 relativePos.setMag(closestVertDist + spore.size * 0.3); // Attach slightly outside the core radius
+
+
+                let newSymbiote = new Symbiote(this, relativePos, spore.color, spore.size);
+                this.symbiotes.push(newSymbiote);
+
+                 // Small immediate feedback: nudge core color slightly towards spore color
+                 this.color = lerpColor(this.color, spore.color, 0.08);
+            }
+
+            display() {
+                push();
+                translate(this.pos.x, this.pos.y);
+
+                // Draw Core (organic shape)
+                fill(this.color);
+                 stroke(hue(this.color), saturation(this.color) * 0.7, brightness(this.color) * 1.2, 90);
+                 strokeWeight(2);
+                 beginShape();
+                 for (let v of this.coreVertices) {
+                     curveVertex(v.x, v.y); // Use curveVertex for smoother organic look
+                 }
+                 // Close the curve shape properly
+                 if (this.coreVertices.length > 1) {
+                     curveVertex(this.coreVertices[0].x, this.coreVertices[0].y);
+                     curveVertex(this.coreVertices[1].x, this.coreVertices[1].y);
+                 }
+                 endShape();
+
+
+                // Draw all attached symbiotes
+                for (let sym of this.symbiotes) {
+                    sym.display(); // Display is relative to the translated origin
+                }
+
+                pop();
+            }
+
+            // Collision check considers core and all symbiotes
+             checkCollision(spore) {
+                 // 1. Check collision with core body (approximate with radius)
+                 let distSqCore = p5.Vector.dist(this.pos, spore.pos);
+                 let coreRadius = this.baseRadius * 1.2; // Use a slightly larger radius for core collision
+                 if (distSqCore < (coreRadius + spore.size / 2)) {
+                      return spore.pos; // Return spore position as collision point (simplification)
+                 }
+
+                 // 2. Check collision with each symbiote
+                 for (let sym of this.symbiotes) {
+                     let absoluteSymPos = p5.Vector.add(this.pos, sym.relativePos);
+                     let distSqSym = p5.Vector.dist(absoluteSymPos, spore.pos);
+                      if (distSqSym < (sym.currentSize / 2 + spore.size / 2)) {
+                          return absoluteSymPos; // Return symbiote position as collision point
+                      }
+                 }
+                 return null; // No collision
+             }
+        }
+
+        // --- Symbiote Class (Attached Entity) ---
+        class Symbiote {
+            constructor(parentCore, relativePos, initialColor, initialSize) {
+                this.parent = parentCore;
+                this.relativePos = relativePos; // Position relative to core center
+                this.color = initialColor;
+                this.initialSize = initialSize * 1.2; // Start slightly larger than spore
+                this.currentSize = 0; // Grow in
+                this.maxSize = this.initialSize * random(1.2, 2.5); // Max size varies
+                this.age = 0;
+                this.maxAge = random(800, 2500); // Lifespan in frames (approx 13-40 secs at 60fps)
+                this.pulseOffset = random(TWO_PI);
+                this.pulseSpeed = random(0.02, 0.08);
+                this.state = 'growing'; // 'growing', 'stable', 'decaying'
+                this.growthDuration = 100; // Frames to reach full size
+                this.decayDuration = 150; // Frames to fade out
+                 this.noiseOffset = random(1000); // For unique pulsation/shape
+            }
+
+            update() {
+                this.age += deltaTime / (1000.0 / 60.0); // Frame-rate independent age increase
+
+                // State transitions
+                if (this.state === 'growing' && this.age > this.growthDuration) {
+                    this.state = 'stable';
+                }
+                if (this.state === 'stable' && this.age > this.maxAge - this.decayDuration) {
+                    this.state = 'decaying';
+                }
+                if (this.age > this.maxAge) {
+                    return false; // Signal to remove
+                }
+
+                // Update size based on state
+                if (this.state === 'growing') {
+                    this.currentSize = lerp(0, this.maxSize, this.age / this.growthDuration);
+                } else if (this.state === 'stable') {
+                     this.currentSize = this.maxSize;
+                     // Optional: Slowly change color during stable phase?
+                     // let currentHue = hue(this.color);
+                     // this.color = color((currentHue + 0.1) % 360, saturation(this.color), brightness(this.color));
+                } else if (this.state === 'decaying') {
+                    let decayProgress = (this.age - (this.maxAge - this.decayDuration)) / this.decayDuration;
+                    this.currentSize = lerp(this.maxSize, 0, decayProgress);
+                }
+
+                // Optional: Slight drift or rotation around attachment point?
+                // this.relativePos.rotate(0.001);
+
+                 // Optional: Influence parent core's shape locally (complex)
+                 // Could find nearest core vertices and push them slightly
+
+                return true; // Still alive
+            }
+
+            display() {
+                 let pulse = (sin(this.pulseOffset + millis() * 0.001 * this.pulseSpeed) + 1) / 2; // 0 to 1
+                 let displaySize = this.currentSize * (1 + pulse * 0.1); // Pulsate size slightly
+                 let alpha = 100;
+                 if (this.state === 'growing'){
+                     alpha = map(this.age, 0, this.growthDuration, 0, 100);
+                 } else if (this.state === 'decaying') {
+                     alpha = map(this.age, this.maxAge - this.decayDuration, this.maxAge, 100, 0);
+                 }
+
+                 push();
+                 translate(this.relativePos.x, this.relativePos.y); // Position relative to core center
+                 rotate(this.relativePos.heading() + PI/2); // Orient slightly outwards
+
+                 // Draw symbiote (e.g., organic blob)
+                 let symColor = color(hue(this.color), saturation(this.color), brightness(this.color), alpha);
+                 let symGlowColor = color(hue(this.color), saturation(this.color)*0.6, 100, alpha * 0.5);
+
+                 noStroke();
+                 // Glow effect
+                 fill(symGlowColor);
+                 ellipse(0, 0, displaySize * 1.6, displaySize * 1.2);
+
+                 // Main body
+                 fill(symColor);
+                  // More organic shape using noise
+                  beginShape();
+                  let numVerts = 8;
+                  let timeFactor = millis()*0.0005;
+                  for (let i = 0; i < numVerts; i++) {
+                      let angle = map(i, 0, numVerts, 0, TWO_PI);
+                      let noiseVal = noise(this.noiseOffset + cos(angle)*0.8 + timeFactor, this.noiseOffset + sin(angle)*0.8);
+                      let r = displaySize * 0.5 * (1 + map(noiseVal, 0, 1, -0.2, 0.2));
+                      vertex(cos(angle) * r, sin(angle) * r);
+                  }
+                  endShape(CLOSE);
+
+
+                 pop();
+            }
+        }
+
+
+        // --- Spore Class (Drifting Collectible) ---
+        class Spore {
+            constructor() {
+                // Start from edge
+                let edge = floor(random(4));
+                let spawnMargin = 50;
+                this.pos = createVector();
+                this.vel = createVector();
+
+                if (edge === 0) { // Top
+                    this.pos.set(random(width), -spawnMargin);
+                    this.vel.set(random(-1, 1), random(0.5, 1.5));
+                } else if (edge === 1) { // Right
+                    this.pos.set(width + spawnMargin, random(height));
+                    this.vel.set(random(-1.5, -0.5), random(-1, 1));
+                } else if (edge === 2) { // Bottom
+                    this.pos.set(random(width), height + spawnMargin);
+                    this.vel.set(random(-1, 1), random(-1.5, -0.5));
+                } else { // Left
+                    this.pos.set(-spawnMargin, random(height));
+                    this.vel.set(random(0.5, 1.5), random(-1, 1));
+                }
+
+                this.size = random(6, 14);
+                 // More varied colors - wider hue range, sometimes less saturated
+                 this.color = color(random(360), random(40, 100), random(70, 100));
+                this.lifespan = random(300, 600); // Longer lifespan
+                 this.initialLifespan = this.lifespan;
+                 this.turnSpeed = random(-0.01, 0.01); // Slight curve
+            }
+
+            update() {
+                 this.vel.rotate(this.turnSpeed * (deltaTime / 16.66)); // Curve based on time
+                 this.vel.mult(1 + (deltaTime/1000)*0.01); // Very slight acceleration
+                this.pos.add(p5.Vector.mult(this.vel, deltaTime / 16.66)); // Time-based movement
+                this.lifespan -= deltaTime / 16.66;
+            }
+
+            display() {
+                 let alpha = 100;
+                 // Fade in/out
+                 if (this.lifespan < 50) alpha = map(this.lifespan, 50, 0, 100, 0);
+                 else if (this.lifespan > this.initialLifespan - 50) alpha = map(this.lifespan, this.initialLifespan, this.initialLifespan - 50, 0, 100);
+
+                let displayColor = color(hue(this.color), saturation(this.color), brightness(this.color), alpha);
+                 let glowColor = color(hue(this.color), saturation(this.color)*0.5, 100, alpha*0.4);
+
+                noStroke();
+                fill(glowColor);
+                ellipse(this.pos.x, this.pos.y, this.size * 2); // Larger glow
+                fill(displayColor);
+                ellipse(this.pos.x, this.pos.y, this.size, this.size);
+                 // Tiny tail?
+                 let tailPos = p5.Vector.sub(this.pos, this.vel.copy().normalize().mult(this.size));
+                 fill(glowColor);
+                 ellipse(tailPos.x, tailPos.y, this.size * 0.5);
+            }
+
+            isOffscreen() {
+                let killMargin = 100; // Wider margin
+                return (this.pos.x < -killMargin || this.pos.x > width + killMargin ||
+                        this.pos.y < -killMargin || this.pos.y > height + killMargin ||
+                        this.lifespan <= 0);
+            }
+        }
+
+
+        // --- p5.js Main Functions ---
+        function setup() {
+            createCanvas(windowWidth, windowHeight);
+            colorMode(HSB, 360, 100, 100, 100);
+            noiseSeed(noiseSeedBase); // Set the unique noise seed
+
+            core = new Core(width / 2, height / 2);
+            bgColor = color(240, 20, 5); // Very dark blue start
+
+            // Prevent context menu on canvas
+             for (let elt of document.getElementsByTagName('canvas')) {
+                 elt.addEventListener('contextmenu', (e) => e.preventDefault());
+             }
+        }
+
+        function draw() {
+            // Evolving Background
+             time += deltaTime * 0.00002; // Slower time progression
+             let bgHueNoise = noise(time * 3 + 100);
+             let bgSatNoise = noise(time * 2 + 200);
+             let bgBriNoise = noise(time * 4 + 300); // Faster brightness flicker?
+
+             let baseHue = 240; // Deep Blue/Purple base
+             let hueRange = 80;
+             let bgHue = (baseHue + map(bgHueNoise, 0, 1, -hueRange / 2, hueRange / 2)) % 360;
+             let bgSat = map(bgSatNoise, 0, 1, 15, 45); // Low saturation
+             let bgBri = map(bgBriNoise, 0, 1, 3, 10); // Very dark
+
+            // Use low alpha background for motion blur/trails
+            background(bgHue, bgSat, bgBri, 15); // Lower alpha for more trails
+
+            // --- Spore Management ---
+             let maxSpores = 80;
+             let spawnChance = lerp(0.03, 0.15, constrain(core.symbiotes.length / 100, 0, 1)); // Spawn rate increases with symbiote count
+             if (random(1) < spawnChance * (deltaTime / 16.66) && spores.length < maxSpores) {
+                 spores.push(new Spore());
+             }
+
+            // Update/display spores and check collisions
+            for (let i = spores.length - 1; i >= 0; i--) {
+                spores[i].update();
+                spores[i].display();
+
+                 let collisionPoint = core.checkCollision(spores[i]);
+                 if (collisionPoint && spores[i].lifespan > 50) { // Check collision only if spore is visible
+                     core.attach(spores[i], collisionPoint); // Attach the spore
+                     spores.splice(i, 1); // Remove the spore
+                     // Optional: Sound effect
+                 } else if (spores[i].isOffscreen()) {
+                    spores.splice(i, 1);
+                }
+            }
+
+            // --- Core Management ---
+            core.update();
+            core.display();
+        }
+
+        function windowResized() {
+            resizeCanvas(windowWidth, windowHeight);
+             // Maybe slightly adjust core position if canvas resizes drastically?
+             core.pos.x = constrain(core.pos.x, 0, width);
+             core.pos.y = constrain(core.pos.y, 0, height);
+        }
+
+    </script>
+
+</body>
+</html>

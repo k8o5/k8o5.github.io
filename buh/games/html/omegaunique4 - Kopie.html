@@ -1,0 +1,684 @@
+﻿<!DOCTYPE html>
+<html lang="de">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Omega Genesis (Kein Sound)</title>
+    <!-- Google Font: Orbitron -->
+    <link rel="preconnect" href="https://fonts.googleapis.com">
+    <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+    <link href="https://fonts.googleapis.com/css2?family=Orbitron:wght@400;700&display=swap" rel="stylesheet">
+    <style>
+        html, body {
+            margin: 0;
+            padding: 0;
+            overflow: hidden;
+            background-color: #000; /* Darker background */
+            display: flex;
+            flex-direction: column;
+            justify-content: center;
+            align-items: center;
+            height: 100vh;
+            font-family: 'Orbitron', sans-serif; /* Themed font */
+            color: #eee;
+            text-align: center;
+        }
+        canvas {
+            display: block;
+            /* Neon Glow effect using CSS */
+            box-shadow: 0 0 10px #0ff, 0 0 20px #0ff, 0 0 30px #f0f, 0 0 40px #f0f;
+            border: 1px solid rgba(0, 255, 255, 0.5); /* Cyan border */
+            margin-bottom: 15px;
+        }
+         #info {
+            color: #aaa;
+            font-size: 14px;
+            position: absolute;
+            bottom: 10px;
+            width: 100%;
+            text-shadow: 0 0 5px #0ff; /* Subtle text glow */
+            letter-spacing: 1px;
+        }
+        /* Style for links within p5 text (if ever needed) */
+        a { color: #0ff; text-decoration: none; }
+        a:hover { color: #fff; text-decoration: underline; }
+    </style>
+    <!-- p5.js Kernbibliothek via CDN einbinden -->
+    <script src="https://cdnjs.cloudflare.com/ajax/libs/p5.js/1.7.0/p5.js"></script>
+</head>
+<body>
+    <!-- Canvas wird hier durch p5.js erstellt -->
+    <div id="info">Steuerung: W A S D | Neustart: ENTER</div>
+
+    <script>
+        // --- Globale Variablen ---
+        let player;
+        let obstacles = [];
+        let particles = []; // For explosions and trails
+        let score = 0;
+        let hiScore = 0; // Track high score
+        let gameState = 'start'; // 'start', 'playing', 'gameOver'
+
+        // Difficulty & Dynamics
+        let baseObstacleSpawnRate = 80; // Slightly faster spawn
+        let baseSpeed = 3.5;
+        let speedIncreaseFactor = 0.0015;
+        let spawnRateDecreaseFactor = 0.06;
+        let minSpawnRate = 15; // Don't spawn too fast
+        let maxSpeed = 12;     // Cap the speed
+
+        // Visual Effects
+        let stars = [];
+        let starCount = 300;
+        let nebulaGraphics; // Offscreen buffer for nebula
+        let nebulaNoiseScale = 0.005;
+        let nebulaSpeed = 0.005;
+        let shakeIntensity = 0;
+        let shakeDuration = 0;
+        let gameFont;
+
+        // --- p5.js Hauptfunktionen ---
+        function preload() {
+             // Load the font specified in the HTML head
+            gameFont = loadFont('https://fonts.googleapis.com/css2?family=Orbitron:wght@400;700&display=swap'); // Direct link might fail due to CORS, usually CSS link is enough
+            // Fallback if direct loading is tricky (rely on CSS)
+            try {
+                 gameFont = loadFont('Orbitron');
+            } catch (e) {
+                console.warn("Direct font loading might be restricted. Relying on CSS font-family.");
+                gameFont = 'Orbitron'; // Use string name
+            }
+        }
+
+        function setup() {
+            let cnv = createCanvas(windowWidth * 0.9, windowHeight * 0.9);
+            cnv.position((windowWidth - width) / 2, (windowHeight - height) / 2);
+
+            player = new Player();
+
+            // Create offscreen graphics for nebula background
+            nebulaGraphics = createGraphics(width, height);
+            nebulaGraphics.colorMode(HSB, 360, 100, 100, 100);
+            nebulaGraphics.noStroke();
+
+            // Initialize Stars
+            for (let i = 0; i < starCount; i++) {
+                stars.push({
+                    x: random(width),
+                    y: random(height),
+                    size: random(0.5, 2.5),
+                    speed: random(0.1, 0.5) // Parallax speed
+                });
+            }
+
+            // Global settings
+            colorMode(HSB, 360, 100, 100, 100); // Use HSB globally for easier neon colors
+            textFont(gameFont); // Apply loaded font
+            textAlign(CENTER, CENTER);
+            rectMode(CENTER);
+            ellipseMode(CENTER);
+            noStroke();
+
+            // Load High Score from Local Storage (Optional)
+            let storedHiScore = localStorage.getItem('omegaGenesisHiScore');
+            if (storedHiScore) {
+                hiScore = parseInt(storedHiScore, 10);
+            }
+        }
+
+        function draw() {
+            // Screen Shake Offset
+            let shakeX = random(-shakeIntensity, shakeIntensity);
+            let shakeY = random(-shakeIntensity, shakeIntensity);
+            translate(shakeX, shakeY);
+
+            // 1. Hintergrund zeichnen
+            drawBackground();
+
+            // 2. Spiel-Logik basierend auf dem Zustand
+            if (gameState === 'start') {
+                showStartScreen();
+            } else if (gameState === 'playing') {
+                runGame();
+            } else if (gameState === 'gameOver') {
+                showGameOverScreen();
+            }
+
+            // 3. Update and draw particles (always draw on top)
+            updateAndDrawParticles();
+
+            // 4. Update screen shake effect
+            updateShake();
+
+             // Reset translation if shake was applied
+             if (shakeIntensity > 0) {
+                 translate(-shakeX, -shakeY);
+             }
+        }
+
+        // --- Spiel-Logik Funktionen ---
+
+        function runGame() {
+            score++;
+            // Display Score and High Score
+            fill(180, 80, 100); // Cyan score color
+            textSize(36);
+            text("SCORE: " + score, width / 2, 45);
+            textSize(18);
+            fill(280, 60, 90); // Purple Hi-Score color
+            text("HI: " + hiScore, width - 100, 35);
+
+
+            if (!player) return;
+
+            player.handleInput();
+            player.update();
+            player.display();
+
+            // Difficulty Scaling
+            let currentSpeed = min(maxSpeed, baseSpeed + score * speedIncreaseFactor);
+            let currentSpawnRate = max(minSpawnRate, floor(baseObstacleSpawnRate - score * spawnRateDecreaseFactor));
+
+            // Spawn Obstacles
+            if (frameCount % currentSpawnRate === 0) {
+                obstacles.push(new Obstacle(currentSpeed));
+            }
+
+            // Manage Obstacles
+            for (let i = obstacles.length - 1; i >= 0; i--) {
+                obstacles[i].update(currentSpeed);
+                obstacles[i].display();
+
+                if (obstacles[i].hits(player)) {
+                    gameState = 'gameOver';
+                    triggerShake(15, 30); // Stronger shake on death
+                    emitParticles(player.x, player.y, 50, 300, 100, random(5, 10)); // Player explosion
+                     // Update High Score if needed
+                    if (score > hiScore) {
+                        hiScore = score;
+                        // Save High Score to Local Storage (Optional)
+                        localStorage.setItem('omegaGenesisHiScore', hiScore);
+                    }
+                    document.getElementById('info').style.display = 'block';
+                    // NO sound action needed
+                }
+
+                if (obstacles[i].isOffscreen()) {
+                    obstacles.splice(i, 1);
+                }
+            }
+        }
+
+        // --- Visuals ---
+
+        function drawBackground() {
+            background(0, 0, 5); // Very dark blue/black
+
+            // 1. Draw Stars with Parallax
+            push();
+            stroke(0, 0, 100, 80); // White stars, slightly transparent
+            for (let star of stars) {
+                star.x -= star.speed;
+                if (star.x < 0) {
+                    star.x = width;
+                    star.y = random(height); // Reset position
+                }
+                strokeWeight(star.size);
+                point(star.x, star.y);
+            }
+            pop();
+
+            // 2. Draw Dynamic Nebula (using offscreen graphics)
+            drawNebula();
+            image(nebulaGraphics, 0, 0); // Draw the pre-rendered nebula
+
+        }
+
+        function drawNebula() {
+            nebulaGraphics.clear(); // Clear the buffer
+            let time = frameCount * nebulaSpeed;
+
+            for (let y = 0; y < height; y += 5) { // Increase step for performance
+                for (let x = 0; x < width; x += 5) {
+                    // Noise for density and color variation
+                    let noiseVal = noise(x * nebulaNoiseScale, y * nebulaNoiseScale, time);
+                    let noiseColor = noise(x * nebulaNoiseScale * 0.5 + 10, y * nebulaNoiseScale * 0.5 + 10, time * 0.8);
+
+                    if (noiseVal > 0.4) { // Only draw denser parts
+                        let alpha = map(noiseVal, 0.4, 1, 0, 30); // Control transparency
+                        let hue = map(noiseColor, 0, 1, 200, 330); // Color shift (Cyan to Magenta/Purple)
+                        let saturation = map(noiseVal, 0.4, 1, 50, 100);
+                        let brightness = map(noiseVal, 0.4, 1, 30, 70);
+
+                        nebulaGraphics.fill(hue, saturation, brightness, alpha);
+                        nebulaGraphics.rect(x, y, 5, 5); // Draw small squares
+                    }
+                }
+            }
+        }
+
+        function showStartScreen() {
+            background(0, 0, 5, 70); // Slightly fade background
+            fill(180, 80, 100, 90); // Neon Cyan
+            textSize(64);
+            text("OMEGA GENESIS", width / 2, height / 2 - 80);
+
+            fill(0, 0, 100, 80); // White
+            textSize(28);
+            text("Steuerung: W A S D", width / 2, height / 2 + 0);
+             textSize(24);
+             text("Ausweichen!", width / 2, height / 2 + 50);
+
+            // Blinking "Start" text
+            fill(map(sin(frameCount * 0.08), -1, 1, 30, 100), 80, 100); // Pulsing Yellow/Orange
+            textSize(30);
+            text("WASD zum Starten", width / 2, height / 2 + 110);
+
+            // Display Hi-Score
+             if (hiScore > 0) {
+                 fill(280, 60, 90, 70); // Purple
+                 textSize(20);
+                 text("High Score: " + hiScore, width / 2, height - 50);
+             }
+
+             document.getElementById('info').style.display = 'none';
+        }
+
+        function showGameOverScreen() {
+            // More subtle overlay, letting background show through
+             fill(0, 0, 0, 60); // Dark transparent overlay
+             rect(width / 2, height / 2, width, height);
+
+            // Game Over Text
+            fill(0, 90, 100, 95); // Neon Red
+            textSize(80);
+            text("SYSTEM CRASH", width / 2, height / 2 - 100); // Themed text
+
+            // Final Score
+            fill(0, 0, 100, 90); // White
+            textSize(48);
+            text("Score: " + score, width / 2, height / 2 - 10);
+
+             // High Score comparison
+             if (score >= hiScore && score > 0) {
+                 fill(60, 90, 100); // Neon Yellow - New High Score!
+                 textSize(32);
+                 text("Neuer High Score!", width / 2, height / 2 + 50);
+             } else if (hiScore > 0) {
+                  fill(280, 60, 90, 80); // Purple
+                  textSize(26);
+                  text("High Score: " + hiScore, width / 2, height / 2 + 50);
+             }
+
+            // Restart Text (pulsing)
+            fill(map(sin(frameCount * 0.08), -1, 1, 30, 100), 80, 100); // Pulsing Yellow/Orange
+            textSize(28);
+            text("ENTER zum Neustart", width / 2, height / 2 + 120);
+
+             document.getElementById('info').style.display = 'block';
+        }
+
+        // --- Game State Management ---
+        function startGame() {
+            if (gameState === 'start') {
+                resetGame(false); // Don't reset score on first start
+                gameState = 'playing';
+                document.getElementById('info').style.display = 'block';
+            }
+        }
+
+        function resetGame(fullReset = true) {
+             if (fullReset) { // Only reset score on actual restart, not first game start
+                 score = 0;
+             }
+            obstacles = [];
+            particles = [];
+            if (player) {
+                player.x = width * 0.15; // Start further left
+                player.y = height / 2;
+                player.reset();
+            } else {
+                player = new Player();
+            }
+            gameState = 'playing';
+            frameCount = 0; // Reset frameCount for consistent spawning
+            document.getElementById('info').style.display = 'block';
+        }
+
+        // --- Effects ---
+
+        function triggerShake(intensity, durationFrames) {
+            shakeIntensity = intensity;
+            shakeDuration = durationFrames;
+        }
+
+        function updateShake() {
+            if (shakeDuration > 0) {
+                shakeDuration--;
+                if (shakeDuration === 0) {
+                    shakeIntensity = 0;
+                } else {
+                     // Optional: Gradually reduce intensity
+                     // shakeIntensity *= 0.95;
+                }
+            }
+        }
+
+        function emitParticles(x, y, count, baseHue, hueVariance, speedRange) {
+            for (let i = 0; i < count; i++) {
+                particles.push(new Particle(x, y, baseHue, hueVariance, speedRange));
+            }
+        }
+
+        function updateAndDrawParticles() {
+            for (let i = particles.length - 1; i >= 0; i--) {
+                particles[i].update();
+                particles[i].display();
+                if (particles[i].isDead()) {
+                    particles.splice(i, 1);
+                }
+            }
+        }
+
+
+        // --- Event Handlers ---
+        function keyPressed() {
+            if (gameState === 'start' && (keyCode === 87 || keyCode === 65 || keyCode === 83 || keyCode === 68)) { // W, A, S, D
+                startGame();
+            } else if (gameState === 'gameOver' && (keyCode === ENTER || keyCode === RETURN)) {
+                resetGame(true); // Full reset on ENTER
+            }
+             // Prevent default browser scrolling for WASD/Enter if needed
+             // if ([87, 65, 83, 68, 13].includes(keyCode)) {
+             //    //return false; // Uncomment if keys cause page scrolling
+             // }
+        }
+
+        function mousePressed() {
+             // Allow starting with mouse click too
+            if (gameState === 'start') {
+                startGame();
+            }
+        }
+
+
+        // --- Classes ---
+
+        class Player {
+            constructor() {
+                this.baseSize = 30;
+                this.size = this.baseSize;
+                this.x = width * 0.15; // Start further left
+                this.y = height / 2;
+                this.ySpeed = 6; // Slightly faster movement
+                this.xSpeed = 5;
+                this.baseHue = 180; // Base Cyan
+                this.hue = this.baseHue;
+                this.hitFlash = 0; // Timer for hit effect
+                this.trailCooldown = 2; // Emit trail particle every N frames
+            }
+
+            handleInput() {
+                if (keyIsDown(87)) { this.y -= this.ySpeed; } // W
+                if (keyIsDown(83)) { this.y += this.ySpeed; } // S
+                if (keyIsDown(65)) { this.x -= this.xSpeed; } // A
+                if (keyIsDown(68)) { this.x += this.xSpeed; } // D
+            }
+
+            update() {
+                this.y = constrain(this.y, this.size / 2, height - this.size / 2);
+                this.x = constrain(this.x, this.size / 2, width - this.size / 2);
+
+                // Dynamic Hue based on position or speed (subtle)
+                 this.hue = (this.baseHue + map(this.y, 0, height, -20, 20)) % 360;
+
+                 // Emit trail particles
+                 if (frameCount % this.trailCooldown === 0) {
+                     emitParticles(this.x, this.y, 1, this.hue, 20, 1); // Few, slow trail particles
+                 }
+
+                 // Hit flash effect
+                 if (this.hitFlash > 0) {
+                     this.hitFlash--;
+                     this.size = this.baseSize * 1.2; // Briefly pulse size
+                 } else {
+                     this.size = this.baseSize;
+                 }
+            }
+
+             display() {
+                push();
+                translate(this.x, this.y);
+
+                let currentHue = this.hue;
+                let saturation = 80;
+                let brightness = 100;
+                let outerGlowAlpha = 60;
+                let innerGlowAlpha = 80;
+
+                // Hit Flash visuals
+                if (this.hitFlash > 0) {
+                    currentHue = 0; // Red
+                    saturation = 100;
+                    outerGlowAlpha = 90;
+                    innerGlowAlpha = 100;
+                }
+
+                 // Outer Glow (using semi-transparent larger shapes or shadow)
+                 drawingContext.shadowBlur = 20;
+                 drawingContext.shadowColor = color(currentHue, saturation, brightness, 0.5); // p5 color to CSS string
+                 fill(currentHue, saturation, brightness, outerGlowAlpha);
+                 triangle(0, -this.size * 0.6, -this.size * 0.5, this.size * 0.4, this.size * 0.5, this.size * 0.4);
+
+                 // Inner Glow / Core shape
+                 drawingContext.shadowBlur = 10;
+                 drawingContext.shadowColor = color(currentHue, saturation, 100, 0.7); // Brighter shadow
+                 fill(currentHue, saturation * 0.8, 100, innerGlowAlpha); // Slightly less saturated core
+                 triangle(0, -this.size * 0.5, -this.size * 0.4, this.size * 0.3, this.size * 0.4, this.size * 0.3);
+
+                 // Reset shadow for other elements
+                 drawingContext.shadowBlur = 0;
+
+                pop();
+            }
+
+            // Called when hit (before game over state change)
+             triggerHit() {
+                 this.hitFlash = 15; // Duration of flash in frames
+             }
+
+             reset() {
+                  this.hitFlash = 0;
+                  this.size = this.baseSize;
+                  this.hue = this.baseHue;
+             }
+        }
+
+        class Obstacle {
+            constructor(speed) {
+                 // Make obstacles more shard/crystal like
+                this.w = random(20, 80);
+                this.h = random(20, 120); // Can be taller or wider
+                this.x = width + this.w; // Start fully offscreen right
+                this.y = random(0, height); // Can spawn partially offscreen vertically
+                this.angle = random(TWO_PI); // Initial rotation
+                this.rotationSpeed = random(-0.01, 0.01); // Slow rotation
+
+                this.baseSpeed = speed;
+                this.speedVariance = random(-0.8, 1.2);
+                this.speed = this.baseSpeed + this.speedVariance;
+
+                // More vibrant HSB colors (Magenta/Purple range)
+                this.hue = random(280, 340);
+                this.saturation = random(70, 100);
+                this.brightness = random(80, 100);
+                this.alpha = 90;
+
+                 // Define vertices for a jagged shape relative to center (0,0)
+                 this.vertices = [];
+                 let numVertices = floor(random(5, 9));
+                 for (let i = 0; i < numVertices; i++) {
+                     let angle = map(i, 0, numVertices, 0, TWO_PI);
+                     // Vary radius more extremely for jagged look
+                     let radius = random(0.6, 1.4) * max(this.w, this.h) * 0.5;
+                     this.vertices.push({
+                         x: cos(angle) * radius,
+                         y: sin(angle) * radius
+                     });
+                 }
+            }
+
+            update(currentGlobalSpeed) {
+                // Update speed based on global speed, maintaining variance
+                this.speed = currentGlobalSpeed + this.speedVariance;
+                this.x -= this.speed;
+                this.angle += this.rotationSpeed;
+            }
+
+            display() {
+                push();
+                translate(this.x, this.y);
+                rotate(this.angle);
+
+                // Glow effect using shadow
+                 drawingContext.shadowBlur = 15;
+                 drawingContext.shadowColor = color(this.hue, this.saturation, this.brightness, 0.4);
+
+                fill(this.hue, this.saturation, this.brightness, this.alpha);
+                // Draw the custom shape
+                 beginShape();
+                 for (let v of this.vertices) {
+                     vertex(v.x, v.y);
+                 }
+                 endShape(CLOSE);
+
+                 // Reset shadow
+                 drawingContext.shadowBlur = 0;
+
+                pop();
+            }
+
+            isOffscreen() {
+                // Check if fully offscreen left (consider max dimension)
+                return (this.x < -max(this.w, this.h) * 1.5); // More generous bounds
+            }
+
+            // Collision: Use point-in-polygon test against player's corners (approx)
+            // Or simpler: Treat obstacle as a bounding box for performance
+             hits(player) {
+                if (!player) return false;
+
+                 // Simple bounding box collision for performance
+                 // AABB collision (Axis-Aligned Bounding Box)
+                 // Find rough bounds of the rotated polygon (approximation)
+                 let boundsRadius = max(this.w, this.h) * 0.7; // Approx radius covering most points
+
+                 // Circle vs Circle collision (Player center vs Obstacle center + boundsRadius)
+                 let distSq = (player.x - this.x)**2 + (player.y - this.y)**2;
+                 let radiiSq = (player.size / 2 + boundsRadius)**2;
+
+                 if (distSq < radiiSq) {
+                     // Potential hit, maybe do a slightly more precise check if needed
+                     // For now, this is good enough and performs well
+                     player.triggerHit(); // Visual feedback on player
+                     triggerShake(5, 10); // Minor shake on hit
+                     emitParticles(player.x, player.y, 10, 0, 30, random(2, 5)); // Small red spark on hit
+                     return true; // Collision detected
+                 }
+                 return false;
+
+                 /* // More Accurate (but slower) Polygon vs Circle
+                 push();
+                 translate(this.x, this.y);
+                 rotate(this.angle);
+                 let collision = collideCirclePoly(player.x - this.x, player.y - this.y, player.size, this.vertices);
+                 pop();
+                 if(collision) {
+                     player.triggerHit();
+                     triggerShake(5, 10);
+                      emitParticles(player.x, player.y, 10, 0, 30, random(2, 5));
+                 }
+                 return collision;
+                 // Requires p5.collide2d library or implementing the check manually
+                 */
+            }
+        }
+
+        // Class for Particles
+        class Particle {
+            constructor(x, y, baseHue, hueVariance, speedRange) {
+                this.pos = createVector(x, y);
+                let angle = random(TWO_PI);
+                let speed = random(speedRange * 0.5, speedRange * 1.5);
+                this.vel = createVector(cos(angle) * speed, sin(angle) * speed);
+                this.lifespan = random(40, 80); // Frames
+                this.decay = random(0.8, 2.5); // How fast it fades/shrinks
+                this.size = random(2, 6);
+                this.hue = (baseHue + random(-hueVariance, hueVariance) + 360) % 360;
+                this.saturation = random(80, 100);
+                this.brightness = 100; // Start bright
+            }
+
+            update() {
+                this.pos.add(this.vel);
+                this.lifespan -= this.decay;
+                this.vel.mult(0.97); // Air resistance/damping
+                 this.brightness = map(this.lifespan, 0, 80, 0, 100); // Fade brightness
+                 this.size = max(0, this.size - 0.05 * this.decay); // Shrink
+            }
+
+            display() {
+                // No stroke for particles unless desired
+                // stroke(this.hue, this.saturation, this.brightness, this.lifespan / 80 * 100);
+                // strokeWeight(1);
+                noStroke();
+                fill(this.hue, this.saturation, this.brightness, map(this.lifespan, 0, 80, 0, 100));
+                ellipse(this.pos.x, this.pos.y, this.size);
+            }
+
+            isDead() {
+                return this.lifespan <= 0 || this.size <= 0;
+            }
+        }
+
+
+        // --- Utility ---
+        function windowResized() {
+             // Maintain aspect ratio or recalculate size
+             resizeCanvas(windowWidth * 0.9, windowHeight * 0.9);
+             nebulaGraphics = createGraphics(width, height); // Recreate buffer
+             nebulaGraphics.colorMode(HSB, 360, 100, 100, 100);
+             nebulaGraphics.noStroke();
+
+            // Recenter canvas using CSS positioning (should be automatic)
+            let cnvElement = document.querySelector('canvas');
+             if (cnvElement) {
+                 cnvElement.style.left = `${(windowWidth - width) / 2}px`;
+                 cnvElement.style.top = `${(windowHeight - height) / 2}px`;
+             }
+
+             // Reset stars (optional, or reposition proportionally)
+             stars = [];
+             for (let i = 0; i < starCount; i++) { // Reinitialize stars for new size
+                 stars.push({
+                    x: random(width),
+                    y: random(height),
+                    size: random(0.5, 2.5),
+                    speed: random(0.1, 0.5)
+                });
+             }
+
+             // Adjust player position proportionally (simple approach)
+             if (player) {
+                 player.x = constrain(player.x, player.size / 2, width - player.size / 2);
+                 player.y = constrain(player.y, player.size / 2, height - player.size / 2);
+             }
+        }
+
+        // Needed if using p5.collide2d - include the library script tag in HTML
+        // Or implement point-in-polygon check manually if needed.
+        // Basic AABB used above for performance.
+
+    </script>
+</body>
+</html>

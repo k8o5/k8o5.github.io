@@ -1,0 +1,347 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Awesome Head Soccer</title>
+    <style>
+        body {
+            margin: 0;
+            padding: 0;
+            display: flex;
+            justify-content: center;
+            align-items: center;
+            height: 100vh;
+            background: linear-gradient(to bottom, #1e5799, #2989d8, #207cca, #7db9e8);
+            font-family: 'Arial', sans-serif;
+        }
+        #gameCanvas {
+            border: 5px solid #fff;
+            border-radius: 10px;
+            box-shadow: 0 0 20px rgba(0,0,0,0.3);
+        }
+    </style>
+</head>
+<body>
+    <canvas id="gameCanvas" width="800" height="400"></canvas>
+
+    <script>
+        const canvas = document.getElementById('gameCanvas');
+        const ctx = canvas.getContext('2d');
+
+        // Game constants
+        const GRAVITY = 0.5;
+        const JUMP_STRENGTH = -12;
+        const MOVE_SPEED = 5;
+        const GROUND_LEVEL = canvas.height - 50;
+
+        // Game objects
+        const ball = {
+            x: canvas.width / 2,
+            y: GROUND_LEVEL - 20,
+            radius: 20,
+            speedX: 0,
+            speedY: 0
+        };
+
+        const player1 = {
+            x: 100,
+            y: GROUND_LEVEL - 70,
+            width: 70,
+            height: 70,
+            speedY: 0,
+            score: 0,
+            color: '#FF6347'
+        };
+
+        const player2 = {
+            x: canvas.width - 170,
+            y: GROUND_LEVEL - 70,
+            width: 70,
+            height: 70,
+            speedY: 0,
+            score: 0,
+            color: '#4169E1'
+        };
+
+        const goal1 = {
+            x: 0,
+            y: GROUND_LEVEL - 100,
+            width: 20,
+            height: 100
+        };
+
+        const goal2 = {
+            x: canvas.width - 20,
+            y: GROUND_LEVEL - 100,
+            width: 20,
+            height: 100
+        };
+
+        // Particles
+        let particles = [];
+
+        function createParticles(x, y, color) {
+            for (let i = 0; i < 10; i++) {
+                particles.push({
+                    x: x,
+                    y: y,
+                    radius: Math.random() * 3 + 1,
+                    color: color,
+                    speedX: Math.random() * 6 - 3,
+                    speedY: Math.random() * 6 - 3,
+                    life: 30
+                });
+            }
+        }
+
+        function updateParticles() {
+            particles = particles.filter(p => p.life > 0);
+            particles.forEach(p => {
+                p.x += p.speedX;
+                p.y += p.speedY;
+                p.speedY += 0.1;
+                p.life--;
+            });
+        }
+
+        function drawParticles() {
+            particles.forEach(p => {
+                ctx.beginPath();
+                ctx.arc(p.x, p.y, p.radius, 0, Math.PI * 2);
+                ctx.fillStyle = p.color;
+                ctx.fill();
+            });
+        }
+
+        // Game loop
+        function gameLoop() {
+            update();
+            draw();
+            requestAnimationFrame(gameLoop);
+        }
+
+        function update() {
+            updatePlayer(player1);
+            updatePlayer(player2);
+            updateBall();
+            checkCollisions();
+            checkGoal();
+            updateParticles();
+        }
+
+        function updatePlayer(player) {
+            player.speedY += GRAVITY;
+            player.y += player.speedY;
+
+            if (player.y + player.height > GROUND_LEVEL) {
+                player.y = GROUND_LEVEL - player.height;
+                player.speedY = 0;
+            }
+        }
+
+        function updateBall() {
+            ball.speedY += GRAVITY;
+            ball.x += ball.speedX;
+            ball.y += ball.speedY;
+
+            if (ball.y + ball.radius > GROUND_LEVEL) {
+                ball.y = GROUND_LEVEL - ball.radius;
+                ball.speedY = -ball.speedY * 0.8;
+            }
+
+            if (ball.x - ball.radius < 0 || ball.x + ball.radius > canvas.width) {
+                ball.speedX = -ball.speedX;
+            }
+
+            ball.speedX *= 0.99;
+        }
+
+        function checkCollisions() {
+            checkPlayerBallCollision(player1);
+            checkPlayerBallCollision(player2);
+        }
+
+        function checkPlayerBallCollision(player) {
+            const dx = ball.x - Math.max(player.x, Math.min(ball.x, player.x + player.width));
+            const dy = ball.y - Math.max(player.y, Math.min(ball.y, player.y + player.height));
+            const distance = Math.sqrt(dx * dx + dy * dy);
+
+            if (distance < ball.radius) {
+                const angle = Math.atan2(ball.y - (player.y + player.height / 2), ball.x - (player.x + player.width / 2));
+                const speed = Math.sqrt(ball.speedX * ball.speedX + ball.speedY * ball.speedY);
+                ball.speedX = Math.cos(angle) * speed * 1.5;
+                ball.speedY = Math.sin(angle) * speed * 1.5;
+                createParticles(ball.x, ball.y, '#FFFFFF');
+            }
+        }
+
+        function checkGoal() {
+            if (ball.x - ball.radius < goal1.x + goal1.width && ball.y > goal1.y && ball.y < goal1.y + goal1.height) {
+                player2.score++;
+                createParticles(ball.x, ball.y, '#00FF00');
+                resetBall();
+            } else if (ball.x + ball.radius > goal2.x && ball.y > goal2.y && ball.y < goal2.y + goal2.height) {
+                player1.score++;
+                createParticles(ball.x, ball.y, '#00FF00');
+                resetBall();
+            }
+        }
+
+        function resetBall() {
+            ball.x = canvas.width / 2;
+            ball.y = GROUND_LEVEL - ball.radius;
+            ball.speedX = 0;
+            ball.speedY = -10;
+        }
+
+        function draw() {
+            // Draw sky
+            ctx.fillStyle = '#87CEEB';
+            ctx.fillRect(0, 0, canvas.width, canvas.height);
+
+            // Draw sun
+            ctx.beginPath();
+            ctx.arc(50, 50, 30, 0, Math.PI * 2);
+            ctx.fillStyle = '#FFD700';
+            ctx.fill();
+
+            // Draw clouds
+            drawCloud(100, 80, 40);
+            drawCloud(300, 60, 50);
+            drawCloud(600, 70, 45);
+
+            // Draw ground
+            ctx.fillStyle = '#8B4513';
+            ctx.fillRect(0, GROUND_LEVEL, canvas.width, canvas.height - GROUND_LEVEL);
+
+            // Draw grass
+            ctx.fillStyle = '#228B22';
+            ctx.fillRect(0, GROUND_LEVEL, canvas.width, 10);
+
+            // Draw goals
+            drawGoal(goal1);
+            drawGoal(goal2);
+
+            // Draw players
+            drawPlayer(player1);
+            drawPlayer(player2);
+
+            // Draw ball
+            drawBall();
+
+            // Draw particles
+            drawParticles();
+
+            // Draw scores
+            ctx.fillStyle = '#FFFFFF';
+            ctx.font = 'bold 32px Arial';
+            ctx.fillText(player1.score, canvas.width / 4, 50);
+            ctx.fillText(player2.score, 3 * canvas.width / 4, 50);
+        }
+
+        function drawCloud(x, y, size) {
+            ctx.fillStyle = '#FFFFFF';
+            ctx.beginPath();
+            ctx.arc(x, y, size, 0, Math.PI * 2);
+            ctx.arc(x + size, y, size * 0.8, 0, Math.PI * 2);
+            ctx.arc(x - size, y, size * 0.8, 0, Math.PI * 2);
+            ctx.arc(x, y - size / 2, size * 0.8, 0, Math.PI * 2);
+            ctx.fill();
+        }
+
+        function drawGoal(goal) {
+            ctx.fillStyle = '#FFFFFF';
+            ctx.fillRect(goal.x, goal.y, goal.width, goal.height);
+            
+            // Draw net
+            ctx.strokeStyle = '#000000';
+            ctx.lineWidth = 2;
+            for (let i = 0; i < goal.height; i += 10) {
+                ctx.beginPath();
+                ctx.moveTo(goal.x, goal.y + i);
+                ctx.lineTo(goal.x + goal.width, goal.y + i);
+                ctx.stroke();
+            }
+            for (let i = 0; i < goal.width; i += 10) {
+                ctx.beginPath();
+                ctx.moveTo(goal.x + i, goal.y);
+                ctx.lineTo(goal.x + i, goal.y + goal.height);
+                ctx.stroke();
+            }
+        }
+
+        function drawPlayer(player) {
+            ctx.fillStyle = player.color;
+            ctx.beginPath();
+            ctx.arc(player.x + player.width / 2, player.y + player.height / 2, player.width / 2, 0, Math.PI * 2);
+            ctx.fill();
+
+            // Draw eyes
+            ctx.fillStyle = '#FFFFFF';
+            ctx.beginPath();
+            ctx.arc(player.x + player.width / 2 - 10, player.y + player.height / 2 - 10, 8, 0, Math.PI * 2);
+            ctx.arc(player.x + player.width / 2 + 10, player.y + player.height / 2 - 10, 8, 0, Math.PI * 2);
+            ctx.fill();
+
+            ctx.fillStyle = '#000000';
+            ctx.beginPath();
+            ctx.arc(player.x + player.width / 2 - 10, player.y + player.height / 2 - 10, 4, 0, Math.PI * 2);
+            ctx.arc(player.x + player.width / 2 + 10, player.y + player.height / 2 - 10, 4, 0, Math.PI * 2);
+            ctx.fill();
+        }
+
+        function drawBall() {
+            ctx.fillStyle = '#FFFFFF';
+            ctx.beginPath();
+            ctx.arc(ball.x, ball.y, ball.radius, 0, Math.PI * 2);
+            ctx.fill();
+
+            // Draw ball pattern
+            ctx.strokeStyle = '#000000';
+            ctx.lineWidth = 2;
+            ctx.beginPath();
+            ctx.moveTo(ball.x - ball.radius, ball.y);
+            ctx.lineTo(ball.x + ball.radius, ball.y);
+            ctx.moveTo(ball.x, ball.y - ball.radius);
+            ctx.lineTo(ball.x, ball.y + ball.radius);
+            ctx.stroke();
+        }
+
+        // Keyboard input
+        const keys = {};
+
+        document.addEventListener('keydown', (e) => {
+            keys[e.code] = true;
+            if (e.code === 'KeyW' && player1.y === GROUND_LEVEL - player1.height) {
+                player1.speedY = JUMP_STRENGTH;
+            }
+            if (e.code === 'ArrowUp' && player2.y === GROUND_LEVEL - player2.height) {
+                player2.speedY = JUMP_STRENGTH;
+            }
+        });
+
+        document.addEventListener('keyup', (e) => {
+            keys[e.code] = false;
+        });
+
+        function handleInput() {
+            if (keys['KeyA'] && player1.x > 0) player1.x -= MOVE_SPEED;
+            if (keys['KeyD'] && player1.x < canvas.width / 2 - player1.width) player1.x += MOVE_SPEED;
+            if (keys['ArrowLeft'] && player2.x > canvas.width / 2) player2.x -= MOVE_SPEED;
+            if (keys['ArrowRight'] && player2.x < canvas.width - player2.width) player2.x += MOVE_SPEED;
+        }
+
+        // Main game loop
+        function gameLoop() {
+            handleInput();
+            update();
+            draw();
+            requestAnimationFrame(gameLoop);
+        }
+
+        // Start the game
+        gameLoop();
+    </script>
+</body>
+</html>

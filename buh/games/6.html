@@ -1,0 +1,190 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Advanced 2D Racing Game</title>
+    <style>
+        canvas {
+            border: 1px solid black;
+        }
+        #gameInfo {
+            font-family: Arial, sans-serif;
+            margin-top: 10px;
+        }
+    </style>
+</head>
+<body>
+    <canvas id="gameCanvas" width="800" height="600"></canvas>
+    <div id="gameInfo">
+        <p>Score: <span id="score">0</span></p>
+        <p>Lap: <span id="lap">1</span>/3</p>
+    </div>
+
+    <script>
+        const canvas = document.getElementById('gameCanvas');
+        const ctx = canvas.getContext('2d');
+        const scoreElement = document.getElementById('score');
+        const lapElement = document.getElementById('lap');
+
+        // Game state
+        let score = 0;
+        let lap = 1;
+
+        // Player car
+        const player = {
+            x: 400,
+            y: 500,
+            width: 40,
+            height: 60,
+            speed: 5,
+            color: 'red'
+        };
+
+        // AI cars
+        const aiCars = [
+            {x: 300, y: 300, width: 40, height: 60, speed: 3, color: 'blue'},
+            {x: 500, y: 100, width: 40, height: 60, speed: 4, color: 'green'},
+            {x: 200, y: 400, width: 40, height: 60, speed: 3.5, color: 'yellow'}
+        ];
+
+        // Power-ups
+        const powerUps = [
+            {x: 350, y: 200, width: 30, height: 30, color: 'purple', active: true},
+            {x: 450, y: 400, width: 30, height: 30, color: 'orange', active: true}
+        ];
+
+        // Track
+        const track = {
+            outerWidth: 600,
+            innerWidth: 400,
+            height: 3000,
+            y: -2400
+        };
+
+        // Game loop
+        function gameLoop() {
+            // Clear canvas
+            ctx.clearRect(0, 0, canvas.width, canvas.height);
+
+            // Draw and move track
+            drawTrack();
+            moveTrack();
+
+            // Draw and move player
+            drawCar(player);
+            movePlayer();
+
+            // Draw and move AI cars
+            aiCars.forEach(car => {
+                drawCar(car);
+                moveAICar(car);
+            });
+
+            // Draw power-ups
+            powerUps.forEach(powerUp => {
+                if (powerUp.active) {
+                    drawPowerUp(powerUp);
+                }
+            });
+
+            // Check collisions
+            checkCollisions();
+
+            // Update score and lap
+            updateScore();
+
+            requestAnimationFrame(gameLoop);
+        }
+
+        function drawTrack() {
+            ctx.fillStyle = '#808080';
+            ctx.fillRect((canvas.width - track.outerWidth) / 2, track.y, track.outerWidth, track.height);
+            ctx.fillStyle = '#90EE90';
+            ctx.fillRect((canvas.width - track.innerWidth) / 2, track.y, track.innerWidth, track.height);
+        }
+
+        function moveTrack() {
+            track.y += 2;
+            if (track.y > 0) {
+                track.y = -2400;
+                lap++;
+                if (lap > 3) {
+                    alert('Race finished! Your score: ' + score);
+                    location.reload();
+                }
+            }
+        }
+
+        function drawCar(car) {
+            ctx.fillStyle = car.color;
+            ctx.fillRect(car.x, car.y, car.width, car.height);
+        }
+
+        function movePlayer() {
+            document.onkeydown = function(e) {
+                switch(e.keyCode) {
+                    case 37: // Left arrow
+                        if (player.x > (canvas.width - track.outerWidth) / 2) {
+                            player.x -= player.speed;
+                        }
+                        break;
+                    case 39: // Right arrow
+                        if (player.x < ((canvas.width - track.outerWidth) / 2 + track.outerWidth - player.width)) {
+                            player.x += player.speed;
+                        }
+                        break;
+                }
+            };
+        }
+
+        function moveAICar(car) {
+            car.y += car.speed;
+            if (car.y > canvas.height) {
+                car.y = -car.height;
+                car.x = Math.random() * (track.outerWidth - car.width) + (canvas.width - track.outerWidth) / 2;
+            }
+        }
+
+        function drawPowerUp(powerUp) {
+            ctx.fillStyle = powerUp.color;
+            ctx.fillRect(powerUp.x, powerUp.y, powerUp.width, powerUp.height);
+        }
+
+        function checkCollisions() {
+            // Check collision with AI cars
+            aiCars.forEach(car => {
+                if (isColliding(player, car)) {
+                    player.speed = 3;
+                    setTimeout(() => player.speed = 5, 2000);
+                }
+            });
+
+            // Check collision with power-ups
+            powerUps.forEach(powerUp => {
+                if (powerUp.active && isColliding(player, powerUp)) {
+                    powerUp.active = false;
+                    player.speed = 7;
+                    setTimeout(() => player.speed = 5, 5000);
+                    score += 100;
+                }
+            });
+        }
+
+        function isColliding(rect1, rect2) {
+            return rect1.x < rect2.x + rect2.width &&
+                   rect1.x + rect1.width > rect2.x &&
+                   rect1.y < rect2.y + rect2.height &&
+                   rect1.y + rect1.height > rect2.y;
+        }
+
+        function updateScore() {
+            score++;
+            scoreElement.textContent = score;
+            lapElement.textContent = lap;
+        }
+
+        gameLoop();
+    </script>
+</body>
+</html>

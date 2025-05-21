@@ -1,0 +1,300 @@
+<!DOCTYPE html>
+<html lang="de">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Wizard Kartenspiel</title>
+    <style>
+        body {
+            font-family: Arial, sans-serif;
+            text-align: center;
+        }
+        .card {
+            width: 100px;
+            height: 150px;
+            margin: 5px;
+            border: 1px solid black;
+            display: inline-block;
+            background-size: cover;
+            cursor: pointer;
+        }
+        .card:hover {
+            border: 2px solid blue;
+        }
+        #player-hand, #current-trick, #scoreboard, #bid-section {
+            margin-top: 20px;
+        }
+        button {
+            padding: 10px 20px;
+            margin: 5px;
+            font-size: 16px;
+        }
+    </style>
+</head>
+<body>
+    <h1>Wizard Kartenspiel</h1>
+    <h2>Runde: <span id="round-number">1</span> | Trumpf: <span id="trump-suit">Kein Trumpf</span></h2>
+    <div id="bid-section">
+        <h3>Gebot abgeben</h3>
+        <input type="number" id="bid-input" min="0" max="1" value="0">
+        <button onclick="submitBid()">Gebot bestätigen</button>
+    </div>
+    <div id="player-hand">
+        <h3>Deine Hand</h3>
+    </div>
+    <div id="current-trick">
+        <h3>Aktueller Stich</h3>
+    </div>
+    <div id="scoreboard">
+        <h3>Punkte</h3>
+        <table border="1" style="margin: 0 auto;">
+            <thead>
+                <tr>
+                    <th>Spieler</th>
+                    <th>Gebot</th>
+                    <th>Stiche</th>
+                    <th>Punkte</th>
+                </tr>
+            </thead>
+            <tbody id="score-table"></tbody>
+        </table>
+    </div>
+
+    <script>
+        class Card {
+            constructor(type, suit, rank) {
+                this.type = type; // 'standard', 'narr', 'zauberer'
+                this.suit = suit; // 'herz', 'karo', 'kreuz', 'pik' oder null
+                this.rank = rank; // 1 (narr), 2-14 (standard), 15 (zauberer)
+            }
+
+            toString() {
+                if (this.type === 'narr') return 'Narr';
+                if (this.type === 'zauberer') return 'Zauberer';
+                const ranks = {2: '2', 3: '3', 4: '4', 5: '5', 6: '6', 7: '7', 8: '8', 9: '9', 10: '10', 11: 'Bube', 12: 'Dame', 13: 'König', 14: 'Ass'};
+                const suits = { 'herz': '♥', 'karo': '♦', 'kreuz': '♣', 'pik': '♠' };
+                return `${ranks[this.rank]} ${suits[this.suit]}`;
+            }
+        }
+
+        class Player {
+            constructor(name) {
+                this.name = name;
+                this.hand = [];
+                this.bid = 0;
+                this.tricks_taken = 0;
+                this.score = 0;
+            }
+        }
+
+        class Game {
+            constructor() {
+                this.deck = this.createDeck();
+                this.players = [new Player('Spieler 1'), new Player('KI 1'), new Player('KI 2'), new Player('KI 3')];
+                this.round = 1;
+                this.trump = null;
+                this.current_trick = [];
+                this.current_player_index = 0;
+                this.bidding_phase = true;
+                this.bids_submitted = 0;
+            }
+
+            createDeck() {
+                const suits = ['herz', 'karo', 'kreuz', 'pik'];
+                const deck = [];
+                for (let suit of suits) {
+                    for (let rank = 2; rank <= 14; rank++) {
+                        deck.push(new Card('standard', suit, rank));
+                    }
+                }
+                for (let i = 0; i < 4; i++) {
+                    deck.push(new Card('narr', null, 1));
+                }
+                for (let i = 0; i < 4; i++) {
+                    deck.push(new Card('zauberer', null, 15));
+                }
+                return deck;
+            }
+
+            shuffleDeck() {
+                for (let i = this.deck.length - 1; i > 0; i--) {
+                    const j = Math.floor(Math.random() * (i + 1));
+                    [this.deck[i], this.deck[j]] = [this.deck[j], this.deck[i]];
+                }
+            }
+
+            dealCards() {
+                const cardsPerPlayer = this.round;
+                for (let player of this.players) {
+                    player.hand = this.deck.splice(0, cardsPerPlayer);
+                }
+            }
+
+            determineTrump() {
+                if (this.deck.length > 0) {
+                    const trumpCard = this.deck.pop();
+                    if (trumpCard.type === 'standard') {
+                        this.trump = trumpCard.suit;
+                    } else if (trumpCard.type === 'narr') {
+                        this.trump = null;
+                    } else if (trumpCard.type === 'zauberer') {
+                        this.trump = 'herz'; // Beispiel: immer Herz
+                    }
+                } else {
+                    this.trump = null;
+                }
+                document.getElementById('trump-suit').textContent = this.trump ? this.trump : 'Kein Trumpf';
+            }
+
+            evaluateTrick() {
+                let winnerIndex = this.current_player_index;
+                let highestCard = this.current_trick[0];
+                const leadSuit = highestCard.type === 'standard' ? highestCard.suit : null;
+
+                for (let i = 1; i < this.current_trick.length; i++) {
+                    const card = this.current_trick[i];
+                    if (card.type === 'zauberer') {
+                        highestCard = card;
+                        winnerIndex = (this.current_player_index + i) % this.players.length;
+                        break;
+                    }
+                    if (highestCard.type !== 'zauberer') {
+                        if (card.type === 'standard' && card.suit === this.trump && highestCard.suit !== this.trump) {
+                            highestCard = card;
+                            winnerIndex = (this.current_player_index + i) % this.players.length;
+                        } else if (card.type === 'standard' && card.suit === leadSuit && highestCard.suit === leadSuit && card.rank > highestCard.rank) {
+                            highestCard = card;
+                            winnerIndex = (this.current_player_index + i) % this.players.length;
+                        }
+                    }
+                }
+
+                this.players[winnerIndex].tricks_taken++;
+                this.current_player_index = winnerIndex;
+                this.current_trick = [];
+                updateUI();
+                if (this.players[0].hand.length > 0) {
+                    playAITurns();
+                } else {
+                    this.endRound();
+                }
+            }
+
+            endRound() {
+                for (let player of this.players) {
+                    if (player.bid === player.tricks_taken) {
+                        player.score += 20 + (player.bid * 10);
+                    } else {
+                        player.score -= Math.abs(player.bid - player.tricks_taken) * 10;
+                    }
+                }
+                this.round++;
+                if (this.round <= 15) {
+                    this.startRound();
+                } else {
+                    alert('Spiel beendet!');
+                }
+            }
+
+            startRound() {
+                this.shuffleDeck();
+                this.dealCards();
+                this.determineTrump();
+                this.bidding_phase = true;
+                this.bids_submitted = 0;
+                this.current_trick = [];
+                this.current_player_index = 0;
+                for (let player of this.players) {
+                    player.bid = 0;
+                    player.tricks_taken = 0;
+                }
+                document.getElementById('round-number').textContent = this.round;
+                document.getElementById('bid-input').max = this.round;
+                updateUI();
+            }
+        }
+
+        const game = new Game();
+
+        function updateUI() {
+            const playerHandDiv = document.getElementById('player-hand');
+            playerHandDiv.innerHTML = '<h3>Deine Hand</h3>';
+            game.players[0].hand.forEach((card, index) => {
+                const cardDiv = document.createElement('div');
+                cardDiv.className = 'card';
+                cardDiv.textContent = card.toString(); // Platzhalter, ersetzen Sie mit Bildern
+                // cardDiv.style.backgroundImage = `url('path/to/card/images/${card.type}_${card.suit || 'none'}_${card.rank}.png')`;
+                cardDiv.onclick = () => playCard(index);
+                playerHandDiv.appendChild(cardDiv);
+            });
+
+            const trickDiv = document.getElementById('current-trick');
+            trickDiv.innerHTML = '<h3>Aktueller Stich</h3>';
+            game.current_trick.forEach(card => {
+                const cardDiv = document.createElement('div');
+                cardDiv.className = 'card';
+                cardDiv.textContent = card.toString();
+                trickDiv.appendChild(cardDiv);
+            });
+
+            const scoreTable = document.getElementById('score-table');
+            scoreTable.innerHTML = '';
+            game.players.forEach(player => {
+                const row = document.createElement('tr');
+                row.innerHTML = `
+                    <td>${player.name}</td>
+                    <td>${player.bid}</td>
+                    <td>${player.tricks_taken}</td>
+                    <td>${player.score}</td>
+                `;
+                scoreTable.appendChild(row);
+            });
+
+            document.getElementById('bid-section').style.display = game.bidding_phase ? 'block' : 'none';
+        }
+
+        function submitBid() {
+            const bid = parseInt(document.getElementById('bid-input').value);
+            game.players[0].bid = bid;
+            game.bids_submitted++;
+
+            // KI-Gebote (einfache Zufallsimplementierung)
+            for (let i = 1; i < game.players.length; i++) {
+                game.players[i].bid = Math.floor(Math.random() * (game.round + 1));
+                game.bids_submitted++;
+            }
+
+            if (game.bids_submitted === game.players.length) {
+                game.bidding_phase = false;
+                updateUI();
+                playAITurns();
+            }
+        }
+
+        function playCard(index) {
+            if (game.bidding_phase || game.current_player_index !== 0) return;
+            const card = game.players[0].hand.splice(index, 1)[0];
+            game.current_trick.push(card);
+            game.current_player_index = 1;
+            updateUI();
+            playAITurns();
+        }
+
+        function playAITurns() {
+            while (game.current_player_index !== 0 && game.players[game.current_player_index].hand.length > 0) {
+                const player = game.players[game.current_player_index];
+                const card = player.hand.shift(); // Einfache KI: erste Karte spielen
+                game.current_trick.push(card);
+                game.current_player_index = (game.current_player_index + 1) % game.players.length;
+                updateUI();
+            }
+            if (game.current_trick.length === game.players.length) {
+                setTimeout(() => game.evaluateTrick(), 1000); // Kurze Pause für Sichtbarkeit
+            }
+        }
+
+        // Spiel starten
+        game.startRound();
+    </script>
+</body>
+</html>

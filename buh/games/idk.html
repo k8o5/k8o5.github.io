@@ -1,0 +1,174 @@
+<!DOCTYPE html>
+<html lang="de">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>2-Spieler Physikbasiertes Spiel</title>
+    <style>
+        body {
+            margin: 0;
+            display: flex;
+            flex-direction: column;
+            justify-content: center;
+            align-items: center;
+            height: 100vh;
+            background: linear-gradient(135deg, #f5af19, #f12711);
+            color: white;
+            font-family: Arial, sans-serif;
+        }
+        h1 {
+            margin: 0;
+        }
+        #scoreboard {
+            font-size: 24px;
+            margin-bottom: 20px;
+        }
+        canvas {
+            border: 3px solid white;
+            box-shadow: 0px 0px 20px rgba(0, 0, 0, 0.5);
+        }
+        .winner {
+            font-size: 32px;
+            color: yellow;
+            margin-top: 20px;
+        }
+    </style>
+</head>
+<body>
+    <h1>2-Spieler Physikbasiertes Spiel</h1>
+    <div id="scoreboard">
+        Spieler 1 (Blau): <span id="score1">0</span> | Spieler 2 (Rot): <span id="score2">0</span>
+    </div>
+    <canvas id="gameCanvas" width="800" height="600"></canvas>
+    <div id="winnerMessage" class="winner"></div>
+
+    <!-- Matter.js von CDN laden -->
+    <script src="https://cdnjs.cloudflare.com/ajax/libs/matter-js/0.19.0/matter.min.js"></script>
+
+    <script>
+        // Matter.js Module Aliases
+        const { Engine, Render, Runner, Bodies, World, Body, Events } = Matter;
+
+        // Physik-Engine und Welt erstellen
+        const engine = Engine.create();
+        const world = engine.world;
+
+        // Renderer erstellen
+        const render = Render.create({
+            element: document.body,
+            canvas: document.getElementById('gameCanvas'),
+            engine: engine,
+            options: {
+                width: 800,
+                height: 600,
+                wireframes: false,
+                background: '#222'  // Dunklerer Hintergrund für coolen Effekt
+            }
+        });
+
+        // Spieler Objekte erstellen
+        const player1 = Bodies.rectangle(200, 500, 50, 50, {
+            render: { fillStyle: 'blue' },
+            friction: 0.01,
+            restitution: 0.5
+        });
+
+        const player2 = Bodies.rectangle(600, 500, 50, 50, {
+            render: { fillStyle: 'red' },
+            friction: 0.01,
+            restitution: 0.5
+        });
+
+        // Plattformen (Boden und Wände)
+        const ground = Bodies.rectangle(400, 580, 810, 60, { isStatic: true, render: { fillStyle: 'green' }});
+        
+        // Objekte zur Welt hinzufügen
+        World.add(world, [player1, player2, ground]);
+
+        // Spieler-Punktestände
+        let score1 = 0;
+        let score2 = 0;
+        const scoreDisplay1 = document.getElementById('score1');
+        const scoreDisplay2 = document.getElementById('score2');
+        const winnerMessage = document.getElementById('winnerMessage');
+
+        // Tastensteuerung für Spieler 1 (WASD) und Spieler 2 (Pfeiltasten)
+        document.addEventListener('keydown', (event) => {
+            const forceMagnitude = 0.02;
+
+            // Steuerung für Spieler 1 (WASD)
+            if (event.key === 'w') {
+                Body.applyForce(player1, player1.position, { x: 0, y: -forceMagnitude });
+            }
+            if (event.key === 'a') {
+                Body.applyForce(player1, player1.position, { x: -forceMagnitude, y: 0 });
+            }
+            if (event.key === 'd') {
+                Body.applyForce(player1, player1.position, { x: forceMagnitude, y: 0 });
+            }
+
+            // Steuerung für Spieler 2 (Pfeiltasten)
+            if (event.key === 'ArrowUp') {
+                Body.applyForce(player2, player2.position, { x: 0, y: -forceMagnitude });
+            }
+            if (event.key === 'ArrowLeft') {
+                Body.applyForce(player2, player2.position, { x: -forceMagnitude, y: 0 });
+            }
+            if (event.key === 'ArrowRight') {
+                Body.applyForce(player2, player2.position, { x: forceMagnitude, y: 0 });
+            }
+        });
+
+        // Kollisionserkennung: Prüfen, ob ein Spieler von der Plattform fällt
+        Events.on(engine, 'afterUpdate', () => {
+            if (player1.position.y > 600) {
+                score2++;
+                updateScore();
+                checkWinner();
+                resetGame();
+            }
+            if (player2.position.y > 600) {
+                score1++;
+                updateScore();
+                checkWinner();
+                resetGame();
+            }
+        });
+
+        // Punktestand anzeigen
+        function updateScore() {
+            scoreDisplay1.textContent = score1;
+            scoreDisplay2.textContent = score2;
+        }
+
+        // Gewinner prüfen
+        function checkWinner() {
+            if (score1 >= 5) {
+                winnerMessage.textContent = 'Spieler 1 (Blau) gewinnt!';
+                resetGame(true);
+            } else if (score2 >= 5) {
+                winnerMessage.textContent = 'Spieler 2 (Rot) gewinnt!';
+                resetGame(true);
+            }
+        }
+
+        // Funktion zum Zurücksetzen des Spiels
+        function resetGame(isGameOver = false) {
+            if (isGameOver) {
+                score1 = 0;
+                score2 = 0;
+                updateScore();
+            }
+            Body.setPosition(player1, { x: 200, y: 500 });
+            Body.setVelocity(player1, { x: 0, y: 0 });
+            Body.setPosition(player2, { x: 600, y: 500 });
+            Body.setVelocity(player2, { x: 0, y: 0 });
+        }
+
+        // Starten der Physik-Engine und des Renderers
+        Render.run(render);
+        const runner = Runner.create();
+        Runner.run(runner, engine);
+    </script>
+</body>
+</html>
