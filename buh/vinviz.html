@@ -1,0 +1,124 @@
+<!DOCTYPE html>
+<html lang="de">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Aktien-Heatmap mit Live-Daten von Yahoo Finance</title>
+    <style>
+        /* CSS ist identisch und bleibt unverändert */
+        body { font-family: -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, Helvetica, Arial, sans-serif; background-color: #1a1a1a; color: #f0f0f0; margin: 0; padding: 20px; display: flex; flex-direction: column; align-items: center; }
+        .main-container { width: 95%; max-width: 1400px; }
+        h1 { text-align: center; color: #e0e0e0; font-weight: 300; }
+        #loading-status { font-size: 1.2em; padding: 40px; text-align: center; color: #aaa; }
+        .loader { border: 5px solid #333; border-top: 5px solid #00aaff; border-radius: 50%; width: 40px; height: 40px; animation: spin 1s linear infinite; margin: 20px auto; }
+        @keyframes spin { 0% { transform: rotate(0deg); } 100% { transform: rotate(360deg); } }
+        #stock-map-container { display: flex; flex-wrap: wrap; width: 100%; height: 80vh; border: 1px solid #444; background-color: #222; visibility: hidden; }
+        .sector-container { display: flex; flex-direction: column; border: 2px solid #1a1a1a; box-sizing: border-box; }
+        .sector-header { padding: 4px 6px; font-size: 12px; font-weight: bold; background-color: rgba(0, 0, 0, 0.2); text-overflow: ellipsis; white-space: nowrap; overflow: hidden; }
+        .stocks-wrapper { display: flex; flex-wrap: wrap; flex-grow: 1; overflow: hidden; }
+        .stock-tile { position: relative; display: flex; flex-direction: column; justify-content: center; align-items: center; color: white; border: 1px solid #222; box-sizing: border-box; cursor: pointer; transition: all 0.2s ease-in-out; overflow: hidden; flex-basis: 0; }
+        .stock-tile:hover { border: 1px solid #fff; z-index: 10; transform: scale(1.05); }
+        .stock-ticker { font-weight: bold; font-size: 14px; }
+        .stock-change { font-size: 12px; }
+        .stock-tile .tooltip { visibility: hidden; width: 200px; background-color: #111; color: #fff; text-align: left; border-radius: 6px; padding: 8px; position: absolute; z-index: 20; bottom: 105%; left: 50%; margin-left: -100px; opacity: 0; transition: opacity 0.3s; font-size: 12px; line-height: 1.4; pointer-events: none; }
+        .stock-tile .tooltip::after { content: ""; position: absolute; top: 100%; left: 50%; margin-left: -5px; border-width: 5px; border-style: solid; border-color: #111 transparent transparent transparent; }
+        .stock-tile:hover .tooltip { visibility: visible; opacity: 1; }
+    </style>
+</head>
+<body>
+    <div class="main-container">
+        <h1>Aktien-Heatmap (S&P 500)</h1>
+        <p style="text-align:center; font-size: 14px; color: #aaa;">Daten via Yahoo Finance Screener. Die Größe ist proportional zur Marktkapitalisierung. <br><strong>WICHTIG: Muss von einem lokalen Webserver (z.B. VS Code "Live Server") gestartet werden.</strong></p>
+        <div id="loading-status">
+            <div class="loader"></div>
+            Lade S&P 500 Daten von Yahoo Finance...
+        </div>
+        <div id="stock-map-container"></div>
+    </div>
+    <script>
+        const YAHOO_FINANCE_URL = "https://query1.finance.yahoo.com/v1/finance/screener/predefined/saved?formatted=true&lang=en-US&region=US&scrId=sp_500&start=0&count=500";
+        const PROXY_URL = `https://proxy.cors.sh/${YAHOO_FINANCE_URL}`;
+        const PROXY_API_KEY = 'temp_847116223e7215f60a95b3641b311749';
+
+        document.addEventListener("DOMContentLoaded", function() {
+            fetchStockData();
+        });
+
+        async function fetchStockData() {
+            const statusElement = document.getElementById("loading-status");
+            const mapContainer = document.getElementById("stock-map-container");
+
+            try {
+                const response = await fetch(PROXY_URL, {
+                    headers: { 'x-cors-api-key': PROXY_API_KEY, },
+                });
+                if (!response.ok) throw new Error(`HTTP-Fehler! Status: ${response.status} ${response.statusText}`);
+                const data = await response.json();
+                if (!data.finance?.result?.[0]?.quotes) throw new Error("Unerwartetes Datenformat von Yahoo Finance.");
+                
+                const validStockData = data.finance.result[0].quotes.filter(stock => stock.sector && stock.marketCap);
+                statusElement.innerText = `Daten für ${validStockData.length} Aktien geladen. Erstelle die Karte...`;
+                renderMap(validStockData);
+                statusElement.style.display = 'none';
+                mapContainer.style.visibility = 'visible';
+            } catch (error) {
+                console.error("Fehler beim Laden der Aktiendaten:", error);
+                statusElement.innerHTML = `<strong>Fehler beim Laden der Daten.</strong><br>Stellen Sie sicher, dass Sie diese Seite von einem lokalen Webserver ausführen (nicht als file://).<br><small>Details: ${error.message}</small>`;
+            }
+        }
+        function renderMap(stockData) {
+            const mapContainer = document.getElementById('stock-map-container');
+            mapContainer.innerHTML = ''; 
+            const sectors = {};
+            stockData.forEach(stock => {
+                const sectorName = stock.sector || "Unbekannt";
+                if (!sectors[sectorName]) sectors[sectorName] = { stocks: [], totalCap: 0 };
+                sectors[sectorName].stocks.push(stock);
+                if(stock.marketCap) sectors[sectorName].totalCap += stock.marketCap;
+            });
+            for (const sectorName in sectors) {
+                const sector = sectors[sectorName];
+                if(sector.totalCap <= 0) continue;
+                const sectorContainer = document.createElement('div');
+                sectorContainer.className = 'sector-container';
+                sectorContainer.style.flexGrow = sector.totalCap;
+                const sectorHeader = document.createElement('div');
+                sectorHeader.className = 'sector-header';
+                sectorHeader.textContent = sectorName;
+                sectorContainer.appendChild(sectorHeader);
+                const stocksWrapper = document.createElement('div');
+                stocksWrapper.className = 'stocks-wrapper';
+                sector.stocks.forEach(stock => {
+                    if(!stock.marketCap) return;
+                    const tile = document.createElement('div');
+                    tile.className = 'stock-tile';
+                    tile.style.flexGrow = stock.marketCap;
+                    tile.style.backgroundColor = getChangeColor(stock.regularMarketChangePercent);
+                    const ticker = document.createElement('div');
+                    ticker.className = 'stock-ticker';
+                    ticker.textContent = stock.symbol;
+                    const change = document.createElement('div');
+                    change.className = 'stock-change';
+                    change.textContent = (stock.regularMarketChangePercent > 0 ? '+' : '') + (stock.regularMarketChangePercent?.toFixed(2) || '0.00') + '%';
+                    const tooltip = document.createElement('span');
+                    tooltip.className = 'tooltip';
+                    tooltip.innerHTML = `<strong>${stock.longName || stock.symbol}</strong><br>Marktkap.: ${(stock.marketCap / 1e9).toFixed(2)} Mrd.<br>Veränderung: ${change.textContent}<br>Sektor: ${stock.sector}`;
+                    tile.appendChild(ticker);
+                    tile.appendChild(change);
+                    tile.appendChild(tooltip);
+                    stocksWrapper.appendChild(tile);
+                });
+                sectorContainer.appendChild(stocksWrapper);
+                mapContainer.appendChild(sectorContainer);
+            }
+        }
+        function getChangeColor(changePercent) {
+            if (typeof changePercent !== 'number') return '#555';
+            const intensity = Math.min(Math.abs(changePercent) / 3, 1);
+            if (changePercent > 0) return `rgb(0, ${Math.round(180 + 75 * intensity)}, 0)`;
+            if (changePercent < 0) return `rgb(${Math.round(180 + 75 * intensity)}, 0, 0)`;
+            return '#555555';
+        }
+    </script>
+</body>
+</html>
