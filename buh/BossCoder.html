@@ -1,0 +1,455 @@
+<!DOCTYPE html>
+<html lang="de">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>AI Code Assistant Pro</title>
+    <link rel="preconnect" href="https://fonts.googleapis.com">
+    <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+    <link href="https://fonts.googleapis.com/css2?family=Inter:wght@400;500;700&display=swap" rel="stylesheet">
+    <script src="https://cdnjs.cloudflare.com/ajax/libs/jszip/3.10.1/jszip.min.js"></script>
+    <style>
+        :root {
+            --bg: #f7f8fa; --panel-bg: #ffffff; --text: #2d3748; --subtle-text: #718096;
+            --border: #e2e8f0; --editor-bg: #1a202c; --editor-text: #e2e8f0;
+            --highlight-bg: rgba(49, 130, 206, 0.15); --highlight-border: #3182ce;
+            --primary-gradient: linear-gradient(45deg, #6a11cb 0%, #2575fc 100%);
+            --shadow: 0 4px 15px rgba(0,0,0,0.05);
+        }
+        body.dark-mode {
+            --bg: #1a202c; --panel-bg: #2d3748; --text: #e2e8f0; --subtle-text: #a0aec0;
+            --border: #4a5568; --editor-bg: #121826; --editor-text: #e2e8f0;
+            --highlight-bg: rgba(66, 153, 225, 0.2); --highlight-border: #63b3ed;
+            --shadow: 0 4px 15px rgba(0,0,0,0.2);
+        }
+        @keyframes fadeIn { from { opacity: 0; transform: translateY(10px); } to { opacity: 1; transform: translateY(0); } }
+
+        body {
+            font-family: 'Inter', sans-serif; background-color: var(--bg); color: var(--text);
+            margin: 0; padding: 25px; display: flex; justify-content: center; min-height: 100vh;
+            box-sizing: border-box; transition: background-color 0.3s, color 0.3s;
+        }
+        .container { display: flex; gap: 25px; width: 100%; max-width: 1800px; }
+        .panel {
+            background-color: var(--panel-bg); border: 1px solid var(--border); border-radius: 12px;
+            padding: 30px; display: flex; flex-direction: column; animation: fadeIn 0.5s ease-out;
+            box-shadow: var(--shadow); transition: background-color 0.3s, border-color 0.3s;
+        }
+        .control-panel { flex: 1; min-width: 450px; }
+        .editor-panel { flex: 2; }
+
+        h1 {
+            font-size: 2rem; font-weight: 700; text-align: center; margin: 0 0 10px 0;
+            background: var(--primary-gradient); -webkit-background-clip: text; -webkit-text-fill-color: transparent;
+        }
+        .panel-header {
+            display: flex; justify-content: space-between; align-items: center; padding-bottom: 15px;
+            border-bottom: 1px solid var(--border); transition: border-color 0.3s;
+        }
+        h2 { font-size: 1.25rem; font-weight: 500; margin: 0; }
+        
+        .input-group { margin-bottom: 15px; }
+        label { display: block; font-weight: 500; margin-bottom: 8px; font-size: 0.9rem; }
+        .help-link { font-weight: 400; font-size: 0.8rem; margin-left: 8px; color: var(--highlight-border); text-decoration: none; }
+        .help-link:hover { text-decoration: underline; }
+        
+        .import-section {
+            border: 1px solid var(--border); border-radius: 8px; padding: 15px;
+            background-color: var(--bg);
+        }
+        
+        .button-group { display: flex; gap: 10px; }
+        .secondary-button {
+            flex: 1; padding: 10px; background-color: transparent; border: 1px solid var(--border);
+            color: var(--text); border-radius: 8px; cursor: pointer; transition: all 0.2s;
+        }
+        .secondary-button:hover:not(:disabled) { background-color: var(--highlight-bg); }
+        .secondary-button:disabled { opacity: 0.5; cursor: not-allowed; }
+
+        textarea, input {
+            width: 100%; padding: 12px; border: 1px solid var(--border); border-radius: 8px;
+            font-family: "SF Mono", "Courier New", monospace; font-size: 0.875rem; box-sizing: border-box;
+            background-color: var(--panel-bg); color: var(--text); transition: all 0.2s;
+        }
+        textarea:focus, input:focus {
+            outline: none; border-color: var(--highlight-border); box-shadow: 0 0 0 3px var(--highlight-bg);
+        }
+        #instruction { min-height: 120px; resize: vertical; margin-top: 15px; }
+
+        button#runBtn {
+            display: block; width: 100%; padding: 15px; background: var(--primary-gradient); color: white; border: none;
+            border-radius: 8px; font-size: 1rem; font-weight: 500; cursor: pointer; transition: transform 0.2s; margin-top: 20px;
+        }
+        button#runBtn:hover:not(:disabled) { transform: translateY(-2px); }
+        button:disabled { background: #cbd5e0; cursor: not-allowed; transform: none; }
+        body.dark-mode button:disabled { background: #4a5568; }
+
+        #downloadBtn {
+            background-color: var(--editor-bg); color: var(--editor-text); padding: 8px 15px; font-size: 0.875rem;
+            border: 1px solid var(--border); border-radius: 8px; cursor: pointer;
+        }
+        
+        #editor-container { background-color: var(--editor-bg); padding: 20px; border-radius: 8px; height: 100%; overflow: auto; display: flex; gap: 20px; }
+        #file-tree { flex: 1; min-width: 200px; overflow-y: auto; color: var(--editor-text); }
+        #file-content-preview { flex: 3; white-space: pre-wrap; font-family: "SF Mono", monospace; font-size: 0.9rem; line-height: 1.6; margin: 0; color: var(--editor-text); }
+        #file-tree ul { list-style: none; padding-left: 15px; }
+        #file-tree li { padding: 5px; cursor: pointer; border-radius: 4px; }
+        #file-tree li.active, #file-tree li:hover { background-color: rgba(255,255,255,0.1); }
+        .status-message { color: var(--subtle-text); font-style: italic; text-align: center; margin-top: 15px; height: 20px; transition: color 0.3s; }
+
+        .spinner { border: 4px solid var(--border); border-top: 4px solid var(--highlight-border); border-radius: 50%; width: 25px; height: 25px; animation: spin 1s linear infinite; margin: 20px auto; display: none; }
+        @keyframes spin { 0% { transform: rotate(0deg); } 100% { transform: rotate(360deg); } }
+
+        .theme-switch-wrapper { display: flex; align-items: center; }
+        .theme-switch { display: inline-block; height: 24px; position: relative; width: 48px; }
+        .theme-switch input { display: none; }
+        .slider { background-color: #ccc; bottom: 0; cursor: pointer; left: 0; position: absolute; right: 0; top: 0; transition: .4s; border-radius: 24px; }
+        .slider:before { background-color: #fff; bottom: 4px; content: ""; height: 16px; left: 4px; position: absolute; transition: .4s; width: 16px; border-radius: 50%; }
+        input:checked + .slider { background-image: var(--primary-gradient); }
+        input:checked + .slider:before { transform: translateX(24px); }
+
+    </style>
+</head>
+<body>
+
+    <div class="container">
+        <div class="panel control-panel">
+            <div class="panel-header">
+                <h1>AI Assistant Pro</h1>
+                <div class="theme-switch-wrapper">
+                  <label class="theme-switch" for="checkbox">
+                    <input type="checkbox" id="checkbox" />
+                    <div class="slider round"></div>
+                  </label>
+                </div>
+            </div>
+            
+            <div class="input-group">
+                <label for="apiKey">Gemini API Key <a href="https://aistudio.google.com/app/apikey" target="_blank" rel="noopener noreferrer" class="help-link">erstellen</a></label>
+                <input type="password" id="apiKey" placeholder="Deinen API Key hier einfügen">
+            </div>
+
+            <div class="input-group">
+                <label for="model-input">Gemini Model</label>
+                <input type="text" id="model-input" value="gemini-1.5-flash-latest">
+            </div>
+
+            <div class="import-section">
+                <label>Code-Kontext bereitstellen</label>
+                <div class="input-group">
+                    <div class="button-group">
+                        <input type="text" id="githubUrl" placeholder="owner/repo oder GitHub URL..." style="flex: 2;">
+                        <button id="importGithubBtn" class="secondary-button" style="flex: 1;">Import</button>
+                    </div>
+                </div>
+                <div class="button-group">
+                    <button id="importDirBtn" class="secondary-button">Lokales Verzeichnis</button>
+                    <button id="pasteCodeBtn" class="secondary-button">Code aus Zwischenablage</button>
+                </div>
+            </div>
+            
+            <textarea id="instruction" placeholder="Anweisung an die KI... z.B. 'Erstelle eine Vue.js Komponente für einen Counter' oder 'Füge eine Ladeanimation zu dieser Funktion hinzu'"></textarea>
+            
+            <button id="runBtn">Ausführen</button>
+            <div class="spinner" id="loading"></div>
+            <p class="status-message" id="statusMessage"></p>
+        </div>
+
+        <div class="panel editor-panel">
+            <div class="panel-header">
+                 <h2>Ergebnis</h2>
+                 <button id="downloadBtn" disabled style="display: none;">Download</button>
+            </div>
+            <div id="editor-container">
+                <div id="file-tree"></div>
+                <pre id="file-content-preview">Hier wird der Code angezeigt...</pre>
+            </div>
+        </div>
+    </div>
+
+    <script>
+        // Globaler State
+        let projectContext = '';
+        let outputFiles = [];
+        let originalFilename = 'project';
+
+        // DOM Elemente
+        const apiKeyInput = document.getElementById('apiKey');
+        const instructionInput = document.getElementById('instruction');
+        const runBtn = document.getElementById('runBtn');
+        const loadingSpinner = document.getElementById('loading');
+        const modelInput = document.getElementById('model-input');
+        const downloadBtn = document.getElementById('downloadBtn');
+        const importDirBtn = document.getElementById('importDirBtn');
+        const pasteCodeBtn = document.getElementById('pasteCodeBtn');
+        const importGithubBtn = document.getElementById('importGithubBtn');
+        const githubUrlInput = document.getElementById('githubUrl');
+        const fileTreeContainer = document.getElementById('file-tree');
+        const fileContentPreview = document.getElementById('file-content-preview');
+        const themeToggle = document.getElementById('checkbox');
+        const statusMessage = document.getElementById('statusMessage');
+        
+        // --- Initialisierung & Feature Detection ---
+        document.addEventListener('DOMContentLoaded', () => {
+            if (localStorage.getItem('theme') === 'dark') {
+                document.body.classList.add('dark-mode');
+                themeToggle.checked = true;
+            }
+            if (!window.showDirectoryPicker) {
+                importDirBtn.disabled = true;
+                importDirBtn.title = "Diese Funktion erfordert eine sichere Verbindung (https:// oder localhost).";
+            }
+        });
+        
+        themeToggle.addEventListener('change', () => {
+            document.body.classList.toggle('dark-mode');
+            localStorage.setItem('theme', document.body.classList.contains('dark-mode') ? 'dark' : 'light');
+        });
+
+        function setStatus(message, isError = false) {
+            statusMessage.textContent = message;
+            statusMessage.style.color = isError ? '#e53e3e' : 'var(--subtle-text)';
+        }
+
+        function setProjectContext(content, type = 'single-file', name = 'file.txt') {
+            projectContext = content;
+            originalFilename = name;
+            fileTreeContainer.innerHTML = '';
+            fileContentPreview.textContent = type === 'directory' ? `Verzeichnis '${name}' geladen.` : content;
+            downloadBtn.style.display = 'none';
+        }
+
+        // --- Code Input Logik ---
+        importDirBtn.addEventListener('click', async () => {
+            try {
+                const dirHandle = await window.showDirectoryPicker();
+                setStatus('Lese Verzeichnis...');
+                let structure = '';
+                for await (const entry of dirHandle.values()) {
+                    structure += await processHandle(entry, entry.name);
+                }
+                setProjectContext(structure, 'directory', dirHandle.name);
+                setStatus('Verzeichnis erfolgreich geladen.', false);
+            } catch (e) {
+                if (e.name === 'AbortError') {
+                    console.log('Verzeichnis-Auswahl vom Benutzer abgebrochen.');
+                    setStatus('');
+                } else {
+                    console.error("Fehler bei Verzeichnis-Auswahl:", e);
+                    setStatus("Fehler bei Verzeichnis-Auswahl.", true);
+                }
+            }
+        });
+        
+        async function processHandle(handle, path) {
+            if (handle.kind === 'file') {
+                const file = await handle.getFile();
+                const content = await file.text();
+                return `--- FILE: ${path} ---\n${content}\n--- END OF FILE ---\n\n`;
+            } else if (handle.kind === 'directory') {
+                let structure = '';
+                for await (const entry of handle.values()) {
+                    structure += await processHandle(entry, `${path}/${entry.name}`);
+                }
+                return structure;
+            }
+        }
+
+        pasteCodeBtn.addEventListener('click', async () => {
+            try {
+                const text = await navigator.clipboard.readText();
+                if (text) setProjectContext(text, 'single-file', 'clipboard.txt');
+                setStatus('Code aus Zwischenablage eingefügt.');
+            } catch(e) { console.warn("Einfügen fehlgeschlagen.", e); }
+        });
+
+        function parseGithubUrl(url) {
+            const regex = /(?:https?:\/\/)?(?:www\.)?github\.com\/([a-zA-Z0-9-]+\/[a-zA-Z0-9-._]+)/;
+            const match = url.match(regex);
+            if (match && match[1]) {
+                return match[1].replace(/\.git$/, '');
+            }
+            if (/^[a-zA-Z0-9-]+\/[a-zA-Z0-9-._]+$/.test(url)) {
+                return url;
+            }
+            return null;
+        }
+
+        importGithubBtn.addEventListener('click', async () => {
+            const repoPath = parseGithubUrl(githubUrlInput.value.trim());
+            if (!repoPath) {
+                setStatus('Ungültiges GitHub Repo-Format. Bitte "owner/repo" oder eine volle URL angeben.', true);
+                return;
+            }
+
+            const [owner, repo] = repoPath.split('/');
+            originalFilename = repo;
+            setStatus(`Lade Repo '${owner}/${repo}'...`);
+
+            try {
+                const corsProxy = 'https://api.allorigins.win/raw?url=';
+                const zipUrl = `${corsProxy}https://github.com/${owner}/${repo}/archive/refs/heads/main.zip`;
+
+                const response = await fetch(zipUrl);
+                if (!response.ok) {
+                    throw new Error(`Repo nicht gefunden oder Zugriffsproblem (Status: ${response.status}). Existiert ein 'main'-Branch?`);
+                }
+
+                const blob = await response.blob();
+                const zip = await JSZip.loadAsync(blob);
+
+                let structure = '';
+                const filePromises = [];
+                zip.forEach((relativePath, zipEntry) => {
+                    if (!zipEntry.dir) {
+                        filePromises.push(
+                            zipEntry.async('string').then(content => {
+                                const cleanPath = relativePath.substring(relativePath.indexOf('/') + 1);
+                                if(cleanPath) {
+                                   structure += `--- FILE: ${cleanPath} ---\n${content}\n--- END OF FILE ---\n\n`;
+                                }
+                            })
+                        );
+                    }
+                });
+                
+                await Promise.all(filePromises);
+                setProjectContext(structure, 'directory', repo);
+                setStatus(`Repo '${owner}/${repo}' erfolgreich geladen.`, false);
+
+            } catch (e) {
+                console.error("GitHub Import fehlgeschlagen:", e);
+                setStatus(`GitHub Import fehlgeschlagen: ${e.message}`, true);
+            }
+        });
+
+        downloadBtn.addEventListener('click', async () => {
+            if (outputFiles.length === 0) return;
+            const isProject = outputFiles.length > 1 || outputFiles.some(f => f.path.includes('/'));
+            
+            if (!isProject && outputFiles.length === 1) {
+                const file = outputFiles[0];
+                const blob = new Blob([file.content], { type: 'text/plain;charset=utf-8' });
+                const a = document.createElement('a');
+                a.href = URL.createObjectURL(blob);
+                a.download = file.path || originalFilename;
+                a.click();
+                URL.revokeObjectURL(a.href);
+            } else {
+                const zip = new JSZip();
+                outputFiles.forEach(file => zip.file(file.path, file.content));
+                const blob = await zip.generateAsync({ type: 'blob' });
+                const a = document.createElement('a');
+                a.href = URL.createObjectURL(blob);
+                a.download = `${originalFilename}-modified.zip`;
+                a.click();
+                URL.revokeObjectURL(a.href);
+            }
+        });
+
+        async function fetchWithBackoff(url, options) {
+            const maxRetries = 5;
+            let delay = 2000;
+            for (let i = 0; i < maxRetries; i++) {
+                const response = await fetch(url, options);
+                if (response.status === 429 && i < maxRetries - 1) {
+                    setStatus(`Rate Limit erreicht. Warte ${delay / 1000}s...`, true);
+                    await new Promise(resolve => setTimeout(resolve, delay));
+                    delay *= 2;
+                    setStatus('Versuche es erneut...');
+                    continue;
+                }
+                return response;
+            }
+        }
+
+        runBtn.addEventListener('click', async () => {
+            const apiKey = apiKeyInput.value.trim();
+            const instruction = instructionInput.value.trim();
+            const model = modelInput.value.trim();
+
+            if (!apiKey || !instruction || !model) {
+                alert('API Key, Modell und eine Anweisung sind erforderlich.');
+                return;
+            }
+
+            runBtn.disabled = true;
+            loadingSpinner.style.display = 'block';
+            downloadBtn.style.display = 'none';
+            setStatus('Sende Anfrage an die KI...');
+            
+            const prompt = `**TASK:** You are an expert AI programmer. Your task is to either modify the existing code or generate a new project structure based on the user's instruction. **PROTOCOL:** 1. Analyze the provided context (if any) and the instruction. 2. If the user asks to **generate** a new project, create a file structure. Your response MUST be a JSON object with a "files" key, which is an array of {path: string, content: string}. 3. If the user asks to **modify** existing code, identify the changes. Your response MUST be a JSON object with a "modifications" key, which is an array of {path: string, startLine: number, endLine: number, newCode: string}. For a single file project, the path can be the original filename. **YOUR ENTIRE RESPONSE MUST BE A SINGLE, VALID JSON OBJECT ENCLOSED IN \`\`\`json ... \`\`\`.** **CONTEXT:**\n${projectContext ? projectContext : "No context provided. The user wants to generate code from scratch."}\n---\n**INSTRUCTION:**\n${instruction}\n---\n\n**YOUR JSON RESPONSE:**`;
+
+            try {
+                const url = `https://generativelanguage.googleapis.com/v1beta/models/${model}:generateContent?key=${apiKey}`;
+                const options = { method: 'POST', headers: {'Content-Type': 'application/json'}, body: JSON.stringify({ contents: [{ parts: [{ text: prompt }] }] }) };
+                const response = await fetchWithBackoff(url, options);
+
+                if (!response.ok) {
+                    const errorData = await response.json().catch(() => ({}));
+                    const errorMessage = errorData.error?.message || response.statusText;
+                    throw new Error(`API Fehler: ${response.status} - ${errorMessage}`);
+                }
+
+                setStatus('Antwort erhalten, verarbeite...');
+                const data = await response.json();
+                const rawText = data.candidates[0].content.parts[0].text;
+                const jsonMatch = rawText.match(/```json\s*([\s\S]*?)\s*```/);
+                if (!jsonMatch) throw new Error("KI hat kein gültiges JSON-Format geliefert.");
+                
+                const result = JSON.parse(jsonMatch[1]);
+                handleAIResult(result);
+                setStatus('Erfolgreich abgeschlossen!', false);
+
+            } catch (e) {
+                setStatus(`Fehler: ${e.message}`, true);
+                console.error(e);
+            } finally {
+                runBtn.disabled = false;
+                loadingSpinner.style.display = 'none';
+            }
+        });
+        
+        function handleAIResult(result) {
+            outputFiles = [];
+            if (result.files) {
+                outputFiles = result.files;
+            } else if (result.modifications) {
+                const mod = result.modifications[0];
+                const originalLines = projectContext.split('\n');
+                originalLines.splice(mod.startLine - 1, mod.endLine - mod.startLine + 1, ...mod.newCode.split('\n'));
+                outputFiles = [{ path: mod.path || originalFilename, content: originalLines.join('\n') }];
+            }
+
+            if (outputFiles.length > 0) {
+                displayFileTree(outputFiles);
+                fileContentPreview.textContent = outputFiles[0].content;
+                const firstFileEl = fileTreeContainer.querySelector('li');
+                if (firstFileEl) firstFileEl.classList.add('active');
+                downloadBtn.style.display = 'inline-block';
+                downloadBtn.disabled = false;
+            } else {
+                fileContentPreview.textContent = "Keine Dateien vom Assistenten generiert oder modifiziert.";
+            }
+        }
+
+        function displayFileTree(files) {
+            fileTreeContainer.innerHTML = '';
+            const ul = document.createElement('ul');
+            files.forEach((file, index) => {
+                const li = document.createElement('li');
+                li.textContent = file.path;
+                li.dataset.index = index;
+                li.addEventListener('click', (e) => {
+                    document.querySelectorAll('#file-tree li').forEach(el => el.classList.remove('active'));
+                    e.target.classList.add('active');
+                    fileContentPreview.textContent = files[parseInt(e.target.dataset.index)].content;
+                });
+                ul.appendChild(li);
+            });
+            fileTreeContainer.appendChild(ul);
+        }
+
+    </script>
+</body>
+</html>
