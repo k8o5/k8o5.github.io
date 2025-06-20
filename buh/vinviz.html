@@ -9,6 +9,7 @@
         body { font-family: -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, Helvetica, Arial, sans-serif; background-color: #1a1a1a; color: #f0f0f0; margin: 0; padding: 20px; display: flex; flex-direction: column; align-items: center; }
         .main-container { width: 95%; max-width: 1400px; }
         h1 { text-align: center; color: #e0e0e0; font-weight: 300; }
+        p { text-align:center; font-size: 14px; color: #aaa; }
         #loading-status { font-size: 1.2em; padding: 40px; text-align: center; color: #aaa; }
         .loader { border: 5px solid #333; border-top: 5px solid #00aaff; border-radius: 50%; width: 40px; height: 40px; animation: spin 1s linear infinite; margin: 20px auto; }
         @keyframes spin { 0% { transform: rotate(0deg); } 100% { transform: rotate(360deg); } }
@@ -26,20 +27,26 @@
     </style>
 </head>
 <body>
+
     <div class="main-container">
         <h1>Aktien-Heatmap (S&P 500)</h1>
-        <p style="text-align:center; font-size: 14px; color: #aaa;">Daten via Yahoo Finance Screener. Die Größe ist proportional zur Marktkapitalisierung. <br><strong>WICHTIG: Muss von einem lokalen Webserver (z.B. VS Code "Live Server") gestartet werden.</strong></p>
+        <p>Daten via Yahoo Finance Screener. Die Größe ist proportional zur Marktkapitalisierung.</p>
         <div id="loading-status">
             <div class="loader"></div>
             Lade S&P 500 Daten von Yahoo Finance...
         </div>
         <div id="stock-map-container"></div>
     </div>
-    <script>
-        const YAHOO_FINANCE_URL = "https://query1.finance.yahoo.com/v1/finance/screener/predefined/saved?formatted=true&lang=en-US&region=US&scrId=sp_500&start=0&count=500";
-        const PROXY_URL = `https://proxy.cors.sh/${YAHOO_FINANCE_URL}`;
-        const PROXY_API_KEY = 'temp_847116223e7215f60a95b3641b311749';
 
+    <script>
+        // --- CONFIGURATION ---
+        const YAHOO_FINANCE_URL = "https://query1.finance.yahoo.com/v1/finance/screener/predefined/saved?formatted=true&lang=en-US®ion=US&scrId=sp_500&start=0&count=500";
+        
+        // *** NEUER PROXY: corsproxy.xyz ***
+        // Dieser ist einfach und erfordert keine Header oder API-Keys.
+        const PROXY_URL = `https://corsproxy.xyz/${YAHOO_FINANCE_URL}`;
+
+        // --- MAIN LOGIC ---
         document.addEventListener("DOMContentLoaded", function() {
             fetchStockData();
         });
@@ -49,23 +56,32 @@
             const mapContainer = document.getElementById("stock-map-container");
 
             try {
-                const response = await fetch(PROXY_URL, {
-                    headers: { 'x-cors-api-key': PROXY_API_KEY, },
-                });
-                if (!response.ok) throw new Error(`HTTP-Fehler! Status: ${response.status} ${response.statusText}`);
+                // Der fetch-Aufruf ist jetzt wieder einfacher, ohne Header-Objekt
+                const response = await fetch(PROXY_URL);
+
+                if (!response.ok) {
+                    throw new Error(`HTTP-Fehler! Status: ${response.status} ${response.statusText}`);
+                }
                 const data = await response.json();
-                if (!data.finance?.result?.[0]?.quotes) throw new Error("Unerwartetes Datenformat von Yahoo Finance.");
                 
+                if (!data.finance?.result?.[0]?.quotes) {
+                    throw new Error("Unerwartetes Datenformat von Yahoo Finance empfangen.");
+                }
+
                 const validStockData = data.finance.result[0].quotes.filter(stock => stock.sector && stock.marketCap);
                 statusElement.innerText = `Daten für ${validStockData.length} Aktien geladen. Erstelle die Karte...`;
                 renderMap(validStockData);
+                
                 statusElement.style.display = 'none';
                 mapContainer.style.visibility = 'visible';
+
             } catch (error) {
                 console.error("Fehler beim Laden der Aktiendaten:", error);
-                statusElement.innerHTML = `<strong>Fehler beim Laden der Daten.</strong><br>Stellen Sie sicher, dass Sie diese Seite von einem lokalen Webserver ausführen (nicht als file://).<br><small>Details: ${error.message}</small>`;
+                statusElement.innerHTML = `<strong>Fehler beim Laden der Daten.</strong><br>Der Proxy oder Yahoo Finance blockiert möglicherweise die Anfrage. <br><small>Details: ${error.message}</small>`;
             }
         }
+        
+        // Die renderMap und getChangeColor Funktionen sind unverändert und korrekt.
         function renderMap(stockData) {
             const mapContainer = document.getElementById('stock-map-container');
             mapContainer.innerHTML = ''; 
@@ -120,5 +136,6 @@
             return '#555555';
         }
     </script>
+
 </body>
 </html>
