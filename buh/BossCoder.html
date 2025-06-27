@@ -20,6 +20,7 @@
             --text-primary: #cccccc;
             --text-secondary: #999999;
             --accent-color: #007acc;
+            --resizer-color: #555;
         }
 
         * { box-sizing: border-box; margin: 0; padding: 0; }
@@ -41,6 +42,7 @@
             display: flex;
             flex-direction: column;
             align-items: center;
+            flex-shrink: 0;
         }
         .activity-bar .icon {
             width: 40px; height: 40px;
@@ -55,10 +57,11 @@
         }
 
         .sidebar {
-            width: 280px;
+            width: 280px; /* Initial width */
             background-color: var(--bg-sidebar);
             display: flex;
             flex-direction: column;
+            flex-shrink: 0;
         }
         .sidebar-view { display: none; padding: 10px; flex-grow: 1; overflow-y: auto; }
         .sidebar-view.active { display: block; }
@@ -74,6 +77,12 @@
         #explorer-view li { padding: 4px 10px; cursor: pointer; border-radius: 3px; white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
         #explorer-view li:hover { background-color: rgba(255,255,255,0.05); }
         #explorer-view li.active { background-color: rgba(0, 122, 204, 0.3); }
+
+        #explorer-view button { 
+             width: 100%; margin-top: 10px; background: #37373d; border: 1px solid #4f4f4f; padding: 8px; color: #ccc; border-radius: 3px; cursor: pointer;
+        }
+        #explorer-view button:hover { background-color: #4f4f4f; }
+
 
         #settings-view .input-group { margin-bottom: 15px; }
         #settings-view label { font-size: 12px; margin-bottom: 5px; display: block; }
@@ -92,12 +101,14 @@
             flex-grow: 1;
             display: flex;
             flex-direction: column;
+            min-width: 200px; /* Prevent shrinking too much */
         }
         
         .tab-bar {
             display: flex;
             background-color: #2d2d2d;
             flex-shrink: 0;
+            overflow-x: auto;
         }
         .tab {
             padding: 8px 15px;
@@ -105,6 +116,7 @@
             cursor: pointer;
             border-right: 1px solid #252526;
             font-size: 13px;
+            white-space: nowrap;
         }
         .tab.active { background-color: var(--bg-tab-active); }
         
@@ -116,20 +128,23 @@
             font-size: 14px;
             white-space: pre;
             background-color: var(--bg-main);
+            min-height: 100px; /* Prevent shrinking too much */
         }
         .editor-placeholder {
-            display: flex; align-items: center; justify-content: center;
+            display: flex; flex-direction: column; align-items: center; justify-content: center;
             height: 100%; color: var(--text-secondary);
             text-align: center;
+            white-space: normal;
         }
 
         .panel-bottom {
-            height: 200px;
+            height: 200px; /* Initial height */
             background-color: var(--bg-panel);
             border-top: 1px solid var(--border-color);
             display: flex;
             flex-direction: column;
             padding: 10px;
+            flex-shrink: 0;
         }
         #instruction {
             flex-grow: 1;
@@ -150,6 +165,7 @@
             border-radius: 3px;
             cursor: pointer;
         }
+        #runBtn:disabled { background-color: #555; cursor: not-allowed;}
         .status-message { flex-grow: 1; color: var(--text-secondary); font-style: italic; font-size: 13px; align-self: center; }
 
         .status-bar {
@@ -161,6 +177,48 @@
             align-items: center;
             padding: 0 10px;
         }
+
+        /* --- Resizer Styles --- */
+        .resizer-v {
+            width: 5px;
+            cursor: col-resize;
+            background-color: var(--bg-activitybar);
+            flex-shrink: 0;
+        }
+        .resizer-h {
+            height: 5px;
+            cursor: row-resize;
+            background-color: var(--bg-main);
+            border-top: 1px solid var(--border-color);
+            border-bottom: 1px solid var(--border-color);
+        }
+        .resizer-v:hover, .resizer-h:hover {
+            background-color: var(--resizer-color);
+        }
+
+        /* --- Drag and Drop Overlay --- */
+        .drag-overlay {
+            position: fixed;
+            top: 0; left: 0; right: 0; bottom: 0;
+            background-color: rgba(0, 122, 204, 0.3);
+            border: 2px dashed var(--accent-color);
+            z-index: 9999;
+            display: flex;
+            align-items: center;
+            justify-content: center;
+            pointer-events: none;
+        }
+        .drag-overlay p {
+            font-size: 24px;
+            font-weight: bold;
+            color: white;
+            padding: 20px;
+            background: rgba(0,0,0,0.5);
+            border-radius: 10px;
+        }
+        .hidden {
+            display: none !important;
+        }
         
     </style>
 </head>
@@ -168,7 +226,7 @@
 
 <div class="vscode-container">
     <div class="activity-bar">
-        <div class="icon" id="explorer-icon" title="Explorer">
+        <div class="icon active" id="explorer-icon" title="Explorer">
             <svg viewBox="0 0 24 24"><path fill="currentColor" d="M4,2H20A2,2 0 0,1 22,4V20A2,2 0 0,1 20,22H4A2,2 0 0,1 2,20V4A2,2 0 0,1 4,2M4,4V11H11V4H4M4,20H11V13H4V20M20,20V13H13V20H20M20,4H13V11H20V4Z"></path></svg>
         </div>
         <div class="icon" id="settings-icon" title="Settings & Import">
@@ -176,13 +234,14 @@
         </div>
     </div>
     
-    <div class="sidebar">
-        <div id="explorer-view" class="sidebar-view">
+    <div class="sidebar" id="sidebar">
+        <div id="explorer-view" class="sidebar-view active">
             <div class="sidebar-header">Explorer</div>
             <ul id="file-tree">
                 <!-- File tree will be generated here -->
             </ul>
-            <button id="startNewBtn" style="width: 100%; margin-top: 20px; background: #37373d; border: 1px solid #4f4f4f; padding: 8px; color: #ccc; border-radius: 3px; cursor: pointer;">Neues Projekt starten</button>
+            <button id="downloadZipBtn">Projekt als ZIP laden</button>
+            <button id="startNewBtn">Neues Projekt starten</button>
         </div>
         <div id="settings-view" class="sidebar-view">
             <div class="sidebar-header">Settings & Import</div>
@@ -207,7 +266,9 @@
         </div>
     </div>
 
-    <div class="main-content" id="main-drop-zone">
+    <div class="resizer-v" id="resizer-v"></div>
+
+    <div class="main-content">
         <div class="tab-bar" id="tab-bar">
             <!-- Tabs will be generated here -->
         </div>
@@ -216,12 +277,15 @@
                 <h2>Willkommen beim AI Code Assistant</h2>
                 <p style="margin-top: 20px; max-width: 400px;">
                     Starten Sie, indem Sie ein Projekt importieren (links in den Einstellungen) oder eine Datei/ein Verzeichnis hierher ziehen.
-                    Geben Sie dann Ihre Anweisung im unteren Panel ein.
+                    Geben Sie dann Ihre Anweisung im unteren Panel ein und drücken Sie 'Run' oder Enter.
                 </p>
             </div>
         </div>
-        <div class="panel-bottom">
-            <textarea id="instruction" placeholder="Anweisung an die KI..."></textarea>
+        
+        <div class="resizer-h" id="resizer-h"></div>
+        
+        <div class="panel-bottom" id="panel-bottom">
+            <textarea id="instruction" placeholder="Anweisung an die KI... (Enter zum Senden, Shift+Enter für neue Zeile)"></textarea>
             <div class="panel-actions">
                 <button id="runBtn">Run</button>
                 <span id="statusMessage" class="status-message"></span>
@@ -231,6 +295,10 @@
 </div>
 <div class="status-bar" id="status-bar">
     Ready
+</div>
+
+<div id="drag-overlay" class="drag-overlay hidden">
+    <p>Dateien oder Verzeichnis hier ablegen</p>
 </div>
 
 
@@ -245,6 +313,7 @@
 
         // --- DOM Elements ---
         const dom = {
+            body: document.body,
             explorerIcon: document.getElementById('explorer-icon'),
             settingsIcon: document.getElementById('settings-icon'),
             explorerView: document.getElementById('explorer-view'),
@@ -262,7 +331,13 @@
             importGithubBtn: document.getElementById('importGithubBtn'),
             githubUrlInput: document.getElementById('githubUrl'),
             startNewBtn: document.getElementById('startNewBtn'),
-            mainDropZone: document.getElementById('main-drop-zone'),
+            downloadZipBtn: document.getElementById('downloadZipBtn'),
+            dragOverlay: document.getElementById('drag-overlay'),
+            // Resizable elements
+            sidebar: document.getElementById('sidebar'),
+            panelBottom: document.getElementById('panel-bottom'),
+            resizerV: document.getElementById('resizer-v'),
+            resizerH: document.getElementById('resizer-h'),
         };
 
         // --- UI Rendering ---
@@ -270,7 +345,7 @@
             // Render File Tree
             dom.fileTree.innerHTML = '';
             if (state.files.length > 0) {
-                state.files.forEach(file => {
+                state.files.sort((a,b) => a.path.localeCompare(b.path)).forEach(file => {
                     const li = document.createElement('li');
                     li.textContent = file.path;
                     li.dataset.path = file.path;
@@ -285,22 +360,35 @@
             
             // Render Tabs
             dom.tabBar.innerHTML = '';
-            state.files.forEach(file => {
+            if (state.activeFile) {
                 const tab = document.createElement('div');
-                tab.className = 'tab';
-                tab.textContent = file.path.split('/').pop();
-                tab.dataset.path = file.path;
-                if (state.activeFile && file.path === state.activeFile.path) {
-                    tab.classList.add('active');
-                }
+                tab.className = 'tab active';
+                tab.textContent = state.activeFile.path.split('/').pop();
+                tab.dataset.path = state.activeFile.path;
                 dom.tabBar.appendChild(tab);
-            });
+            }
 
             // Render Editor Content
             if (state.activeFile) {
-                dom.editorView.textContent = state.activeFile.content;
+                // To prevent re-rendering and losing cursor position, check if content is different
+                if (dom.editorView.textContent !== state.activeFile.content) {
+                    dom.editorView.textContent = state.activeFile.content;
+                }
+                dom.editorView.style.display = 'block';
+                const placeholder = document.querySelector('.editor-placeholder');
+                if(placeholder) placeholder.remove();
             } else {
-                dom.editorView.innerHTML = `<div class="editor-placeholder">Keine Datei geöffnet. Wählen Sie eine aus dem Explorer.</div>`;
+                 dom.editorView.innerHTML = ''; // Clear content
+                 dom.editorView.style.display = 'none';
+                 if (!document.querySelector('.editor-placeholder')) {
+                    const mainContent = document.querySelector('.main-content');
+                    mainContent.insertAdjacentHTML('afterbegin', `<div class="editor-placeholder">
+                        <h2 style="margin-top: auto;">Willkommen beim AI Code Assistant</h2>
+                        <p style="margin-top: 20px; max-width: 400px; margin-bottom: auto;">
+                            Keine Datei geöffnet. Wählen Sie eine aus dem Explorer oder starten Sie ein neues Projekt.
+                        </p>
+                    </div>`);
+                 }
             }
         }
         
@@ -315,6 +403,8 @@
             dom.explorerIcon.addEventListener('click', () => switchView('explorer'));
             dom.settingsIcon.addEventListener('click', () => switchView('settings'));
             dom.startNewBtn.addEventListener('click', startNewProject);
+            dom.downloadZipBtn.addEventListener('click', handleDownloadZip);
+
             dom.fileTree.addEventListener('click', e => {
                 if (e.target.tagName === 'LI' && e.target.dataset.path) {
                     setActiveFile(e.target.dataset.path);
@@ -325,11 +415,28 @@
                     setActiveFile(e.target.dataset.path);
                 }
             });
+
             dom.importDirBtn.addEventListener('click', handleDirectoryImport);
             dom.importGithubBtn.addEventListener('click', handleGithubImport);
-            dom.mainDropZone.addEventListener('dragover', e => e.preventDefault());
-            dom.mainDropZone.addEventListener('drop', handleDrop);
+            
+            // Global Drag & Drop
+            dom.body.addEventListener('dragenter', handleDragEnter);
+            dom.body.addEventListener('dragleave', handleDragLeave);
+            dom.body.addEventListener('dragover', e => e.preventDefault());
+            dom.body.addEventListener('drop', handleDrop);
+
+            // Run button and instruction textarea
             dom.runBtn.addEventListener('click', handleRun);
+            dom.instruction.addEventListener('keydown', (e) => {
+                if (e.key === 'Enter' && !e.shiftKey) {
+                    e.preventDefault();
+                    handleRun();
+                }
+            });
+
+            // Resizers
+            initResizer(dom.resizerV, dom.sidebar, 'horizontal');
+            initResizer(dom.resizerH, dom.panelBottom, 'vertical');
         }
 
         // --- Actions ---
@@ -341,11 +448,13 @@
         }
         
         function startNewProject() {
-            state.files = [];
-            state.activeFile = null;
-            projectContext = ''; // Clear old full context
-            render();
-            setStatus('Bereit für ein neues Projekt.');
+            const yes = confirm("Möchten Sie wirklich alle aktuellen Dateien löschen und ein neues Projekt starten?");
+            if (yes) {
+                state.files = [];
+                state.activeFile = null;
+                render();
+                setStatus('Bereit für ein neues Projekt.');
+            }
         }
 
         function setActiveFile(path) {
@@ -360,15 +469,13 @@
             } else {
                 state.activeFile = null;
             }
-            projectContext = files.map(f => `--- FILE: ${f.path} ---\n${f.content}\n--- END OF FILE ---\n\n`).join('');
-            originalFilename = projectName;
             switchView('explorer');
             render();
         }
         
         async function handleDirectoryImport() {
              if (!window.showDirectoryPicker) {
-                alert("Diese Funktion erfordert eine sichere Verbindung (HTTPS oder localhost).");
+                alert("Diese Funktion wird nur in sicheren Kontexten (HTTPS oder localhost) unterstützt.");
                 return;
             }
             try {
@@ -380,6 +487,8 @@
             } catch (e) {
                 if (e.name !== 'AbortError') {
                     setStatus('Fehler bei Verzeichnis-Auswahl.', true);
+                } else {
+                    setStatus('Verzeichnis-Auswahl abgebrochen.');
                 }
             }
         }
@@ -389,31 +498,77 @@
             for await (const entry of dirHandle.values()) {
                 const newPath = path ? `${path}/${entry.name}` : entry.name;
                 if (entry.kind === 'file') {
-                    const file = await entry.getFile();
-                    const content = await file.text();
-                    files.push({ path: newPath, content });
+                    try {
+                        const file = await entry.getFile();
+                        const content = await file.text();
+                        files.push({ path: newPath, content });
+                    } catch (e) {
+                        console.warn(`Konnte Datei nicht lesen: ${newPath}`, e);
+                    }
                 } else if (entry.kind === 'directory') {
                     files = files.concat(await readDirectory(entry, newPath));
                 }
             }
             return files;
         }
-
+        
+        // --- Drag & Drop Handlers ---
+        let dragCounter = 0;
+        function handleDragEnter(e) {
+            e.preventDefault();
+            dragCounter++;
+            dom.dragOverlay.classList.remove('hidden');
+        }
+        function handleDragLeave(e) {
+            e.preventDefault();
+            dragCounter--;
+            if (dragCounter === 0) {
+                dom.dragOverlay.classList.add('hidden');
+            }
+        }
+        
+        // --- KORRIGIERTE handleDrop Funktion ---
         async function handleDrop(e) {
             e.preventDefault();
-            const handle = await e.dataTransfer.items[0].getAsFileSystemHandle();
-            if (!handle) return;
-            
-            setStatus('Verarbeite Drop-Ereignis...');
-            if (handle.kind === 'file') {
-                const file = await handle.getFile();
-                const content = await file.text();
-                loadFiles([{ path: file.name, content }], file.name);
-                setStatus(`Datei '${file.name}' geladen.`);
-            } else if (handle.kind === 'directory') {
-                const files = await readDirectory(handle);
-                loadFiles(files, handle.name);
-                setStatus(`Verzeichnis '${handle.name}' geladen.`);
+            dragCounter = 0;
+            dom.dragOverlay.classList.add('hidden');
+            if (!e.dataTransfer || (!e.dataTransfer.items && !e.dataTransfer.files)) return;
+
+            // Try modern API (for folders), only works in secure contexts (https/localhost)
+            if (e.dataTransfer.items && e.dataTransfer.items[0] && typeof e.dataTransfer.items[0].getAsFileSystemHandle === 'function') {
+                const handle = await e.dataTransfer.items[0].getAsFileSystemHandle();
+                if (!handle) return;
+                
+                setStatus('Verarbeite Drop-Ereignis (Moderne API)...');
+                if (handle.kind === 'file') {
+                    const file = await handle.getFile();
+                    const content = await file.text();
+                    loadFiles([{ path: file.name, content }], file.name);
+                    setStatus(`Datei '${file.name}' geladen.`);
+                } else if (handle.kind === 'directory') {
+                    const files = await readDirectory(handle);
+                    loadFiles(files, handle.name);
+                    setStatus(`Verzeichnis '${handle.name}' geladen.`);
+                }
+            } 
+            // Fallback to traditional API (for files), works everywhere (e.g., file:///)
+            else if (e.dataTransfer.files && e.dataTransfer.files.length > 0) {
+                setStatus('Verarbeite Drop-Ereignis (Fallback)...');
+                const filesToLoad = [];
+                const promises = Array.from(e.dataTransfer.files).map(file => {
+                    return file.text().then(content => {
+                        filesToLoad.push({ path: file.name, content });
+                    }).catch(err => console.error(`Konnte Datei nicht lesen: ${file.name}`, err));
+                });
+                
+                await Promise.all(promises);
+
+                if (filesToLoad.length > 0) {
+                    loadFiles(filesToLoad, 'dropped-project');
+                    setStatus(`${filesToLoad.length} Datei(en) erfolgreich geladen.`);
+                } else {
+                    setStatus("Keine lesbaren Dateien abgelegt.", true);
+                }
             }
         }
         
@@ -434,10 +589,9 @@
             const [owner, repo] = repoPath.split('/');
             setStatus(`Lade Repo '${repoPath}'...`);
             try {
-                const corsProxy = 'https://api.allorigins.win/raw?url=';
-                const zipUrl = `${corsProxy}https://github.com/${owner}/${repo}/archive/refs/heads/main.zip`;
+                const zipUrl = `https://api.github.com/repos/${owner}/${repo}/zipball/main`;
                 const response = await fetch(zipUrl);
-                if (!response.ok) throw new Error(`Repo nicht gefunden (Status: ${response.status}).`);
+                if (!response.ok) throw new Error(`Repo nicht gefunden oder API-Limit erreicht (Status: ${response.status}).`);
                 
                 const blob = await response.blob();
                 const zip = await JSZip.loadAsync(blob);
@@ -473,28 +627,35 @@
             }
 
             dom.runBtn.disabled = true;
-            setStatus('Sende Anfrage...');
+            setStatus('Sende Anfrage an die KI...');
 
             const currentContext = state.files.map(f => `--- FILE: ${f.path} ---\n${f.content}\n--- END OF FILE ---\n\n`).join('');
 
-            const prompt = `**ROLE:** You are an expert AI programmer acting as a surgical code modifier inside an editor. **TASK:** Your task is to either modify the existing code or generate a new project structure based on the user's instruction. You must be precise and minimalist. **PROTOCOL:** 1. Analyze the provided context and the instruction. 2. If the user asks to **GENERATE** code, your response MUST be a JSON object with a "files" key, containing an array of {path: string, content: string}. 3. If the user asks to **MODIFY** code, your response MUST be a JSON object with a "modifications" key, containing an array of {path: string, startLine: number, endLine: number, newCode: string}. Do NOT replace the entire file if only a few lines change. Be a surgeon, not a butcher. **YOUR ENTIRE RESPONSE MUST BE A SINGLE, VALID JSON OBJECT ENCLOSED IN \`\`\`json ... \`\`\`.** **CONTEXT:**\n${currentContext || "No context provided. The user wants to generate code from scratch."}\n---\n**INSTRUCTION:**\n${instruction}\n---\n**YOUR JSON RESPONSE:**`;
+            const prompt = `**ROLE:** You are an expert AI programmer acting as a surgical code modifier inside an editor. **TASK:** Your task is to either modify the existing code or generate a new project structure based on the user's instruction. You must be precise and minimalist. **PROTOCOL:** 1. Analyze the provided context and the instruction. 2. If the user asks to **GENERATE** code (e.g., from scratch), your response MUST be a JSON object with a "files" key, containing an array of {path: string, content: string}. 3. If the user asks to **MODIFY** code, your response MUST be a JSON object with a "modifications" key, containing an array of {path: string, startLine: number, endLine: number, newCode: string}. Do NOT replace the entire file if only a few lines change. Be a surgeon, not a butcher. **YOUR ENTIRE RESPONSE MUST BE A SINGLE, VALID JSON OBJECT ENCLOSED IN \`\`\`json ... \`\`\`.** **CONTEXT:**\n${currentContext || "No context provided. The user wants to generate code from scratch."}\n---\n**INSTRUCTION:**\n${instruction}\n---\n**YOUR JSON RESPONSE:**`;
             
             try {
                  const url = `https://generativelanguage.googleapis.com/v1beta/models/${state.model}:generateContent?key=${state.apiKey}`;
                  const options = { method: 'POST', headers: {'Content-Type': 'application/json'}, body: JSON.stringify({ contents: [{ parts: [{ text: prompt }] }] }) };
-                 const response = await fetch(url, options); // Simplified fetch for now
-                 if (!response.ok) throw new Error(`API Fehler: ${response.status} - ${await response.text()}`);
+                 const response = await fetch(url, options);
+                 if (!response.ok) {
+                    const errorText = await response.text();
+                    throw new Error(`API Fehler: ${response.status} - ${errorText}`);
+                 }
 
                  const data = await response.json();
+                 if (!data.candidates || !data.candidates[0].content.parts[0].text) {
+                     throw new Error("Unerwartete API-Antwortstruktur.");
+                 }
                  const rawText = data.candidates[0].content.parts[0].text;
                  const jsonMatch = rawText.match(/```json\s*([\s\S]*?)\s*```/);
-                 if (!jsonMatch) throw new Error("KI hat kein gültiges JSON-Format geliefert.");
+                 if (!jsonMatch) throw new Error("KI hat kein gültiges JSON-Format geliefert. Antwort war: " + rawText.substring(0, 200));
                 
                  const result = JSON.parse(jsonMatch[1]);
                  processAIResult(result);
                  setStatus('Operation erfolgreich abgeschlossen.');
 
             } catch (e) {
+                console.error(e);
                 setStatus(`Fehler: ${e.message}`, true);
             } finally {
                 dom.runBtn.disabled = false;
@@ -503,25 +664,113 @@
         
         function processAIResult(result) {
             if (result.files) { // Generation
-                loadFiles(result.files, originalFilename || 'new-project');
+                loadFiles(result.files, 'new-project');
             } else if (result.modifications) { // Modification
                 result.modifications.forEach(mod => {
                     const fileToModify = state.files.find(f => f.path === mod.path);
                     if (fileToModify) {
                         const lines = fileToModify.content.split('\n');
-                        lines.splice(mod.startLine - 1, (mod.endLine - mod.startLine + 1), ...mod.newCode.split('\n'));
+                        // Clamp values to be safe
+                        const start = Math.max(1, mod.startLine);
+                        const end = Math.max(start, mod.endLine);
+                        const newCodeLines = mod.newCode ? mod.newCode.split('\n') : [''];
+                        lines.splice(start - 1, (end - start + 1), ...newCodeLines);
                         fileToModify.content = lines.join('\n');
+                    } else {
+                        // AI wants to modify a file that doesn't exist, create it
+                        state.files.push({path: mod.path, content: mod.newCode || ''});
                     }
                 });
-                render(); // Re-render to show changes
+                 // Re-render to show changes, keeping the active file if it still exists
+                const currentActivePath = state.activeFile ? state.activeFile.path : null;
+                render();
+                if (currentActivePath && state.files.some(f => f.path === currentActivePath)) {
+                    setActiveFile(currentActivePath);
+                }
             }
         }
+
+        async function handleDownloadZip() {
+            if (state.files.length === 0) {
+                alert("Keine Dateien im Projekt zum Herunterladen.");
+                return;
+            }
+            setStatus("Erstelle ZIP-Datei...");
+            const zip = new JSZip();
+            state.files.forEach(file => {
+                zip.file(file.path, file.content);
+            });
+            try {
+                const content = await zip.generateAsync({type:"blob"});
+                const a = document.createElement('a');
+                a.href = URL.createObjectURL(content);
+                a.download = "ai-code-assistant-project.zip";
+                document.body.appendChild(a);
+                a.click();
+                document.body.removeChild(a);
+                URL.revokeObjectURL(a.href);
+                setStatus("ZIP-Download gestartet.");
+            } catch (e) {
+                setStatus("Fehler beim Erstellen der ZIP-Datei.", true);
+                console.error(e);
+            }
+        }
+        
+        // --- Resizer Logic ---
+        function initResizer(resizer, elementToResize, direction) {
+            let startPos, startSize;
+
+            function onMouseMove(e) {
+                if (direction === 'horizontal') {
+                    const dx = e.clientX - startPos;
+                    elementToResize.style.width = `${startSize + dx}px`;
+                } else { // vertical
+                    const dy = e.clientY - startPos;
+                    elementToResize.style.height = `${startSize - dy}px`;
+                }
+            }
+
+            function onMouseUp() {
+                window.removeEventListener('mousemove', onMouseMove);
+                window.removeEventListener('mouseup', onMouseUp);
+                document.body.style.cursor = 'default';
+                document.body.style.userSelect = 'auto';
+            }
+
+            resizer.addEventListener('mousedown', (e) => {
+                e.preventDefault();
+                if (direction === 'horizontal') {
+                    startPos = e.clientX;
+                    startSize = elementToResize.offsetWidth;
+                    document.body.style.cursor = 'col-resize';
+                } else { // vertical
+                    startPos = e.clientY;
+                    startSize = elementToResize.offsetHeight;
+                    document.body.style.cursor = 'row-resize';
+                }
+                
+                document.body.style.userSelect = 'none';
+                window.addEventListener('mousemove', onMouseMove);
+                window.addEventListener('mouseup', onMouseUp);
+            });
+        }
+
 
         // --- Initialisierung ---
         document.addEventListener('DOMContentLoaded', () => {
             setupEventListeners();
             switchView('explorer');
             render();
+            // Load API key from local storage if available
+            const savedApiKey = localStorage.getItem('geminiApiKey');
+            if (savedApiKey) {
+                dom.apiKeyInput.value = savedApiKey;
+                state.apiKey = savedApiKey;
+            }
+            // Save API key on change
+            dom.apiKeyInput.addEventListener('change', () => {
+                localStorage.setItem('geminiApiKey', dom.apiKeyInput.value);
+            });
         });
     </script>
 </body>
