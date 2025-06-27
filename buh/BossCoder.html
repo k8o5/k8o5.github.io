@@ -27,13 +27,7 @@
             --error-color: #f48771;
         }
         * { box-sizing: border-box; margin: 0; padding: 0; }
-        body {
-            font-family: var(--font-family);
-            background-color: var(--bg-main);
-            color: var(--text-primary);
-            overflow: hidden;
-            height: 100vh;
-        }
+        body { font-family: var(--font-family); background-color: var(--bg-main); color: var(--text-primary); overflow: hidden; height: 100vh; }
         .vscode-container { display: flex; height: 100vh; }
         .activity-bar { width: 50px; background-color: var(--bg-activitybar); padding: 10px 0; display: flex; flex-direction: column; align-items: center; flex-shrink: 0; }
         .activity-bar .icon { width: 40px; height: 40px; padding: 8px; cursor: pointer; fill: var(--text-secondary); border-left: 2px solid transparent; }
@@ -75,6 +69,9 @@
         .status-message { flex-grow: 1; color: var(--text-secondary); font-style: italic; font-size: 13px; align-self: center; }
         #terminal-output { flex-grow: 1; font-family: var(--font-mono); font-size: 13px; white-space: pre-wrap; overflow-y: auto; background: var(--bg-main); padding: 5px; color: var(--text-primary); }
         #terminal-output .error { color: var(--error-color); }
+        .terminal-prompt { margin-top: 10px; padding-top: 10px; border-top: 1px dashed var(--border-color); }
+        .terminal-prompt button { background-color: var(--bg-input); border: 1px solid var(--border-color); color: var(--text-primary); padding: 4px 10px; border-radius: 3px; cursor: pointer; margin-left: 10px; }
+        .terminal-prompt button:hover { background-color: #4f4f4f; }
         .status-bar { height: 22px; background-color: var(--bg-statusbar); color: white; font-size: 12px; display: flex; align-items: center; padding: 0 10px; }
         .resizer-v { width: 5px; cursor: col-resize; background-color: var(--bg-activitybar); flex-shrink: 0; }
         .resizer-h { height: 5px; cursor: row-resize; background-color: var(--bg-main); border-top: 1px solid var(--border-color); border-bottom: 1px solid var(--border-color); }
@@ -181,7 +178,7 @@
         
         function escapeHTML(str) {
             if (typeof str !== 'string') return '';
-            return str.replace(/&/g, '&amp;').replace(/</g, '&lt;').replace(/>/g, '&gt;');
+            return str.replace(/&/g, '&').replace(/</g, '<').replace(/>/g, '>');
         }
         
         function appendToTerminal(text, type = 'stdout') {
@@ -255,7 +252,7 @@
                         const currentLine = index + 1;
                         const escapedLine = escapeHTML(line);
                         if (currentLine >= highlightInfo.startLine && currentLine <= highlightEndLine) {
-                            return `<span class="highlight-change">${escapedLine || '&nbsp;'}</span>`;
+                            return `<span class="highlight-change">${escapedLine || ' '}</span>`;
                         }
                         return escapedLine;
                     }).join('\n');
@@ -329,17 +326,81 @@
                 return;
             }
 
-            const code = state.activeFile.content;
+            dom.runPyBtn.disabled = true;
             dom.terminalOutput.innerHTML = '';
             appendToTerminal(`> Führe ${state.activeFile.path} aus...`);
-            dom.runPyBtn.disabled = true;
+
+            const code = state.activeFile.content;
 
             try {
                 await pyodide.runPythonAsync(code);
+                appendToTerminal(`> Ausführung von ${state.activeFile.path} erfolgreich beendet.`);
             } catch (error) {
-                appendToTerminal(error.message, "stderr");
+                const moduleMatch = error.message.match(/ModuleNotFoundError: No module named '(\w+)'/);
+                if (moduleMatch && moduleMatch[1]) {
+                    const moduleName = moduleMatch[1];
+                    appendToTerminal(error.message, "stderr");
+                    promptToInstall(moduleName, code);
+                } else {
+                    appendToTerminal(error.message, "stderr");
+                }
             } finally {
                 dom.runPyBtn.disabled = false;
+                setStatus('Bereit.');
+            }
+        }
+
+        function promptToInstall(moduleName, codeToRerun) {
+            const promptDiv = document.createElement('div');
+            promptDiv.className = 'terminal-prompt';
+
+            const question = document.createElement('span');
+            question.textContent = `Das Modul '${moduleName}' wurde nicht gefunden. Möchten Sie es installieren?`;
+            
+            const btnYes = document.createElement('button');
+            btnYes.textContent = 'Ja';
+            
+            const btnNo = document.createElement('button');
+            btnNo.textContent = 'Nein';
+
+            btnYes.onclick = () => {
+                promptDiv.remove();
+                installAndRerun(moduleName, codeToRerun);
+            };
+
+            btnNo.onclick = () => {
+                promptDiv.remove();
+                appendToTerminal('> Installation abgebrochen.');
+            };
+
+            promptDiv.appendChild(question);
+            promptDiv.appendChild(btnYes);
+            promptDiv.appendChild(btnNo);
+            dom.terminalOutput.appendChild(promptDiv);
+        }
+
+        async function installAndRerun(moduleName, codeToRerun) {
+            appendToTerminal(`> Installiere '${moduleName}' mit micropip...`);
+            setStatus(`Installiere ${moduleName}...`);
+            dom.runPyBtn.disabled = true;
+
+            try {
+                await pyodide.loadPackage('micropip');
+                const micropip = pyodide.pyimport('micropip');
+                await micropip.install(moduleName);
+                
+                appendToTerminal(`> Installation von '${moduleName}' erfolgreich.`);
+                setStatus('Installation erfolgreich. Führe Code erneut aus...');
+                
+                appendToTerminal(`> Führe ${state.activeFile.path} erneut aus...`);
+                await pyodide.runPythonAsync(codeToRerun);
+                appendToTerminal(`> Ausführung von ${state.activeFile.path} erfolgreich beendet.`);
+
+            } catch (error) {
+                appendToTerminal(`Fehler bei der Installation oder erneuten Ausführung: ${error.message}`, "stderr");
+            } finally {
+                dom.runPyBtn.disabled = false;
+                setStatus('Bereit.');
             }
         }
 
@@ -587,7 +648,6 @@
             const savedApiKey = localStorage.getItem('geminiApiKey');
             if (savedApiKey) { dom.apiKeyInput.value = savedApiKey; state.apiKey = savedApiKey; }
             dom.apiKeyInput.addEventListener('change', () => { localStorage.setItem('geminiApiKey', dom.apiKeyInput.value); });
-            // Lade Pyodide proaktiv im Hintergrund, damit es beim ersten Klick schneller geht.
             initPyodide();
         });
     </script>
