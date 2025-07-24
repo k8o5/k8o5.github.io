@@ -1,0 +1,801 @@
+<!DOCTYPE html>
+<html lang="de">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>ＢｏｓｓＣｏｄｅｒ</title>
+    <link rel="icon" href="data:image/svg+xml;base64,PHN2ZyB4bWxucz0iaHR0cDovL3d3dy53My5vcmcvMjAwMC9zdmciIHZpZXdCb3g9IjAgMCAyNCAyNCIgZmlsbD0iI2NjY2NjYyI+PHBhdGggZD0iTTExLjk5IDJDNi40NyAyIDIgNi40OCAyIDEyczQuNDcgMTAgOS45OSAxMFMxMiAyIDExLjk5IDJ6TTQuMTUgMTMuODNjLjYxLTIuNDQgMi4zOS00LjUgNC42NC01LjUxbC44IDMuMmMtMS4xMy41Mi0yLjA0IDEuNDMtMi40MyAyLjU5bC0zLjAxLS4yOHptOS42OC01LjQ4bC44LTMuMkMyMC4zNyA2LjQ4IDIyIDkuMjQgMjIgMTMuODFoLTMuMjJjLS40MS0xLjI0LTEuNDItMi4yOC0yLjc1LTIuNzV6TTcuNSA5LjVjMC0uODIuNjctMS41IDEuNS0xLjVzMS41LjY3IDEuNSAxLjVTOS44MyA5LjUgOSA5LjV6bTggMGMwLS44Mi42Ny0xLjUgMS41LTEuNXMxLjUuNjcgMS41IDEuNVMyMC4zMyA5LjUgMTkuNSA5LjV6bS04IDVjLS44MyAwLTEuNS42Ny0xLjUgMS41aDNjMC0uODMtLjY3LTEuNS0xLjUtMS41em03IDBjLS44MyAwLTEuNS42Ny0xLjUgMS41aDNjMC0uODMtLjY3LTEuNS0xLjUtMS41eiIvPjwvc3ZnPg==">
+    <script src="https://cdnjs.cloudflare.com/ajax/libs/jszip/3.10.1/jszip.min.js"></script>
+    <script src="https://cdn.jsdelivr.net/pyodide/v0.25.0/full/pyodide.js"></script>
+    <style>
+        :root {
+            --font-family: -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, "Helvetica Neue", Arial, sans-serif;
+            --font-mono: "Fira Code", "Courier New", monospace;
+            --bg-main: #1e1e1e;
+            --bg-sidebar: #252526;
+            --bg-activitybar: #333333;
+            --bg-panel: #252526;
+            --bg-statusbar: #007acc;
+            --bg-tab-active: #1e1e1e;
+            --bg-tab-inactive: #2d2d2d;
+            --bg-input: #3c3c3c;
+            --border-color: #3c3c3c;
+            --text-primary: #cccccc;
+            --text-secondary: #999999;
+            --accent-color: #007acc;
+            --resizer-color: #555;
+            --error-color: #f48771;
+        }
+        * { box-sizing: border-box; margin: 0; padding: 0; }
+        body { font-family: var(--font-family); background-color: var(--bg-main); color: var(--text-primary); overflow: hidden; height: 100vh; }
+        .vscode-container { display: flex; height: 100vh; }
+        .activity-bar { width: 50px; background-color: var(--bg-activitybar); padding: 10px 0; display: flex; flex-direction: column; align-items: center; flex-shrink: 0; }
+        .activity-bar .icon { width: 40px; height: 40px; padding: 8px; cursor: pointer; fill: var(--text-secondary); border-left: 2px solid transparent; }
+        .activity-bar .icon:hover { fill: var(--text-primary); }
+        .activity-bar .icon.active { fill: var(--text-primary); border-left-color: var(--accent-color); }
+        .sidebar { width: 280px; background-color: var(--bg-sidebar); display: flex; flex-direction: column; flex-shrink: 0; }
+        .sidebar-view { display: none; padding: 10px; flex-grow: 1; overflow-y: auto; }
+        .sidebar-view.active { display: block; }
+        .sidebar-header { font-size: 11px; text-transform: uppercase; padding: 5px 10px; font-weight: bold; color: var(--text-secondary); }
+        #explorer-view ul { list-style: none; padding-left: 10px; }
+        #explorer-view li { padding: 4px 10px; cursor: pointer; border-radius: 3px; white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
+        #explorer-view li:hover { background-color: rgba(255,255,255,0.05); }
+        #explorer-view li.active { background-color: rgba(0, 122, 204, 0.3); }
+        #explorer-view button { width: 100%; margin-top: 10px; background: #37373d; border: 1px solid #4f4f4f; padding: 8px; color: #ccc; border-radius: 3px; cursor: pointer; }
+        #explorer-view button:hover { background-color: #4f4f4f; }
+        #settings-view .input-group { margin-bottom: 15px; }
+        #settings-view label { font-size: 12px; margin-bottom: 5px; display: block; }
+        #settings-view input, #settings-view button { width: 100%; background-color: var(--bg-input); border: 1px solid var(--border-color); color: var(--text-primary); padding: 8px; border-radius: 3px; }
+        #settings-view button { cursor: pointer; margin-top: 5px; }
+        #settings-view button:hover { background-color: #4f4f4f; }
+        .main-content { flex-grow: 1; display: flex; flex-direction: column; min-width: 200px; }
+        .tab-bar { display: flex; background-color: #2d2d2d; flex-shrink: 0; overflow-x: auto; }
+        .tab { padding: 8px 15px; background-color: var(--bg-tab-inactive); cursor: pointer; border-right: 1px solid #252526; font-size: 13px; white-space: nowrap; }
+        .tab.active { background-color: var(--bg-tab-active); }
+        .editor-view { flex-grow: 1; padding: 10px; overflow: auto; font-family: var(--font-mono); font-size: 14px; white-space: pre; background-color: var(--bg-main); min-height: 100px; }
+        .editor-placeholder { display: flex; flex-direction: column; align-items: center; justify-content: center; height: 100%; color: var(--text-secondary); text-align: center; white-space: normal; }
+        .panel-bottom { height: 200px; background-color: var(--bg-panel); border-top: 1px solid var(--border-color); display: flex; flex-direction: column; flex-shrink: 0; }
+        .panel-tab-bar { display: flex; border-bottom: 1px solid var(--border-color); flex-shrink: 0; }
+        .panel-tab { padding: 5px 10px; font-size: 12px; cursor: pointer; color: var(--text-secondary); border-bottom: 2px solid transparent; }
+        .panel-tab:hover { color: var(--text-primary); }
+        .panel-tab.active { color: var(--text-primary); border-bottom-color: var(--accent-color); }
+        .panel-view { display: none; flex-grow: 1; padding: 0; flex-direction: column; overflow: hidden;}
+        .panel-view.active { display: flex; }
+        #instruction-view { padding: 10px; }
+        #instruction { flex-grow: 1; background: transparent; border: 1px solid transparent; color: var(--text-primary); resize: none; font-family: var(--font-family); font-size: 13px; width: 100%;}
+        #instruction:focus { outline: none; border-color: var(--accent-color); }
+        .panel-actions { display: flex; gap: 10px; margin-top: 10px; }
+        #terminal-view .panel-actions { padding: 0 10px 10px 10px; }
+        #runBtn, #runPyBtn { background-color: var(--accent-color); color: white; border: none; padding: 8px 15px; border-radius: 3px; cursor: pointer; }
+        #runBtn:disabled, #runPyBtn:disabled { background-color: #555; cursor: not-allowed;}
+        .status-message { flex-grow: 1; color: var(--text-secondary); font-style: italic; font-size: 13px; align-self: center; }
+        #terminal-output { flex-grow: 1; font-family: var(--font-mono); font-size: 13px; white-space: pre-wrap; overflow-y: auto; background: var(--bg-main); padding: 10px; color: var(--text-primary); }
+        #terminal-output .error { color: var(--error-color); }
+        .terminal-prompt { margin-top: 10px; padding-top: 10px; border-top: 1px dashed var(--border-color); }
+        .terminal-prompt button { background-color: var(--bg-input); border: 1px solid var(--border-color); color: var(--text-primary); padding: 4px 10px; border-radius: 3px; cursor: pointer; margin-left: 10px; }
+        .terminal-prompt button:hover { background-color: #4f4f4f; }
+        .terminal-input-line { display: flex; padding: 5px 10px; background: var(--bg-main); flex-shrink: 0; }
+        .terminal-prompt-prefix { font-family: var(--font-mono); color: var(--text-secondary); margin-right: 5px;}
+        #terminal-input { flex-grow: 1; background: transparent; border: none; color: var(--text-primary); font-family: var(--font-mono); font-size: 13px; }
+        #terminal-input:focus { outline: none; }
+        .status-bar { height: 22px; background-color: var(--bg-statusbar); color: white; font-size: 12px; display: flex; align-items: center; padding: 0 10px; }
+        .resizer-v { width: 5px; cursor: col-resize; background-color: var(--bg-activitybar); flex-shrink: 0; }
+        .resizer-h { height: 5px; cursor: row-resize; background-color: var(--bg-main); border-top: 1px solid var(--border-color); border-bottom: 1px solid var(--border-color); }
+        .resizer-v:hover, .resizer-h:hover { background-color: var(--resizer-color); }
+        .drag-overlay { position: fixed; top: 0; left: 0; right: 0; bottom: 0; background-color: rgba(0, 122, 204, 0.3); border: 2px dashed var(--accent-color); z-index: 9999; display: flex; align-items: center; justify-content: center; pointer-events: none; }
+        .drag-overlay p { font-size: 24px; font-weight: bold; color: white; padding: 20px; background: rgba(0,0,0,0.5); border-radius: 10px; }
+        .hidden { display: none !important; }
+        @keyframes fade-out-highlight { from { background-color: rgba(0, 122, 204, 0.4); } to { background-color: transparent; } }
+        .highlight-change { display: block; animation: fade-out-highlight 3s ease-out forwards; }
+        .context-menu { position: absolute; background-color: var(--bg-sidebar); border: 1px solid var(--border-color); border-radius: 4px; padding: 5px 0; z-index: 1000; box-shadow: 0 2px 8px rgba(0,0,0,0.3); }
+        .context-menu ul { list-style: none; padding: 0; margin: 0; }
+        .context-menu li { padding: 8px 15px; cursor: pointer; font-size: 13px; color: var(--text-primary); }
+        .context-menu li:hover { background-color: var(--accent-color); color: white; }
+    </style>
+</head>
+<body>
+
+<div class="vscode-container">
+    <div class="activity-bar">
+        <div class="icon active" id="explorer-icon" title="Explorer"><svg viewBox="0 0 24 24"><path fill="currentColor" d="M4,2H20A2,2 0 0,1 22,4V20A2,2 0 0,1 20,22H4A2,2 0 0,1 2,20V4A2,2 0 0,1 4,2M4,4V11H11V4H4M4,20H11V13H4V20M20,20V13H13V20H20M20,4H13V11H20V4Z"></path></svg></div>
+        <div class="icon" id="settings-icon" title="Settings & Import"><svg viewBox="0 0 24 24"><path fill="currentColor" d="M19.43,12.98C19.47,12.65 19.5,12.33 19.5,12C19.5,11.67 19.47,11.34 19.43,11L21.54,9.37C21.73,9.22 21.78,8.95 21.66,8.73L19.66,5.27C19.54,5.05 19.27,4.96 19.05,5.05L16.56,6.05C16.04,5.66 15.5,5.32 14.87,5.07L14.5,2.42C14.46,2.18 14.25,2 14,2H10C9.75,2 9.54,2.18 9.5,2.42L9.13,5.07C8.5,5.32 7.96,5.66 7.44,6.05L4.95,5.05C4.73,4.96 4.46,5.05 4.34,5.27L2.34,8.73C2.21,8.95 2.27,9.22 2.46,9.37L4.57,11C4.53,11.34 4.5,11.67 4.5,12C4.5,12.33 4.53,12.65 4.57,12.98L2.46,14.63C2.27,14.78 2.21,15.05 2.34,15.27L4.34,18.73C4.46,18.95 4.73,19.03 4.95,18.95L7.44,17.94C7.96,18.34 8.5,18.68 9.13,18.93L9.5,21.58C9.54,21.82 9.75,22 10,22H14C14.25,22 14.46,21.82 14.5,21.58L14.87,18.93C15.5,18.68 16.04,18.34 16.56,17.94L19.05,18.95C19.27,19.03 19.54,18.95 19.66,18.73L21.66,15.27C21.78,15.05 21.73,14.78 21.54,14.63L19.43,12.98M12,15.5A3.5,3.5 0 0,1 8.5,12A3.5,3.5 0 0,1 12,8.5A3.5,3.5 0 0,1 15.5,12A3.5,3.5 0 0,1 12,15.5Z"></path></svg></div>
+    </div>
+    <div class="sidebar" id="sidebar">
+        <div id="explorer-view" class="sidebar-view active">
+            <div class="sidebar-header">Explorer</div>
+            <ul id="file-tree"></ul>
+            <button id="downloadZipBtn">Projekt als ZIP laden</button>
+            <button id="startNewBtn">Neues Projekt starten</button>
+        </div>
+        <div id="settings-view" class="sidebar-view">
+            <div class="sidebar-header">Settings & Import</div>
+            <div class="input-group"><label for="apiKey">Gemini API Key <a href="https://aistudio.google.com/app/apikey" target="_blank" class="help-link">erstellen</a></label><input type="password" id="apiKey"></div>
+            <div class="input-group"><label for="model-input">Gemini Model</label><input type="text" id="model-input" value="gemini-1.5-flash-latest"></div>
+            <hr style="border-color: #4f4f4f; margin: 20px 0;">
+            <div class="input-group"><label>GitHub Repo importieren</label><input type="text" id="githubUrl" placeholder="owner/repo/subdir..."><button id="importGithubBtn">Import</button></div>
+            <div class="input-group"><label>Lokales Verzeichnis importieren</label><button id="importDirBtn">Auswählen</button></div>
+        </div>
+    </div>
+    <div class="resizer-v" id="resizer-v"></div>
+    <div class="main-content">
+        <div class="tab-bar" id="tab-bar"></div>
+        <div class="editor-view" id="editor-view"><div class="editor-placeholder"><h2>Willkommen beim AI Code Assistant</h2><p style="margin-top: 20px; max-width: 400px;">Starten Sie, indem Sie ein Projekt importieren (links in den Einstellungen) oder eine Datei/ein Verzeichnis hierher ziehen. Geben Sie dann Ihre Anweisung im unteren Panel ein und drücken Sie 'Run' oder Enter.</p></div></div>
+        <div class="resizer-h" id="resizer-h"></div>
+        <div class="panel-bottom" id="panel-bottom">
+            <div class="panel-tab-bar">
+                <div class="panel-tab active" data-view="instruction-view">Anweisung</div>
+                <div class="panel-tab" data-view="terminal-view">Terminal</div>
+            </div>
+            <div id="instruction-view" class="panel-view active">
+                <textarea id="instruction" placeholder="Anweisung an die KI... (Enter zum Senden, Shift+Enter für neue Zeile)"></textarea>
+                <div class="panel-actions"><button id="runBtn">Run</button><span id="statusMessage" class="status-message"></span></div>
+            </div>
+            <div id="terminal-view" class="panel-view">
+                <div id="terminal-output"></div>
+                <div class="terminal-input-line">
+                    <span class="terminal-prompt-prefix">>>></span>
+                    <input type="text" id="terminal-input" autocomplete="off" spellcheck="false">
+                </div>
+                <div class="panel-actions">
+                    <button id="runPyBtn">Run Python File</button>
+                </div>
+            </div>
+        </div>
+    </div>
+</div>
+<div class="status-bar" id="status-bar">Ready</div>
+<div id="drag-overlay" class="drag-overlay hidden">
+    <p>Dateien oder Verzeichnis hier ablegen</p>
+</div>
+<div id="context-menu" class="context-menu hidden">
+    <ul>
+        <li data-action="download">Download</li>
+        <li data-action="rename">Rename</li>
+        <li data-action="delete">Delete</li>
+    </ul>
+</div>
+
+<script>
+    let pyodide = null;
+    let isPyodideLoading = false;
+    let commandHistory = [];
+    let historyIndex = -1;
+    let contextMenuTarget = null;
+
+    let state = {
+        files: [],
+        activeFile: null,
+        apiKey: '',
+        model: 'gemini-1.5-flash-latest',
+        highlightedChanges: []
+    };
+
+    const dom = {
+        body: document.body,
+        explorerIcon: document.getElementById('explorer-icon'),
+        settingsIcon: document.getElementById('settings-icon'),
+        explorerView: document.getElementById('explorer-view'),
+        settingsView: document.getElementById('settings-view'),
+        fileTree: document.getElementById('file-tree'),
+        tabBar: document.getElementById('tab-bar'),
+        editorView: document.getElementById('editor-view'),
+        instruction: document.getElementById('instruction'),
+        runBtn: document.getElementById('runBtn'),
+        statusBar: document.getElementById('status-bar'),
+        statusMessage: document.getElementById('statusMessage'),
+        apiKeyInput: document.getElementById('apiKey'),
+        modelInput: document.getElementById('model-input'),
+        importDirBtn: document.getElementById('importDirBtn'),
+        importGithubBtn: document.getElementById('importGithubBtn'),
+        githubUrlInput: document.getElementById('githubUrl'),
+        startNewBtn: document.getElementById('startNewBtn'),
+        downloadZipBtn: document.getElementById('downloadZipBtn'),
+        dragOverlay: document.getElementById('drag-overlay'),
+        sidebar: document.getElementById('sidebar'),
+        panelBottom: document.getElementById('panel-bottom'),
+        resizerV: document.getElementById('resizer-v'),
+        resizerH: document.getElementById('resizer-h'),
+        panelTabBar: document.querySelector('.panel-tab-bar'),
+        instructionView: document.getElementById('instruction-view'),
+        terminalView: document.getElementById('terminal-view'),
+        terminalOutput: document.getElementById('terminal-output'),
+        runPyBtn: document.getElementById('runPyBtn'),
+        terminalInput: document.getElementById('terminal-input'),
+        contextMenu: document.getElementById('context-menu'),
+    };
+    
+    function escapeHTML(str) {
+        if (typeof str !== 'string') return '';
+        return str.replace(/&/g, '&amp;').replace(/</g, '&lt;').replace(/>/g, '&gt;');
+    }
+    
+    function appendToTerminal(text, type = 'stdout') {
+        const line = document.createElement('div');
+        line.textContent = text;
+        if (type === 'stderr') {
+            line.classList.add('error');
+        }
+        dom.terminalOutput.appendChild(line);
+        dom.terminalOutput.scrollTop = dom.terminalOutput.scrollHeight;
+    }
+
+    async function initPyodide() {
+        if (pyodide || isPyodideLoading) return;
+        isPyodideLoading = true;
+        setStatus('Lade Python-Laufzeitumgebung...');
+        dom.runPyBtn.disabled = true;
+        dom.terminalInput.disabled = true;
+        try {
+            pyodide = await loadPyodide();
+            pyodide.setStdout({ batched: (str) => appendToTerminal(str, 'stdout') });
+            pyodide.setStderr({ batched: (str) => appendToTerminal(str, 'stderr') });
+            setStatus('Python-Laufzeitumgebung bereit.');
+            appendToTerminal('Python 3.12 (Pyodide) initialisiert. Geben Sie Befehle ein und drücken Sie Enter.');
+        } catch (error) {
+            setStatus('Fehler beim Laden von Python.', true);
+            appendToTerminal(`Pyodide-Fehler: ${error.message}`, 'stderr');
+        } finally {
+            isPyodideLoading = false;
+            dom.runPyBtn.disabled = false;
+            dom.terminalInput.disabled = false;
+            dom.terminalInput.focus();
+        }
+    }
+
+    function render() {
+        dom.fileTree.innerHTML = '';
+        if (state.files.length > 0) {
+            state.files.sort((a,b) => a.path.localeCompare(b.path)).forEach(file => {
+                const li = document.createElement('li');
+                li.textContent = file.path;
+                li.dataset.path = file.path;
+                if (state.activeFile && file.path === state.activeFile.path) {
+                    li.classList.add('active');
+                }
+                dom.fileTree.appendChild(li);
+            });
+        } else {
+             dom.fileTree.innerHTML = '<li>Keine Dateien im Projekt.</li>';
+        }
+        
+        dom.tabBar.innerHTML = '';
+        if (state.activeFile) {
+            const tab = document.createElement('div');
+            tab.className = 'tab active';
+            tab.textContent = state.activeFile.path.split('/').pop();
+            tab.dataset.path = state.activeFile.path;
+            dom.tabBar.appendChild(tab);
+        }
+
+        if (state.activeFile) {
+            dom.editorView.style.display = 'block';
+            const placeholder = document.querySelector('.editor-placeholder');
+            if(placeholder) placeholder.remove();
+            const highlightInfo = state.highlightedChanges.find(h => h.path === state.activeFile.path);
+            if (highlightInfo) {
+                const lines = state.activeFile.content.split('\n');
+                const highlightEndLine = highlightInfo.startLine + highlightInfo.lineCount - 1;
+                const htmlContent = lines.map((line, index) => {
+                    const currentLine = index + 1;
+                    const escapedLine = escapeHTML(line);
+                    if (currentLine >= highlightInfo.startLine && currentLine <= highlightEndLine) {
+                        return `<span class="highlight-change">${escapedLine || ' '}</span>`;
+                    }
+                    return escapedLine;
+                }).join('\n');
+                dom.editorView.innerHTML = htmlContent;
+            } else {
+                dom.editorView.innerHTML = escapeHTML(state.activeFile.content);
+            }
+        } else {
+             dom.editorView.innerHTML = '';
+             dom.editorView.style.display = 'none';
+             if (!document.querySelector('.editor-placeholder')) {
+                const mainContent = document.querySelector('.main-content > .editor-view').parentElement;
+                mainContent.insertAdjacentHTML('afterbegin', `<div class="editor-placeholder">
+                    <h2 style="margin-top: auto;">Willkommen beim AI Code Assistant</h2>
+                    <p style="margin-top: 20px; max-width: 400px; margin-bottom: auto;">
+                        Keine Datei geöffnet. Wählen Sie eine aus dem Explorer oder starten Sie ein neues Projekt.
+                    </p>
+                </div>`);
+             }
+        }
+        
+        if (state.highlightedChanges.length > 0) {
+             state.highlightedChanges = [];
+        }
+    }
+    
+    function setStatus(message, isError = false) {
+        dom.statusMessage.textContent = message;
+        dom.statusBar.textContent = message;
+        dom.statusMessage.style.color = isError ? '#ff5555' : 'var(--text-secondary)';
+    }
+    
+    function setupEventListeners() {
+        dom.explorerIcon.addEventListener('click', () => switchView('explorer'));
+        dom.settingsIcon.addEventListener('click', () => switchView('settings'));
+        dom.startNewBtn.addEventListener('click', startNewProject);
+        dom.downloadZipBtn.addEventListener('click', handleDownloadZip);
+        dom.fileTree.addEventListener('click', e => { if (e.target.tagName === 'LI' && e.target.dataset.path) setActiveFile(e.target.dataset.path); });
+        dom.tabBar.addEventListener('click', e => { if (e.target.classList.contains('tab') && e.target.dataset.path) setActiveFile(e.target.dataset.path); });
+        dom.importDirBtn.addEventListener('click', handleDirectoryImport);
+        dom.importGithubBtn.addEventListener('click', handleGithubImport);
+        dom.body.addEventListener('dragenter', handleDragEnter);
+        dom.body.addEventListener('dragleave', handleDragLeave);
+        dom.body.addEventListener('dragover', e => e.preventDefault());
+        dom.body.addEventListener('drop', handleDrop);
+        dom.runBtn.addEventListener('click', handleRun);
+        dom.instruction.addEventListener('keydown', (e) => { if (e.key === 'Enter' && !e.shiftKey) { e.preventDefault(); handleRun(); } });
+        initResizer(dom.resizerV, dom.sidebar, 'horizontal');
+        initResizer(dom.resizerH, dom.panelBottom, 'vertical');
+        dom.panelTabBar.addEventListener('click', (e) => {
+            if (e.target.classList.contains('panel-tab')) {
+                const viewName = e.target.dataset.view;
+                dom.panelTabBar.querySelector('.active').classList.remove('active');
+                e.target.classList.add('active');
+                document.querySelector('.panel-view.active').classList.remove('active');
+                document.getElementById(viewName).classList.add('active');
+            }
+        });
+        dom.runPyBtn.addEventListener('click', runPythonFile);
+        dom.terminalInput.addEventListener('keydown', handleTerminalKeydown);
+        dom.fileTree.addEventListener('contextmenu', showContextMenu);
+        window.addEventListener('click', hideContextMenu);
+        dom.contextMenu.addEventListener('click', handleContextMenuAction);
+    }
+
+    async function handleTerminalKeydown(e) {
+        if (e.key === 'Enter') {
+            e.preventDefault();
+            const command = dom.terminalInput.value.trim();
+            if (command) {
+                appendToTerminal(`>>> ${command}`);
+                dom.terminalInput.value = '';
+                commandHistory.push(command);
+                historyIndex = commandHistory.length;
+                await evaluatePython(command);
+            }
+        } else if (e.key === 'ArrowUp') {
+            e.preventDefault();
+            if (historyIndex > 0) {
+                historyIndex--;
+                dom.terminalInput.value = commandHistory[historyIndex];
+            }
+        } else if (e.key === 'ArrowDown') {
+            e.preventDefault();
+            if (historyIndex < commandHistory.length - 1) {
+                historyIndex++;
+                dom.terminalInput.value = commandHistory[historyIndex];
+            } else {
+                historyIndex = commandHistory.length;
+                dom.terminalInput.value = '';
+            }
+        }
+    }
+
+    async function evaluatePython(code) {
+        if (!pyodide) await initPyodide();
+        if (!pyodide) return;
+        dom.terminalInput.disabled = true;
+        try {
+            let result = await pyodide.runPythonAsync(code);
+            if (result !== undefined) {
+                appendToTerminal(result.toString());
+            }
+        } catch (error) {
+            // error is already printed by setStderr, no need to print again
+        } finally {
+            dom.terminalInput.disabled = false;
+            dom.terminalInput.focus();
+        }
+    }
+
+    async function runPythonFile() {
+        if (!pyodide) await initPyodide();
+        if (!pyodide) return;
+        if (!state.activeFile || !state.activeFile.path.endsWith('.py')) {
+            appendToTerminal("Fehler: Bitte eine Python-Datei (.py) im Editor öffnen, um sie auszuführen.", "stderr");
+            return;
+        }
+        dom.runPyBtn.disabled = true;
+        dom.terminalInput.disabled = true;
+        dom.terminalOutput.innerHTML = '';
+        appendToTerminal(`> Führe Datei aus: ${state.activeFile.path}...`);
+        const code = state.activeFile.content;
+        try {
+            await pyodide.runPythonAsync(code);
+            appendToTerminal(`> Ausführung von ${state.activeFile.path} erfolgreich beendet.`);
+        } catch (error) {
+            const moduleMatch = error.message.match(/ModuleNotFoundError: No module named '(\w+)'/);
+            if (moduleMatch && moduleMatch[1]) {
+                const moduleName = moduleMatch[1];
+                appendToTerminal(error.message, "stderr");
+                promptToInstall(moduleName, code);
+                return; 
+            }
+        }
+        dom.runPyBtn.disabled = false;
+        dom.terminalInput.disabled = false;
+        dom.terminalInput.focus();
+        setStatus('Bereit.');
+    }
+
+    function promptToInstall(moduleName, codeToRerun) {
+        const promptDiv = document.createElement('div');
+        promptDiv.className = 'terminal-prompt';
+        const question = document.createElement('span');
+        question.textContent = `Das Modul '${moduleName}' wurde nicht gefunden. Möchten Sie es installieren?`;
+        const btnYes = document.createElement('button');
+        btnYes.textContent = 'Ja';
+        const btnNo = document.createElement('button');
+        btnNo.textContent = 'Nein';
+        btnYes.onclick = () => {
+            promptDiv.remove();
+            installAndRerun(moduleName, codeToRerun);
+        };
+        btnNo.onclick = () => {
+            promptDiv.remove();
+            appendToTerminal('> Installation abgebrochen.');
+            dom.runPyBtn.disabled = false;
+            dom.terminalInput.disabled = false;
+        };
+        promptDiv.appendChild(question);
+        promptDiv.appendChild(btnYes);
+        promptDiv.appendChild(btnNo);
+        dom.terminalOutput.appendChild(promptDiv);
+    }
+
+    async function installAndRerun(moduleName, codeToRerun) {
+        appendToTerminal(`> Installiere '${moduleName}' mit micropip...`);
+        setStatus(`Installiere ${moduleName}...`);
+        try {
+            await pyodide.loadPackage('micropip');
+            const micropip = pyodide.pyimport('micropip');
+            await micropip.install(moduleName);
+            appendToTerminal(`> Installation von '${moduleName}' erfolgreich.`);
+            setStatus('Installation erfolgreich. Führe Code erneut aus...');
+            appendToTerminal(`> Führe ${state.activeFile.path} erneut aus...`);
+            await pyodide.runPythonAsync(codeToRerun);
+            appendToTerminal(`> Ausführung von ${state.activeFile.path} erfolgreich beendet.`);
+        } catch (error) {
+            appendToTerminal(`Fehler bei der Installation oder erneuten Ausführung: ${error.message}`, "stderr");
+        } finally {
+            dom.runPyBtn.disabled = false;
+            dom.terminalInput.disabled = false;
+            setStatus('Bereit.');
+            dom.terminalInput.focus();
+        }
+    }
+
+    function switchView(view) {
+        dom.explorerView.classList.toggle('active', view === 'explorer');
+        dom.explorerIcon.classList.toggle('active', view === 'explorer');
+        dom.settingsView.classList.toggle('active', view === 'settings');
+        dom.settingsIcon.classList.toggle('active', view === 'settings');
+    }
+    
+    function startNewProject() {
+        if (confirm("Möchten Sie wirklich alle aktuellen Dateien löschen und ein neues Projekt starten?")) {
+            state.files = [];
+            state.activeFile = null;
+            render();
+            setStatus('Bereit für ein neues Projekt.');
+        }
+    }
+
+    function setActiveFile(path) {
+        state.activeFile = state.files.find(f => f.path === path) || null;
+        render();
+    }
+
+    function loadFiles(files, projectName) {
+        state.files = files;
+        if (files.length > 0) { setActiveFile(files[0].path); } else { state.activeFile = null; }
+        switchView('explorer');
+        render();
+    }
+    
+    async function handleDirectoryImport() {
+         if (!window.showDirectoryPicker) { alert("Diese Funktion wird nur in sicheren Kontexten (HTTPS oder localhost) unterstützt."); return; }
+        try {
+            const dirHandle = await window.showDirectoryPicker();
+            setStatus('Lese Verzeichnis...');
+            const files = await readDirectory(dirHandle);
+            loadFiles(files, dirHandle.name);
+            setStatus(`Verzeichnis '${dirHandle.name}' erfolgreich geladen.`);
+        } catch (e) {
+            if (e.name !== 'AbortError') { setStatus('Fehler bei Verzeichnis-Auswahl.', true); } else { setStatus('Verzeichnis-Auswahl abgebrochen.'); }
+        }
+    }
+
+    async function readDirectory(dirHandle, path = '') {
+        let files = [];
+        for await (const entry of dirHandle.values()) {
+            const newPath = path ? `${path}/${entry.name}` : entry.name;
+            if (entry.kind === 'file') {
+                try {
+                    const file = await entry.getFile();
+                    const content = await file.text();
+                    files.push({ path: newPath, content });
+                } catch (e) { console.warn(`Konnte Datei nicht lesen: ${newPath}`, e); }
+            } else if (entry.kind === 'directory') {
+                files = files.concat(await readDirectory(entry, newPath));
+            }
+        }
+        return files;
+    }
+    
+    let dragCounter = 0;
+    function handleDragEnter(e) { e.preventDefault(); dragCounter++; dom.dragOverlay.classList.remove('hidden'); }
+    function handleDragLeave(e) { e.preventDefault(); dragCounter--; if (dragCounter === 0) { dom.dragOverlay.classList.add('hidden'); } }
+    
+    async function handleDrop(e) {
+        e.preventDefault();
+        dragCounter = 0;
+        dom.dragOverlay.classList.add('hidden');
+        if (!e.dataTransfer || (!e.dataTransfer.items && !e.dataTransfer.files)) return;
+        if (e.dataTransfer.items && e.dataTransfer.items[0] && typeof e.dataTransfer.items[0].getAsFileSystemHandle === 'function') {
+            const handle = await e.dataTransfer.items[0].getAsFileSystemHandle();
+            if (!handle) return;
+            setStatus('Verarbeite Drop-Ereignis...');
+            if (handle.kind === 'file') {
+                const file = await handle.getFile();
+                const content = await file.text();
+                loadFiles([{ path: file.name, content }], file.name);
+                setStatus(`Datei '${file.name}' geladen.`);
+            } else if (handle.kind === 'directory') {
+                const files = await readDirectory(handle);
+                loadFiles(files, handle.name);
+                setStatus(`Verzeichnis '${handle.name}' geladen.`);
+            }
+        } 
+        else if (e.dataTransfer.files && e.dataTransfer.files.length > 0) {
+            setStatus('Verarbeite Drop-Ereignis...');
+            const filesToLoad = [];
+            const promises = Array.from(e.dataTransfer.files).map(file => file.text().then(content => filesToLoad.push({ path: file.name, content })).catch(err => console.error(`Konnte Datei nicht lesen: ${file.name}`, err)));
+            await Promise.all(promises);
+            if (filesToLoad.length > 0) { loadFiles(filesToLoad, 'dropped-project'); setStatus(`${filesToLoad.length} Datei(en) erfolgreich geladen.`); } 
+            else { setStatus("Keine lesbaren Dateien abgelegt.", true); }
+        }
+    }
+    
+    async function fetchGithubDirectory(owner, repo, path) {
+        const url = `https://api.github.com/repos/${owner}/${repo}/contents/${path}`;
+        const response = await fetch(url);
+        if (!response.ok) throw new Error(`GitHub API Fehler: ${response.status}`);
+        const items = await response.json();
+        let files = [];
+        const promises = items.map(async (item) => {
+            if (item.type === 'file') {
+                try {
+                    const contentResponse = await fetch(item.download_url);
+                    if (contentResponse.ok) {
+                        const content = await contentResponse.text();
+                        files.push({ path: item.path, content });
+                    }
+                } catch (e) { console.warn(`Konnte Datei nicht laden: ${item.path}`, e); }
+            } else if (item.type === 'dir') {
+                const subFiles = await fetchGithubDirectory(owner, repo, item.path);
+                files = files.concat(subFiles);
+            }
+        });
+        await Promise.all(promises);
+        return files;
+    }
+
+    async function handleGithubImport() {
+        let path = dom.githubUrlInput.value.trim().replace(/^(https?:\/\/)?(www\.)?github\.com\//, '');
+        path = path.replace(/\/tree\/[^\/]+\//, '/'); 
+        const parts = path.split('/').filter(p => p);
+        if (parts.length < 2) { setStatus('Ungültiges GitHub Repo-Format. Erwartet: owner/repo', true); return; }
+        const owner = parts[0];
+        const repo = parts[1];
+        const subdir = parts.length > 2 ? parts.slice(2).join('/') : '';
+        const repoNameForStatus = subdir ? `${repo}/${subdir}` : repo;
+        setStatus(`Lade '${owner}/${repoNameForStatus}' von GitHub API...`);
+        try {
+            let allFiles = await fetchGithubDirectory(owner, repo, subdir);
+            if (subdir) {
+                allFiles = allFiles.map(file => ({ ...file, path: file.path.substring(subdir.length + 1) }));
+            }
+            if (allFiles.length === 0) { throw new Error(`Keine Dateien im Pfad '${subdir}' gefunden oder das Verzeichnis ist leer.`); }
+            loadFiles(allFiles, repo);
+            setStatus(`Repo '${repoNameForStatus}' erfolgreich geladen.`);
+        } catch (e) { setStatus(`GitHub Import fehlgeschlagen: ${e.message}`, true); console.error(e); }
+    }
+
+    async function handleRun() {
+        state.apiKey = dom.apiKeyInput.value.trim();
+        state.model = dom.modelInput.value.trim();
+        const instruction = dom.instruction.value.trim();
+        if (!state.apiKey || !instruction || !state.model) { alert('API Key, Modell und eine Anweisung sind erforderlich.'); return; }
+        dom.runBtn.disabled = true;
+        setStatus('Sende Anfrage an die KI...');
+        const currentContext = state.files.map(f => `--- FILE: ${f.path} ---\n${f.content}\n--- END OF FILE ---\n\n`).join('');
+        const prompt = `**ROLE:** You are an expert AI programmer acting as a surgical code modifier inside an editor. **TASK:** Your task is to either modify the existing code or generate a new project structure based on the user's instruction. You must be precise and minimalist. **PROTOCOL:** 1. Analyze the provided context and the instruction. 2. If the user asks to **GENERATE** code (e.g., from scratch), your response MUST be a JSON object with a "files" key, containing an array of {path: string, content: string}. 3. If the user asks to **MODIFY** code, your response MUST be a JSON object with a "modifications" key, containing an array of {path: string, startLine: number, endLine: number, newCode: string}. Do NOT replace the entire file if only a few lines change. Be a surgeon, not a butcher. **YOUR ENTIRE RESPONSE MUST BE A SINGLE, VALID JSON OBJECT ENCLOSED IN \`\`\`json ... \`\`\`.** **CONTEXT:**\n${currentContext || "No context provided. The user wants to generate code from scratch."}\n---\n**INSTRUCTION:**\n${instruction}\n---\n**YOUR JSON RESPONSE:**`;
+        try {
+             const url = `https://generativelanguage.googleapis.com/v1beta/models/${state.model}:generateContent?key=${state.apiKey}`;
+             const options = { method: 'POST', headers: {'Content-Type': 'application/json'}, body: JSON.stringify({ contents: [{ parts: [{ text: prompt }] }] }) };
+             const response = await fetch(url, options);
+             if (!response.ok) { const errorText = await response.text(); throw new Error(`API Fehler: ${response.status} - ${errorText}`); }
+             const data = await response.json();
+             if (!data.candidates || !data.candidates[0].content.parts[0].text) { throw new Error("Unerwartete API-Antwortstruktur."); }
+             const rawText = data.candidates[0].content.parts[0].text;
+             const jsonMatch = rawText.match(/```json\s*([\s\S]*?)\s*```/);
+             if (!jsonMatch) throw new Error("KI hat kein gültiges JSON-Format geliefert. Antwort war: " + rawText.substring(0, 200));
+             const result = JSON.parse(jsonMatch[1]);
+             processAIResult(result);
+             setStatus('Operation erfolgreich abgeschlossen.');
+        } catch (e) { console.error(e); setStatus(`Fehler: ${e.message}`, true); } finally { dom.runBtn.disabled = false; }
+    }
+    
+    function processAIResult(result) {
+        state.highlightedChanges = [];
+        if (result.files) {
+            loadFiles(result.files, 'new-project');
+        } else if (result.modifications) {
+            result.modifications.forEach(mod => {
+                const fileToModify = state.files.find(f => f.path === mod.path);
+                const newCodeLines = mod.newCode ? mod.newCode.split('\n') : [''];
+                if (fileToModify) {
+                    const lines = fileToModify.content.split('\n');
+                    const start = Math.max(1, mod.startLine);
+                    const end = Math.max(start, mod.endLine);
+                    lines.splice(start - 1, (end - start + 1), ...newCodeLines);
+                    fileToModify.content = lines.join('\n');
+                    state.highlightedChanges.push({ path: mod.path, startLine: start, lineCount: newCodeLines.length });
+                } else {
+                    state.files.push({path: mod.path, content: mod.newCode || ''});
+                    state.highlightedChanges.push({ path: mod.path, startLine: 1, lineCount: newCodeLines.length });
+                }
+            });
+            const currentActivePath = state.activeFile ? state.activeFile.path : null;
+            render();
+            if (currentActivePath && state.files.some(f => f.path === currentActivePath)) {
+                setActiveFile(currentActivePath);
+            } else if (result.modifications.length > 0) {
+                const firstModifiedPath = result.modifications[0].path;
+                if(firstModifiedPath && state.files.some(f => f.path === firstModifiedPath)) { setActiveFile(firstModifiedPath); }
+            }
+        }
+    }
+
+    async function handleDownloadZip() {
+        if (state.files.length === 0) { alert("Keine Dateien im Projekt zum Herunterladen."); return; }
+        setStatus("Erstelle ZIP-Datei...");
+        const zip = new JSZip();
+        state.files.forEach(file => zip.file(file.path, file.content));
+        try {
+            const content = await zip.generateAsync({type:"blob"});
+            const a = document.createElement('a');
+            a.href = URL.createObjectURL(content);
+            a.download = "boss-coder-project.zip";
+            document.body.appendChild(a); a.click(); document.body.removeChild(a);
+            URL.revokeObjectURL(a.href);
+            setStatus("ZIP-Download gestartet.");
+        } catch (e) { setStatus("Fehler beim Erstellen der ZIP-Datei.", true); console.error(e); }
+    }
+    
+    function initResizer(resizer, elementToResize, direction) {
+        let startPos, startSize;
+        function onMouseMove(e) {
+            if (direction === 'horizontal') { elementToResize.style.width = `${startSize + (e.clientX - startPos)}px`; } 
+            else { elementToResize.style.height = `${startSize - (e.clientY - startPos)}px`; }
+        }
+        function onMouseUp() {
+            window.removeEventListener('mousemove', onMouseMove);
+            window.removeEventListener('mouseup', onMouseUp);
+            document.body.style.cursor = 'default';
+            document.body.style.userSelect = 'auto';
+        }
+        resizer.addEventListener('mousedown', (e) => {
+            e.preventDefault();
+            if (direction === 'horizontal') { startPos = e.clientX; startSize = elementToResize.offsetWidth; document.body.style.cursor = 'col-resize'; } 
+            else { startPos = e.clientY; startSize = elementToResize.offsetHeight; document.body.style.cursor = 'row-resize'; }
+            document.body.style.userSelect = 'none';
+            window.addEventListener('mousemove', onMouseMove);
+            window.addEventListener('mouseup', onMouseUp);
+        });
+    }
+
+    function showContextMenu(e) {
+        const targetLi = e.target.closest('li[data-path]');
+        if (targetLi) {
+            e.preventDefault();
+            contextMenuTarget = targetLi.dataset.path;
+            dom.contextMenu.style.top = `${e.clientY}px`;
+            dom.contextMenu.style.left = `${e.clientX}px`;
+            dom.contextMenu.classList.remove('hidden');
+        }
+    }
+
+    function hideContextMenu(e) {
+        if (!dom.contextMenu.contains(e.target)) {
+            dom.contextMenu.classList.add('hidden');
+            contextMenuTarget = null;
+        }
+    }
+
+    function handleContextMenuAction(e) {
+        const action = e.target.dataset.action;
+        if (!action || !contextMenuTarget) return;
+
+        switch(action) {
+            case 'download':
+                downloadFile(contextMenuTarget);
+                break;
+            case 'rename':
+                renameFile(contextMenuTarget);
+                break;
+            case 'delete':
+                deleteFile(contextMenuTarget);
+                break;
+        }
+        dom.contextMenu.classList.add('hidden');
+    }
+
+    function downloadFile(path) {
+        const file = state.files.find(f => f.path === path);
+        if (!file) return;
+        try {
+            const blob = new Blob([file.content], { type: 'text/plain;charset=utf-8' });
+            const a = document.createElement('a');
+            a.href = URL.createObjectURL(blob);
+            a.download = file.path.split('/').pop();
+            document.body.appendChild(a);
+            a.click();
+            document.body.removeChild(a);
+            URL.revokeObjectURL(a.href);
+            setStatus(`Lade ${a.download} herunter...`);
+        } catch (e) {
+            setStatus(`Fehler beim Erstellen des Downloads für ${path}`, true);
+        }
+    }
+
+    function renameFile(path) {
+        const oldPath = path;
+        const fileToRename = state.files.find(f => f.path === oldPath);
+        if (!fileToRename) return;
+        const oldFilename = oldPath.split('/').pop();
+        const pathPrefix = oldPath.substring(0, oldPath.lastIndexOf('/') + 1);
+        const newFilename = prompt("Neuen Dateinamen eingeben:", oldFilename);
+        if (!newFilename || newFilename === oldFilename) return;
+        if (newFilename.includes('/')) { alert("Dateiname darf keine Schrägstriche enthalten."); return; }
+        const newPath = pathPrefix + newFilename;
+        if (state.files.some(f => f.path === newPath)) { alert(`Datei mit Namen "${newPath}" existiert bereits.`); return; }
+        fileToRename.path = newPath;
+        if (state.activeFile && state.activeFile.path === oldPath) {
+            state.activeFile.path = newPath;
+        }
+        setStatus(`Datei umbenannt in ${newPath}`);
+        render();
+    }
+
+    function deleteFile(path) {
+        const filename = path.split('/').pop();
+        if (confirm(`Sind Sie sicher, dass Sie "${filename}" löschen möchten?`)) {
+            const fileIndex = state.files.findIndex(f => f.path === path);
+            if (fileIndex > -1) {
+                state.files.splice(fileIndex, 1);
+                if (state.activeFile && state.activeFile.path === path) {
+                    state.activeFile = null;
+                }
+                setStatus(`Datei gelöscht: ${path}`);
+                render();
+            }
+        }
+    }
+
+    document.addEventListener('DOMContentLoaded', () => {
+        setupEventListeners();
+        switchView('explorer');
+        render();
+        const savedApiKey = localStorage.getItem('geminiApiKey');
+        if (savedApiKey) { dom.apiKeyInput.value = savedApiKey; state.apiKey = savedApiKey; }
+        dom.apiKeyInput.addEventListener('change', () => { localStorage.setItem('geminiApiKey', dom.apiKeyInput.value); });
+        initPyodide();
+    });
+</script>
+</body>
+</html>
