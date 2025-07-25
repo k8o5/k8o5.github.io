@@ -605,6 +605,7 @@
             <label for="musicStudio_promptInput">Describe music or theme:</label>
             <textarea id="musicStudio_promptInput" rows="3" placeholder="e.g., 'upbeat 8-bit space theme loop' (JS code generation works best with Gemini/Groq/DeepSeek)"></textarea>
             <button id="musicStudio_generateButton" disabled>Generate Music Code</button>
+            <button id="musicStudio_modifyButton" style="margin-left: 5px;" disabled>Modify Music</button> <!-- ADDED THIS BUTTON -->
             <div id="musicStudio_loadingIndicator" style="display: none; margin-top: 5px;">Generating music code...</div>
             <label for="musicStudio_generatedCode" style="margin-top:10px;">Generated JavaScript (Web Audio API):</label>
             <textarea id="musicStudio_generatedCode" rows="8" readonly></textarea>
@@ -3376,7 +3377,7 @@ if(musicStudio_generateButton) musicStudio_generateButton.addEventListener('clic
     const fullPrompt = baseInstruction.replace("{USER_PROMPT}", userPrompt);
 
     try {
-        let text = await callCurrentAiProviderForText(fullPrompt, 8000, 0.6, musicStudioStatusUpdater);
+        let text = await callCurrentAiProviderForText(fullPrompt, 16000, 0.6, musicStudioStatusUpdater);
         if (text && typeof text === 'string') {
             if (text.startsWith("```javascript")) text = text.substring(13).trim();
             else if (text.startsWith("```")) text = text.substring(3).trim();
@@ -3405,21 +3406,47 @@ if(musicStudio_generateButton) musicStudio_generateButton.addEventListener('clic
     finally { enableAppButtons(); }
 });
 
+// REPLACE IT WITH THIS
 function stopAllMusicStudioSounds() {
-    if (musicStudio_currentAudioContext && musicStudio_currentAudioContext.state !== 'closed') { musicStudio_currentAudioContext.close().catch(e => console.error("Error closing previous AudioContext:", e)); }
-    musicStudio_currentAudioContext = null; musicStudio_activeSources.forEach(source => { try { if(source && typeof source.stop === 'function') source.stop(); if(source && typeof source.disconnect === 'function') source.disconnect(); } catch(e){ console.warn("Error stopping/disconnecting audio source:", e); } });
-    musicStudio_activeSources = []; if(musicStudio_stopButton) musicStudio_stopButton.disabled = true; if(musicStudio_playButton && musicStudio_generatedCode.value) musicStudio_playButton.disabled = false;
+    if (musicStudio_currentAudioContext && musicStudio_currentAudioContext.state !== 'closed') {
+        musicStudio_currentAudioContext.close().catch(e => console.error("Error closing previous AudioContext:", e));
+    }
+    musicStudio_currentAudioContext = null;
+    musicStudio_activeSources.forEach(source => {
+        try {
+            if(source && typeof source.stop === 'function') source.stop();
+            if(source && typeof source.disconnect === 'function') source.disconnect();
+        } catch(e){ console.warn("Error stopping/disconnecting audio source:", e); }
+    });
+    musicStudio_activeSources = [];
+    if(musicStudio_stopButton) musicStudio_stopButton.disabled = true;
+    // Re-enable play button only if there is code to be played
+    if(musicStudio_playButton && musicStudio_generatedCode.value.trim()) {
+        musicStudio_playButton.disabled = false;
+    }
 }
+// REPLACE IT WITH THIS
 if(musicStudio_playButton) musicStudio_playButton.addEventListener('click', () => {
     const code = musicStudio_generatedCode.value;
     if (code) {
-        stopAllMusicStudioSounds();
+        stopAllMusicStudioSounds(); // Stop any previous sounds first
         try {
-            musicStudio_currentAudioContext = new (window.AudioContext || window.webkitAudioContext)(); musicStudio_activeSources = [];
-            const soundFunction = new Function('audioContext', 'activeSources', code); soundFunction(musicStudio_currentAudioContext, musicStudio_activeSources);
+            // IMPORTANT: Create the AudioContext on user interaction (the click)
+            musicStudio_currentAudioContext = new (window.AudioContext || window.webkitAudioContext)();
+            musicStudio_activeSources = [];
+            
+            const soundFunction = new Function('audioContext', 'activeSources', code);
+            soundFunction(musicStudio_currentAudioContext, musicStudio_activeSources);
+            
             logK8osActivity("Music Studio", `Played music: ${musicStudio_promptInput.value.trim().substring(0,50)}...`);
-            musicStudioStatusUpdater("Playing..."); musicStudio_stopButton.disabled = musicStudio_activeSources.length === 0; musicStudio_playButton.disabled = true;
-        } catch (e) { console.error("Error playing music:", e); musicStudioStatusUpdater("Playback Error: " + (e.message || String(e)) ); stopAllMusicStudioSounds(); }
+            musicStudioStatusUpdater("Playing...");
+            musicStudio_stopButton.disabled = false; // Always enable stop when play is successful
+            musicStudio_playButton.disabled = true;
+        } catch (e) {
+            console.error("Error playing music:", e);
+            musicStudioStatusUpdater("Playback Error: " + (e.message || String(e)) );
+            stopAllMusicStudioSounds(); // Clean up on error
+        }
     }
 });
 if(musicStudio_stopButton) musicStudio_stopButton.addEventListener('click', stopAllMusicStudioSounds);
