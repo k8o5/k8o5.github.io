@@ -506,6 +506,7 @@
             <select id="apiProviderSelect" style="margin-bottom: 10px;">
                 <option value="gemini">Google Gemini</option>
                 <option value="groq">Groq</option>
+                <option value="openrouter">OpenRouter</option>
                 <option value="deepseek">DeepSeek</option>
                 <option value="huggingface">Hugging Face</option>
                 <option value="transformersjs">Transformers.js (Local LLM)</option>
@@ -518,6 +519,7 @@
             <p id="apiKeyLinksContainer" style="margin-top:10px; font-size: 11px;">
                 <a href="https://aistudio.google.com/app/apikey" target="_blank" rel="noopener noreferrer" class="get-api-key-link" id="geminiApiKeyLink">Get a Gemini API Key</a>
                 <a href="https://console.groq.com/keys" target="_blank" rel="noopener noreferrer" class="get-api-key-link" id="groqApiKeyLink" style="display:none;">Get a Groq API Key</a>
+                <a href="https://openrouter.ai/keys" target="_blank" rel="noopener noreferrer" class="get-api-key-link" id="openrouterApiKeyLink" style="display:none;">Get an OpenRouter API Key</a>
                 <a href="https://platform.deepseek.com/api_keys" target="_blank" rel="noopener noreferrer" class="get-api-key-link" id="deepseekApiKeyLink" style="display:none;">Get a DeepSeek API Key</a>
                 <a href="https://huggingface.co/settings/tokens" target="_blank" rel="noopener noreferrer" class="get-api-key-link" id="hfApiKeyLink" style="display:none;">Get a Hugging Face Token</a>
                 <a href="#" class="get-api-key-link" id="customSetupLink" style="display:none;">Setup Custom Endpoint Guide</a>
@@ -575,7 +577,7 @@
             <label for="gameGen_prompt">Describe game idea:</label>
             <textarea id="gameGen_prompt" rows="2" placeholder="e.g., 'breakout-style game with 3 lives' (Complex generation works best with Gemini/Groq/DeepSeek)"></textarea>
             <button id="gameGen_generateButton" disabled>Generate Game</button>
-            <button id="gameGen_downloadHtmlButton" style="display: none; margin-top: 5px;">Download HTML</button>
+            <button id="gameGen_downloadZipButton" style="display: none; margin-top: 5px;">Download Game as ZIP</button>
             <div id="gameGen_loadingMessage" style="display: none;">AI working...</div>
             <div id="gameGen_errorMessage" style="display: none;"></div>
             <div style="margin-top:10px;">
@@ -700,6 +702,18 @@
                     <button id="systemSettings_ai_saveGroqMaxTokensButton">Save Max Tokens</button>
                     <p class="provider-caveat">Lower values use less quota per request but might cut off long responses.</p>
                 </div>
+                <div id="openrouterModelSettings" style="display:none;">
+                    <h3>Global AI Model (OpenRouter)</h3>
+                    <label for="systemSettings_ai_openrouterModelInput">Enter OpenRouter Model String:</label>
+                    <input type="text" id="systemSettings_ai_openrouterModelInput" placeholder="e.g., google/gemini-flash-1.5 or mistralai/mistral-7b-instruct">
+                    <button id="systemSettings_ai_saveOpenrouterModelButton">Save OpenRouter Model</button>
+                    <p class="provider-caveat">Find model strings on the OpenRouter <a href="https://openrouter.ai/models" target="_blank" rel="noopener noreferrer">Models page</a>.</p>
+                    <h3 style="margin-top:15px;">OpenRouter API Settings</h3>
+                    <label for="systemSettings_ai_openrouterHttpRefererInput">Site URL / HTTP-Referer (Optional):</label>
+                    <input type="text" id="systemSettings_ai_openrouterHttpRefererInput" placeholder="e.g., https://your-site.com">
+                    <button id="systemSettings_ai_saveOpenrouterHttpRefererButton">Save Site URL</button>
+                    <p class="provider-caveat">Set your site URL to identify your app to OpenRouter. See their docs.</p>
+                </div>
                 <div id="deepseekModelSettings" style="display:none;">
                     <h3>Global AI Model (DeepSeek)</h3>
                     <label for="systemSettings_ai_deepseekModelInput">Enter DeepSeek Model Name:</label>
@@ -764,7 +778,7 @@
                 <p id="systemSettings_about_version">Version: 0.1.6</p>
                 <p>Created by: k8o5</p>
                 <p>© 2025 k8o5.</p>
-                <p style="font-size:11px; margin-top:15px;">Uses Google Generative AI, Groq API, DeepSeek API, Hugging Face Inference API, Transformers.js, MarkedJS, ES Module Shims, JSZip.</p>
+                <p style="font-size:11px; margin-top:15px;">Uses Google Generative AI, Groq API, OpenRouter, DeepSeek API, Hugging Face Inference API, Transformers.js, MarkedJS, ES Module Shims, JSZip.</p>
             </div>
             <div id="systemSettings_status" class="status-bar">Settings panel.</div>
         </div>
@@ -899,9 +913,10 @@
     transformersEnv.allowLocalModels = false; // Only fetch from HF Hub
     transformersEnv.useBrowserCache = true;   // Cache models in browser
 
-    const K8OS_VERSION = "0.1.14"; // Version bump for Colab/IDX provider integration
+    const K8OS_VERSION = "0.1.15"; // Version bump for OpenRouter and GameGen overhaul
     const DEFAULT_GEMINI_AI_MODEL = "gemini-1.5-flash";
     const DEFAULT_GROQ_AI_MODEL = "llama3-8b-8192";
+    const DEFAULT_OPENROUTER_AI_MODEL = "google/gemini-flash-1.5";
     const DEFAULT_DEEPSEEK_CHAT_MODEL = "deepseek-chat";
     const DEFAULT_DEEPSEEK_CODER_MODEL = "deepseek-coder";
     const DEFAULT_HF_MODEL_ID = "mistralai/Mistral-7B-Instruct-v0.1";
@@ -917,8 +932,8 @@
 
     const DEFAULT_SVG_INSTRUCTION = `Generate ONLY raw SVG code for: "{USER_PROMPT}". The SVG should be simple, iconic, and scalable. Start with "<svg" and end with "</svg>". Include 'viewBox'. No explanations, comments, or markdown.`;
     const DEFAULT_GAMEGEN_PLAN_INSTRUCTION = `Based on the user's game idea: "{USER_GAME_IDEA}", create a concise game plan. The plan must include: 1. A brief (1-2 sentences) description of the core game mechanic. 2. A list of 3 to 5 essential SVG assets. For each, provide a short, clear description for an SVG generator. If an asset should be animated (e.g., player walking, enemy pulsing), include that in its description (e.g., "player character with simple walking animation", "pulsating alien SVG"). 3. A list of 2 to 3 essential sound effects required (short, one-shot sounds). For each, provide a short, clear description for a sound generator (e.g., "laser shoot sound", "explosion sound", "item collect sound"). Format the output as a JSON object with three keys: "game_mechanic" (string), "svg_assets" (array of objects, each with "description" and "animated": boolean), and "sound_effects" (array of strings for sound descriptions). Example JSON: { "game_mechanic": "Top-down shooter...", "svg_assets": [{"description": "player ship, blue", "animated": false}, {"description": "enemy UFO, rotates slowly", "animated": true}], "sound_effects": ["shoot sound", "explosion fx"] }. Output ONLY the JSON object.`;
-    const DEFAULT_GAMEGEN_FINAL_INSTRUCTION = `Generate a COMPLETE, SINGLE-FILE, RUNNABLE HTML/JavaScript game. User's idea: "{USER_GAME_IDEA}". Game Plan: {GAME_PLAN_JSON}. SVG assets (raw SVG code array - some might be animated with SMIL): {SVG_ASSETS_ARRAY_OF_STRINGS}. Sound effect JS function bodies (JS code array, each function body takes 'audioContext' argument): {SOUND_EFFECTS_JS_ARRAY_OF_STRINGS}. IMPORTANT: For SVGs, implement an asynchronous loading mechanism. 1. Create Image objects for each SVG string. 2. Set their .src to the data URI ('data:image/svg+xml;utf8,' + encodeURIComponent(svgString)). 3. Use onload/onerror handlers for each Image. 4. Only start the main game loop (e.g., call requestAnimationFrame) AFTER all SVG images are loaded. Use a counter or Promises. 5. Store the loaded Image objects in your game entities (e.g., player.img, enemy.img) for direct use with ctx.drawImage(). Animated SVGs (with SMIL) should play automatically when rendered this way. Create JavaScript functions, one for each sound effect, using the provided JS code snippets. Name them descriptively (e.g., playShootSound, playExplosionSound). Integrate these sounds by calling their respective functions at appropriate game events (e.g., on shoot, on enemy defeat). Output ONLY the single HTML file string. Use pure JS/Canvas or CDN libraries. Include game loop, rendering, input. Self-contained. No markdown/explanations outside HTML. Make game playable, fit description/plan, using all provided SVGs (animated ones should animate) and triggering sound effects.`;
-    const DEFAULT_GAMEGEN_DEBUG_INSTRUCTION = `The HTML/JS game code (original idea: "{USER_GAME_IDEA}") produced error(s) and/or the user has provided hints: "{ERRORS_AND_HINTS}". Analyze the code, errors, and hints. Provide a corrected version of the full HTML/JS game code. Focus on fixing specified issues while preserving the game's original intent. Pay close attention to asynchronous asset loading for SVGs if errors relate to drawing. Output ONLY the corrected, complete HTML/JS code, starting with <!DOCTYPE html> or <html> and ending with </html>. No explanations or markdown. Problematic code:\n\`\`\`html\n{PROBLEM_CODE}\n\`\`\``;
+    const DEFAULT_GAMEGEN_FINAL_INSTRUCTION = `Generate a COMPLETE, SINGLE-FILE, RUNNABLE HTML/JavaScript game. User's idea: "{USER_GAME_IDEA}". Game Plan: {GAME_PLAN_JSON}. All assets will be provided in a relative './assets/' directory. You MUST load them from there. The asset filenames are: {ASSET_FILENAMES_JSON}. IMPORTANT: For SVGs, use an asynchronous loading mechanism. 1. Create Image objects for each SVG asset using its path (e.g., 'assets/player.svg'). 2. Use onload/onerror handlers. 3. Only start the game loop AFTER all images are loaded. 4. For sound effects, the assets are JavaScript files. You must fetch each JS file (e.g., fetch('assets/shoot.js')), get its text content, and then use 'new Function('audioContext', 'activeSources', THE_FETCHED_CODE)' to create the playable sound function. Manage loading these sound functions asynchronously as well. The game should not start until all assets (SVGs and sounds) are loaded. Output ONLY the single HTML file string. Use pure JS/Canvas or CDN libraries. Include game loop, rendering, input. Self-contained. No markdown/explanations outside HTML. Make game playable, fit description/plan, using all provided assets and triggering sound effects.`;
+    const DEFAULT_GAMEGEN_DEBUG_INSTRUCTION = `The HTML/JS game code (original idea: "{USER_GAME_IDEA}") produced error(s) and/or the user has provided hints: "{ERRORS_AND_HINTS}". Analyze the code, errors, and hints. Provide a corrected version of the full HTML/JS game code. Focus on fixing specified issues while preserving the game's original intent. Pay close attention to asynchronous asset loading from the './assets/' folder. Output ONLY the corrected, complete HTML/JS code, starting with <!DOCTYPE html> or <html> and ending with </html>. No explanations or markdown. Problematic code:\n\`\`\`html\n{PROBLEM_CODE}\n\`\`\``;
     const DEFAULT_MUSICSTUDIO_INSTRUCTION = `Generate JavaScript code using the Web Audio API to create music based on the description: "{USER_PROMPT}". The code should be a self-contained function body. It will be executed within a function that receives 'audioContext' and 'activeSources' (an array to push created source nodes to for later stopping) as arguments, like so: new Function('audioContext', 'activeSources', YOUR_CODE_HERE)(audioContextInstance, activeSourcesArray); Your code should use the provided 'audioContext'. It should create and start all necessary audio nodes and push main/looping source nodes to the 'activeSources' array if they are intended to be stopped later. If the description implies a loop or continuous music, structure your code to create and start the loop. If it's a one-shot piece, it should play through once. Generate ONLY the JavaScript function body. No explanations or markdown.`;
     const DEFAULT_GIFCREATOR_ANIMATED_SVG_INSTRUCTION = `Generate ONLY raw SVG code for an animated image based on: "{USER_PROMPT}". The SVG MUST include SMIL animation (<animate>, <animateTransform>, <animateMotion>, etc.) to create a looping, GIF-like effect. Ensure the animation is self-contained within the SVG. Start with "<svg" and end with "</svg>". Include 'viewBox'. No explanations, comments, or markdown outside the SVG code itself.`;
     const DEFAULT_GIFCREATOR_ANIMATE_EXISTING_SVG_INSTRUCTION = `Take the following static SVG code:\n\`\`\`svg\n{STATIC_SVG_CODE}\n\`\`\`\nNow, add SMIL animation elements to this SVG to achieve the following animation described by the user: "{ANIMATION_PROMPT}". Modify the provided SVG code directly. The output should be the complete, modified SVG code with the SMIL animations included. Ensure the animation is looping and self-contained. Start with "<svg" and end with "</svg>". No explanations, comments, or markdown outside the SVG code itself.`;
@@ -954,6 +969,7 @@ Output ONLY the JSON array. No explanations, comments, or markdown outside the J
     const apiKeyLinksContainer = document.getElementById('apiKeyLinksContainer');
     const geminiApiKeyLink = document.getElementById('geminiApiKeyLink');
     const groqApiKeyLink = document.getElementById('groqApiKeyLink');
+    const openrouterApiKeyLink = document.getElementById('openrouterApiKeyLink');
     const deepseekApiKeyLink = document.getElementById('deepseekApiKeyLink');
     const hfApiKeyLink = document.getElementById('hfApiKeyLink');
     const customSetupLink = document.getElementById('customSetupLink');
@@ -978,7 +994,7 @@ Output ONLY the JSON array. No explanations, comments, or markdown outside the J
     const gifCreator_errorDisplay = document.getElementById('gifCreator_errorDisplay');
     const gameGen_promptInput = document.getElementById('gameGen_prompt');
     const gameGen_generateButton = document.getElementById('gameGen_generateButton');
-    const gameGen_downloadHtmlButton = document.getElementById('gameGen_downloadHtmlButton');
+    const gameGen_downloadZipButton = document.getElementById('gameGen_downloadZipButton');
     const gameGen_generatedCodeTextarea = document.getElementById('gameGen_generatedCode');
     const gameGen_loadingMessage = document.getElementById('gameGen_loadingMessage');
     const gameGen_errorMessage = document.getElementById('gameGen_errorMessage');
@@ -1036,6 +1052,10 @@ Output ONLY the JSON array. No explanations, comments, or markdown outside the J
     const systemSettings_ai_saveGroqModelButton = document.getElementById('systemSettings_ai_saveGroqModelButton');
     const systemSettings_ai_groqMaxTokensInput = document.getElementById('systemSettings_ai_groqMaxTokensInput');
     const systemSettings_ai_saveGroqMaxTokensButton = document.getElementById('systemSettings_ai_saveGroqMaxTokensButton');
+    const systemSettings_ai_openrouterModelInput = document.getElementById('systemSettings_ai_openrouterModelInput');
+    const systemSettings_ai_saveOpenrouterModelButton = document.getElementById('systemSettings_ai_saveOpenrouterModelButton');
+    const systemSettings_ai_openrouterHttpRefererInput = document.getElementById('systemSettings_ai_openrouterHttpRefererInput');
+    const systemSettings_ai_saveOpenrouterHttpRefererButton = document.getElementById('systemSettings_ai_saveOpenrouterHttpRefererButton');
     const systemSettings_ai_deepseekModelInput = document.getElementById('systemSettings_ai_deepseekModelInput');
     const systemSettings_ai_saveDeepseekModelButton = document.getElementById('systemSettings_ai_saveDeepseekModelButton');
     const systemSettings_ai_deepseekMaxTokensInput = document.getElementById('systemSettings_ai_deepseekMaxTokensInput');
@@ -1064,6 +1084,7 @@ Output ONLY the JSON array. No explanations, comments, or markdown outside the J
     const systemSettings_about_version = document.getElementById('systemSettings_about_version');
     const geminiModelSettingsDiv = document.getElementById('geminiModelSettings');
     const groqModelSettingsDiv = document.getElementById('groqModelSettings');
+    const openrouterModelSettingsDiv = document.getElementById('openrouterModelSettings');
     const deepseekModelSettingsDiv = document.getElementById('deepseekModelSettings');
     const hfModelSettingsDiv = document.getElementById('hfModelSettings');
     const transformersjsModelSettingsDiv = document.getElementById('transformersjsModelSettings');
@@ -1081,6 +1102,7 @@ Output ONLY the JSON array. No explanations, comments, or markdown outside the J
 
     window.GLOBAL_GEMINI_API_KEY = null;
     window.GLOBAL_GROQ_API_KEY = null;
+    window.GLOBAL_OPENROUTER_API_KEY = null;
     window.GLOBAL_DEEPSEEK_API_KEY = null;
     window.GLOBAL_HF_TOKEN = null;
     window.GLOBAL_TRANSFORMERSJS_MODEL_ID = null;
@@ -1098,6 +1120,7 @@ Output ONLY the JSON array. No explanations, comments, or markdown outside the J
     let highestZIndex = 100;
     let VFS = { items: {} };
     let gameGen_lastHtmlCode = null;
+    let gameGen_lastGameAssetPackage = null;
     let gameGen_lastUserIdea = "";
     let musicStudio_lastJsCode = "";
     let musicStudio_currentAudioContext = null;
@@ -1584,6 +1607,8 @@ if __name__ == '__main__':
     function getCurrentGeminiModel() { return getStoredOrDefault('k8os_globalGeminiAiModel', DEFAULT_GEMINI_AI_MODEL); }
     function getCurrentGroqModel() { return getStoredOrDefault('k8os_globalGroqAiModel', DEFAULT_GROQ_AI_MODEL); }
     function getCurrentGroqMaxTokens() { return parseInt(getStoredOrDefault('k8os_globalGroqMaxTokens', DEFAULT_GROQ_MAX_TOKENS.toString()), 10); }
+    function getCurrentOpenRouterModel() { return getStoredOrDefault('k8os_globalOpenRouterAiModel', DEFAULT_OPENROUTER_AI_MODEL); }
+    function getCurrentOpenRouterHttpReferer() { return getStoredOrDefault('k8os_globalOpenRouterHttpReferer', ''); }
     function getCurrentDeepSeekModel() { return getStoredOrDefault('k8os_globalDeepSeekAiModel', DEFAULT_DEEPSEEK_CHAT_MODEL); }
     function getCurrentDeepSeekMaxTokens() { return parseInt(getStoredOrDefault('k8os_globalDeepSeekMaxTokens', DEFAULT_DEEPSEEK_MAX_TOKENS.toString()), 10); }
     function getCurrentHfModelId() { return getStoredOrDefault('k8os_globalHfModelId', DEFAULT_HF_MODEL_ID); }
@@ -1597,6 +1622,7 @@ if __name__ == '__main__':
         selectedApiProvider = getStoredOrDefault('k8os_apiProvider', 'gemini');
         window.GLOBAL_GEMINI_API_KEY = localStorage.getItem('k8os_GlobalGeminiApiKey');
         window.GLOBAL_GROQ_API_KEY = localStorage.getItem('k8os_GlobalGroqApiKey');
+        window.GLOBAL_OPENROUTER_API_KEY = localStorage.getItem('k8os_GlobalOpenRouterApiKey');
         window.GLOBAL_DEEPSEEK_API_KEY = localStorage.getItem('k8os_GlobalDeepSeekApiKey');
         window.GLOBAL_HF_TOKEN = localStorage.getItem('k8os_GlobalHfToken');
         window.GLOBAL_TRANSFORMERSJS_MODEL_ID = getCurrentTransformersJsModelId();
@@ -1613,7 +1639,7 @@ if __name__ == '__main__':
         updateApiKeyUI(); enableAppButtons(); initAllAiApps(); initSystemSettingsApp();
         loadVFS();
         if (localStorage.getItem('k8os_assistant_enabled') === 'true' &&
-            (window.GLOBAL_GEMINI_API_KEY || window.GLOBAL_GROQ_API_KEY || window.GLOBAL_DEEPSEEK_API_KEY ||
+            (window.GLOBAL_GEMINI_API_KEY || window.GLOBAL_GROQ_API_KEY || window.GLOBAL_OPENROUTER_API_KEY || window.GLOBAL_DEEPSEEK_API_KEY ||
              window.GLOBAL_HF_TOKEN || window.GLOBAL_TRANSFORMERSJS_MODEL_ID ||
              (window.GLOBAL_CUSTOM_API_KEY && getCurrentCustomEndpointUrl())
             )
@@ -1631,14 +1657,15 @@ if __name__ == '__main__':
         }
     }
     function updateApiKeyUI() {
-        if (!apiKeyInputLabel || !apiKeyInput || !apiKeyStatus || !geminiApiKeyLink || !groqApiKeyLink || !deepseekApiKeyLink || !hfApiKeyLink || !customSetupLink || !apiKeyInfoText || !apiKeyLinksContainer) return;
+        if (!apiKeyInputLabel || !apiKeyInput || !apiKeyStatus || !geminiApiKeyLink || !groqApiKeyLink || !openrouterApiKeyLink || !deepseekApiKeyLink || !hfApiKeyLink || !customSetupLink || !apiKeyInfoText || !apiKeyLinksContainer) return;
         let currentKey = null; let providerName = ''; let keyLabel = 'API Key/Token:';
         apiKeyInput.style.display = 'block'; apiKeyInputLabel.style.display = 'block';
         apiKeyInfoText.style.display = 'none'; apiKeyLinksContainer.style.display = 'block';
 
-        geminiApiKeyLink.style.display = 'none'; groqApiKeyLink.style.display = 'none'; deepseekApiKeyLink.style.display = 'none'; hfApiKeyLink.style.display = 'none'; customSetupLink.style.display = 'none';
+        geminiApiKeyLink.style.display = 'none'; groqApiKeyLink.style.display = 'none'; openrouterApiKeyLink.style.display = 'none'; deepseekApiKeyLink.style.display = 'none'; hfApiKeyLink.style.display = 'none'; customSetupLink.style.display = 'none';
         if (geminiModelSettingsDiv) geminiModelSettingsDiv.style.display = 'none';
         if (groqModelSettingsDiv) groqModelSettingsDiv.style.display = 'none';
+        if (openrouterModelSettingsDiv) openrouterModelSettingsDiv.style.display = 'none';
         if (deepseekModelSettingsDiv) deepseekModelSettingsDiv.style.display = 'none';
         if (hfModelSettingsDiv) hfModelSettingsDiv.style.display = 'none';
         if (transformersjsModelSettingsDiv) transformersjsModelSettingsDiv.style.display = 'none';
@@ -1648,6 +1675,7 @@ if __name__ == '__main__':
         switch (selectedApiProvider) {
             case 'gemini': currentKey = window.GLOBAL_GEMINI_API_KEY; providerName = 'Gemini'; keyLabel = 'Gemini API Key:'; geminiApiKeyLink.style.display = 'inline'; if (geminiModelSettingsDiv) geminiModelSettingsDiv.style.display = 'block'; break;
             case 'groq': currentKey = window.GLOBAL_GROQ_API_KEY; providerName = 'Groq'; keyLabel = 'Groq API Key:'; groqApiKeyLink.style.display = 'inline'; if (groqModelSettingsDiv) groqModelSettingsDiv.style.display = 'block'; break;
+            case 'openrouter': currentKey = window.GLOBAL_OPENROUTER_API_KEY; providerName = 'OpenRouter'; keyLabel = 'OpenRouter API Key:'; openrouterApiKeyLink.style.display = 'inline'; if (openrouterModelSettingsDiv) openrouterModelSettingsDiv.style.display = 'block'; break;
             case 'deepseek': currentKey = window.GLOBAL_DEEPSEEK_API_KEY; providerName = 'DeepSeek'; keyLabel = 'DeepSeek API Key:'; deepseekApiKeyLink.style.display = 'inline'; if (deepseekModelSettingsDiv) deepseekModelSettingsDiv.style.display = 'block'; break;
             case 'huggingface': currentKey = window.GLOBAL_HF_TOKEN; providerName = 'Hugging Face'; keyLabel = 'HF API Token:'; hfApiKeyLink.style.display = 'inline'; if (hfModelSettingsDiv) hfModelSettingsDiv.style.display = 'block'; break;
             case 'transformersjs':
@@ -1694,6 +1722,7 @@ if __name__ == '__main__':
             switch (selectedApiProvider) {
                 case 'gemini': storageKey = 'k8os_GlobalGeminiApiKey'; providerName = 'Gemini'; globalVarSetter = (k) => window.GLOBAL_GEMINI_API_KEY = k; break;
                 case 'groq': storageKey = 'k8os_GlobalGroqApiKey'; providerName = 'Groq'; globalVarSetter = (k) => window.GLOBAL_GROQ_API_KEY = k; break;
+                case 'openrouter': storageKey = 'k8os_GlobalOpenRouterApiKey'; providerName = 'OpenRouter'; globalVarSetter = (k) => window.GLOBAL_OPENROUTER_API_KEY = k; break;
                 case 'deepseek': storageKey = 'k8os_GlobalDeepSeekApiKey'; providerName = 'DeepSeek'; globalVarSetter = (k) => window.GLOBAL_DEEPSEEK_API_KEY = k; break;
                 case 'huggingface': storageKey = 'k8os_GlobalHfToken'; providerName = 'Hugging Face'; globalVarSetter = (k) => window.GLOBAL_HF_TOKEN = k; break;
                 case 'custom': storageKey = 'k8os_GlobalCustomApiKey'; providerName = 'Custom Endpoint'; globalVarSetter = (k) => window.GLOBAL_CUSTOM_API_KEY = k; break;
@@ -1925,6 +1954,7 @@ if __name__ == '__main__':
     async function callCurrentAiProviderForText(promptContent, maxTokens = 50, temperature = 0.8, statusUpdater = null) {
         const keyAvailable = (selectedApiProvider === 'gemini' && window.GLOBAL_GEMINI_API_KEY) ||
                              (selectedApiProvider === 'groq' && window.GLOBAL_GROQ_API_KEY) ||
+                             (selectedApiProvider === 'openrouter' && window.GLOBAL_OPENROUTER_API_KEY) ||
                              (selectedApiProvider === 'deepseek' && window.GLOBAL_DEEPSEEK_API_KEY) ||
                              (selectedApiProvider === 'huggingface' && window.GLOBAL_HF_TOKEN) ||
                              (selectedApiProvider === 'transformersjs' && window.GLOBAL_TRANSFORMERSJS_MODEL_ID) ||
@@ -1953,6 +1983,9 @@ if __name__ == '__main__':
         } else if (selectedApiProvider === 'groq') {
             const messages = [{ role: "user", content: promptContent }];
             return await callGroqApi(messages, temperature, maxTokens);
+        } else if (selectedApiProvider === 'openrouter') {
+            const messages = [{ role: "user", content: promptContent }];
+            return await callOpenRouterApi(messages, temperature, maxTokens);
         } else if (selectedApiProvider === 'deepseek') {
             const messages = [{ role: "user", content: promptContent }];
             return await callDeepSeekApi(messages, temperature, maxTokens);
@@ -2273,6 +2306,7 @@ if __name__ == '__main__':
     async function executeGameGenerationFromPlan(userGameIdea, gamePlan, svgAssetsArray, soundJsArray, statusUpdater = null) {
         const keyAvailable = (selectedApiProvider === 'gemini' && window.GLOBAL_GEMINI_API_KEY) ||
                              (selectedApiProvider === 'groq' && window.GLOBAL_GROQ_API_KEY) ||
+                             (selectedApiProvider === 'openrouter' && window.GLOBAL_OPENROUTER_API_KEY) ||
                              (selectedApiProvider === 'deepseek' && window.GLOBAL_DEEPSEEK_API_KEY) ||
                              (selectedApiProvider === 'huggingface' && window.GLOBAL_HF_TOKEN) ||
                              (selectedApiProvider === 'transformersjs' && window.GLOBAL_TRANSFORMERSJS_MODEL_ID) ||
@@ -2296,21 +2330,9 @@ if __name__ == '__main__':
                 if (!gameGen_main_model) { initGameGeneratorApp(); if (!gameGen_main_model) throw new Error("Gemini game model not ready.");}
                 const gameCodeResult = await gameGen_main_model.generateContent(finalGamePrompt);
                 gameHtml = gameCodeResult.response.text().trim();
-             } else if (selectedApiProvider === 'groq') {
-                 const messages = [ { role: "system", content: "You are an expert HTML/JS game developer. Generate a complete, single-file HTML game based on the user's idea, plan, and provided assets (SVG strings, JS sound function bodies). Follow the instructions precisely, especially regarding asynchronous asset loading. Output ONLY the raw HTML code." }, { role: "user", content: finalGamePrompt } ];
-                 gameHtml = await callGroqApi(messages, 0.7, 8192);
-             } else if (selectedApiProvider === 'deepseek') {
-                 const messages = [ { role: "system", content: "You are an expert HTML/JS game developer. Generate a complete, single-file HTML game based on the user's idea, plan, and provided assets (SVG strings, JS sound function bodies). Follow the instructions precisely, especially regarding asynchronous asset loading. Output ONLY the raw HTML code." }, { role: "user", content: finalGamePrompt } ];
-                 gameHtml = await callDeepSeekApi(messages, 0.7, 8192);
-             } else if (selectedApiProvider === 'huggingface') {
-                  const hfPrompt = `Generate a complete, single-file HTML/JS game based on the following. Idea: ${userGameIdea}. Plan: ${JSON.stringify(gamePlan)}. SVG Assets (array of strings): ${JSON.stringify(svgAssetsArray)}. Sound JS (array of function bodies): ${JSON.stringify(soundJsArray)}. Follow the final game generation instructions precisely, especially async asset loading. Output ONLY the raw HTML code.`;
-                  gameHtml = await callHuggingFaceApi(getCurrentHfModelId(), {inputs: hfPrompt, parameters: { max_new_tokens: 4096 } });
-             } else if (selectedApiProvider === 'transformersjs') {
-                  if(statusUpdater) statusUpdater("Generating final game code with Local LLM...");
-                  gameHtml = await callTransformersJsApi(finalGamePrompt, 4096, 0.7, statusUpdater);
-             } else if (selectedApiProvider === 'custom') {
-                  if(statusUpdater) statusUpdater(`Generating final game code with ${selectedApiProvider}...`);
-                  gameHtml = await callCurrentAiProviderForText(finalGamePrompt, 8192, 0.7, statusUpdater);
+             } else if (['groq', 'openrouter', 'deepseek', 'huggingface', 'transformersjs', 'custom'].includes(selectedApiProvider)) {
+                 if(statusUpdater) statusUpdater(`Generating final game code with ${selectedApiProvider}...`);
+                 gameHtml = await callCurrentAiProviderForText(finalGamePrompt, 8192, 0.7, statusUpdater);
              }
             if (gameHtml && gameHtml.startsWith("```html")) gameHtml = gameHtml.substring(7).trim(); else if (gameHtml && gameHtml.startsWith("```")) gameHtml = gameHtml.substring(3).trim(); if (gameHtml && gameHtml.endsWith("```")) gameHtml = gameHtml.substring(0, gameHtml.length - 3).trim();
             return gameHtml;
@@ -2328,6 +2350,7 @@ if __name__ == '__main__':
         switch (selectedApiProvider) {
             case 'gemini': keyAvailable = !!window.GLOBAL_GEMINI_API_KEY; break;
             case 'groq': keyAvailable = !!window.GLOBAL_GROQ_API_KEY; break;
+            case 'openrouter': keyAvailable = !!window.GLOBAL_OPENROUTER_API_KEY; break;
             case 'deepseek': keyAvailable = !!window.GLOBAL_DEEPSEEK_API_KEY; break;
             case 'huggingface': keyAvailable = !!window.GLOBAL_HF_TOKEN; break;
             case 'transformersjs': keyAvailable = !!window.GLOBAL_TRANSFORMERSJS_MODEL_ID; break;
@@ -2360,6 +2383,51 @@ if __name__ == '__main__':
             else { console.warn("Groq API response missing expected content:", data); throw new Error("Groq API response format unexpected."); }
         } catch (error) { console.error("Error calling Groq API:", error); throw error; }
     }
+
+    async function callOpenRouterApi(messages, temperature = 0.5, maxTokensOverride = null) {
+        if (!window.GLOBAL_OPENROUTER_API_KEY) { throw new Error("OpenRouter API Key not set."); }
+        const OPENROUTER_API_URL = "https://openrouter.ai/api/v1/chat/completions";
+        const modelToUse = getCurrentOpenRouterModel();
+        const httpReferer = getCurrentOpenRouterHttpReferer();
+        const headers = {
+            'Authorization': `Bearer ${window.GLOBAL_OPENROUTER_API_KEY}`,
+            'Content-Type': 'application/json'
+        };
+        if (httpReferer) {
+            headers['HTTP-Referer'] = httpReferer;
+        }
+        try {
+            const body = {
+                model: modelToUse,
+                messages: messages,
+                temperature: temperature,
+            };
+            if (maxTokensOverride !== null) {
+                body.max_tokens = maxTokensOverride;
+            }
+            const response = await fetch(OPENROUTER_API_URL, {
+                method: 'POST',
+                headers: headers,
+                body: JSON.stringify(body)
+            });
+            if (!response.ok) {
+                const errorData = await response.json().catch(() => ({}));
+                console.error("OpenRouter API Error Response:", errorData);
+                throw new Error(`OpenRouter API request failed: ${response.status} ${response.statusText}. Model: ${modelToUse}. ${errorData?.error?.message || ''}`);
+            }
+            const data = await response.json();
+            if (data.choices && data.choices.length > 0 && data.choices[0].message && data.choices[0].message.content) {
+                return data.choices[0].message.content;
+            } else {
+                console.warn("OpenRouter API response missing expected content:", data);
+                throw new Error("OpenRouter API response format unexpected.");
+            }
+        } catch (error) {
+            console.error("Error calling OpenRouter API:", error);
+            throw error;
+        }
+    }
+
 
     async function callDeepSeekApi(messages, temperature = 0.5, maxTokensOverride = null) {
         if (!window.GLOBAL_DEEPSEEK_API_KEY) { throw new Error("DeepSeek API Key not set."); }
@@ -2795,6 +2863,7 @@ if __name__ == '__main__':
         svg_genAI_internal_model = null; // Gemini specific
         const keyAvailable = (selectedApiProvider === 'gemini' && window.GLOBAL_GEMINI_API_KEY) ||
                              (selectedApiProvider === 'groq' && window.GLOBAL_GROQ_API_KEY) ||
+                             (selectedApiProvider === 'openrouter' && window.GLOBAL_OPENROUTER_API_KEY) ||
                              (selectedApiProvider === 'deepseek' && window.GLOBAL_DEEPSEEK_API_KEY) ||
                              (selectedApiProvider === 'huggingface' && window.GLOBAL_HF_TOKEN) ||
                              (selectedApiProvider === 'transformersjs' && window.GLOBAL_TRANSFORMERSJS_MODEL_ID) ||
@@ -2825,7 +2894,7 @@ if __name__ == '__main__':
                     if (!modelToUse) throw new Error(`Gemini model not initialized for ${isAnimated ? 'GIF' : 'SVG'} generation.`);
                 }
                 const result = await modelToUse.generateContent(fullPrompt); svgText = result.response.text();
-            } else if (['groq', 'deepseek', 'huggingface', 'transformersjs', 'custom'].includes(selectedApiProvider)) {
+            } else if (['groq', 'openrouter', 'deepseek', 'huggingface', 'transformersjs', 'custom'].includes(selectedApiProvider)) {
                  svgText = await callCurrentAiProviderForText(fullPrompt, 80000, isAnimated ? 0.4 : 0.2, statusUpdaterFn);
             } else {
                  throw new Error(`Provider ${selectedApiProvider} not supported for internal SVG generation.`);
@@ -2840,6 +2909,7 @@ if __name__ == '__main__':
     async function svg_handleGenerateSvg() {
         const keyAvailable = (selectedApiProvider === 'gemini' && window.GLOBAL_GEMINI_API_KEY) ||
                              (selectedApiProvider === 'groq' && window.GLOBAL_GROQ_API_KEY) ||
+                             (selectedApiProvider === 'openrouter' && window.GLOBAL_OPENROUTER_API_KEY) ||
                              (selectedApiProvider === 'deepseek' && window.GLOBAL_DEEPSEEK_API_KEY) ||
                              (selectedApiProvider === 'huggingface' && window.GLOBAL_HF_TOKEN) ||
                              (selectedApiProvider === 'transformersjs' && window.GLOBAL_TRANSFORMERSJS_MODEL_ID) ||
@@ -2876,6 +2946,7 @@ if __name__ == '__main__':
         gifCreator_genAI_model = null; // Gemini specific
         const keyAvailable = (selectedApiProvider === 'gemini' && window.GLOBAL_GEMINI_API_KEY) ||
                              (selectedApiProvider === 'groq' && window.GLOBAL_GROQ_API_KEY) ||
+                             (selectedApiProvider === 'openrouter' && window.GLOBAL_OPENROUTER_API_KEY) ||
                              (selectedApiProvider === 'deepseek' && window.GLOBAL_DEEPSEEK_API_KEY) ||
                              (selectedApiProvider === 'huggingface' && window.GLOBAL_HF_TOKEN) ||
                              (selectedApiProvider === 'transformersjs' && window.GLOBAL_TRANSFORMERSJS_MODEL_ID) ||
@@ -2896,6 +2967,7 @@ if __name__ == '__main__':
         gameGen_main_model = null; // Gemini specific
         const keyAvailable = (selectedApiProvider === 'gemini' && window.GLOBAL_GEMINI_API_KEY) ||
                              (selectedApiProvider === 'groq' && window.GLOBAL_GROQ_API_KEY) ||
+                             (selectedApiProvider === 'openrouter' && window.GLOBAL_OPENROUTER_API_KEY) ||
                              (selectedApiProvider === 'deepseek' && window.GLOBAL_DEEPSEEK_API_KEY) ||
                              (selectedApiProvider === 'huggingface' && window.GLOBAL_HF_TOKEN) ||
                              (selectedApiProvider === 'transformersjs' && window.GLOBAL_TRANSFORMERSJS_MODEL_ID) ||
@@ -2910,7 +2982,7 @@ if __name__ == '__main__':
             } else { if (gameGen_generateButton) gameGen_generateButton.disabled = false; gameGenStatusUpdater(`Idle (${selectedApiProvider})`); }
         } else { gameGenStatusUpdater("API Key/Model ID/Endpoint URL not set for selected provider."); if (gameGen_generateButton) gameGen_generateButton.disabled = true; }
     }
-    function gameGen_showLoading(message) { if (!gameGen_loadingMessage || !gameGen_generateButton) return; gameGen_loadingMessage.textContent = message; gameGen_loadingMessage.style.display = 'block'; gameGen_generateButton.disabled = true; if(gameGen_downloadHtmlButton) gameGen_downloadHtmlButton.style.display = 'none'; gameGen_lastHtmlCode = null; if(gameGen_debugSection) gameGen_debugSection.style.display = 'none';}
+    function gameGen_showLoading(message) { if (!gameGen_loadingMessage || !gameGen_generateButton) return; gameGen_loadingMessage.textContent = message; gameGen_loadingMessage.style.display = 'block'; gameGen_generateButton.disabled = true; if(gameGen_downloadZipButton) gameGen_downloadZipButton.style.display = 'none'; gameGen_lastGameAssetPackage = null; if(gameGen_debugSection) gameGen_debugSection.style.display = 'none';}
     function gameGen_hideLoading() { if(gameGen_loadingMessage) gameGen_loadingMessage.style.display = 'none'; enableAppButtons(); }
     function gameGen_displayError(message, isRuntimeError = false) { if (!gameGen_errorMessage) return; gameGen_errorMessage.textContent = "Game Gen Error: " + message + (isRuntimeError ? " Check Browser Console (F12)." : ""); gameGen_errorMessage.style.display = 'block'; gameGenStatusUpdater(`Error: ${message.substring(0,100)}`);}
     function gameGen_clearError() { if (!gameGen_errorMessage) return; gameGen_errorMessage.textContent = ''; gameGen_errorMessage.style.display = 'none'; }
@@ -2929,7 +3001,7 @@ if __name__ == '__main__':
                     if (!modelToUse) throw new Error("Gemini model not initialized for sound JS.");
                 }
                 const result = await modelToUse.generateContent(fullPrompt); jsCode = result.response.text().trim();
-            } else if (['groq', 'deepseek', 'huggingface', 'transformersjs', 'custom'].includes(selectedApiProvider)) {
+            } else if (['groq', 'openrouter', 'deepseek', 'huggingface', 'transformersjs', 'custom'].includes(selectedApiProvider)) {
                  jsCode = await callCurrentAiProviderForText(fullPrompt, 8000, 0.6, statusUpdaterFn);
                  if (selectedApiProvider === 'huggingface' || selectedApiProvider === 'transformersjs' || selectedApiProvider === 'custom') {
                      jsCode = `/* WARNING: JS code generated by ${selectedApiProvider}, may not be valid Web Audio API code. */\n` + jsCode;
@@ -2947,6 +3019,7 @@ if __name__ == '__main__':
         musicStudio_genAI_model = null; // Gemini specific
         const keyAvailable = (selectedApiProvider === 'gemini' && window.GLOBAL_GEMINI_API_KEY) ||
                              (selectedApiProvider === 'groq' && window.GLOBAL_GROQ_API_KEY) ||
+                             (selectedApiProvider === 'openrouter' && window.GLOBAL_OPENROUTER_API_KEY) ||
                              (selectedApiProvider === 'deepseek' && window.GLOBAL_DEEPSEEK_API_KEY) ||
                              (selectedApiProvider === 'huggingface' && window.GLOBAL_HF_TOKEN) ||
                              (selectedApiProvider === 'transformersjs' && window.GLOBAL_TRANSFORMERSJS_MODEL_ID) ||
@@ -3008,6 +3081,8 @@ if __name__ == '__main__':
         if (systemSettings_ai_modelNameInput) systemSettings_ai_modelNameInput.value = getCurrentGeminiModel();
         if (systemSettings_ai_groqModelInput) systemSettings_ai_groqModelInput.value = getCurrentGroqModel();
         if (systemSettings_ai_groqMaxTokensInput) systemSettings_ai_groqMaxTokensInput.value = getCurrentGroqMaxTokens();
+        if (systemSettings_ai_openrouterModelInput) systemSettings_ai_openrouterModelInput.value = getCurrentOpenRouterModel();
+        if (systemSettings_ai_openrouterHttpRefererInput) systemSettings_ai_openrouterHttpRefererInput.value = getCurrentOpenRouterHttpReferer();
         if (systemSettings_ai_deepseekModelInput) systemSettings_ai_deepseekModelInput.value = getCurrentDeepSeekModel();
         if (systemSettings_ai_deepseekMaxTokensInput) systemSettings_ai_deepseekMaxTokensInput.value = getCurrentDeepSeekMaxTokens();
         if (systemSettings_ai_hfModelIdInput) systemSettings_ai_hfModelIdInput.value = getCurrentHfModelId();
@@ -3026,6 +3101,8 @@ if __name__ == '__main__':
         if (systemSettings_ai_saveModelButton) { systemSettings_ai_saveModelButton.addEventListener('click', () => { const newModel = systemSettings_ai_modelNameInput.value.trim(); if (newModel) { localStorage.setItem('k8os_globalGeminiAiModel', newModel); if (systemSettings_status) systemSettings_status.textContent = `Gemini Model set: ${newModel}. Re-init AI apps...`; initAllAiApps(); } else { if (systemSettings_status) systemSettings_status.textContent = "Gemini Model name cannot be empty."; } }); }
         if (systemSettings_ai_saveGroqModelButton) { systemSettings_ai_saveGroqModelButton.addEventListener('click', () => { const newModel = systemSettings_ai_groqModelInput.value.trim(); if (newModel) { localStorage.setItem('k8os_globalGroqAiModel', newModel); if (systemSettings_status) systemSettings_status.textContent = `Groq Model set: ${newModel}.`; } else { if (systemSettings_status) systemSettings_status.textContent = "Groq Model name cannot be empty."; } }); }
         if (systemSettings_ai_saveGroqMaxTokensButton) { systemSettings_ai_saveGroqMaxTokensButton.addEventListener('click', () => { const newMaxTokens = parseInt(systemSettings_ai_groqMaxTokensInput.value, 10); if (!isNaN(newMaxTokens) && newMaxTokens > 0) { localStorage.setItem('k8os_globalGroqMaxTokens', newMaxTokens.toString()); if (systemSettings_status) systemSettings_status.textContent = `Groq Max Tokens set: ${newMaxTokens}.`; } else { if (systemSettings_status) systemSettings_status.textContent = "Invalid Groq Max Tokens value."; } }); }
+        if (systemSettings_ai_saveOpenrouterModelButton) { systemSettings_ai_saveOpenrouterModelButton.addEventListener('click', () => { const newModel = systemSettings_ai_openrouterModelInput.value.trim(); if (newModel) { localStorage.setItem('k8os_globalOpenRouterAiModel', newModel); if (systemSettings_status) systemSettings_status.textContent = `OpenRouter Model set: ${newModel}.`; } else { if (systemSettings_status) systemSettings_status.textContent = "OpenRouter Model name cannot be empty."; } }); }
+        if (systemSettings_ai_saveOpenrouterHttpRefererButton) { systemSettings_ai_saveOpenrouterHttpRefererButton.addEventListener('click', () => { const newReferer = systemSettings_ai_openrouterHttpRefererInput.value.trim(); localStorage.setItem('k8os_globalOpenRouterHttpReferer', newReferer); if (systemSettings_status) systemSettings_status.textContent = `OpenRouter Site URL saved.`; }); }
         if (systemSettings_ai_saveDeepseekModelButton) { systemSettings_ai_saveDeepseekModelButton.addEventListener('click', () => { const newModel = systemSettings_ai_deepseekModelInput.value.trim(); if (newModel) { localStorage.setItem('k8os_globalDeepSeekAiModel', newModel); if (systemSettings_status) systemSettings_status.textContent = `DeepSeek Model set: ${newModel}.`; } else { if (systemSettings_status) systemSettings_status.textContent = "DeepSeek Model name cannot be empty."; } }); }
         if (systemSettings_ai_saveDeepseekMaxTokensButton) { systemSettings_ai_saveDeepseekMaxTokensButton.addEventListener('click', () => { const newMaxTokens = parseInt(systemSettings_ai_deepseekMaxTokensInput.value, 10); if (!isNaN(newMaxTokens) && newMaxTokens > 0) { localStorage.setItem('k8os_globalDeepSeekMaxTokens', newMaxTokens.toString()); if (systemSettings_status) systemSettings_status.textContent = `DeepSeek Max Tokens set: ${newMaxTokens}.`; } else { if (systemSettings_status) systemSettings_status.textContent = "Invalid DeepSeek Max Tokens value."; } }); }
         if (systemSettings_ai_saveHfModelButton) { systemSettings_ai_saveHfModelButton.addEventListener('click', () => { let newModelId = systemSettings_ai_hfModelIdInput.value.trim(); if (newModelId.endsWith('.')) { newModelId = newModelId.substring(0, newModelId.length - 1); console.warn("Trimmed trailing period from HF Model ID before saving. New ID:", newModelId); systemSettings_ai_hfModelIdInput.value = newModelId; } if (newModelId) { localStorage.setItem('k8os_globalHfModelId', newModelId); if (systemSettings_status) systemSettings_status.textContent = `Hugging Face Model ID set: ${newModelId}.`; } else { if (systemSettings_status) systemSettings_status.textContent = "Hugging Face Model ID cannot be empty."; } }); }
@@ -3082,6 +3159,7 @@ if __name__ == '__main__':
     if(gifCreator_generateButton) gifCreator_generateButton.addEventListener('click', async () => {
         const keyAvailable = (selectedApiProvider === 'gemini' && window.GLOBAL_GEMINI_API_KEY) ||
                              (selectedApiProvider === 'groq' && window.GLOBAL_GROQ_API_KEY) ||
+                             (selectedApiProvider === 'openrouter' && window.GLOBAL_OPENROUTER_API_KEY) ||
                              (selectedApiProvider === 'deepseek' && window.GLOBAL_DEEPSEEK_API_KEY) ||
                              (selectedApiProvider === 'huggingface' && window.GLOBAL_HF_TOKEN) ||
                              (selectedApiProvider === 'transformersjs' && window.GLOBAL_TRANSFORMERSJS_MODEL_ID) ||
@@ -3103,459 +3181,485 @@ if __name__ == '__main__':
             if (animatedSvgText && animatedSvgText.endsWith("```")) animatedSvgText = animatedSvgText.substring(0, animatedSvgText.length - 3).trim();
             const svgMatch = animatedSvgText ? animatedSvgText.match(/<svg[\s\S]*?<\/svg>/im) : null;
             if (svgMatch && svgMatch[0]) { gifCreator_currentAnimatedSvg = svgMatch[0]; if(gifCreator_previewContainer) gifCreator_previewContainer.innerHTML = gifCreator_currentAnimatedSvg; if(gifCreator_downloadButton) gifCreator_downloadButton.style.display = 'block'; gifCreatorStatusUpdater("Animated SVG Generated.");}
-            else { gifCreatorStatusUpdater(`AI (${selectedApiProvider}) did not return valid SVG code for animation. Check console.`); if(gifCreator_previewContainer) gifCreator_previewContainer.innerHTML = "<p style='color:red'>Failed to generate animated SVG.</p>"; console.warn("Raw output from API for GIF:", animatedSvgText); }
-        } catch (e) { console.error(`GIF Creator AI Error (${selectedApiProvider}):`, e); gifCreatorStatusUpdater(`AI Error: ${e.message || String(e)}`); if(gifCreator_previewContainer) gifCreator_previewContainer.innerHTML = "<p style='color:red'>Error during generation.</p>"; }
-        finally { enableAppButtons(); }
-    });
+            else { 
+    gifCreatorStatusUpdater(`AI (${selectedApiProvider}) did not return valid SVG code for animation. Check console.`); 
+    if(gifCreator_previewContainer) gifCreator_previewContainer.innerHTML = "<p style='color:red'>Failed to generate animated SVG.</p>"; 
+    console.warn("Raw output from API for GIF:", animatedSvgText); 
+}
+} catch (e) { 
+    console.error(`GIF Creator AI Error (${selectedApiProvider}):`, e); 
+    gifCreatorStatusUpdater(`AI Error: ${e.message || String(e)}`); 
+    if(gifCreator_previewContainer) gifCreator_previewContainer.innerHTML = "<p style='color:red'>Error during generation.</p>"; 
+}
+finally { 
+    enableAppButtons(); 
+}
+});
 
-        if(gifCreator_downloadButton) gifCreator_downloadButton.addEventListener('click', () => { if (gifCreator_currentAnimatedSvg) { let fileName = (gifCreator_promptInput.value.trim() || gifCreator_animationPromptInput.value.trim() || "animated_image").toLowerCase().replace(/[^\w\s-]/g, '').replace(/\s+/g, '_'); downloadFile(gifCreator_currentAnimatedSvg, `${fileName}.svg`, "image/svg+xml;charset=utf-8"); } else { alert("No animated SVG to download."); } });
-    function prepareGameHTMLWithLogger(htmlContent) { const errorLoggerScript = `<script> window.onerror = function(message, source, lineno, colno, error) { console.error("GameRuntimeError:", { message, source: source.substring(source.lastIndexOf('/') + 1), lineno, colno, error: error ? error.stack : 'N/A' }); return false; }; window.onunhandledrejection = function(event) { console.error("GameRuntimePromiseRejection:", { reason: event.reason ? (event.reason.message || event.reason) : 'Unknown reason', stack: event.reason ? event.reason.stack : 'N/A'}); }; <\/script>`; if (htmlContent.includes("</head>")) { return htmlContent.replace("</head>", errorLoggerScript + "</head>"); } else if (htmlContent.includes("<body>")) { return htmlContent.replace("<body>", errorLoggerScript + "<body>"); } return errorLoggerScript + htmlContent; }
-    async function executeGameGeneration(userGameIdea, isDebugAttempt = false, existingCode = "", errorsAndHints = "") {
-        const keyAvailable = (selectedApiProvider === 'gemini' && window.GLOBAL_GEMINI_API_KEY) ||
-                             (selectedApiProvider === 'groq' && window.GLOBAL_GROQ_API_KEY) ||
-                             (selectedApiProvider === 'deepseek' && window.GLOBAL_DEEPSEEK_API_KEY) ||
-                             (selectedApiProvider === 'huggingface' && window.GLOBAL_HF_TOKEN) ||
-                             (selectedApiProvider === 'transformersjs' && window.GLOBAL_TRANSFORMERSJS_MODEL_ID) ||
-                             (selectedApiProvider === 'custom' && window.GLOBAL_CUSTOM_API_KEY && getCurrentCustomEndpointUrl());
-        if (!keyAvailable) { gameGen_displayError("API Key/Model ID/Endpoint URL not set for selected provider!"); return null; }
-        if (selectedApiProvider === 'gemini' && !gameGen_main_model) { gameGen_displayError("Gemini AI Model not ready!"); return null; }
-        gameGen_clearError(); const providerName = selectedApiProvider;
+if(gifCreator_downloadButton) gifCreator_downloadButton.addEventListener('click', () => { 
+    if (gifCreator_currentAnimatedSvg) { 
+        let fileName = (gifCreator_promptInput.value.trim() || gifCreator_animationPromptInput.value.trim() || "animated_image").toLowerCase().replace(/[^\w\s-]/g, '').replace(/\s+/g, '_'); 
+        downloadFile(gifCreator_currentAnimatedSvg, `${fileName}.svg`, "image/svg+xml;charset=utf-8"); 
+    } else { 
+        alert("No animated SVG to download."); 
+    } 
+});function prepareGameHTMLWithLogger(htmlContent) { const errorLoggerScript = `<script> window.onerror = function(message, source, lineno, colno, error) { console.error("GameRuntimeError:", { message, source: source.substring(source.lastIndexOf('/') + 1), lineno, colno, error: error ? error.stack : 'N/A' }); return false; }; window.onunhandledrejection = function(event) { console.error("GameRuntimePromiseRejection:", { reason: event.reason ? (event.reason.message || event.reason) : 'Unknown reason', stack: event.reason ? event.reason.stack : 'N/A'}); }; <\/script>`; if (htmlContent.includes("</head>")) { return htmlContent.replace("</head>", errorLoggerScript + "</head>"); } else if (htmlContent.includes("<body>")) { return htmlContent.replace("<body>", errorLoggerScript + "<body>"); } return errorLoggerScript + htmlContent; }
 
-        const localGameGenStatusUpdater = (msg) => {
-            if(gameGen_assetStatus) gameGen_assetStatus.textContent = msg;
-            gameGenStatusUpdater(msg);
-            if(msg.toLowerCase().includes("loading") || msg.toLowerCase().includes("generating")) gameGen_showLoading(msg); else gameGen_hideLoading();
-        };
+async function executeGameGeneration(userGameIdea, isDebugAttempt = false, existingCode = "", errorsAndHints = "") {
+    const keyAvailable = (selectedApiProvider === 'gemini' && window.GLOBAL_GEMINI_API_KEY) ||
+                         (selectedApiProvider === 'groq' && window.GLOBAL_GROQ_API_KEY) ||
+                         (selectedApiProvider === 'openrouter' && window.GLOBAL_OPENROUTER_API_KEY) ||
+                         (selectedApiProvider === 'deepseek' && window.GLOBAL_DEEPSEEK_API_KEY) ||
+                         (selectedApiProvider === 'huggingface' && window.GLOBAL_HF_TOKEN) ||
+                         (selectedApiProvider === 'transformersjs' && window.GLOBAL_TRANSFORMERSJS_MODEL_ID) ||
+                         (selectedApiProvider === 'custom' && window.GLOBAL_CUSTOM_API_KEY && getCurrentCustomEndpointUrl());
+    if (!keyAvailable) { gameGen_displayError("API Key/Model ID/Endpoint URL not set for selected provider!"); return null; }
+    if (selectedApiProvider === 'gemini' && !gameGen_main_model) { gameGen_displayError("Gemini AI Model not ready!"); return null; }
+    gameGen_clearError(); const providerName = selectedApiProvider;
 
-        if (isDebugAttempt) {
-            localGameGenStatusUpdater(`Attempting to debug game code with ${providerName}...`);
-            const debugInstruction = DEFAULT_GAMEGEN_DEBUG_INSTRUCTION.replace("{USER_GAME_IDEA}", gameGen_lastUserIdea || "the previously described game").replace("{ERRORS_AND_HINTS}", errorsAndHints).replace("{PROBLEM_CODE}", existingCode);
-            try {
-                let fixedHtml = await callCurrentAiProviderForText(debugInstruction, 8192, 0.5, localGameGenStatusUpdater);
-                if (fixedHtml && fixedHtml.startsWith("```html")) fixedHtml = fixedHtml.substring(7).trim(); else if (fixedHtml && fixedHtml.startsWith("```")) fixedHtml = fixedHtml.substring(3).trim(); if (fixedHtml && fixedHtml.endsWith("```")) fixedHtml = fixedHtml.substring(0, fixedHtml.length - 3).trim();
-                return fixedHtml;
-            } catch (e) { console.error(`Game Debugging Error (${providerName}):`, e); let message = `Failed to debug game with ${providerName}. ${e.message || 'Unknown error.'}`; gameGen_displayError(message); return null; }
-            finally { gameGen_hideLoading(); }
-        } else {
-            localGameGenStatusUpdater(`Generating game plan with ${providerName}...`); if(gameGen_planDisplay) gameGen_planDisplay.textContent = "Generating game plan..."; if(gameGen_assetStatus) gameGen_assetStatus.textContent = "";
-            let gamePlan; let planResponseText = "";
-            try {
-                const planPrompt = DEFAULT_GAMEGEN_PLAN_INSTRUCTION.replace("{USER_GAME_IDEA}", userGameIdea);
-                planResponseText = await callCurrentAiProviderForText(planPrompt, 2048, 0.3, localGameGenStatusUpdater);
-                let cleanedJsonString = planResponseText.replace(/```json\n?/g, "").replace(/```\n?/g, "").trim();
-                const jsonStart = cleanedJsonString.indexOf('{'); const jsonEnd = cleanedJsonString.lastIndexOf('}');
-                if (jsonStart !== -1 && jsonEnd !== -1 && jsonEnd > jsonStart) { cleanedJsonString = cleanedJsonString.substring(jsonStart, jsonEnd + 1); }
-                gamePlan = JSON.parse(cleanedJsonString);
-                if (!gamePlan.game_mechanic || !Array.isArray(gamePlan.svg_assets) || gamePlan.svg_assets.length < 1 || !Array.isArray(gamePlan.sound_effects) ) {
-                    console.warn("Game plan structure might be invalid or missing sound_effects array:", gamePlan);
-                    if(gameGen_assetStatus) gameGen_assetStatus.textContent = "Warning: Game plan structure seems invalid (e.g. missing sound_effects array), proceeding anyway...";
-                    gamePlan.svg_assets = gamePlan.svg_assets || [];
-                    gamePlan.sound_effects = gamePlan.sound_effects || []; // Ensure it's an array
-                }
-                let planDisplayText = `Game Mechanic: ${gamePlan.game_mechanic || 'N/A'}\nSVGs:\n`;
-                (gamePlan.svg_assets || []).forEach(asset => planDisplayText += ` - ${asset.description || '??'} (Animated: ${!!asset.animated})\n`);
-                planDisplayText += `Sounds: ${(gamePlan.sound_effects || []).join(', ')}`;
-                if(gameGen_planDisplay) gameGen_planDisplay.textContent = planDisplayText;
-            } catch (e) { console.error("Error parsing game plan JSON:", e, "Raw response:", planResponseText); gameGen_displayError(`Failed to generate/parse game plan from ${providerName}. Check console. AI Response: ${(planResponseText || '').substring(0,200)}...`); gameGen_hideLoading(); return null; }
+    const localGameGenStatusUpdater = (msg) => {
+        if(gameGen_assetStatus) gameGen_assetStatus.textContent = msg;
+        gameGenStatusUpdater(msg);
+        if(msg.toLowerCase().includes("loading") || msg.toLowerCase().includes("generating")) gameGen_showLoading(msg); else gameGen_hideLoading();
+    };
 
-            localGameGenStatusUpdater(`Generating SVG assets with ${providerName}...`); const generatedSvgs = [];
-            for (let i = 0; i < gamePlan.svg_assets.length; i++) {
-                const assetInfo = gamePlan.svg_assets[i]; if (!assetInfo || !assetInfo.description) continue;
-                localGameGenStatusUpdater(`Generating SVG ${i+1}/${gamePlan.svg_assets.length}: ${assetInfo.description}...`);
-                const svgCode = await internal_generateSingleSvg(assetInfo.description, !!assetInfo.animated, localGameGenStatusUpdater);
-                if (svgCode) { generatedSvgs.push(svgCode); } else { generatedSvgs.push(`<svg viewBox="0 0 10 10" xmlns="http://www.w3.org/2000/svg"><rect width="10" height="10" fill="red"/><text x="1" y="8" font-size="5" fill="white">X</text></svg>`); localGameGenStatusUpdater(`SVG ${i+1} [Failed for: ${assetInfo.description}]`); console.warn(`Failed to generate SVG for: ${assetInfo.description}.`); }
-            }
-
-            localGameGenStatusUpdater(`Generating sound effect JS with ${providerName}...`);
-            const generatedSoundJs = [];
-            if (gamePlan.sound_effects && gamePlan.sound_effects.length > 0) {
-                for (let i = 0; i < gamePlan.sound_effects.length; i++) {
-                    const soundDesc = gamePlan.sound_effects[i]; if (!soundDesc) continue;
-                    localGameGenStatusUpdater(`Generating Sound JS ${i+1}/${gamePlan.sound_effects.length}: ${soundDesc}...`);
-                    const soundJsCode = await internal_generateSingleSoundJs(soundDesc, localGameGenStatusUpdater);
-                    if (soundJsCode) {
-                        generatedSoundJs.push(soundJsCode);
-                    } else {
-                        generatedSoundJs.push(`console.warn("Failed to generate sound JS for '${soundDesc.replace(/"/g, '\\"').replace(/'/g, "\\'")}' in game.");`);
-                        localGameGenStatusUpdater(`Sound JS ${i+1} [Failed for: ${soundDesc}]`);
-                        console.warn(`Failed to generate Sound JS for: ${soundDesc}.`);
-                    }
-                }
-            } else {
-                 localGameGenStatusUpdater(`No sound effects requested in game plan.`);
-            }
-
-            localGameGenStatusUpdater(`All assets processed. Generating final game code with ${providerName}...`);
-            const finalGamePromptInstruction = getAppInstruction('gameGen_final', DEFAULT_GAMEGEN_FINAL_INSTRUCTION);
-            const finalGamePrompt = finalGamePromptInstruction.replace("{USER_GAME_IDEA}", userGameIdea).replace("{GAME_PLAN_JSON}", JSON.stringify(gamePlan)).replace("{SVG_ASSETS_ARRAY_OF_STRINGS}", JSON.stringify(generatedSvgs)).replace("{SOUND_EFFECTS_JS_ARRAY_OF_STRINGS}", JSON.stringify(generatedSoundJs));
-            let gameHtml;
-            try {
-                 gameHtml = await callCurrentAiProviderForText(finalGamePrompt, 8192, 0.7, localGameGenStatusUpdater);
-                if (gameHtml && gameHtml.startsWith("```html")) gameHtml = gameHtml.substring(7).trim(); else if (gameHtml && gameHtml.startsWith("```")) gameHtml = gameHtml.substring(3).trim(); if (gameHtml && gameHtml.endsWith("```")) gameHtml = gameHtml.substring(0, gameHtml.length - 3).trim();
-                return gameHtml;
-            } catch (e) { console.error(`Game Generator Final Code Error (${providerName}):`, e); let message = `Final code generation process failed with ${providerName}. ${e.message || 'Unknown error.'}`; gameGen_displayError(message); return null; }
-            finally { gameGen_hideLoading(); }
-        }
-    }
-    async function processAndDisplayGameCode(gameHtml, userGameIdea) {
-        if (gameGen_generatedCodeTextarea) gameGen_generatedCodeTextarea.value = gameHtml;
-        if (gameHtml && gameHtml.toLowerCase().includes("<html") && gameHtml.toLowerCase().includes("</html>")) {
-            gameGen_lastHtmlCode = gameHtml;
-            if(gameGen_downloadHtmlButton) gameGen_downloadHtmlButton.style.display = 'block';
-            if(gameGen_debugSection) gameGen_debugSection.style.display = 'block';
-            const gameTitle = userGameIdea.substring(0, 30) + (userGameIdea.length > 30 ? "..." : "") + " - Game";
-
-            const sparkyFolderId = ensureSparkyCreationsFolder();
-            const filename = `game-${userGameIdea.substring(0,15).replace(/[^a-z0-9]/gi, '_') || 'untitled'}-${Date.now().toString(36)}.html`;
-            createVFSEntry({ type: 'file', name: filename, mimeType: 'text/html', content: gameHtml, parentId: sparkyFolderId });
-            if(fe_fileListElement && (currentFEVfsPathId === 'root' || currentFEVfsPathId === sparkyFolderId)) {
-                 renderVFSFileList(currentFEVfsPathId);
-            }
-            // updateAssistantSpeech might be too chatty here, Game Gen has its own status.
-
-            const gamePlayerWin = openWindow('gamePlayerWindow', { title: gameTitle });
-            if (gamePlayerWin) {
-                const htmlWithLogger = prepareGameHTMLWithLogger(gameHtml);
-                if (gamePlayerWindow_iframe) {
-                    gamePlayerWindow_iframe.srcdoc = '';
-                    gamePlayerWindow_iframe.srcdoc = htmlWithLogger;
-                }
-            }
-        } else {
-            gameGen_displayError(`AI (${selectedApiProvider}) did not return valid HTML. Output: ` + (gameHtml ? gameHtml.substring(0,100) + "..." : "empty"), true);
-            if(gameGen_debugSection) gameGen_debugSection.style.display = 'none';
-        }
-    }
-
-    if (gameGen_generateButton) gameGen_generateButton.addEventListener('click', async () => { gameGen_lastUserIdea = gameGen_promptInput.value.trim(); if (!gameGen_lastUserIdea) { gameGen_displayError("Please describe the game."); return; } const gameHtml = await executeGameGeneration(gameGen_lastUserIdea); if (gameHtml) { await processAndDisplayGameCode(gameHtml, gameGen_lastUserIdea); } });
-    if (gameGen_debugAttemptButton) gameGen_debugAttemptButton.addEventListener('click', async () => { const currentCode = gameGen_generatedCodeTextarea.value; const errorsAndHints = gameGen_debugCombinedInput.value.trim(); if (!currentCode) { gameGen_displayError("No game code to debug."); return; } if (!errorsAndHints) { gameGen_displayError("Please provide error messages or hints for debugging."); return; } const fixedHtml = await executeGameGeneration(gameGen_lastUserIdea, true, currentCode, errorsAndHints); if (fixedHtml) { await processAndDisplayGameCode(fixedHtml, gameGen_lastUserIdea); } });
-    if(gameGen_downloadHtmlButton) { gameGen_downloadHtmlButton.addEventListener('click', () => { if (gameGen_lastHtmlCode) { let fileName = (gameGen_lastUserIdea || "generated_game").trim().toLowerCase().replace(/[^\w\s-]/g, '').replace(/\s+/g, '_'); downloadFile(gameGen_lastHtmlCode, `${fileName}.html`, "text/html"); } else { alert("No game HTML generated."); } }); }
-
-    if(musicStudio_generateButton) musicStudio_generateButton.addEventListener('click', async () => {
-        const keyAvailable = (selectedApiProvider === 'gemini' && window.GLOBAL_GEMINI_API_KEY) ||
-                             (selectedApiProvider === 'groq' && window.GLOBAL_GROQ_API_KEY) ||
-                             (selectedApiProvider === 'deepseek' && window.GLOBAL_DEEPSEEK_API_KEY) ||
-                             (selectedApiProvider === 'huggingface' && window.GLOBAL_HF_TOKEN) ||
-                             (selectedApiProvider === 'transformersjs' && window.GLOBAL_TRANSFORMERSJS_MODEL_ID) ||
-                             (selectedApiProvider === 'custom' && window.GLOBAL_CUSTOM_API_KEY && getCurrentCustomEndpointUrl());
-        if (!keyAvailable) { musicStudioStatusUpdater("API Key/Model ID/Endpoint URL not set for selected provider."); return; }
-        if (selectedApiProvider === 'gemini' && !musicStudio_genAI_model) { musicStudioStatusUpdater("Music Studio Gemini AI model not initialized."); return; }
-        const userPrompt = musicStudio_promptInput.value.trim(); if (!userPrompt) { musicStudioStatusUpdater("Please describe the music."); return; }
-
-        musicStudioStatusUpdater("Generating...");
-        musicStudio_generatedCode.value = ""; musicStudio_playButton.disabled = true; musicStudio_stopButton.disabled = true; musicStudio_downloadJsButton.style.display = 'none';
-        const baseInstruction = getAppInstruction('musicStudio', DEFAULT_MUSICSTUDIO_INSTRUCTION);
-        const fullPrompt = baseInstruction.replace("{USER_PROMPT}", userPrompt);
-
+    if (isDebugAttempt) {
+        localGameGenStatusUpdater(`Attempting to debug game code with ${providerName}...`);
+        const debugInstruction = DEFAULT_GAMEGEN_DEBUG_INSTRUCTION.replace("{USER_GAME_IDEA}", gameGen_lastUserIdea || "the previously described game").replace("{ERRORS_AND_HINTS}", errorsAndHints).replace("{PROBLEM_CODE}", existingCode);
         try {
-            let text = await callCurrentAiProviderForText(fullPrompt, 8000, 0.6, musicStudioStatusUpdater);
-            if (text && typeof text === 'string') {
-                if (text.startsWith("```javascript")) text = text.substring(13).trim();
-                else if (text.startsWith("```")) text = text.substring(3).trim();
-                if (text.endsWith("```")) text = text.substring(0, text.length - 3).trim();
-            } else {
-                text = "";
+            let fixedHtml = await callCurrentAiProviderForText(debugInstruction, 8192, 0.5, localGameGenStatusUpdater);
+            if (fixedHtml && fixedHtml.startsWith("```html")) fixedHtml = fixedHtml.substring(7).trim(); else if (fixedHtml && fixedHtml.startsWith("```")) fixedHtml = fixedHtml.substring(3).trim(); if (fixedHtml && fixedHtml.endsWith("```")) fixedHtml = fixedHtml.substring(0, fixedHtml.length - 3).trim();
+            return { html: fixedHtml, assets: gameGen_lastGameAssetPackage?.assets || [] };
+        } catch (e) { console.error(`Game Debugging Error (${providerName}):`, e); let message = `Failed to debug game with ${providerName}. ${e.message || 'Unknown error.'}`; gameGen_displayError(message); return null; }
+        finally { gameGen_hideLoading(); }
+    } else {
+        localGameGenStatusUpdater(`Generating game plan with ${providerName}...`); if(gameGen_planDisplay) gameGen_planDisplay.textContent = "Generating game plan..."; if(gameGen_assetStatus) gameGen_assetStatus.textContent = "";
+        let gamePlan; let planResponseText = "";
+        try {
+            const planPrompt = DEFAULT_GAMEGEN_PLAN_INSTRUCTION.replace("{USER_GAME_IDEA}", userGameIdea);
+            planResponseText = await callCurrentAiProviderForText(planPrompt, 2048, 0.3, localGameGenStatusUpdater);
+            let cleanedJsonString = planResponseText.replace(/```json\n?/g, "").replace(/```\n?/g, "").trim();
+            const jsonStart = cleanedJsonString.indexOf('{'); const jsonEnd = cleanedJsonString.lastIndexOf('}');
+            if (jsonStart !== -1 && jsonEnd !== -1 && jsonEnd > jsonStart) { cleanedJsonString = cleanedJsonString.substring(jsonStart, jsonEnd + 1); }
+            gamePlan = JSON.parse(cleanedJsonString);
+            if (!gamePlan.game_mechanic || !Array.isArray(gamePlan.svg_assets) || gamePlan.svg_assets.length < 1 || !Array.isArray(gamePlan.sound_effects) ) {
+                console.warn("Game plan structure might be invalid or missing sound_effects array:", gamePlan);
+                if(gameGen_assetStatus) gameGen_assetStatus.textContent = "Warning: Game plan structure seems invalid (e.g. missing sound_effects array), proceeding anyway...";
+                gamePlan.svg_assets = gamePlan.svg_assets || [];
+                gamePlan.sound_effects = gamePlan.sound_effects || []; // Ensure it's an array
             }
-            if (text && text.trim().length > 10) {
-                musicStudio_lastJsCode = text;
-                musicStudio_generatedCode.value = text;
-                musicStudio_playButton.disabled = false;
-                musicStudio_downloadJsButton.style.display = 'block';
-                musicStudioStatusUpdater("Music Code Generated.");
-            } else {
-                musicStudio_lastJsCode = "";
-                musicStudio_generatedCode.value = "";
-                musicStudioStatusUpdater("AI returned empty or invalid code. Check console.");
-                console.warn("Music Studio: AI returned insufficient code.", text);
+            let planDisplayText = `Game Mechanic: ${gamePlan.game_mechanic || 'N/A'}\nSVGs:\n`;
+            (gamePlan.svg_assets || []).forEach(asset => planDisplayText += ` - ${asset.description || '??'} (Animated: ${!!asset.animated})\n`);
+            planDisplayText += `Sounds: ${(gamePlan.sound_effects || []).join(', ')}`;
+            if(gameGen_planDisplay) gameGen_planDisplay.textContent = planDisplayText;
+        } catch (e) { console.error("Error parsing game plan JSON:", e, "Raw response:", planResponseText); gameGen_displayError(`Failed to generate/parse game plan from ${providerName}. Check console. AI Response: ${(planResponseText || '').substring(0,200)}...`); gameGen_hideLoading(); return null; }
+
+        const generatedAssets = []; const assetFilenames = { svg: [], js: [] };
+        localGameGenStatusUpdater(`Generating SVG assets with ${providerName}...`);
+        for (let i = 0; i < gamePlan.svg_assets.length; i++) {
+            const assetInfo = gamePlan.svg_assets[i]; if (!assetInfo || !assetInfo.description) continue;
+            localGameGenStatusUpdater(`Generating SVG ${i+1}/${gamePlan.svg_assets.length}: ${assetInfo.description}...`);
+            const svgCode = await internal_generateSingleSvg(assetInfo.description, !!assetInfo.animated, localGameGenStatusUpdater);
+            const filename = `${assetInfo.description.substring(0,15).replace(/[^a-z0-9]/gi, '_') || `asset_${i}`}.svg`;
+            assetFilenames.svg.push(filename);
+            if (svgCode) { generatedAssets.push({ filename: filename, content: svgCode, type: 'svg' }); }
+            else { generatedAssets.push({ filename: filename, content: `<svg viewBox="0 0 10 10" xmlns="http://www.w3.org/2000/svg"><rect width="10" height="10" fill="red"/><text x="1" y="8" font-size="5" fill="white">X</text></svg>`, type: 'svg' }); localGameGenStatusUpdater(`SVG ${i+1} [Failed for: ${assetInfo.description}]`); console.warn(`Failed to generate SVG for: ${assetInfo.description}.`); }
+        }
+
+        localGameGenStatusUpdater(`Generating sound effect JS with ${providerName}...`);
+        if (gamePlan.sound_effects && gamePlan.sound_effects.length > 0) {
+            for (let i = 0; i < gamePlan.sound_effects.length; i++) {
+                const soundDesc = gamePlan.sound_effects[i]; if (!soundDesc) continue;
+                localGameGenStatusUpdater(`Generating Sound JS ${i+1}/${gamePlan.sound_effects.length}: ${soundDesc}...`);
+                const soundJsCode = await internal_generateSingleSoundJs(soundDesc, localGameGenStatusUpdater);
+                const filename = `${soundDesc.substring(0,15).replace(/[^a-z0-9]/gi, '_') || `sound_${i}`}.js`;
+                assetFilenames.js.push(filename);
+                if (soundJsCode) { generatedAssets.push({ filename: filename, content: soundJsCode, type: 'js' }); }
+                else { generatedAssets.push({ filename: filename, content: `console.warn("Failed to generate sound JS for '${soundDesc.replace(/"/g, '\\"').replace(/'/g, "\\'")}' in game.");`, type: 'js' }); localGameGenStatusUpdater(`Sound JS ${i+1} [Failed for: ${soundDesc}]`); console.warn(`Failed to generate Sound JS for: ${soundDesc}.`); }
             }
-        } catch (e) {
-            console.error(`Music Studio AI Error (${selectedApiProvider}):`, e);
-            musicStudioStatusUpdater(`AI Error: ${e.message || String(e)}`);
+        } else { localGameGenStatusUpdater(`No sound effects requested in game plan.`); }
+
+        localGameGenStatusUpdater(`All assets processed. Generating final game code with ${providerName}...`);
+        const finalGamePromptInstruction = getAppInstruction('gameGen_final', DEFAULT_GAMEGEN_FINAL_INSTRUCTION)
+            .replace("{USER_GAME_IDEA}", userGameIdea)
+            .replace("{GAME_PLAN_JSON}", JSON.stringify(gamePlan))
+            .replace("{ASSET_FILENAMES_JSON}", JSON.stringify(assetFilenames));
+        let gameHtml;
+        try {
+             gameHtml = await callCurrentAiProviderForText(finalGamePrompt, 8192, 0.7, localGameGenStatusUpdater);
+            if (gameHtml && gameHtml.startsWith("```html")) gameHtml = gameHtml.substring(7).trim(); else if (gameHtml && gameHtml.startsWith("```")) gameHtml = gameHtml.substring(3).trim(); if (gameHtml && gameHtml.endsWith("```")) gameHtml = gameHtml.substring(0, gameHtml.length - 3).trim();
+            return { html: gameHtml, assets: generatedAssets };
+        } catch (e) { console.error(`Game Generator Final Code Error (${providerName}):`, e); let message = `Final code generation process failed with ${providerName}. ${e.message || 'Unknown error.'}`; gameGen_displayError(message); return null; }
+        finally { gameGen_hideLoading(); }
+    }
+}
+
+async function processAndSaveGamePackage(gamePackage, userGameIdea) {
+    if (!gamePackage || !gamePackage.html || !gamePackage.html.toLowerCase().includes("<html")) {
+        gameGen_displayError(`AI (${selectedApiProvider}) did not return valid HTML.`, true);
+        if(gameGen_debugSection) gameGen_debugSection.style.display = 'none';
+        return;
+    }
+
+    if (gameGen_generatedCodeTextarea) gameGen_generatedCodeTextarea.value = gamePackage.html;
+
+    const gameName = userGameIdea.substring(0, 25).replace(/[^a-z0-9]/gi, '_') || 'generated-game';
+    const gameFolderName = `${gameName}-${Date.now().toString(36)}`;
+
+    const sparkyCreationsId = ensureSparkyCreationsFolder();
+    const gameFolder = createVFSEntry({ type: 'folder', name: gameFolderName, parentId: sparkyCreationsId });
+    const assetsFolder = createVFSEntry({ type: 'folder', name: 'assets', parentId: gameFolder.id });
+
+    for (const asset of gamePackage.assets) {
+        let mimeType = 'text/plain';
+        if (asset.type === 'svg') mimeType = 'image/svg+xml';
+        else if (asset.type === 'js') mimeType = 'application/javascript';
+        createVFSEntry({ type: 'file', name: asset.filename, content: asset.content, mimeType: mimeType, parentId: assetsFolder.id });
+    }
+    const mainHtmlFile = createVFSEntry({ type: 'file', name: 'index.html', content: gamePackage.html, mimeType: 'text/html', parentId: gameFolder.id });
+
+    gameGen_lastHtmlCode = gamePackage.html;
+    gameGen_lastGameAssetPackage = { gameFolderId: gameFolder.id, assets: gamePackage.assets };
+    if(gameGen_downloadZipButton) gameGen_downloadZipButton.style.display = 'block';
+    if(gameGen_debugSection) gameGen_debugSection.style.display = 'block';
+    
+    gameGenStatusUpdater(`Game "${gameFolderName}" created in Sparky's Creations!`);
+    openNewBrowserWindow(null, mainHtmlFile.id); // Automatically open the game to play
+    if (fe_fileListElement && (currentFEVfsPathId === sparkyCreationsId)) {
+        renderVFSFileList(sparkyCreationsId);
+    }
+}
+
+if (gameGen_generateButton) gameGen_generateButton.addEventListener('click', async () => { gameGen_lastUserIdea = gameGen_promptInput.value.trim(); if (!gameGen_lastUserIdea) { gameGen_displayError("Please describe the game."); return; } const gamePackage = await executeGameGeneration(gameGen_lastUserIdea); if (gamePackage) { await processAndSaveGamePackage(gamePackage, gameGen_lastUserIdea); } });
+if (gameGen_debugAttemptButton) gameGen_debugAttemptButton.addEventListener('click', async () => { const currentCode = gameGen_generatedCodeTextarea.value; const errorsAndHints = gameGen_debugCombinedInput.value.trim(); if (!currentCode) { gameGen_displayError("No game code to debug."); return; } if (!errorsAndHints) { gameGen_displayError("Please provide error messages or hints for debugging."); return; } const fixedPackage = await executeGameGeneration(gameGen_lastUserIdea, true, currentCode, errorsAndHints); if (fixedPackage) { await processAndSaveGamePackage(fixedPackage, gameGen_lastUserIdea); } });
+if(gameGen_downloadZipButton) { gameGen_downloadZipButton.addEventListener('click', () => { if (gameGen_lastGameAssetPackage && gameGen_lastGameAssetPackage.gameFolderId) { downloadVFSEntryAsZip(gameGen_lastGameAssetPackage.gameFolderId); } else { alert("No game package generated to download."); } }); }
+
+if(musicStudio_generateButton) musicStudio_generateButton.addEventListener('click', async () => {
+    const keyAvailable = (selectedApiProvider === 'gemini' && window.GLOBAL_GEMINI_API_KEY) ||
+                         (selectedApiProvider === 'groq' && window.GLOBAL_GROQ_API_KEY) ||
+                         (selectedApiProvider === 'openrouter' && window.GLOBAL_OPENROUTER_API_KEY) ||
+                         (selectedApiProvider === 'deepseek' && window.GLOBAL_DEEPSEEK_API_KEY) ||
+                         (selectedApiProvider === 'huggingface' && window.GLOBAL_HF_TOKEN) ||
+                         (selectedApiProvider === 'transformersjs' && window.GLOBAL_TRANSFORMERSJS_MODEL_ID) ||
+                         (selectedApiProvider === 'custom' && window.GLOBAL_CUSTOM_API_KEY && getCurrentCustomEndpointUrl());
+    if (!keyAvailable) { musicStudioStatusUpdater("API Key/Model ID/Endpoint URL not set for selected provider."); return; }
+    if (selectedApiProvider === 'gemini' && !musicStudio_genAI_model) { musicStudioStatusUpdater("Music Studio Gemini AI model not initialized."); return; }
+    const userPrompt = musicStudio_promptInput.value.trim(); if (!userPrompt) { musicStudioStatusUpdater("Please describe the music."); return; }
+
+    musicStudioStatusUpdater("Generating...");
+    musicStudio_generatedCode.value = ""; musicStudio_playButton.disabled = true; musicStudio_stopButton.disabled = true; musicStudio_downloadJsButton.style.display = 'none';
+    const baseInstruction = getAppInstruction('musicStudio', DEFAULT_MUSICSTUDIO_INSTRUCTION);
+    const fullPrompt = baseInstruction.replace("{USER_PROMPT}", userPrompt);
+
+    try {
+        let text = await callCurrentAiProviderForText(fullPrompt, 8000, 0.6, musicStudioStatusUpdater);
+        if (text && typeof text === 'string') {
+            if (text.startsWith("```javascript")) text = text.substring(13).trim();
+            else if (text.startsWith("```")) text = text.substring(3).trim();
+            if (text.endsWith("```")) text = text.substring(0, text.length - 3).trim();
+        } else {
+            text = "";
+        }
+        if (text && text.trim().length > 10) {
+            musicStudio_lastJsCode = text;
+            musicStudio_generatedCode.value = text;
+            musicStudio_playButton.disabled = false;
+            musicStudio_downloadJsButton.style.display = 'block';
+            musicStudioStatusUpdater("Music Code Generated.");
+        } else {
             musicStudio_lastJsCode = "";
             musicStudio_generatedCode.value = "";
+            musicStudioStatusUpdater("AI returned empty or invalid code. Check console.");
+            console.warn("Music Studio: AI returned insufficient code.", text);
         }
-        finally { enableAppButtons(); }
-    });
-
-    function stopAllMusicStudioSounds() {
-        if (musicStudio_currentAudioContext && musicStudio_currentAudioContext.state !== 'closed') { musicStudio_currentAudioContext.close().catch(e => console.error("Error closing previous AudioContext:", e)); }
-        musicStudio_currentAudioContext = null; musicStudio_activeSources.forEach(source => { try { if(source && typeof source.stop === 'function') source.stop(); if(source && typeof source.disconnect === 'function') source.disconnect(); } catch(e){ console.warn("Error stopping/disconnecting audio source:", e); } });
-        musicStudio_activeSources = []; if(musicStudio_stopButton) musicStudio_stopButton.disabled = true; if(musicStudio_playButton && musicStudio_generatedCode.value) musicStudio_playButton.disabled = false;
+    } catch (e) {
+        console.error(`Music Studio AI Error (${selectedApiProvider}):`, e);
+        musicStudioStatusUpdater(`AI Error: ${e.message || String(e)}`);
+        musicStudio_lastJsCode = "";
+        musicStudio_generatedCode.value = "";
     }
-    if(musicStudio_playButton) musicStudio_playButton.addEventListener('click', () => {
-        const code = musicStudio_generatedCode.value;
-        if (code) {
-            stopAllMusicStudioSounds();
-            try {
-                musicStudio_currentAudioContext = new (window.AudioContext || window.webkitAudioContext)(); musicStudio_activeSources = [];
-                const soundFunction = new Function('audioContext', 'activeSources', code); soundFunction(musicStudio_currentAudioContext, musicStudio_activeSources);
-                logK8osActivity("Music Studio", `Played music: ${musicStudio_promptInput.value.trim().substring(0,50)}...`);
-                musicStudioStatusUpdater("Playing..."); musicStudio_stopButton.disabled = musicStudio_activeSources.length === 0; musicStudio_playButton.disabled = true;
-            } catch (e) { console.error("Error playing music:", e); musicStudioStatusUpdater("Playback Error: " + (e.message || String(e)) ); stopAllMusicStudioSounds(); }
-        }
-    });
-    if(musicStudio_stopButton) musicStudio_stopButton.addEventListener('click', stopAllMusicStudioSounds);
-    if(musicStudio_downloadJsButton) musicStudio_downloadJsButton.addEventListener('click', () => { if (musicStudio_lastJsCode) { let fileName = musicStudio_promptInput.value.trim().toLowerCase().replace(/[^\w\s-]/g, '').replace(/\s+/g, '_') || "music_script"; downloadFile(musicStudio_lastJsCode, `${fileName}.js`, "application/javascript"); } else { alert("No music code generated yet."); } });
+    finally { enableAppButtons(); }
+});
 
-    if(gamePlayer_refreshButton) gamePlayer_refreshButton.addEventListener('click', () => { if (gameGen_lastHtmlCode && gamePlayerWindow_iframe) { const htmlWithLogger = prepareGameHTMLWithLogger(gameGen_lastHtmlCode); gamePlayerWindow_iframe.srcdoc = htmlWithLogger; logK8osActivity("Game Player", `Refreshed game: ${gameGen_lastUserIdea.substring(0,50)}...`); } else { alert("No game loaded to refresh."); } });
-
-    function createBrowserWindowHTML(instanceId, initialTitle = "🌐 Web Browser") { return ` <div class="title-bar"> <span class="title-bar-text" id="${instanceId}_titleBarText">${initialTitle}</span> <div class="title-bar-controls"><button class="minimize-button" title="Minimize">0</button><button class="fullscreen-button" title="Toggle Fullscreen">1</button><button class="close-button" title="Close">r</button></div> </div> <div id="${instanceId}_navControls" class="webBrowserWindow_navControls"> <button id="${instanceId}_backButton" title="Back" disabled>3</button> <button id="${instanceId}_forwardButton" title="Forward" disabled>4</button> <button id="${instanceId}_refreshButton" title="Refresh">Q</button> <input type="text" id="${instanceId}_addressBar" class="webBrowserWindow_addressBar" placeholder="Enter URL or VFS path (/file.html)"> <button id="${instanceId}_goButton" style="width:auto;padding-left:5px;padding-right:5px;">Go</button> </div> <div class="window-content"> <iframe id="${instanceId}_iframeContent" class="webBrowserWindow_iframeContent" sandbox="allow-scripts allow-forms allow-popups allow-same-origin"></iframe> </div> <div id="${instanceId}_status" class="status-bar">Status: Idle</div> `; }
-    function openNewBrowserWindow(initialUrl = null, vfsFileId = null) {
-        browserWindowCounter++; const instanceId = `webBrowserWindow-${browserWindowCounter}`;
-        const windowEl = document.createElement('div'); windowEl.id = instanceId; windowEl.className = 'window webBrowserWindow';
-        const topOffset = 40 + (browserWindowCounter % 10) * 20; const leftOffset = 300 + (browserWindowCounter % 10) * 20;
-        windowEl.style.width = '800px'; windowEl.style.height = '600px'; windowEl.style.top = `${topOffset}px`; windowEl.style.left = `${leftOffset}px`;
-        windowEl.innerHTML = createBrowserWindowHTML(instanceId); desktopElement.appendChild(windowEl); initializeWindowBehavior(windowEl);
-        const instance = { id: instanceId, windowElement: windowEl, iframe: document.getElementById(`${instanceId}_iframeContent`), addressBar: document.getElementById(`${instanceId}_addressBar`), backButton: document.getElementById(`${instanceId}_backButton`), forwardButton: document.getElementById(`${instanceId}_forwardButton`), refreshButton: document.getElementById(`${instanceId}_refreshButton`), goButton: document.getElementById(`${instanceId}_goButton`), status: document.getElementById(`${instanceId}_status`), titleBarTextElement: document.getElementById(`${instanceId}_titleBarText`), history: [], historyIndex: -1 };
-        browserInstances[instanceId] = instance;
-        instance.goButton.addEventListener('click', () => navigateToUrlInBrowserInstance(instanceId, instance.addressBar.value.trim()));
-        instance.addressBar.addEventListener('keypress', (e) => { if (e.key === 'Enter') navigateToUrlInBrowserInstance(instanceId, instance.addressBar.value.trim()); });
-        instance.backButton.addEventListener('click', () => webBrowserNavigateInstance(instanceId, -1));
-        instance.forwardButton.addEventListener('click', () => webBrowserNavigateInstance(instanceId, 1));
-        instance.refreshButton.addEventListener('click', () => { if (instance.historyIndex > -1 && instance.history[instance.historyIndex]) { loadUrlInBrowserInstance(instanceId, instance.history[instance.historyIndex], false); logK8osActivity(`Browser (${instanceId})`, `Refreshed: ${instance.history[instance.historyIndex].substring(0,50)}...`); } });
-
-        let targetUrl = initialUrl;
-        if (vfsFileId) {
-            const fileEntry = getVFSEntry(vfsFileId);
-            if (fileEntry && (fileEntry.mimeType === 'text/html' || fileEntry.name.endsWith('.html') || fileEntry.name.endsWith('.htm'))) {
-                targetUrl = `vfs://${vfsFileId}/${fileEntry.name}`;
-                if (instance.titleBarTextElement) instance.titleBarTextElement.textContent = `🌐 ${fileEntry.name}`;
-            }
-        }
-        openWindow(instanceId);
-        if (targetUrl) { navigateToUrlInBrowserInstance(instanceId, targetUrl); }
-        updateWebBrowserNavButtonsInstance(instanceId); return windowEl;
-    }
-    async function loadUrlInBrowserInstance(instanceId, url, addToHistory = true) {
-        const instance = browserInstances[instanceId];
-        if (!instance || !instance.iframe || !instance.status || !instance.addressBar) { console.error(`Browser instance ${instanceId} not found or incomplete.`); return; }
-        instance.status.textContent = `Loading: ${url}...`; instance.addressBar.value = url; instance.iframe.srcdoc = '';
-
+function stopAllMusicStudioSounds() {
+    if (musicStudio_currentAudioContext && musicStudio_currentAudioContext.state !== 'closed') { musicStudio_currentAudioContext.close().catch(e => console.error("Error closing previous AudioContext:", e)); }
+    musicStudio_currentAudioContext = null; musicStudio_activeSources.forEach(source => { try { if(source && typeof source.stop === 'function') source.stop(); if(source && typeof source.disconnect === 'function') source.disconnect(); } catch(e){ console.warn("Error stopping/disconnecting audio source:", e); } });
+    musicStudio_activeSources = []; if(musicStudio_stopButton) musicStudio_stopButton.disabled = true; if(musicStudio_playButton && musicStudio_generatedCode.value) musicStudio_playButton.disabled = false;
+}
+if(musicStudio_playButton) musicStudio_playButton.addEventListener('click', () => {
+    const code = musicStudio_generatedCode.value;
+    if (code) {
+        stopAllMusicStudioSounds();
         try {
-            if (url.startsWith('vfs://')) {
-                const parts = url.substring(6).split('/');
-                const fileId = parts[0];
-                const fileEntry = getVFSEntry(fileId);
-                if (fileEntry && (fileEntry.mimeType === 'text/html' || fileEntry.name.endsWith('.html') || fileEntry.name.endsWith('.htm'))) {
-                    instance.iframe.srcdoc = fileEntry.content;
-                    instance.status.textContent = `Loaded from VFS: ${fileEntry.name}`;
-                    if (instance.titleBarTextElement) instance.titleBarTextElement.textContent = `🌐 ${fileEntry.name}`;
-                    logK8osActivity(`Browser (${instanceId})`, `Navigated (VFS): ${fileEntry.name}`);
-                } else {
-                    throw new Error(`VFS file not found or not HTML: ${url}`);
-                }
+            musicStudio_currentAudioContext = new (window.AudioContext || window.webkitAudioContext)(); musicStudio_activeSources = [];
+            const soundFunction = new Function('audioContext', 'activeSources', code); soundFunction(musicStudio_currentAudioContext, musicStudio_activeSources);
+            logK8osActivity("Music Studio", `Played music: ${musicStudio_promptInput.value.trim().substring(0,50)}...`);
+            musicStudioStatusUpdater("Playing..."); musicStudio_stopButton.disabled = musicStudio_activeSources.length === 0; musicStudio_playButton.disabled = true;
+        } catch (e) { console.error("Error playing music:", e); musicStudioStatusUpdater("Playback Error: " + (e.message || String(e)) ); stopAllMusicStudioSounds(); }
+    }
+});
+if(musicStudio_stopButton) musicStudio_stopButton.addEventListener('click', stopAllMusicStudioSounds);
+if(musicStudio_downloadJsButton) musicStudio_downloadJsButton.addEventListener('click', () => { if (musicStudio_lastJsCode) { let fileName = musicStudio_promptInput.value.trim().toLowerCase().replace(/[^\w\s-]/g, '').replace(/\s+/g, '_') || "music_script"; downloadFile(musicStudio_lastJsCode, `${fileName}.js`, "application/javascript"); } else { alert("No music code generated yet."); } });
+
+if(gamePlayer_refreshButton) gamePlayer_refreshButton.addEventListener('click', () => { if (gameGen_lastHtmlCode && gamePlayerWindow_iframe) { const htmlWithLogger = prepareGameHTMLWithLogger(gameGen_lastHtmlCode); gamePlayerWindow_iframe.srcdoc = htmlWithLogger; logK8osActivity("Game Player", `Refreshed game: ${gameGen_lastUserIdea.substring(0,50)}...`); } else { alert("No game loaded to refresh."); } });
+
+function createBrowserWindowHTML(instanceId, initialTitle = "🌐 Web Browser") { return ` <div class="title-bar"> <span class="title-bar-text" id="${instanceId}_titleBarText">${initialTitle}</span> <div class="title-bar-controls"><button class="minimize-button" title="Minimize">0</button><button class="fullscreen-button" title="Toggle Fullscreen">1</button><button class="close-button" title="Close">r</button></div> </div> <div id="${instanceId}_navControls" class="webBrowserWindow_navControls"> <button id="${instanceId}_backButton" title="Back" disabled>3</button> <button id="${instanceId}_forwardButton" title="Forward" disabled>4</button> <button id="${instanceId}_refreshButton" title="Refresh">Q</button> <input type="text" id="${instanceId}_addressBar" class="webBrowserWindow_addressBar" placeholder="Enter URL or VFS path (/file.html)"> <button id="${instanceId}_goButton" style="width:auto;padding-left:5px;padding-right:5px;">Go</button> </div> <div class="window-content"> <iframe id="${instanceId}_iframeContent" class="webBrowserWindow_iframeContent" sandbox="allow-scripts allow-forms allow-popups allow-same-origin"></iframe> </div> <div id="${instanceId}_status" class="status-bar">Status: Idle</div> `; }
+function openNewBrowserWindow(initialUrl = null, vfsFileId = null) {
+    browserWindowCounter++; const instanceId = `webBrowserWindow-${browserWindowCounter}`;
+    const windowEl = document.createElement('div'); windowEl.id = instanceId; windowEl.className = 'window webBrowserWindow';
+    const topOffset = 40 + (browserWindowCounter % 10) * 20; const leftOffset = 300 + (browserWindowCounter % 10) * 20;
+    windowEl.style.width = '800px'; windowEl.style.height = '600px'; windowEl.style.top = `${topOffset}px`; windowEl.style.left = `${leftOffset}px`;
+    windowEl.innerHTML = createBrowserWindowHTML(instanceId); desktopElement.appendChild(windowEl); initializeWindowBehavior(windowEl);
+    const instance = { id: instanceId, windowElement: windowEl, iframe: document.getElementById(`${instanceId}_iframeContent`), addressBar: document.getElementById(`${instanceId}_addressBar`), backButton: document.getElementById(`${instanceId}_backButton`), forwardButton: document.getElementById(`${instanceId}_forwardButton`), refreshButton: document.getElementById(`${instanceId}_refreshButton`), goButton: document.getElementById(`${instanceId}_goButton`), status: document.getElementById(`${instanceId}_status`), titleBarTextElement: document.getElementById(`${instanceId}_titleBarText`), history: [], historyIndex: -1 };
+    browserInstances[instanceId] = instance;
+    instance.goButton.addEventListener('click', () => navigateToUrlInBrowserInstance(instanceId, instance.addressBar.value.trim()));
+    instance.addressBar.addEventListener('keypress', (e) => { if (e.key === 'Enter') navigateToUrlInBrowserInstance(instanceId, instance.addressBar.value.trim()); });
+    instance.backButton.addEventListener('click', () => webBrowserNavigateInstance(instanceId, -1));
+    instance.forwardButton.addEventListener('click', () => webBrowserNavigateInstance(instanceId, 1));
+    instance.refreshButton.addEventListener('click', () => { if (instance.historyIndex > -1 && instance.history[instance.historyIndex]) { loadUrlInBrowserInstance(instanceId, instance.history[instance.historyIndex], false); logK8osActivity(`Browser (${instanceId})`, `Refreshed: ${instance.history[instance.historyIndex].substring(0,50)}...`); } });
+
+    let targetUrl = initialUrl;
+    if (vfsFileId) {
+        const fileEntry = getVFSEntry(vfsFileId);
+        if (fileEntry && (fileEntry.mimeType === 'text/html' || fileEntry.name.endsWith('.html') || fileEntry.name.endsWith('.htm'))) {
+            targetUrl = `vfs://${vfsFileId}/${fileEntry.name}`;
+            if (instance.titleBarTextElement) instance.titleBarTextElement.textContent = `🌐 ${fileEntry.name}`;
+        }
+    }
+    openWindow(instanceId);
+    if (targetUrl) { navigateToUrlInBrowserInstance(instanceId, targetUrl); }
+    updateWebBrowserNavButtonsInstance(instanceId); return windowEl;
+}
+async function loadUrlInBrowserInstance(instanceId, url, addToHistory = true) {
+    const instance = browserInstances[instanceId];
+    if (!instance || !instance.iframe || !instance.status || !instance.addressBar) { console.error(`Browser instance ${instanceId} not found or incomplete.`); return; }
+    instance.status.textContent = `Loading: ${url}...`; instance.addressBar.value = url; instance.iframe.srcdoc = '';
+
+    try {
+        if (url.startsWith('vfs://')) {
+            const parts = url.substring(6).split('/');
+            const fileId = parts[0];
+            const fileEntry = getVFSEntry(fileId);
+            if (fileEntry && (fileEntry.mimeType === 'text/html' || fileEntry.name.endsWith('.html') || fileEntry.name.endsWith('.htm'))) {
+                instance.iframe.srcdoc = fileEntry.content;
+                instance.status.textContent = `Loaded from VFS: ${fileEntry.name}`;
+                if (instance.titleBarTextElement) instance.titleBarTextElement.textContent = `🌐 ${fileEntry.name}`;
+                logK8osActivity(`Browser (${instanceId})`, `Navigated (VFS): ${fileEntry.name}`);
             } else {
-                let fetchUrl = url;
-                const isLikelyExternal = url.startsWith('http://') || url.startsWith('https://');
-                const isFileProtocol = url.startsWith('file:///'); const isK8osLocal = window.location.protocol === 'file:';
-                if (isFileProtocol || (isK8osLocal && !isLikelyExternal)) {
-                    instance.status.textContent = `Attempting to load (direct): ${url}`; instance.iframe.src = url;
-                    setTimeout(() => { if (instance.status.textContent.startsWith('Attempting')) { instance.status.textContent = `Attempted direct load: ${url}`; logK8osActivity(`Browser (${instanceId})`, `Navigated (direct): ${url.substring(0,50)}...`); } }, 1000);
-                } else {
-                    if (!isLikelyExternal && !url.startsWith('/')) { /* Potentially prepend origin or handle relative paths */ }
-                    const response = await fetch(fetchUrl);
-                    if (!response.ok) throw new Error(`HTTP error! status: ${response.status} for ${fetchUrl}`);
-                    const htmlContent = await response.text(); let finalHtml = htmlContent;
-                    const pathSegments = fetchUrl.split('/');
-                    const hasSubDirs = !isLikelyExternal && pathSegments.length > 1 && !pathSegments[pathSegments.length-1].includes('.');
-                    if (hasSubDirs && !htmlContent.toLowerCase().includes("<base")) {
-                        let basePath = pathSegments.slice(0, pathSegments[pathSegments.length -1] === '' ? -2 : -1).join('/') + '/';
-                         if (fetchUrl.startsWith(window.location.origin)) { basePath = new URL(basePath, window.location.href).pathname; }
-                         else if (!fetchUrl.startsWith('http')) { basePath = '/' + basePath; }
-                        if (finalHtml.includes("<head>")) { finalHtml = finalHtml.replace("<head>", `<head>\n<base href="${basePath}">`); }
-                        else { finalHtml = `<head><base href="${basePath}"></head>` + finalHtml; }
-                    }
-                    instance.iframe.srcdoc = finalHtml; instance.status.textContent = `Loaded: ${url}`;
-                    logK8osActivity(`Browser (${instanceId})`, `Navigated (fetch): ${url.substring(0,50)}...`);
-                }
-                 if (instance.titleBarTextElement) {
-                    let pageTitle = url; try { const tempDoc = instance.iframe.contentDocument || instance.iframe.contentWindow.document; if (tempDoc && tempDoc.title) { pageTitle = tempDoc.title; } } catch (e) { /* ignore */ }
-                    instance.titleBarTextElement.textContent = `🌐 ${pageTitle.substring(0, 50)}${pageTitle.length > 50 ? '...' : ''}`;
-                }
+                throw new Error(`VFS file not found or not HTML: ${url}`);
             }
-
-            if (addToHistory) {
-                if (instance.historyIndex < instance.history.length - 1) { instance.history = instance.history.slice(0, instance.historyIndex + 1); }
-                instance.history.push(url); instance.historyIndex = instance.history.length - 1;
+        } else {
+            let fetchUrl = url;
+            const isLikelyExternal = url.startsWith('http://') || url.startsWith('https://');
+            const isFileProtocol = url.startsWith('file:///'); const isK8osLocal = window.location.protocol === 'file:';
+            if (isFileProtocol || (isK8osLocal && !isLikelyExternal)) {
+                instance.status.textContent = `Attempting to load (direct): ${url}`; instance.iframe.src = url;
+                setTimeout(() => { if (instance.status.textContent.startsWith('Attempting')) { instance.status.textContent = `Attempted direct load: ${url}`; logK8osActivity(`Browser (${instanceId})`, `Navigated (direct): ${url.substring(0,50)}...`); } }, 1000);
+            } else {
+                if (!isLikelyExternal && !url.startsWith('/')) { /* Potentially prepend origin or handle relative paths */ }
+                const response = await fetch(fetchUrl);
+                if (!response.ok) throw new Error(`HTTP error! status: ${response.status} for ${fetchUrl}`);
+                const htmlContent = await response.text(); let finalHtml = htmlContent;
+                const pathSegments = fetchUrl.split('/');
+                const hasSubDirs = !isLikelyExternal && pathSegments.length > 1 && !pathSegments[pathSegments.length-1].includes('.');
+                if (hasSubDirs && !htmlContent.toLowerCase().includes("<base")) {
+                    let basePath = pathSegments.slice(0, pathSegments[pathSegments.length -1] === '' ? -2 : -1).join('/') + '/';
+                     if (fetchUrl.startsWith(window.location.origin)) { basePath = new URL(basePath, window.location.href).pathname; }
+                     else if (!fetchUrl.startsWith('http')) { basePath = '/' + basePath; }
+                    if (finalHtml.includes("<head>")) { finalHtml = finalHtml.replace("<head>", `<head>\n<base href="${basePath}">`); }
+                    else { finalHtml = `<head><base href="${basePath}"></head>` + finalHtml; }
+                }
+                instance.iframe.srcdoc = finalHtml; instance.status.textContent = `Loaded: ${url}`;
+                logK8osActivity(`Browser (${instanceId})`, `Navigated (fetch): ${url.substring(0,50)}...`);
             }
-        } catch (error) { console.error(`Error loading URL in browser app (${instanceId}):`, error, "URL:", url); instance.iframe.srcdoc = `<p style="color:red;padding:10px;">Error loading page: ${url}<br>${error.message || String(error)}<br><small>Note: Loading local 'file:///' URLs directly has security restrictions. For best results with local files, serve k8OS and your files from a local HTTP server.</small></p>`; instance.status.textContent = `Error: ${error.message || String(error)}`; }
-        updateWebBrowserNavButtonsInstance(instanceId);
-    }
-    function navigateToUrlInBrowserInstance(instanceId, url) { if (url) loadUrlInBrowserInstance(instanceId, url, true); }
-    function webBrowserNavigateInstance(instanceId, direction) {
-        const instance = browserInstances[instanceId]; if (!instance) return;
-        const newIndex = instance.historyIndex + direction;
-        if (newIndex >= 0 && newIndex < instance.history.length) { instance.historyIndex = newIndex; loadUrlInBrowserInstance(instanceId, instance.history[instance.historyIndex], false); logK8osActivity(`Browser (${instanceId})`, `Used ${direction > 0 ? 'Forward' : 'Back'} to: ${instance.history[instance.historyIndex].substring(0,50)}...`); }
-    }
-    function updateWebBrowserNavButtonsInstance(instanceId) { const instance = browserInstances[instanceId]; if (!instance) return; instance.backButton.disabled = instance.historyIndex <= 0; instance.forwardButton.disabled = instance.historyIndex >= instance.history.length - 1; }
+             if (instance.titleBarTextElement) {
+                let pageTitle = url; try { const tempDoc = instance.iframe.contentDocument || instance.iframe.contentWindow.document; if (tempDoc && tempDoc.title) { pageTitle = tempDoc.title; } } catch (e) { /* ignore */ }
+                instance.titleBarTextElement.textContent = `🌐 ${pageTitle.substring(0, 50)}${pageTitle.length > 50 ? '...' : ''}`;
+            }
+        }
 
-    if(startButton) startButton.addEventListener('click', (e) => { e.stopPropagation(); startMenu.style.display = startMenu.style.display === 'flex' ? 'none' : 'flex'; hideContextMenu(); });
-    if(startMenuShutdown) startMenuShutdown.addEventListener('click', () => { startMenu.style.display = 'none'; if (confirm("Are you sure you want to shut down k8OS?")) { document.body.innerHTML = '<div style="position:fixed;top:0;left:0;width:100%;height:100%;background:black;color:white;display:flex;justify-content:center;align-items:center;font-size:24px;">k8OS is shutting down...</div>'; setTimeout(() => { window.close(); }, 2000); } });
-    if(startMenuReboot) startMenuReboot.addEventListener('click', () => { startMenu.style.display = 'none'; if (confirm("Are you sure you want to reboot k8OS?")) { rebootOverlay.style.display = 'flex'; rebootProgressText.textContent = "Closing applications..."; document.querySelectorAll('.window').forEach(w => closeWindow(w)); const rebootSteps = [ { delay: 700, text: "System integrity check..." }, { delay: 1200, text: "Loading kernel modules..." }, { delay: 1000, text: "Initializing desktop..." }, { delay: 800, text: "Mounting file systems..." }, { delay: 600, text: "Starting services..." }, { delay: 500, text: "Finalizing..." }, { delay: 400, text: "System ready." } ]; let currentStepIndex = 0; function processNextStep() { if (currentStepIndex < rebootSteps.length) { rebootProgressText.textContent = rebootSteps[currentStepIndex].text; setTimeout(processNextStep, rebootSteps[currentStepIndex].delay); currentStepIndex++; } else { rebootOverlay.style.display = 'none'; document.querySelectorAll('.desktop-icon.selected').forEach(i => i.classList.remove('selected')); k8osActivityLog = []; loadApiKey(); openWindow('apiKeySettingsWindow'); } } setTimeout(processNextStep, 500); } });
-    if(startMenuFactoryReset) startMenuFactoryReset.addEventListener('click', () => { startMenu.style.display = 'none'; handleFactoryReset(); });
+        if (addToHistory) {
+            if (instance.historyIndex < instance.history.length - 1) { instance.history = instance.history.slice(0, instance.historyIndex + 1); }
+            instance.history.push(url); instance.historyIndex = instance.history.length - 1;
+        }
+    } catch (error) { console.error(`Error loading URL in browser app (${instanceId}):`, error, "URL:", url); instance.iframe.srcdoc = `<p style="color:red;padding:10px;">Error loading page: ${url}<br>${error.message || String(error)}<br><small>Note: Loading local 'file:///' URLs directly has security restrictions. For best results with local files, serve k8OS and your files from a local HTTP server.</small></p>`; instance.status.textContent = `Error: ${error.message || String(error)}`; }
+    updateWebBrowserNavButtonsInstance(instanceId);
+}
+function navigateToUrlInBrowserInstance(instanceId, url) { if (url) loadUrlInBrowserInstance(instanceId, url, true); }
+function webBrowserNavigateInstance(instanceId, direction) {
+    const instance = browserInstances[instanceId]; if (!instance) return;
+    const newIndex = instance.historyIndex + direction;
+    if (newIndex >= 0 && newIndex < instance.history.length) { instance.historyIndex = newIndex; loadUrlInBrowserInstance(instanceId, instance.history[instance.historyIndex], false); logK8osActivity(`Browser (${instanceId})`, `Used ${direction > 0 ? 'Forward' : 'Back'} to: ${instance.history[instance.historyIndex].substring(0,50)}...`); }
+}
+function updateWebBrowserNavButtonsInstance(instanceId) { const instance = browserInstances[instanceId]; if (!instance) return; instance.backButton.disabled = instance.historyIndex <= 0; instance.forwardButton.disabled = instance.historyIndex >= instance.history.length - 1; }
 
-    function handleFactoryReset() {
-        if (!confirm("DANGER ZONE!\n\nAre you absolutely sure you want to factory reset k8OS?\n\nALL data (API keys, files, settings, Sparky's memory) will be PERMANENTLY ERASED.\nThis action cannot be undone.")) {
+if(startButton) startButton.addEventListener('click', (e) => { e.stopPropagation(); startMenu.style.display = startMenu.style.display === 'flex' ? 'none' : 'flex'; hideContextMenu(); });
+if(startMenuShutdown) startMenuShutdown.addEventListener('click', () => { startMenu.style.display = 'none'; if (confirm("Are you sure you want to shut down k8OS?")) { document.body.innerHTML = '<div style="position:fixed;top:0;left:0;width:100%;height:100%;background:black;color:white;display:flex;justify-content:center;align-items:center;font-size:24px;">k8OS is shutting down...</div>'; setTimeout(() => { window.close(); }, 2000); } });
+if(startMenuReboot) startMenuReboot.addEventListener('click', () => { startMenu.style.display = 'none'; if (confirm("Are you sure you want to reboot k8OS?")) { rebootOverlay.style.display = 'flex'; rebootProgressText.textContent = "Closing applications..."; document.querySelectorAll('.window').forEach(w => closeWindow(w)); const rebootSteps = [ { delay: 700, text: "System integrity check..." }, { delay: 1200, text: "Loading kernel modules..." }, { delay: 1000, text: "Initializing desktop..." }, { delay: 800, text: "Mounting file systems..." }, { delay: 600, text: "Starting services..." }, { delay: 500, text: "Finalizing..." }, { delay: 400, text: "System ready." } ]; let currentStepIndex = 0; function processNextStep() { if (currentStepIndex < rebootSteps.length) { rebootProgressText.textContent = rebootSteps[currentStepIndex].text; setTimeout(processNextStep, rebootSteps[currentStepIndex].delay); currentStepIndex++; } else { rebootOverlay.style.display = 'none'; document.querySelectorAll('.desktop-icon.selected').forEach(i => i.classList.remove('selected')); k8osActivityLog = []; loadApiKey(); openWindow('apiKeySettingsWindow'); } } setTimeout(processNextStep, 500); } });
+if(startMenuFactoryReset) startMenuFactoryReset.addEventListener('click', () => { startMenu.style.display = 'none'; handleFactoryReset(); });
+
+function handleFactoryReset() {
+    if (!confirm("DANGER ZONE!\n\nAre you absolutely sure you want to factory reset k8OS?\n\nALL data (API keys, files, settings, Sparky's memory) will be PERMANENTLY ERASED.\nThis action cannot be undone.")) {
+        return;
+    }
+    console.warn("FACTORY RESET INITIATED!");
+    if(assistantIsVisible) updateAssistantSpeech("Resetting... Bye! :(", false, false, true);
+
+    const keysToClear = [];
+    for (let i = 0; i < localStorage.length; i++) {
+        const key = localStorage.key(i);
+        if (key && (key.startsWith('k8os_') ||
+            ['GlobalGeminiApiKey', 'GlobalGroqApiKey', 'GlobalOpenRouterApiKey', 'GlobalDeepSeekApiKey', 'GlobalHfToken',
+             'GlobalCustomApiKey',
+             'desktopBgColor', 'desktopBgImageUrl', 'desktopBgImageSize',
+             'desktopBgImageRepeat', 'desktopIconScaleFactor'].includes(key))
+           ) {
+            keysToClear.push(key);
+        }
+    }
+    keysToClear.forEach(key => {
+        console.log("Clearing localStorage key:", key);
+        localStorage.removeItem(key);
+    });
+
+    sessionStorage.clear();
+
+    if (rebootOverlay && rebootProgressText) {
+        rebootOverlay.style.display = 'flex';
+        rebootProgressText.textContent = "Factory Resetting System... Wiping data...";
+    }
+
+    setTimeout(() => {
+        if (rebootProgressText) rebootProgressText.textContent = "Reloading k8OS...";
+        setTimeout(() => {
+            location.reload(true);
+        }, 1500);
+    }, 2000);
+}
+
+if (textEditor_sparkyAssistButton) {
+    textEditor_sparkyAssistButton.addEventListener('click', async () => {
+        const editorContent = textEditor_contentArea.value.trim();
+        if (!editorContent) {
+            textEditor_status.textContent = "Sparky Assist: Editor is empty. Type a plan for files/folders.";
             return;
         }
-        console.warn("FACTORY RESET INITIATED!");
-        if(assistantIsVisible) updateAssistantSpeech("Resetting... Bye! :(", false, false, true);
+        textEditor_status.textContent = "Sparky Assist: Processing request...";
+        updateAssistantSpeech("Let me help with those files...", false, true, true);
 
-        const keysToClear = [];
-        for (let i = 0; i < localStorage.length; i++) {
-            const key = localStorage.key(i);
-            if (key && (key.startsWith('k8os_') ||
-                ['GlobalGeminiApiKey', 'GlobalGroqApiKey', 'GlobalDeepSeekApiKey', 'GlobalHfToken',
-                 'GlobalCustomApiKey',
-                 'desktopBgColor', 'desktopBgImageUrl', 'desktopBgImageSize',
-                 'desktopBgImageRepeat', 'desktopIconScaleFactor'].includes(key))
-               ) {
-                keysToClear.push(key);
-            }
+        const baseParentIdForCreation = currentTextEditorFileId ? getVFSEntry(currentTextEditorFileId)?.parentId : (currentFEVfsPathId || SPARKY_CREATIONS_VFS_ID || 'root');
+        await processSparkyCommand(`Sparky, create file system based on editor content. ${editorContent}`, baseParentIdForCreation);
+
+        if (fe_fileListElement && (currentFEVfsPathId === baseParentIdForCreation || baseParentIdForCreation === 'root')) {
+            renderVFSFileList(currentFEVfsPathId);
         }
-        keysToClear.forEach(key => {
-            console.log("Clearing localStorage key:", key);
-            localStorage.removeItem(key);
-        });
-
-        sessionStorage.clear();
-
-        if (rebootOverlay && rebootProgressText) {
-            rebootOverlay.style.display = 'flex';
-            rebootProgressText.textContent = "Factory Resetting System... Wiping data...";
-        }
-
-        setTimeout(() => {
-            if (rebootProgressText) rebootProgressText.textContent = "Reloading k8OS...";
-            setTimeout(() => {
-                location.reload(true);
-            }, 1500);
-        }, 2000);
-    }
-
-    if (textEditor_sparkyAssistButton) {
-        textEditor_sparkyAssistButton.addEventListener('click', async () => {
-            const editorContent = textEditor_contentArea.value.trim();
-            if (!editorContent) {
-                textEditor_status.textContent = "Sparky Assist: Editor is empty. Type a plan for files/folders.";
-                return;
-            }
-            textEditor_status.textContent = "Sparky Assist: Processing request...";
-            updateAssistantSpeech("Let me help with those files...", false, true, true);
-
-            const baseParentIdForCreation = currentTextEditorFileId ? getVFSEntry(currentTextEditorFileId)?.parentId : (currentFEVfsPathId || SPARKY_CREATIONS_VFS_ID || 'root');
-            await processSparkyCommand(`Sparky, create file system based on editor content. ${editorContent}`, baseParentIdForCreation);
-
-            if (fe_fileListElement && (currentFEVfsPathId === baseParentIdForCreation || baseParentIdForCreation === 'root')) {
-                renderVFSFileList(currentFEVfsPathId);
-            }
-            textEditor_status.textContent = "Sparky Assist: Request sent.";
-        });
-    }
+        textEditor_status.textContent = "Sparky Assist: Request sent.";
+    });
+}
 
 
-    function initSparkyDynamicBehavior() {
-        if (assistantContainer && assistantIsVisible) {
-            const desktopWidth = desktopElement.clientWidth;
-            const desktopHeight = desktopElement.clientHeight;
-            const taskbarHeight = document.querySelector('.taskbar')?.offsetHeight || 30;
-
-            if (!assistantContainer.style.left || !assistantContainer.style.top) {
-                 sparkyPosX = Math.random() * (desktopWidth - SPARKY_CONTAINER_WIDTH);
-                 sparkyPosY = Math.random() * (desktopHeight - SPARKY_CONTAINER_HEIGHT - taskbarHeight);
-                 assistantContainer.style.left = sparkyPosX + 'px';
-                 assistantContainer.style.top = sparkyPosY + 'px';
-            } else {
-                sparkyPosX = parseFloat(assistantContainer.style.left) || 50;
-                sparkyPosY = parseFloat(assistantContainer.style.top) || 50;
-            }
-            startSparkyMovement();
-        }
-    }
-
-    function startSparkyMovement() {
-        if (sparkyMoveIntervalId) clearInterval(sparkyMoveIntervalId);
-        sparkyMoveIntervalId = setInterval(updateSparkyPosition, 60);
-    }
-
-    function stopSparkyMovement() {
-        if (sparkyMoveIntervalId) clearInterval(sparkyMoveIntervalId);
-        sparkyMoveIntervalId = null;
-    }
-
-
-    function updateSparkyPosition() {
-        if (!sparkyIsMoving || !assistantIsVisible || !assistantContainer || !desktopElement) return;
-
+function initSparkyDynamicBehavior() {
+    if (assistantContainer && assistantIsVisible) {
         const desktopWidth = desktopElement.clientWidth;
         const desktopHeight = desktopElement.clientHeight;
         const taskbarHeight = document.querySelector('.taskbar')?.offsetHeight || 30;
 
-        sparkyPosX += sparkyVelX;
-        sparkyPosY += sparkyVelY;
-
-        if (sparkyPosX + SPARKY_CONTAINER_WIDTH >= desktopWidth) { sparkyVelX = -Math.abs(sparkyVelX); sparkyPosX = desktopWidth - SPARKY_CONTAINER_WIDTH; }
-        else if (sparkyPosX <= 0) { sparkyVelX = Math.abs(sparkyVelX); sparkyPosX = 0; }
-        if (sparkyPosY + SPARKY_CONTAINER_HEIGHT >= desktopHeight - taskbarHeight) { sparkyVelY = -Math.abs(sparkyVelY); sparkyPosY = desktopHeight - taskbarHeight - SPARKY_CONTAINER_HEIGHT; }
-        else if (sparkyPosY <= 0) { sparkyVelY = Math.abs(sparkyVelY); sparkyPosY = 0; }
-
-        assistantContainer.style.left = sparkyPosX + 'px';
-        assistantContainer.style.top = sparkyPosY + 'px';
-
-        const sparkyBobbingGroup = assistantAvatarSVG ? assistantAvatarSVG.querySelector('#sparkyBobbingGroup') : null;
-        if (sparkyBobbingGroup && Math.random() < 0.0008 && !sparkyBobbingGroup.classList.contains('rolling')) {
-            sparkyBobbingGroup.classList.add('rolling');
-            setTimeout(() => {
-                sparkyBobbingGroup.classList.remove('rolling');
-                sparkyBobbingGroup.style.transform = '';
-            }, 1000);
+        if (!assistantContainer.style.left || !assistantContainer.style.top) {
+             sparkyPosX = Math.random() * (desktopWidth - SPARKY_CONTAINER_WIDTH);
+             sparkyPosY = Math.random() * (desktopHeight - SPARKY_CONTAINER_HEIGHT - taskbarHeight);
+             assistantContainer.style.left = sparkyPosX + 'px';
+             assistantContainer.style.top = sparkyPosY + 'px';
+        } else {
+            sparkyPosX = parseFloat(assistantContainer.style.left) || 50;
+            sparkyPosY = parseFloat(assistantContainer.style.top) || 50;
         }
+        startSparkyMovement();
+    }
+}
 
-        if (Math.random() < 0.005) {
-            sparkyIsMoving = false;
-            setTimeout(() => {
-                sparkyIsMoving = true;
-            }, Math.random() * 3000 + 2000);
-        }
-        if (Math.random() < 0.002) {
-            sparkyVelX = (Math.random() < 0.5 ? -1 : 1) * (Math.random() * 1.5 + 0.5);
-            sparkyVelY = (Math.random() < 0.5 ? -1 : 1) * (Math.random() * 1.5 + 0.5);
-        }
+function startSparkyMovement() {
+    if (sparkyMoveIntervalId) clearInterval(sparkyMoveIntervalId);
+    sparkyMoveIntervalId = setInterval(updateSparkyPosition, 60);
+}
+
+function stopSparkyMovement() {
+    if (sparkyMoveIntervalId) clearInterval(sparkyMoveIntervalId);
+    sparkyMoveIntervalId = null;
+}
+
+
+function updateSparkyPosition() {
+    if (!sparkyIsMoving || !assistantIsVisible || !assistantContainer || !desktopElement) return;
+
+    const desktopWidth = desktopElement.clientWidth;
+    const desktopHeight = desktopElement.clientHeight;
+    const taskbarHeight = document.querySelector('.taskbar')?.offsetHeight || 30;
+
+    sparkyPosX += sparkyVelX;
+    sparkyPosY += sparkyVelY;
+
+    if (sparkyPosX + SPARKY_CONTAINER_WIDTH >= desktopWidth) { sparkyVelX = -Math.abs(sparkyVelX); sparkyPosX = desktopWidth - SPARKY_CONTAINER_WIDTH; }
+    else if (sparkyPosX <= 0) { sparkyVelX = Math.abs(sparkyVelX); sparkyPosX = 0; }
+    if (sparkyPosY + SPARKY_CONTAINER_HEIGHT >= desktopHeight - taskbarHeight) { sparkyVelY = -Math.abs(sparkyVelY); sparkyPosY = desktopHeight - taskbarHeight - SPARKY_CONTAINER_HEIGHT; }
+    else if (sparkyPosY <= 0) { sparkyVelY = Math.abs(sparkyVelY); sparkyPosY = 0; }
+
+    assistantContainer.style.left = sparkyPosX + 'px';
+    assistantContainer.style.top = sparkyPosY + 'px';
+
+    const sparkyBobbingGroup = assistantAvatarSVG ? assistantAvatarSVG.querySelector('#sparkyBobbingGroup') : null;
+    if (sparkyBobbingGroup && Math.random() < 0.0008 && !sparkyBobbingGroup.classList.contains('rolling')) {
+        sparkyBobbingGroup.classList.add('rolling');
+        setTimeout(() => {
+            sparkyBobbingGroup.classList.remove('rolling');
+            sparkyBobbingGroup.style.transform = '';
+        }, 1000);
     }
 
-    function initAllAiApps(){
-        initSvgGeneratorApp();
-        initGameGeneratorApp();
-        initMusicStudioApp();
-        initGifCreatorApp();
-        if (selectedApiProvider !== 'gemini' || !window.GLOBAL_GEMINI_API_KEY) { assistant_gemini_model = null; }
-        if (selectedApiProvider === 'transformersjs' && window.GLOBAL_TRANSFORMERSJS_MODEL_ID) {
-            ensureTransformersJsPipeline(window.GLOBAL_TRANSFORMERSJS_MODEL_ID, (progress) => {
-                const statusTarget = document.getElementById('systemSettingsWindow')?.style.display === 'flex' ? systemSettings_transformersjs_status : apiKeyStatus;
-                if (statusTarget) {
-                    if (progress.status === 'loading') {
-                        statusTarget.textContent = `Pre-warming ${window.GLOBAL_TRANSFORMERSJS_MODEL_ID}: ${Math.round(progress.progress)}% (${progress.file})`;
-                    } else if (progress.status === 'loaded') {
-                        statusTarget.textContent = `Model ${window.GLOBAL_TRANSFORMERSJS_MODEL_ID} ready.`;
-                    } else if (progress.status === 'error') {
-                        statusTarget.textContent = `Error pre-warming ${window.GLOBAL_TRANSFORMERSJS_MODEL_ID}: ${(progress.message || String(progress)).substring(0,50)}`;
-                    } else {
-                        statusTarget.textContent = `Pre-warming ${window.GLOBAL_TRANSFORMERSJS_MODEL_ID}: ${Math.round(progress.progress || 0)}% (${progress.file || 'model files'})`;
-                    }
+    if (Math.random() < 0.005) {
+        sparkyIsMoving = false;
+        setTimeout(() => {
+            sparkyIsMoving = true;
+        }, Math.random() * 3000 + 2000);
+    }
+    if (Math.random() < 0.002) {
+        sparkyVelX = (Math.random() < 0.5 ? -1 : 1) * (Math.random() * 1.5 + 0.5);
+        sparkyVelY = (Math.random() < 0.5 ? -1 : 1) * (Math.random() * 1.5 + 0.5);
+    }
+}
+
+function initAllAiApps(){
+    initSvgGeneratorApp();
+    initGameGeneratorApp();
+    initMusicStudioApp();
+    initGifCreatorApp();
+    if (selectedApiProvider !== 'gemini' || !window.GLOBAL_GEMINI_API_KEY) { assistant_gemini_model = null; }
+    if (selectedApiProvider === 'transformersjs' && window.GLOBAL_TRANSFORMERSJS_MODEL_ID) {
+        ensureTransformersJsPipeline(window.GLOBAL_TRANSFORMERSJS_MODEL_ID, (progress) => {
+            const statusTarget = document.getElementById('systemSettingsWindow')?.style.display === 'flex' ? systemSettings_transformersjs_status : apiKeyStatus;
+            if (statusTarget) {
+                if (progress.status === 'loading') {
+                    statusTarget.textContent = `Pre-warming ${window.GLOBAL_TRANSFORMERSJS_MODEL_ID}: ${Math.round(progress.progress)}% (${progress.file})`;
+                } else if (progress.status === 'loaded') {
+                    statusTarget.textContent = `Model ${window.GLOBAL_TRANSFORMERSJS_MODEL_ID} ready.`;
+                } else if (progress.status === 'error') {
+                    statusTarget.textContent = `Error pre-warming ${window.GLOBAL_TRANSFORMERSJS_MODEL_ID}: ${(progress.message || String(progress)).substring(0,50)}`;
+                } else {
+                    statusTarget.textContent = `Pre-warming ${window.GLOBAL_TRANSFORMERSJS_MODEL_ID}: ${Math.round(progress.progress || 0)}% (${progress.file || 'model files'})`;
                 }
-            }).then(() => {
-                 const statusTarget = document.getElementById('systemSettingsWindow')?.style.display === 'flex' ? systemSettings_transformersjs_status : apiKeyStatus;
-                 if (statusTarget) statusTarget.textContent = `Local LLM ${window.GLOBAL_TRANSFORMERSJS_MODEL_ID} ready.`;
-            }).catch(e => {
-                console.error("Error pre-warming Transformers.js model:", e);
-                 const statusTarget = document.getElementById('systemSettingsWindow')?.style.display === 'flex' ? systemSettings_transformersjs_status : apiKeyStatus;
-                 if (statusTarget) statusTarget.textContent = `Error pre-warming: ${(e.message || String(e)).substring(0,50)}`;
-            });
-        }
+            }
+        }).then(() => {
+             const statusTarget = document.getElementById('systemSettingsWindow')?.style.display === 'flex' ? systemSettings_transformersjs_status : apiKeyStatus;
+             if (statusTarget) statusTarget.textContent = `Local LLM ${window.GLOBAL_TRANSFORMERSJS_MODEL_ID} ready.`;
+        }).catch(e => {
+            console.error("Error pre-warming Transformers.js model:", e);
+             const statusTarget = document.getElementById('systemSettingsWindow')?.style.display === 'flex' ? systemSettings_transformersjs_status : apiKeyStatus;
+             if (statusTarget) statusTarget.textContent = `Error pre-warming: ${(e.message || String(e)).substring(0,50)}`;
+        });
     }
+}
 
-    loadApiKey();
-    openWindow('apiKeySettingsWindow');
+loadApiKey();
+openWindow('apiKeySettingsWindow');
 
 </script>
 </body>
