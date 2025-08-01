@@ -1,0 +1,435 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <title>3o5</title>
+    <meta charset="utf-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0, user-scalable=no">
+    <style>
+        @import url('https://fonts.googleapis.com/css2?family=Roboto:wght@300;400;700&family=Source+Code+Pro:wght@400;700&display=swap');
+        
+        :root {
+            --primary-bg: #121212;
+            --secondary-bg: #2a2a2e;
+            --tertiary-bg: #1e1e1e;
+            --border-color: #444;
+            --primary-text: #e0e0e0;
+            --secondary-text: #b0b0b0;
+            --accent-color: #4CAF50;
+            --accent-hover: #45a049;
+            --disabled-color: #555;
+            --error-color: #D32F2F;
+            --ide-bg: #1a1a1c;
+        }
+
+        body {
+            margin: 0;
+            font-family: 'Roboto', sans-serif;
+            background-color: var(--primary-bg);
+            color: var(--primary-text);
+            display: flex;
+            justify-content: center;
+            align-items: center;
+            height: 100vh;
+            overflow: hidden;
+        }
+        
+        #agent-container {
+            width: 90%;
+            max-width: 700px;
+            text-align: center;
+            transition: opacity 0.5s ease-out;
+            position: relative;
+            z-index: 1;
+        }
+        
+        h1 { font-weight: 300; font-size: 2.5em; color: #ffffff; margin-bottom: 10px; }
+        h1 span { font-weight: 700; color: var(--accent-color); }
+        p { color: var(--secondary-text); font-size: 1.1em; margin-bottom: 40px; }
+        
+        #input-wrapper { position: relative; width: 100%; }
+        
+        .styled-input {
+            width: 100%;
+            padding: 20px;
+            border: 1px solid var(--border-color);
+            background-color: var(--secondary-bg);
+            color: var(--primary-text);
+            border-radius: 30px;
+            box-sizing: border-box;
+            font-size: 1.1em;
+            transition: box-shadow 0.3s;
+        }
+        
+        .styled-input:focus { outline: none; box-shadow: 0 0 15px rgba(76, 175, 80, 0.4); }
+        #prompt-input { padding-right: 140px; }
+        
+        .styled-button {
+            padding: 12px 20px;
+            border: none;
+            background-color: var(--accent-color);
+            color: white;
+            border-radius: 20px;
+            cursor: pointer;
+            font-size: 1em;
+            font-weight: bold;
+            transition: background-color 0.3s;
+            white-space: nowrap;
+        }
+        .styled-button:hover:not(:disabled) { background-color: var(--accent-hover); }
+        .styled-button:disabled { background-color: var(--disabled-color); cursor: not-allowed; }
+        #generate-btn { position: absolute; right: 10px; top: 50%; transform: translateY(-50%); }
+        
+        .overlay {
+            position: fixed;
+            top: 0; left: 0;
+            width: 100%; height: 100%;
+            background: rgba(18, 18, 18, 0.8);
+            display: none;
+            justify-content: center;
+            align-items: center;
+            z-index: 1000;
+            backdrop-filter: blur(5px);
+        }
+
+        .panel-container {
+            background-color: var(--tertiary-bg);
+            padding: 30px 40px;
+            border-radius: 15px;
+            box-shadow: 0 10px 30px rgba(0,0,0,0.5);
+            width: 90%;
+            max-width: 550px;
+            position: relative;
+            border: 1px solid var(--border-color);
+        }
+        .panel-container h2 { margin-top: 0; color: var(--accent-color); text-align: center; font-weight: 400; }
+        
+        #final-game-container { position: absolute; top: 0; left: 0; width: 100vw; height: 100vh; z-index: 0; }
+        
+        #custom-alert-box { text-align: center; max-width: 400px; }
+        #custom-alert-box h3 { margin-top: 0; color: #ffffff; }
+        #custom-alert-box p { color: var(--primary-text); margin-bottom: 30px; }
+
+        #ide-overlay { z-index: 1001; }
+        #ide-container {
+            width: 90%; height: 90%; max-width: 1200px;
+            background-color: var(--ide-bg);
+            border: 1px solid var(--border-color);
+            border-radius: 10px;
+            box-shadow: 0 10px 40px rgba(0,0,0,0.6);
+            display: flex; flex-direction: column; overflow: hidden;
+        }
+        #ide-header {
+            padding: 10px 20px; background-color: var(--tertiary-bg);
+            border-bottom: 1px solid var(--border-color);
+            display: flex; align-items: center; justify-content: space-between; flex-shrink: 0;
+        }
+        #ide-status-title { font-family: 'Source Code Pro', monospace; color: var(--accent-color); font-weight: bold; }
+        #ide-status-text { color: var(--secondary-text); }
+        #ide-code-wrapper {
+            flex-grow: 1; overflow-y: auto; padding: 20px;
+            font-family: 'Source Code Pro', monospace;
+            white-space: pre-wrap; word-wrap: break-word;
+            color: #d4d4d4; font-size: 14px; position: relative;
+        }
+        
+        #ide-thinking-indicator {
+            position: absolute; top: 0; left: 0; right: 0; bottom: 0;
+            display: flex; flex-direction: column; justify-content: center; align-items: center; gap: 20px;
+        }
+        .thinking-dots { display: flex; gap: 15px; }
+        .thinking-dots div { width: 12px; height: 12px; background-color: var(--accent-color); border-radius: 50%; animation: pulse 1.4s infinite ease-in-out both; }
+        .thinking-dots .dot-2 { animation-delay: 0.2s; }
+        .thinking-dots .dot-3 { animation-delay: 0.4s; }
+        #ide-thinking-indicator p { font-family: 'Roboto', sans-serif; font-size: 1.1em; color: var(--secondary-text); }
+        @keyframes pulse { 0%, 80%, 100% { transform: scale(0); } 40% { transform: scale(1.0); } }
+    </style>
+</head>
+<body>
+    <div id="agent-container">
+        <h1>Gemini <span>Instant Game Creator</span></h1>
+        <p>Describe the game you want to create. Press 'Esc' for options.</p>
+        <div id="input-wrapper">
+            <input type="text" id="prompt-input" class="styled-input" placeholder="A simple game where a sphere avoids falling cubes.">
+            <button id="generate-btn" class="styled-button">Generate</button>
+        </div>
+    </div>
+
+    <div id="final-game-container"></div>
+
+    <!-- Overlays -->
+    <div id="options-panel" class="overlay">
+        <div class="panel-container">
+             <button id="close-options-btn" style="position: absolute; top: 15px; right: 15px; background: none; border: none; color: var(--secondary-text); font-size: 2em; line-height: 1; cursor: pointer;">×</button>
+             <h2>Options & Debug</h2>
+             <div style="margin-bottom: 20px;">
+                <label for="api-key-input" style="display: block; margin-bottom: 8px; color: var(--secondary-text); font-size: 0.9em;">
+                    <a href="https://aistudio.google.com/app/apikey" target="_blank" rel="noopener noreferrer" style="color: var(--secondary-text); text-decoration: none;">Get your Gemini API Key <span style="display: inline-block; transform: translateY(-1px);">↗</span></a>
+                </label>
+                <input type="password" id="api-key-input" class="styled-input" style="padding: 12px; font-size: 1em; border-radius: 8px;" placeholder="Paste your API key here">
+            </div>
+             <div style="margin-bottom: 20px;">
+                <label for="model-input" style="display: block; margin-bottom: 8px; color: var(--secondary-text); font-size: 0.9em;">Gemini Model</label>
+                <input type="text" id="model-input" class="styled-input" style="padding: 12px; font-size: 1em; border-radius: 8px;" value="gemini-1.5-flash">
+            </div>
+            <div style="display: flex; justify-content: center; gap: 15px; margin-top: 25px;"><button id="save-settings-btn" class="styled-button">Save Settings</button></div>
+            <p id="status-message" style="text-align: center; min-height: 20px; color: var(--accent-color); font-weight: bold;"></p>
+            <hr style="border: 0; height: 1px; background-color: var(--border-color); margin: 30px 0;">
+            <div style="margin-bottom: 20px;">
+                <label for="modify-prompt-input" style="display: block; margin-bottom: 8px; color: var(--secondary-text); font-size: 0.9em;">Instructed Debugging / Modification</label>
+                <input type="text" id="modify-prompt-input" class="styled-input" style="padding: 12px; font-size: 1em; border-radius: 8px;" placeholder="e.g., Make the cubes fall faster">
+            </div>
+            <div style="display: flex; justify-content: center; gap: 15px; margin-top: 25px;">
+                <button id="modify-btn" class="styled-button" disabled>Modify Game</button>
+                <button id="download-btn" class="styled-button" disabled>Download Game</button>
+            </div>
+            <p style="text-align: center; font-size: 0.8em; color: var(--secondary-text); margin-top: 20px;">Press 'Esc' to toggle this panel.</p>
+        </div>
+    </div>
+
+    <div id="custom-alert-overlay" class="overlay">
+        <div id="custom-alert-box" class="panel-container">
+            <h3 id="custom-alert-title">Notice</h3>
+            <p id="custom-alert-message">This is a custom alert message.</p>
+            <button id="custom-alert-ok-btn" class="styled-button">OK</button>
+        </div>
+    </div>
+
+    <div id="ide-overlay" class="overlay">
+        <div id="ide-container">
+            <div id="ide-header">
+                <span id="ide-status-title">AGENT STREAM</span>
+                <span id="ide-status-text"></span>
+            </div>
+            <div id="ide-code-wrapper">
+                <div id="ide-thinking-indicator">
+                    <div class="thinking-dots"> <div class="dot-1"></div><div class="dot-2"></div><div class="dot-3"></div> </div>
+                    <p>Agent is thinking...</p>
+                </div>
+                <pre id="ide-code-output"></pre>
+            </div>
+        </div>
+    </div>
+
+    <script type="importmap">
+        {
+            "imports": {
+                "three": "https://unpkg.com/three@0.161.0/build/three.module.js",
+                "@google/generative-ai": "https://esm.run/@google/generative-ai"
+            }
+        }
+    </script>
+
+    <script type="module">
+        import { GoogleGenerativeAI } from "@google/generative-ai";
+
+        // DOM Elements
+        const generateBtn = document.getElementById('generate-btn'), promptInput = document.getElementById('prompt-input'),
+              agentContainer = document.getElementById('agent-container'), gameContainer = document.getElementById('final-game-container'),
+              optionsPanel = document.getElementById('options-panel'), closeOptionsBtn = document.getElementById('close-options-btn'),
+              apiKeyInput = document.getElementById('api-key-input'), modelInput = document.getElementById('model-input'),
+              saveSettingsBtn = document.getElementById('save-settings-btn'), statusMessage = document.getElementById('status-message'),
+              modifyBtn = document.getElementById('modify-btn'), downloadBtn = document.getElementById('download-btn'),
+              modifyPromptInput = document.getElementById('modify-prompt-input'), customAlertOverlay = document.getElementById('custom-alert-overlay'),
+              customAlertTitle = document.getElementById('custom-alert-title'), customAlertMessage = document.getElementById('custom-alert-message'),
+              customAlertOkBtn = document.getElementById('custom-alert-ok-btn'), ideOverlay = document.getElementById('ide-overlay'),
+              ideStatusText = document.getElementById('ide-status-text'), ideCodeOutput = document.getElementById('ide-code-output'),
+              ideCodeWrapper = document.getElementById('ide-code-wrapper'), ideThinkingIndicator = document.getElementById('ide-thinking-indicator');
+
+        let genAI, currentGeneratedCode = '';
+
+        function showAlert(message, title = 'Notice') {
+            customAlertTitle.textContent = title;
+            customAlertMessage.textContent = message;
+            customAlertOverlay.style.display = 'flex';
+        }
+
+        function initializeApp() {
+            const savedApiKey = localStorage.getItem('gemini_api_key'), savedModel = localStorage.getItem('gemini_model');
+            if (savedApiKey) {
+                apiKeyInput.value = savedApiKey;
+                try { genAI = new GoogleGenerativeAI(savedApiKey); } catch (e) {
+                    console.error("Init Error:", e); showAlert("Error with saved API Key.", "Initialization Error");
+                }
+            }
+            if (savedModel) modelInput.value = savedModel;
+            if (!savedApiKey) setTimeout(() => showAlert("Welcome! Press 'Esc' to open options and set your Gemini API Key.", "Welcome"), 500);
+            customAlertOkBtn.addEventListener('click', () => customAlertOverlay.style.display = 'none');
+        }
+
+        function saveSettings() {
+            const newApiKey = apiKeyInput.value.trim(), newModel = modelInput.value.trim();
+            if (!newApiKey || !newModel) { displayStatus("API Key and Model cannot be empty.", true); return; }
+            localStorage.setItem('gemini_api_key', newApiKey);
+            localStorage.setItem('gemini_model', newModel);
+            try { genAI = new GoogleGenerativeAI(newApiKey); displayStatus("Settings saved successfully!"); } catch (e) {
+                console.error("Save Error:", e); displayStatus("Invalid API Key format.", true);
+            }
+        }
+
+        function displayStatus(message, isError = false) {
+            statusMessage.textContent = message;
+            statusMessage.style.color = isError ? 'var(--error-color)' : 'var(--accent-color)';
+            setTimeout(() => { statusMessage.textContent = ''; }, 3000);
+        }
+
+        function toggleOptionsPanel() {
+            optionsPanel.style.display = optionsPanel.style.display === 'flex' ? 'none' : 'flex';
+        }
+        
+        function cleanupPreviousGame() {
+            gameContainer.innerHTML = '';
+            document.querySelectorAll('body > canvas, #hud, #win-screen, .hud-overlay').forEach(el => el.remove());
+        }
+
+        function injectAndRunGame(htmlCode) {
+            currentGeneratedCode = htmlCode;
+            agentContainer.style.opacity = '0';
+            setTimeout(() => {
+                agentContainer.style.display = 'none';
+                gameContainer.innerHTML = htmlCode;
+                const scriptTag = gameContainer.querySelector('script[type="module"]');
+                if (scriptTag) {
+                    const newScript = document.createElement('script');
+                    newScript.type = 'module';
+                    const originalScriptContent = scriptTag.textContent;
+                    if (!originalScriptContent.trim().includes("import * as THREE from 'three'")) {
+                        console.warn("AI Omission Detected: Generated script was missing the 'three' import. Prepending it now.");
+                        newScript.textContent = `import * as THREE from 'three';\n${originalScriptContent}`;
+                    } else { newScript.textContent = originalScriptContent; }
+                    document.body.appendChild(newScript);
+                    setTimeout(() => { try { document.body.removeChild(newScript); } catch (e) {} }, 0);
+                }
+                modifyBtn.disabled = false;
+                downloadBtn.disabled = false;
+            }, 500);
+        }
+        
+        async function streamResponse(prompt) {
+            if (!genAI) { showAlert("API Key not set. Please set it in the options panel.", "API Key Missing"); return null; }
+            const modelName = modelInput.value.trim();
+            if (!modelName) { showAlert("Model name is missing. Please set it in the options panel.", "Model Missing"); return null; }
+            
+            ideOverlay.style.display = 'flex';
+            ideCodeOutput.style.display = 'none';
+            ideThinkingIndicator.style.display = 'flex';
+            ideStatusText.textContent = "Agent is thinking...";
+            ideCodeOutput.innerHTML = '';
+            
+            try {
+                const model = genAI.getGenerativeModel({ model: modelName });
+                const result = await model.generateContentStream(prompt);
+                let buffer = '', fullResponse = '', currentPhase = 'planning', isFirstChunk = true;
+
+                for await (const chunk of result.stream) {
+                    if (isFirstChunk) {
+                        ideThinkingIndicator.style.display = 'none';
+                        ideCodeOutput.style.display = 'block';
+                        ideStatusText.textContent = "The agent is planning...";
+                        isFirstChunk = false;
+                    }
+                    const isScrolledToBottom = ideCodeWrapper.scrollHeight - ideCodeWrapper.scrollTop <= ideCodeWrapper.clientHeight + 10;
+                    const chunkText = chunk.text();
+                    buffer += chunkText;
+                    fullResponse += chunkText;
+
+                    if (currentPhase === 'planning' && buffer.includes('[CODE_START]')) {
+                        const parts = buffer.split('[CODE_START]');
+                        ideCodeOutput.textContent = parts[0].replace('[GDD_START]', '').trim();
+                        currentPhase = 'coding';
+                        ideStatusText.textContent = "The agent is coding...";
+                        const separator = document.createElement('hr');
+                        separator.style.margin = '20px 0';
+                        separator.style.borderColor = 'var(--border-color)';
+                        ideCodeOutput.appendChild(separator);
+                        buffer = parts[1] || '';
+                    }
+                    const textNode = document.createTextNode(buffer);
+                    if (currentPhase === 'planning') {
+                         ideCodeOutput.textContent = buffer.replace('[GDD_START]','');
+                    } else {
+                         ideCodeOutput.appendChild(textNode);
+                         buffer = '';
+                    }
+                    if (isScrolledToBottom) ideCodeWrapper.scrollTop = ideCodeWrapper.scrollHeight;
+                }
+                ideOverlay.style.display = 'none';
+                let finalCode = fullResponse.split('[CODE_START]')[1] || fullResponse;
+                finalCode = finalCode.replace(/^```html/im, '').replace(/```$/, '').trim();
+                return finalCode;
+            } catch (error) {
+                console.error("Generation Error:", error);
+                showAlert(`Agent failed to generate. Check console for details. Error: ${error.message}`, "Generation Failed");
+                ideOverlay.style.display = 'none';
+                return null;
+            }
+        }
+        
+        const generateGame = async (isModification = false) => {
+            const userPrompt = isModification ? modifyPromptInput.value : promptInput.value;
+            if (!userPrompt) { showAlert(`Please describe the ${isModification ? 'change' : 'game'}.`, "Input Required"); return; }
+            if (isModification) toggleOptionsPanel();
+
+            const moduleRule = "CRITICAL MODULE RULE: The generated `<script type=\"module\">` MUST begin with `import * as THREE from 'three';`. All Three.js objects must be prefixed with `THREE.` (e.g., `new THREE.Scene()`).";
+
+            const megaPrompt = isModification 
+            ? `You are an expert game developer AI. Your task is to modify existing game code.
+                **CRITICAL INSTRUCTIONS:**
+                1. First, describe your plan to implement the change. Start this with [GDD_START].
+                2. After your plan, output the marker [CODE_START].
+                3. ${moduleRule}
+                4. Finally, rewrite the ENTIRE game code with the change.
+                
+                **CURRENT GAME SOURCE CODE:** \`\`\`html\n${currentGeneratedCode}\n\`\`\`
+                **USER'S MODIFICATION REQUEST:** "${userPrompt}"`
+            : `You are an expert game developer AI. Your task is to write a 3D game in a single HTML file.
+                **CRITICAL INSTRUCTIONS:**
+                1. First, create a brief Game Design Document (GDD). Start this with [GDD_START].
+                2. After the GDD, output the marker [CODE_START].
+                3. ${moduleRule}
+                4. Finally, write the complete, single-file HTML game code. Use Three.js, procedural assets, physics, collisions, and a UI.
+                
+                **USER'S GAME REQUEST:** "${userPrompt}"`;
+
+            const finalCode = await streamResponse(megaPrompt);
+            if (finalCode) {
+                 if (isModification) modifyPromptInput.value = '';
+                 cleanupPreviousGame();
+                 injectAndRunGame(finalCode);
+            }
+        };
+
+        function downloadGame() {
+            if (!currentGeneratedCode) { showAlert("No game has been generated to download.", "Error"); return; }
+            const blob = new Blob([currentGeneratedCode], { type: 'text/html' });
+            const a = document.createElement('a');
+            a.href = URL.createObjectURL(blob);
+            a.download = 'gemini-game.html';
+            a.click();
+            a.remove();
+            URL.revokeObjectURL(a.href);
+            displayStatus("Download started!");
+        }
+
+        // --- Event Listeners ---
+        generateBtn.addEventListener('click', () => generateGame(false));
+        promptInput.addEventListener('keyup', (e) => { if (e.key === 'Enter') generateGame(false); });
+        modifyBtn.addEventListener('click', () => generateGame(true));
+        modifyPromptInput.addEventListener('keyup', (e) => { if (e.key === 'Enter') generateGame(true); });
+        
+        saveSettingsBtn.addEventListener('click', saveSettings);
+        closeOptionsBtn.addEventListener('click', toggleOptionsPanel);
+        downloadBtn.addEventListener('click', downloadGame);
+
+        document.addEventListener('keydown', (e) => {
+            if (e.key === 'Escape') {
+                if (customAlertOverlay.style.display === 'flex') customAlertOverlay.style.display = 'none';
+                else if (ideOverlay.style.display === 'flex') { /* Do nothing */ }
+                else toggleOptionsPanel();
+            }
+        });
+
+        // --- Initializer ---
+        initializeApp();
+    </script>
+</body>
+</html>
