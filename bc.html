@@ -30,7 +30,7 @@
         * { box-sizing: border-box; margin: 0; padding: 0; }
         body { font-family: var(--font-family); background-color: var(--bg-main); color: var(--text-primary); overflow: hidden; height: 100vh; }
         .vscode-container { display: flex; height: 100vh; }
-        .activity-bar { width: 50px; background-color: var(--bg-activitybar); padding: 10px 0; display: flex; flex-direction: column; align-items: center; flex-shrink: 0; }
+        .activity-bar { width: 50px; background-color: var(--bg-activitybar); padding: 10px 0; display: flex; flex-direction: column; align-items: center; flex-shrink: 0; z-index: 10; }
         .activity-bar .icon { width: 40px; height: 40px; padding: 8px; cursor: pointer; fill: var(--text-secondary); border-left: 2px solid transparent; }
         .activity-bar .icon:hover { fill: var(--text-primary); }
         .activity-bar .icon.active { fill: var(--text-primary); border-left-color: var(--accent-color); }
@@ -306,6 +306,7 @@
                 dom.editorView.innerHTML = htmlContent;
                 setTimeout(() => state.highlightedChanges = [], 500);
             } else {
+                // THIS IS THE FIX: Always escape the content to show code, not rendered HTML.
                 dom.editorView.innerHTML = escapeHTML(state.activeFile.content);
             }
         } else {
@@ -540,21 +541,18 @@
         const icon = document.getElementById(`${viewName}-icon`);
         const isAlreadyActive = icon.classList.contains('active');
 
-        // If the clicked icon's view is already active, toggle the sidebar off.
         if (isAlreadyActive) {
             dom.sidebar.style.display = 'none';
             dom.resizerV.style.display = 'none';
             icon.classList.remove('active');
         } else {
-            // Otherwise, switch to the new view and ensure the sidebar is on.
             document.querySelector('.activity-bar .icon.active')?.classList.remove('active');
             icon.classList.add('active');
             
             dom.sidebar.style.display = 'flex';
             dom.resizerV.style.display = 'flex';
             
-            const isExplorer = viewName === 'explorer';
-            dom.explorerView.classList.toggle('active', isExplorer);
+            dom.explorerView.classList.toggle('active', viewName === 'explorer');
             dom.settingsView.classList.toggle('active', viewName === 'settings');
         }
     }
@@ -578,8 +576,11 @@
     function loadFiles(files, projectName) {
         state.files = files;
         setActiveFile(files.length > 0 ? files[0].path : null);
-        switchView('explorer');
         render();
+        // Ensure sidebar is open to explorer after loading
+        if (!dom.explorerIcon.classList.contains('active')) {
+            switchView('explorer');
+        }
     }
     
     async function handleDirectoryImport() {
@@ -695,11 +696,9 @@
         
         let currentContext = '';
         const activeFile = state.activeFile;
-        // If the active file is an HTML file, use only its content for context.
         if (activeFile && (activeFile.path.endsWith('.html') || activeFile.path.endsWith('.htm'))) {
             currentContext = `--- FILE: ${activeFile.path} ---\n${activeFile.content}\n--- END OF FILE ---\n\n`;
         } else {
-            // Otherwise, use all files for context (original behavior).
             currentContext = state.files.map(f => `--- FILE: ${f.path} ---\n${f.content}\n--- END OF FILE ---\n\n`).join('');
         }
 
