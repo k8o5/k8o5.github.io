@@ -1,9 +1,9 @@
-const CACHE_NAME = 'k8os-cache-v1';
+const CACHE_NAME = 'k8os-cache-v2';
 const urlsToCache = [
   '.',
   'index.html',
   'manifest.json',
-  'icon.svg',
+  'tomato-icon.svg',
   'https://ga.jspm.io/npm:es-module-shims@1.8.3/dist/es-module-shims.js',
   'https://cdnjs.cloudflare.com/ajax/libs/jszip/3.10.1/jszip.min.js',
   'https://esm.run/@google/generative-ai',
@@ -18,6 +18,21 @@ self.addEventListener('install', event => {
         console.log('Opened cache');
         return cache.addAll(urlsToCache);
       })
+  );
+});
+
+self.addEventListener('activate', event => {
+  const cacheWhitelist = [CACHE_NAME];
+  event.waitUntil(
+    caches.keys().then(cacheNames => {
+      return Promise.all(
+        cacheNames.map(cacheName => {
+          if (cacheWhitelist.indexOf(cacheName) === -1) {
+            return caches.delete(cacheName);
+          }
+        })
+      );
+    })
   );
 });
 
