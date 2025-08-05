@@ -1,9 +1,9 @@
-const CACHE_NAME = 'bc-cache-v2';
+const CACHE_NAME = 'bc-cache-v3';
 const urlsToCache = [
   '.',
   'bc.html',
   'manifest-bc.json',
-  'tomato-icon.svg'
+  'bc-icon.svg'
 ];
 
 self.addEventListener('install', event => {
