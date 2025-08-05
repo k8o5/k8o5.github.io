@@ -753,6 +753,12 @@
                     <p class="provider-caveat">Ensure your backend is running and accessible. The API Key for this endpoint is set in the 'API Key Settings' window.</p>
                 </div>
 
+                <h3 style="margin-top:15px;">Assistant (Sparky) Settings</h3>
+                <div>
+                    <input type="checkbox" id="systemSettings_sparky_enableVoice" style="margin-right: 5px;">
+                    <label for="systemSettings_sparky_enableVoice">Enable Sparky's Voice (Text-to-Speech)</label>
+                </div>
+
                 <h3 style="margin-top:15px;">SVG Creator Instruction</h3>
                 <label for="systemSettings_ai_svgInstruction">Base prompt for SVG generation:</label>
                 <textarea id="systemSettings_ai_svgInstruction" rows="3"></textarea>
@@ -1151,6 +1157,8 @@ Output ONLY the JSON array. No explanations, comments, or markdown outside the J
     let assistantSpeechTimeout;
     let assistantIsThinking = false;
     let assistantIsProcessingCommand = false;
+    let lastHoverGreetingTime = 0;
+    const SPARKY_HOVER_GREETINGS = ["Hi there!", "What's up?", "I can help!", "Need something?", "Hey!", "I'm here to assist!"];
     let k8osActivityLog = [];
     const ACTIVITY_LOG_MAX_AGE = 5 * 60 * 1000;
     const ASSISTANT_SUMMARY_INTERVAL = 3 * 60 * 1000;
@@ -1776,6 +1784,19 @@ if __name__ == '__main__':
                     }
                     promptSparkyForCommand();
                 });
+
+                assistantAvatarSVG.addEventListener('mouseover', () => {
+                    const now = Date.now();
+                    const hoverGreetingCooldown = 15000; // 15 seconds
+                    if (now - lastHoverGreetingTime > hoverGreetingCooldown) {
+                        if (window.speechSynthesis && window.speechSynthesis.speaking) {
+                            return; // Don't interrupt if Sparky is already talking
+                        }
+                        const greeting = SPARKY_HOVER_GREETINGS[Math.floor(Math.random() * SPARKY_HOVER_GREETINGS.length)];
+                        updateAssistantSpeech(greeting, true, false, false);
+                        lastHoverGreetingTime = now;
+                    }
+                });
             }
         }
         if (assistantContainer) {
@@ -1796,9 +1817,34 @@ if __name__ == '__main__':
         if (inputContainer) inputContainer.style.display = 'none';
         if (assistantSparkyMouth) assistantSparkyMouth.classList.remove('talking');
         clearTimeout(assistantSpeechTimeout);
+        if (window.speechSynthesis) window.speechSynthesis.cancel(); // Also stop speech on hide
         stopAssistantSummaryTimer();
         stopSparkyMovement();
     }
+
+    function speakMessage(message, isTemporaryThinkingMessage = false) {
+        const voiceEnabled = localStorage.getItem('k8os_sparky_voice_enabled') === 'true';
+        if (!voiceEnabled || isTemporaryThinkingMessage || !assistantSparkyMouth || !window.speechSynthesis) {
+            return;
+        }
+
+        window.speechSynthesis.cancel(); // Stop any currently playing speech
+
+        const utterance = new SpeechSynthesisUtterance(message);
+        utterance.onstart = () => {
+            if (assistantSparkyMouth) assistantSparkyMouth.classList.add('talking');
+        };
+        utterance.onend = () => {
+            if (assistantSparkyMouth) assistantSparkyMouth.classList.remove('talking');
+        };
+        utterance.onerror = (event) => {
+            console.error('SpeechSynthesisUtterance.onerror', event);
+            if (assistantSparkyMouth) assistantSparkyMouth.classList.remove('talking'); // Ensure cleanup on error
+        };
+
+        window.speechSynthesis.speak(utterance);
+    }
+
     function updateAssistantSpeech(message, autoHide = true, isTemporaryThinkingMessage = false, keepVisibleLonger = false) {
         if (!assistantIsVisible || !assistantSpeechBubble || !assistantSpeechText) return;
 
@@ -1810,9 +1856,30 @@ if __name__ == '__main__':
             assistantSpeechBubble.classList.add('visible');
         }
 
-        if (assistantSparkyMouth) { if (!isTemporaryThinkingMessage && message.length > 0) { assistantSparkyMouth.classList.add('talking'); } else { assistantSparkyMouth.classList.remove('talking'); } }
+        speakMessage(message, isTemporaryThinkingMessage);
+
+        const voiceEnabled = localStorage.getItem('k8os_sparky_voice_enabled') === 'true';
+        if (!voiceEnabled) {
+             if (assistantSparkyMouth) {
+                if (!isTemporaryThinkingMessage && message.length > 0) {
+                    assistantSparkyMouth.classList.add('talking');
+                } else {
+                    assistantSparkyMouth.classList.remove('talking');
+                }
+            }
+        }
+
         clearTimeout(assistantSpeechTimeout);
-        if (autoHide && !isTemporaryThinkingMessage) { assistantSpeechTimeout = setTimeout(() => { assistantSpeechBubble.classList.remove('visible'); if (assistantSparkyMouth) assistantSparkyMouth.classList.remove('talking'); }, keepVisibleLonger ? 10000 : 5000); } // Reduced duration
+        if (autoHide && !isTemporaryThinkingMessage) {
+            assistantSpeechTimeout = setTimeout(() => {
+                assistantSpeechBubble.classList.remove('visible');
+                // Only remove 'talking' class via timeout if voice is disabled
+                // because with voice, the onend event handles it.
+                if (!voiceEnabled && assistantSparkyMouth) {
+                    assistantSparkyMouth.classList.remove('talking');
+                }
+            }, keepVisibleLonger ? 10000 : 5000);
+        }
     }
 
 
@@ -3137,6 +3204,19 @@ if __name__ == '__main__':
             if (systemSettings_status) systemSettings_status.textContent = `Custom Endpoint settings saved. URL: ${url || 'Not set'}. Model: ${modelId || 'Not set'}.`;
             enableAppButtons(); initAllAiApps();
         });}
+
+        // Sparky voice setting
+        const sparkyVoiceCheckbox = document.getElementById('systemSettings_sparky_enableVoice');
+        if (sparkyVoiceCheckbox) {
+            sparkyVoiceCheckbox.checked = localStorage.getItem('k8os_sparky_voice_enabled') === 'true';
+            sparkyVoiceCheckbox.addEventListener('change', (e) => {
+                localStorage.setItem('k8os_sparky_voice_enabled', String(e.target.checked));
+                if (systemSettings_status) systemSettings_status.textContent = `Sparky's voice ${e.target.checked ? 'enabled' : 'disabled'}.`;
+                if (!e.target.checked) {
+                    window.speechSynthesis.cancel(); // Stop any speech if disabled
+                }
+            });
+        }
 
 
         if(systemSettings_ai_saveSvgInstructionButton) systemSettings_ai_saveSvgInstructionButton.addEventListener('click', () => { localStorage.setItem('k8os_instr_svg', systemSettings_ai_svgInstruction.value); if(systemSettings_status) systemSettings_status.textContent = "SVG instruction saved."; initSvgGeneratorApp(); });
