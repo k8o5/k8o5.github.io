@@ -1,14 +1,9 @@
-const CACHE_NAME = 'k8os-cache-v5';
+const CACHE_NAME = 'bc-cache-v2';
 const urlsToCache = [
   '.',
-  'index.html',
-  'manifest.json',
-  'tomato-icon.svg',
-  'https://ga.jspm.io/npm:es-module-shims@1.8.3/dist/es-module-shims.js',
-  'https://cdnjs.cloudflare.com/ajax/libs/jszip/3.10.1/jszip.min.js',
-  'https://esm.run/@google/generative-ai',
-  'https://esm.run/marked@4.0.12',
-  'https://cdn.jsdelivr.net/npm/@huggingface/transformers@3.5.1'
+  'bc.html',
+  'manifest-bc.json',
+  'tomato-icon.svg'
 ];
 
 self.addEventListener('install', event => {
