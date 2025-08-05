@@ -1,4 +1,4 @@
-const CACHE_NAME = 'k8os-cache-v4';
+const CACHE_NAME = 'k8os-cache-v5';
 const urlsToCache = [
   '.',
   'index.html',
