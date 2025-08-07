@@ -367,7 +367,559 @@
         dom.statusBar.textContent = message;
         dom.statusMessage.style.color = isError ? 'var(--error-color)' : 'var(--text-secondary)';
     }
+
+    function switchView(viewName) {
+        const icon = document.getElementById(`${viewName}-icon`);
+        const isAlreadyActive = icon.classList.contains('active');
+
+        if (isAlreadyActive) {
+            dom.sidebar.style.display = 'none';
+            dom.resizerV.style.display = 'none';
+            icon.classList.remove('active');
+        } else {
+            document.querySelector('.activity-bar .icon.active')?.classList.remove('active');
+            icon.classList.add('active');
+
+            dom.sidebar.style.display = 'flex';
+            dom.resizerV.style.display = 'flex';
+
+            dom.explorerView.classList.toggle('active', viewName === 'explorer');
+            dom.settingsView.classList.toggle('active', viewName === 'settings');
+        }
+    }
+
+    function startNewProject() {
+        if (confirm("Are you sure you want to delete all current files and start a new project?")) {
+            state.files = [];
+            state.activeFile = null;
+            state.terminal.currentDir = '/';
+            dom.terminalPromptPrefix.textContent = '/ >';
+            render();
+            setStatus('Ready for a new project.');
+        }
+    }
+
+    function setActiveFile(path) {
+        state.activeFile = state.files.find(f => f.path === path) || null;
+        render();
+    }
+
+    function loadFiles(files, projectName) {
+        state.files = files;
+        setActiveFile(files.length > 0 ? files[0].path : null);
+        render();
+        if (!dom.explorerIcon.classList.contains('active')) {
+            switchView('explorer');
+        }
+    }
+
+    async function handleDirectoryImport() {
+         if (!window.showDirectoryPicker) { alert("This feature is only supported in secure contexts (HTTPS or localhost)."); return; }
+        try {
+            const dirHandle = await window.showDirectoryPicker();
+            setStatus('Reading directory...');
+            const files = await readDirectory(dirHandle);
+            loadFiles(files, dirHandle.name);
+            setStatus(`Successfully loaded directory '${dirHandle.name}'.`);
+        } catch (e) {
+            if (e.name !== 'AbortError') setStatus('Error selecting directory.', true);
+            else setStatus('Directory selection cancelled.');
+        }
+    }
+
+    async function readDirectory(dirHandle, path = '') {
+        let files = [];
+        for await (const entry of dirHandle.values()) {
+            const newPath = path ? `${path}/${entry.name}` : entry.name;
+            if (entry.kind === 'file') {
+                try {
+                    const file = await entry.getFile();
+                    const content = await file.text();
+                    files.push({ path: newPath, content });
+                } catch (e) { console.warn(`Could not read file: ${newPath}`, e); }
+            } else if (entry.kind === 'directory') {
+                files = files.concat(await readDirectory(entry, newPath));
+            }
+        }
+        return files;
+    }
+
+    let dragCounter = 0;
+    function handleDragEnter(e) { e.preventDefault(); dragCounter++; dom.dragOverlay.classList.remove('hidden'); }
+    function handleDragLeave(e) { e.preventDefault(); dragCounter--; if (dragCounter === 0) dom.dragOverlay.classList.add('hidden'); }
+
+    async function handleDrop(e) {
+        e.preventDefault();
+        dragCounter = 0;
+        dom.dragOverlay.classList.add('hidden');
+        if (!e.dataTransfer || (!e.dataTransfer.items && !e.dataTransfer.files)) return;
+        setStatus('Processing dropped items...');
+        if (e.dataTransfer.items?.[0]?.getAsFileSystemHandle) {
+            const handle = await e.dataTransfer.items[0].getAsFileSystemHandle();
+            if (!handle) return;
+            if (handle.kind === 'file') {
+                const file = await handle.getFile();
+                loadFiles([{ path: file.name, content: await file.text() }], file.name);
+                setStatus(`Loaded file '${file.name}'.`);
+            } else if (handle.kind === 'directory') {
+                const files = await readDirectory(handle);
+                loadFiles(files, handle.name);
+                setStatus(`Loaded directory '${handle.name}'.`);
+            }
+        } else if (e.dataTransfer.files?.length > 0) {
+            const filesToLoad = [];
+            const promises = Array.from(e.dataTransfer.files).map(file => file.text().then(content => filesToLoad.push({ path: file.name, content })).catch(err => console.error(`Could not read file: ${file.name}`, err)));
+            await Promise.all(promises);
+            if (filesToLoad.length > 0) { loadFiles(filesToLoad, 'dropped-project'); setStatus(`Successfully loaded ${filesToLoad.length} file(s).`); }
+            else { setStatus("No readable files were dropped.", true); }
+        }
+    }
+
+    async function fetchGithubDirectory(owner, repo, path) {
+        const url = `https://api.github.com/repos/${owner}/${repo}/contents/${path}`;
+        const response = await fetch(url);
+        if (!response.ok) throw new Error(`GitHub API Error: ${response.status}`);
+        const items = await response.json();
+        let files = [];
+        const promises = items.map(async (item) => {
+            if (item.type === 'file') {
+                try {
+                    const contentResponse = await fetch(item.download_url);
+                    if (contentResponse.ok) files.push({ path: item.path, content: await contentResponse.text() });
+                } catch (e) { console.warn(`Could not load file: ${item.path}`, e); }
+            } else if (item.type === 'dir') {
+                files = files.concat(await fetchGithubDirectory(owner, repo, item.path));
+            }
+        });
+        await Promise.all(promises);
+        return files;
+    }
+
+    async function handleGithubImport() {
+        let path = dom.githubUrlInput.value.trim().replace(/^(https?:\/\/)?(www\.)?github\.com\//, '');
+        path = path.replace(/\/tree\/[^\/]+\//, '/');
+        const parts = path.split('/').filter(p => p);
+        if (parts.length < 2) { setStatus('Invalid GitHub repo format. Expected: owner/repo', true); return; }
+        const [owner, repo, ...subdirParts] = parts;
+        const subdir = subdirParts.join('/');
+        const repoNameForStatus = subdir ? `${repo}/${subdir}` : repo;
+        setStatus(`Loading '${owner}/${repoNameForStatus}' from GitHub API...`);
+        try {
+            let allFiles = await fetchGithubDirectory(owner, repo, subdir);
+            if (subdir) allFiles = allFiles.map(file => ({ ...file, path: file.path.substring(subdir.length + 1) }));
+            if (allFiles.length === 0) throw new Error(`No files found in path '${subdir}' or directory is empty.`);
+            loadFiles(allFiles, repo);
+            setStatus(`Repo '${repoNameForStatus}' loaded successfully.`);
+        } catch (e) { setStatus(`GitHub import failed: ${e.message}`, true); console.error(e); }
+    }
+
+    async function handleRun() {
+        state.apiKey = dom.apiKeyInput.value.trim();
+        state.model = dom.modelInput.value.trim();
+        const instruction = dom.instruction.value.trim();
+        if (!state.apiKey || !instruction || !state.model) {
+            alert('Provider, API Key, Model and an instruction are required.');
+            return;
+        }
+        dom.runBtn.disabled = true;
+        setStatus('Sending request to AI...');
+
+        let currentContext = '';
+        const activeFile = state.activeFile;
+        if (activeFile && (activeFile.path.endsWith('.html') || activeFile.path.endsWith('.htm'))) {
+            currentContext = `--- FILE: ${activeFile.path} ---\n${activeFile.content}\n--- END OF FILE ---\n\n`;
+        } else {
+            currentContext = state.files.map(f => `--- FILE: ${f.path} ---\n${f.content}\n--- END OF FILE ---\n\n`).join('');
+        }
+
+        const historyText = state.chatHistory.map(turn => `**USER:**\n${turn.user}\n\n**AI:**\n${turn.ai}`).join('\n\n---\n\n');
+        const prompt = `**ROLE:** You are an expert AI programmer. Your task is to analyze the user's instruction and the provided code context, and then create a clear, step-by-step plan to achieve the user's goal. **CHAT HISTORY:**\n${historyText}\n---\n**PROTOCOL:** 1. First, think about the user's request and the best way to implement it. 2. Then, write down a plan as a JSON object with a "plan" key. The value should be an array of strings, where each string is a step in the plan. **YOUR ENTIRE RESPONSE MUST BE A SINGLE, VALID JSON OBJECT ENCLOSED IN \`\`\`json ... \`\`\`.** **CONTEXT:**\n${currentContext || "No context provided."}\n---\n**INSTRUCTION:**\n${instruction}\n---\n**YOUR JSON RESPONSE (PLAN ONLY):**`;
+
+        try {
+            let rawText;
+            if (state.provider === 'google') {
+                const url = `https://generativelanguage.googleapis.com/v1beta/models/${state.model}:generateContent?key=${state.apiKey}`;
+                const options = { method: 'POST', headers: {'Content-Type': 'application/json'}, body: JSON.stringify({ contents: [{ parts: [{ text: prompt }] }] }) };
+                const response = await fetch(url, options);
+                if (!response.ok) { const errorText = await response.text(); throw new Error(`Google API Error: ${response.status} - ${errorText}`); }
+                const data = await response.json();
+                if (!data.candidates?.[0]?.content?.parts?.[0]?.text) throw new Error("Unexpected Google API response structure.");
+                rawText = data.candidates[0].content.parts[0].text;
+            } else { // openrouter
+                const url = 'https://openrouter.ai/api/v1/chat/completions';
+                const options = {
+                    method: 'POST',
+                    headers: { 'Content-Type': 'application/json', 'Authorization': `Bearer ${state.apiKey}`, 'HTTP-Referer': window.location.origin, 'X-Title': 'BossCoder' },
+                    body: JSON.stringify({ model: state.model, messages: [{ role: 'user', content: prompt }], response_format: { type: "json_object" } })
+                };
+                const response = await fetch(url, options);
+                if (!response.ok) { const errorText = await response.text(); throw new Error(`OpenRouter API Error: ${response.status} - ${errorText}`); }
+                const data = await response.json();
+                if (!data.choices?.[0]?.message?.content) throw new Error("Unexpected OpenRouter API response structure.");
+                rawText = data.choices[0].message.content;
+            }
+
+            const jsonMatch = rawText.match(/```json\s*([\s\S]*?)\s*```/s) || [null, rawText];
+            if (!jsonMatch[1]) throw new Error("AI did not return a valid JSON format for the plan. Response was: " + rawText.substring(0, 300));
+
+            state.proposedPlan = JSON.parse(jsonMatch[1]);
+            showProposedPlan();
+
+        } catch (e) {
+            console.error(e);
+            setStatus(`Error: ${e.message}`, true);
+            dom.runBtn.disabled = false;
+        }
+    }
+
+    function showProposedPlan() {
+        if (!state.proposedPlan || !state.proposedPlan.plan) {
+            setStatus('AI did not provide a valid plan.', true);
+            dom.runBtn.disabled = false;
+            return;
+        }
+
+        const plan = state.proposedPlan.plan;
+        let planHtml = '<strong>AI has proposed the following plan:</strong><br><ul>';
+        plan.forEach(step => {
+            planHtml += `<li>${escapeHTML(step)}</li>`;
+        });
+        planHtml += '</ul><p>Do you approve this plan?</p>';
+
+        appendToTerminal(planHtml, 'stdout');
+
+        const promptDiv = document.createElement('div');
+        promptDiv.className = 'terminal-prompt';
+
+        const btnYes = document.createElement('button');
+        btnYes.textContent = 'Approve & Continue';
+        const btnNo = document.createElement('button');
+        btnNo.textContent = 'Reject';
+
+        btnYes.onclick = () => { promptDiv.remove(); handleApproval(); };
+        btnNo.onclick = () => {
+            promptDiv.remove();
+            state.proposedPlan = null;
+            dom.runBtn.disabled = false;
+            setStatus('Plan rejected.');
+            appendToTerminal('> Plan rejected by user.');
+        };
+
+        promptDiv.appendChild(btnYes);
+        promptDiv.appendChild(btnNo);
+        dom.terminalOutput.appendChild(promptDiv);
+        dom.terminalOutput.scrollTop = dom.terminalOutput.scrollHeight;
+    }
+
+    async function handleApproval() {
+        setStatus('Plan approved. Generating code...');
+        dom.runBtn.disabled = true;
+
+        const instruction = dom.instruction.value.trim();
+        const plan = state.proposedPlan.plan.join('\n- ');
+
+        let currentContext = state.files.map(f => `--- FILE: ${f.path} ---\n${f.content}\n--- END OF FILE ---\n\n`).join('');
+
+        const historyText = state.chatHistory.map(turn => `**USER:**\n${turn.user}\n\n**AI:**\n${turn.ai}`).join('\n\n---\n\n');
+
+        const prompt = `**ROLE:** You are an expert AI programmer. You have already provided a plan, which the user has approved. Now, you must execute that plan. **CHAT HISTORY:**\n${historyText}\n---\n**CONTEXT:**\n${currentContext || "No context provided."}\n---\n**INSTRUCTION:**\n${instruction}\n---\n**APPROVED PLAN:**\n- ${plan}\n---\n**TASK:** Generate the code changes based on the plan. **PROTOCOL:** Your response MUST be a JSON object with "modifications" (for changes) or "files" (for new files) keys, following the established format. **YOUR ENTIRE RESPONSE MUST BE A SINGLE, VALID JSON OBJECT ENCLOSED IN \`\`\`json ... \`\`\`.**`;
+
+        try {
+            let rawText;
+            if (state.provider === 'google') {
+                const url = `https://generativelanguage.googleapis.com/v1beta/models/${state.model}:generateContent?key=${state.apiKey}`;
+                const options = { method: 'POST', headers: {'Content-Type': 'application/json'}, body: JSON.stringify({ contents: [{ parts: [{ text: prompt }] }] }) };
+                const response = await fetch(url, options);
+                if (!response.ok) { const errorText = await response.text(); throw new Error(`Google API Error: ${response.status} - ${errorText}`); }
+                const data = await response.json();
+                if (!data.candidates?.[0]?.content?.parts?.[0]?.text) throw new Error("Unexpected Google API response structure.");
+                rawText = data.candidates[0].content.parts[0].text;
+            } else { // openrouter
+                const url = 'https://openrouter.ai/api/v1/chat/completions';
+                const options = {
+                    method: 'POST',
+                    headers: { 'Content-Type': 'application/json', 'Authorization': `Bearer ${state.apiKey}`, 'HTTP-Referer': window.location.origin, 'X-Title': 'BossCoder' },
+                    body: JSON.stringify({ model: state.model, messages: [{ role: 'user', content: prompt }], response_format: { type: "json_object" } })
+                };
+                const response = await fetch(url, options);
+                if (!response.ok) { const errorText = await response.text(); throw new Error(`OpenRouter API Error: ${response.status} - ${errorText}`); }
+                const data = await response.json();
+                if (!data.choices?.[0]?.message?.content) throw new Error("Unexpected OpenRouter API response structure.");
+                rawText = data.choices[0].message.content;
+            }
+
+            const jsonMatch = rawText.match(/```json\s*([\s\S]*?)\s*```/s) || [null, rawText];
+            if (!jsonMatch[1]) throw new Error("AI did not return a valid JSON format for the code. Response was: " + rawText.substring(0, 300));
+
+            const result = JSON.parse(jsonMatch[1]);
+            processAIResult(result);
+
+            // Update chat history
+            state.chatHistory.push({
+                user: instruction,
+                ai: `Okay, I will follow this plan:\n- ${plan}`
+            });
+            state.chatHistory.push({
+                user: "Yes, please proceed.",
+                ai: "Great! I have implemented the changes."
+            });
+
+
+            setStatus('Operation completed successfully.');
+        } catch (e) {
+            console.error(e);
+            setStatus(`Error: ${e.message}`, true);
+        } finally {
+            dom.runBtn.disabled = false;
+            state.proposedPlan = null;
+        }
+    }
+
+    function generateDiffString(changes) {
+        let diff = '';
+        if (changes.files) {
+            changes.files.forEach(file => {
+                diff += `--- a/new_file\n`;
+                diff += `+++ b/${file.path}\n`;
+                file.content.split('\n').forEach(line => {
+                    diff += `+${line}\n`;
+                });
+            });
+        }
+        if (changes.modifications) {
+            changes.modifications.forEach(mod => {
+                const originalFile = state.files.find(f => f.path === mod.path);
+                diff += `--- a/${mod.path}\n`;
+                diff += `+++ b/${mod.path}\n`;
+                if (originalFile) {
+                    const originalLines = originalFile.content.split('\n');
+                    const newLines = mod.newCode.split('\n');
+                    const start = Math.max(1, mod.startLine);
+                    const end = Math.max(start, mod.endLine);
+                    originalLines.slice(start - 1, end).forEach(line => {
+                        diff += `-${line}\n`;
+                    });
+                    newLines.forEach(line => {
+                        diff += `+${line}\n`;
+                    });
+                } else {
+                    mod.newCode.split('\n').forEach(line => {
+                        diff += `+${line}\n`;
+                    });
+                }
+            });
+        }
+        return diff;
+    }
+
+    function processAIResult(result) {
+        state.proposedChanges = result;
+        const diffContent = generateDiffString(result);
+
+        const diffFileIndex = state.files.findIndex(f => f.path === 'proposed.diff');
+        if (diffFileIndex > -1) {
+            state.files[diffFileIndex].content = diffContent;
+        } else {
+            state.files.push({ path: 'proposed.diff', content: diffContent });
+        }
+
+        setActiveFile('proposed.diff');
+        render();
+    }
+
+    function applyStagedChanges() {
+        if (!state.proposedChanges) {
+            alert("No changes to apply.");
+            return;
+        }
+
+        const result = state.proposedChanges;
+        state.highlightedChanges = [];
+
+        if (result.files) {
+            loadFiles(result.files, 'new-project');
+        } else if (result.modifications) {
+            result.modifications.forEach(mod => {
+                const fileToModify = state.files.find(f => f.path === mod.path);
+                const newCodeLines = mod.newCode ? mod.newCode.split('\n') : [''];
+                if (fileToModify) {
+                    const lines = fileToModify.content.split('\n');
+                    const start = Math.max(1, mod.startLine);
+                    const end = Math.max(start, mod.endLine);
+                    lines.splice(start - 1, (end - start + 1), ...newCodeLines);
+                    fileToModify.content = lines.join('\n');
+                    state.highlightedChanges.push({ path: mod.path, startLine: start, lineCount: newCodeLines.length });
+                } else {
+                    state.files.push({path: mod.path, content: mod.newCode || ''});
+                    state.highlightedChanges.push({ path: mod.path, startLine: 1, lineCount: newCodeLines.length });
+                }
+            });
+        }
+
+        const diffFileIndex = state.files.findIndex(f => f.path === 'proposed.diff');
+        if (diffFileIndex > -1) {
+            state.files.splice(diffFileIndex, 1);
+        }
+
+        state.proposedChanges = null;
+        if (state.activeFile?.path === 'proposed.diff') {
+            setActiveFile(null);
+        }
+
+        render();
+        setStatus('Changes applied successfully.');
+    }
+
+    async function handleDownloadZip() {
+        if (state.files.length === 0) { alert("No files in project to download."); return; }
+        setStatus("Creating ZIP file...");
+        const zip = new JSZip();
+        state.files.forEach(file => zip.file(file.path, file.content));
+        try {
+            const content = await zip.generateAsync({type:"blob"});
+            const a = document.createElement('a');
+            a.href = URL.createObjectURL(content);
+            a.download = "boss-coder-project.zip";
+            a.click();
+            URL.revokeObjectURL(a.href);
+            setStatus("ZIP download started.");
+        } catch (e) { setStatus("Error creating ZIP file.", true); console.error(e); }
+    }
+
+    function initResizer(resizer, elementToResize, direction) {
+        let startPos, startSize;
+        function onMouseMove(e) {
+            if (direction === 'horizontal') elementToResize.style.width = `${startSize + (e.clientX - startPos)}px`;
+            else elementToResize.style.height = `${startSize - (e.clientY - startPos)}px`;
+        }
+        function onMouseUp() {
+            window.removeEventListener('mousemove', onMouseMove);
+            window.removeEventListener('mouseup', onMouseUp);
+            document.body.style.cursor = 'default';
+            document.body.style.userSelect = 'auto';
+        }
+        resizer.addEventListener('mousedown', (e) => {
+            e.preventDefault();
+            if (direction === 'horizontal') { startPos = e.clientX; startSize = elementToResize.offsetWidth; document.body.style.cursor = 'col-resize'; }
+            else { startPos = e.clientY; startSize = elementToResize.offsetHeight; document.body.style.cursor = 'row-resize'; }
+            document.body.style.userSelect = 'none';
+            window.addEventListener('mousemove', onMouseMove);
+            window.addEventListener('mouseup', onMouseUp);
+        });
+    }
+
+    function showContextMenu(e) {
+        const targetLi = e.target.closest('li[data-path]');
+        if (targetLi) {
+            e.preventDefault();
+            contextMenuTarget = targetLi.dataset.path;
+            dom.contextMenu.style.top = `${e.clientY}px`;
+            dom.contextMenu.style.left = `${e.clientX}px`;
+            dom.contextMenu.classList.remove('hidden');
+        }
+    }
+
+    function hideContextMenu(e) {
+        if (!dom.contextMenu.contains(e.target)) {
+            dom.contextMenu.classList.add('hidden');
+            contextMenuTarget = null;
+        }
+    }
+
+    function handleContextMenuAction(e) {
+        const action = e.target.dataset.action;
+        if (!action || !contextMenuTarget) return;
+        const actions = {
+            'download': () => downloadFile(contextMenuTarget),
+            'rename': () => renameFile(contextMenuTarget),
+            'delete': () => deleteFile(contextMenuTarget),
+        };
+        actions[action]?.();
+        dom.contextMenu.classList.add('hidden');
+    }
+
+    function downloadFile(path) {
+        const file = state.files.find(f => f.path === path);
+        if (!file) return;
+        try {
+            const blob = new Blob([file.content], { type: 'text/plain;charset=utf-8' });
+            const a = document.createElement('a');
+            a.href = URL.createObjectURL(blob);
+            a.download = file.path.split('/').pop();
+            a.click();
+            URL.revokeObjectURL(a.href);
+            setStatus(`Downloading ${a.download}...`);
+        } catch (e) { setStatus(`Error creating download for ${path}`, true); }
+    }
+
+    function renameFile(path) {
+        const fileToRename = state.files.find(f => f.path === path);
+        if (!fileToRename) return;
+        const oldFilename = path.split('/').pop();
+        const pathPrefix = path.substring(0, path.lastIndexOf('/') + 1);
+        const newFilename = prompt("Enter new filename:", oldFilename);
+        if (!newFilename || newFilename === oldFilename || newFilename.includes('/')) {
+            if (newFilename?.includes('/')) alert("Filename cannot contain slashes.");
+            return;
+        }
+        const newPath = pathPrefix + newFilename;
+        if (state.files.some(f => f.path === newPath)) { alert(`File "${newPath}" already exists.`); return; }
+        fileToRename.path = newPath;
+        if (state.activeFile?.path === path) state.activeFile.path = newPath;
+        setStatus(`Renamed file to ${newPath}`);
+        render();
+    }
+
+    function deleteFile(path) {
+        const filename = path.split('/').pop();
+        if (confirm(`Are you sure you want to delete "${filename}"?`)) {
+            const fileIndex = state.files.findIndex(f => f.path === path);
+            if (fileIndex > -1) {
+                state.files.splice(fileIndex, 1);
+                if (state.activeFile?.path === path) state.activeFile = null;
+                setStatus(`Deleted file: ${path}`);
+                render();
+            }
+        }
+    }
     
+    function saveSettings() {
+        const provider = dom.providerSelect.value;
+        const apiKey = dom.apiKeyInput.value.trim();
+        const model = dom.modelInput.value.trim();
+        localStorage.setItem('boss_coder_provider', provider);
+        localStorage.setItem('boss_coder_apiKey', apiKey);
+        localStorage.setItem('boss_coder_model', model);
+        state.provider = provider;
+        state.apiKey = apiKey;
+        state.model = model;
+        setStatus('Settings saved.');
+    }
+
+    function loadSettings() {
+        state.provider = localStorage.getItem('boss_coder_provider') || 'google';
+        state.apiKey = localStorage.getItem('boss_coder_apiKey') || '';
+        const savedModel = localStorage.getItem('boss_coder_model') || '';
+
+        dom.providerSelect.value = state.provider;
+        dom.apiKeyInput.value = state.apiKey;
+        updateSettingsUI();
+        if (savedModel) {
+            state.model = savedModel;
+            dom.modelInput.value = savedModel;
+        }
+    }
+
+    function updateSettingsUI() {
+        const provider = dom.providerSelect.value;
+        if (provider === 'google') {
+            dom.apiKeyLabel.innerHTML = `Gemini API Key <a href="https://aistudio.google.com/app/apikey" target="_blank" class="help-link">(get key)</a>`;
+            dom.modelInput.value = state.model || 'gemini-1.5-flash-latest';
+        } else { // openrouter
+            dom.apiKeyLabel.innerHTML = `OpenRouter API Key <a href="https://openrouter.ai/keys" target="_blank" class="help-link">(get key)</a>`;
+            dom.modelInput.value = state.model || 'openrouter/horizon-beta';
+        }
+    }
     function setupEventListeners() {
         dom.explorerIcon.addEventListener('click', () => switchView('explorer'));
         dom.settingsIcon.addEventListener('click', () => switchView('settings'));
@@ -409,6 +961,31 @@
 
         dom.providerSelect.addEventListener('change', updateSettingsUI);
         dom.saveSettingsBtn.addEventListener('click', saveSettings);
+    }
+
+    async function handleTerminalKeydown(e) {
+        if (e.key === 'Enter') {
+            e.preventDefault();
+            const commandLine = dom.terminalInput.value.trim();
+            if (commandLine) {
+                appendToTerminal(`${dom.terminalPromptPrefix.textContent} ${commandLine}`);
+                dom.terminalInput.value = '';
+                state.terminal.history.push(commandLine);
+                state.terminal.historyIndex = state.terminal.history.length;
+                await evaluateCommand(commandLine);
+            }
+        } else if (e.key === 'ArrowUp' || e.key === 'ArrowDown') {
+            e.preventDefault();
+            const direction = e.key === 'ArrowUp' ? -1 : 1;
+            const newIndex = state.terminal.historyIndex + direction;
+            if (newIndex >= 0 && newIndex < state.terminal.history.length) {
+                state.terminal.historyIndex = newIndex;
+                dom.terminalInput.value = state.terminal.history[state.terminal.historyIndex];
+            } else if (direction === 1) {
+                state.terminal.historyIndex = state.terminal.history.length;
+                dom.terminalInput.value = '';
+            }
+        }
     }
 
     async function handleTerminalKeydown(e) {
