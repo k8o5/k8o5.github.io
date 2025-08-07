@@ -95,17 +95,18 @@
         .context-menu ul { list-style: none; padding: 0; margin: 0; }
         .context-menu li { padding: 8px 15px; cursor: pointer; font-size: 13px; color: var(--text-primary); }
         .context-menu li:hover { background-color: var(--accent-color); color: white; }
-
-        .modal-overlay { position: fixed; top: 0; left: 0; right: 0; bottom: 0; background-color: rgba(0, 0, 0, 0.6); z-index: 2000; display: flex; align-items: center; justify-content: center; }
-        .modal-content { background-color: var(--bg-sidebar); padding: 20px; border-radius: 6px; box-shadow: 0 5px 15px rgba(0,0,0,0.5); width: 90%; max-width: 800px; max-height: 80vh; display: flex; flex-direction: column; }
-        .modal-content h2 { margin-bottom: 15px; }
-        .diff-view { flex-grow: 1; overflow-y: auto; background: var(--bg-main); font-family: var(--font-mono); font-size: 13px; padding: 10px; border: 1px solid var(--border-color); white-space: pre-wrap; }
-        .diff-view .diff-add { background-color: rgba(40, 167, 69, 0.2); }
-        .diff-view .diff-del { background-color: rgba(220, 53, 69, 0.2); }
-        .modal-actions { margin-top: 15px; text-align: right; }
-        .modal-actions button { padding: 8px 15px; border-radius: 3px; cursor: pointer; border: 1px solid var(--border-color); }
-        #applyChangesBtn { background-color: var(--accent-color); color: white; }
-        #cancelChangesBtn { background-color: var(--bg-input); color: var(--text-primary); }
+        #applyStagedChangesBtn {
+            position: absolute;
+            bottom: 230px; /* Adjust as needed */
+            right: 30px;
+            padding: 10px 20px;
+            background-color: var(--accent-color);
+            color: white;
+            border: none;
+            border-radius: 5px;
+            cursor: pointer;
+            z-index: 100;
+        }
     </style>
 </head>
 <body>
@@ -146,6 +147,7 @@
     <div class="main-content">
         <div class="tab-bar" id="tab-bar"></div>
         <div class="editor-view" id="editor-view"><div class="editor-placeholder"><h2>Welcome to the AI Code Assistant</h2><p style="margin-top: 20px; max-width: 400px;">Get started by importing a project (in Settings), or by dragging a file/directory here. Then, type your instruction in the panel below and hit 'Run' or Enter.</p></div></div>
+        <button id="applyStagedChangesBtn" class="hidden">Apply Staged Changes</button>
         <div class="resizer-h" id="resizer-h"></div>
         <div class="panel-bottom" id="panel-bottom">
             <div class="panel-tab-bar">
@@ -178,17 +180,6 @@
     </ul>
 </div>
 
-<div id="diff-modal" class="modal-overlay hidden">
-    <div class="modal-content">
-        <h2>Proposed Changes</h2>
-        <div id="diff-view" class="diff-view"></div>
-        <div class="modal-actions">
-            <button id="applyChangesBtn">Apply Changes</button>
-            <button id="cancelChangesBtn">Cancel</button>
-        </div>
-    </div>
-</div>
-
 <script>
     let pyodide = null;
     let isPyodideLoading = false;
@@ -202,6 +193,8 @@
         model: '',
         highlightedChanges: [],
         proposedChanges: null,
+        proposedPlan: null,
+        chatHistory: [],
         terminal: {
             currentDir: '/',
             history: [],
@@ -244,10 +237,7 @@
         terminalInput: document.getElementById('terminal-input'),
         terminalPromptPrefix: document.getElementById('terminal-prompt-prefix'),
         contextMenu: document.getElementById('context-menu'),
-        diffModal: document.getElementById('diff-modal'),
-        diffView: document.getElementById('diff-view'),
-        applyChangesBtn: document.getElementById('applyChangesBtn'),
-        cancelChangesBtn: document.getElementById('cancelChangesBtn'),
+        applyStagedChangesBtn: document.getElementById('applyStagedChangesBtn'),
     };
     
     function escapeHTML(str) {
@@ -287,6 +277,12 @@
     }
 
     function render() {
+        if (state.activeFile?.path === 'proposed.diff') {
+            dom.applyStagedChangesBtn.classList.remove('hidden');
+        } else {
+            dom.applyStagedChangesBtn.classList.add('hidden');
+        }
+
         // File Tree
         dom.fileTree.innerHTML = '';
         if (state.files.length > 0) {
@@ -387,8 +383,7 @@
         dom.body.addEventListener('drop', handleDrop);
         dom.runBtn.addEventListener('click', handleRun);
         dom.instruction.addEventListener('keydown', (e) => { if (e.key === 'Enter' && !e.shiftKey) { e.preventDefault(); handleRun(); } });
-        dom.applyChangesBtn.addEventListener('click', applyProposedChanges);
-        dom.cancelChangesBtn.addEventListener('click', cancelProposedChanges);
+        dom.applyStagedChangesBtn.addEventListener('click', applyStagedChanges);
        
         initResizer(dom.resizerV, dom.sidebar, 'horizontal');
         initResizer(dom.resizerH, dom.panelBottom, 'vertical');
@@ -496,15 +491,8 @@
                     appendToTerminal(`rm: cannot remove '${args[0]}': No such file`, 'stderr');
                 }
                 break;
-            case 'python':
-                 if (!args[0]) { appendToTerminal('python: missing file operand', 'stderr'); break; }
-                 const pyPath = resolvePath(args[0]).substring(1);
-                 const pyFile = state.files.find(f => f.path === pyPath);
-                 if (pyFile) await runPythonCode(pyFile.content, pyFile.path);
-                 else appendToTerminal(`python: can't open file '${args[0]}': [Errno 2] No such file or directory`, 'stderr');
-                break;
             case 'help':
-                appendToTerminal('Available commands:\n  ls [path]             - List directory contents.\n  cd <dir>              - Change current directory.\n  cat <file>            - Display file content.\n  rm <file>             - Delete a file.\n  python <filename.py>  - Execute a Python file.\n  clear                 - Clear the terminal output.\n  help                  - Show this help message.');
+                appendToTerminal('Available commands:\n  ls [path]             - List directory contents.\n  cd <dir>              - Change current directory.\n  cat <file>            - Display file content.\n  rm <file>             - Delete a file.\n  clear                 - Clear the terminal output.\n  help                  - Show this help message.');
                 break;
             case 'clear':
                 dom.terminalOutput.innerHTML = '';
@@ -734,7 +722,8 @@
             currentContext = state.files.map(f => `--- FILE: ${f.path} ---\n${f.content}\n--- END OF FILE ---\n\n`).join('');
         }
 
-        const prompt = `**ROLE:** You are an expert AI programmer acting as a surgical code modifier inside an editor. **TASK:** Your task is to either modify the existing code or generate a new project structure based on the user's instruction. You must be precise and minimalist. **PROTOCOL:** 1. Analyze the provided context and the instruction. 2. If the user asks to **GENERATE** code (e.g., from scratch), your response MUST be a JSON object with a "files" key, containing an array of {path: string, content: string}. 3. If the user asks to **MODIFY** code, your response MUST be a JSON object with a "modifications" key, containing an array of {path: string, startLine: number, endLine: number, newCode: string}. Do NOT replace the entire file if only a few lines change. Be a surgeon, not a butcher. **YOUR ENTIRE RESPONSE MUST BE A SINGLE, VALID JSON OBJECT ENCLOSED IN \`\`\`json ... \`\`\`.** **CONTEXT:**\n${currentContext || "No context provided. The user wants to generate code from scratch."}\n---\n**INSTRUCTION:**\n${instruction}\n---\n**YOUR JSON RESPONSE:**`;
+        const historyText = state.chatHistory.map(turn => `**USER:**\n${turn.user}\n\n**AI:**\n${turn.ai}`).join('\n\n---\n\n');
+        const prompt = `**ROLE:** You are an expert AI programmer. Your task is to analyze the user's instruction and the provided code context, and then create a clear, step-by-step plan to achieve the user's goal. **CHAT HISTORY:**\n${historyText}\n---\n**PROTOCOL:** 1. First, think about the user's request and the best way to implement it. 2. Then, write down a plan as a JSON object with a "plan" key. The value should be an array of strings, where each string is a step in the plan. **YOUR ENTIRE RESPONSE MUST BE A SINGLE, VALID JSON OBJECT ENCLOSED IN \`\`\`json ... \`\`\`.** **CONTEXT:**\n${currentContext || "No context provided."}\n---\n**INSTRUCTION:**\n${instruction}\n---\n**YOUR JSON RESPONSE (PLAN ONLY):**`;
 
         try {
             let rawText;
@@ -761,10 +750,10 @@
             }
 
             const jsonMatch = rawText.match(/```json\s*([\s\S]*?)\s*```/s) || [null, rawText];
-            if (!jsonMatch[1]) throw new Error("AI did not return a valid JSON format. Response was: " + rawText.substring(0, 300));
+            if (!jsonMatch[1]) throw new Error("AI did not return a valid JSON format for the plan. Response was: " + rawText.substring(0, 300));
 
-            state.proposedChanges = JSON.parse(jsonMatch[1]);
-            showProposedChanges();
+            state.proposedPlan = JSON.parse(jsonMatch[1]);
+            showProposedPlan();
 
         } catch (e) {
             console.error(e);
@@ -773,64 +762,151 @@
         }
     }
 
-    function showProposedChanges() {
-        if (!state.proposedChanges) return;
+    function showProposedPlan() {
+        if (!state.proposedPlan || !state.proposedPlan.plan) {
+            setStatus('AI did not provide a valid plan.', true);
+            dom.runBtn.disabled = false;
+            return;
+        }
 
-        setStatus('Waiting for user confirmation...');
-        dom.diffView.innerHTML = generateDiffHtml(state.proposedChanges);
-        dom.diffModal.classList.remove('hidden');
+        const plan = state.proposedPlan.plan;
+        let planHtml = '<strong>AI has proposed the following plan:</strong><br><ul>';
+        plan.forEach(step => {
+            planHtml += `<li>${escapeHTML(step)}</li>`;
+        });
+        planHtml += '</ul><p>Do you approve this plan?</p>';
+
+        appendToTerminal(planHtml, 'stdout');
+
+        const promptDiv = document.createElement('div');
+        promptDiv.className = 'terminal-prompt';
+
+        const btnYes = document.createElement('button');
+        btnYes.textContent = 'Approve & Continue';
+        const btnNo = document.createElement('button');
+        btnNo.textContent = 'Reject';
+
+        btnYes.onclick = () => { promptDiv.remove(); handleApproval(); };
+        btnNo.onclick = () => {
+            promptDiv.remove();
+            state.proposedPlan = null;
+            dom.runBtn.disabled = false;
+            setStatus('Plan rejected.');
+            appendToTerminal('> Plan rejected by user.');
+        };
+
+        promptDiv.appendChild(btnYes);
+        promptDiv.appendChild(btnNo);
+        dom.terminalOutput.appendChild(promptDiv);
+        dom.terminalOutput.scrollTop = dom.terminalOutput.scrollHeight;
     }
 
-    function generateDiffHtml(changes) {
-        let html = '';
+    async function handleApproval() {
+        setStatus('Plan approved. Generating code...');
+        dom.runBtn.disabled = true;
+
+        const instruction = dom.instruction.value.trim();
+        const plan = state.proposedPlan.plan.join('\n- ');
+
+        let currentContext = state.files.map(f => `--- FILE: ${f.path} ---\n${f.content}\n--- END OF FILE ---\n\n`).join('');
+
+        const historyText = state.chatHistory.map(turn => `**USER:**\n${turn.user}\n\n**AI:**\n${turn.ai}`).join('\n\n---\n\n');
+
+        const prompt = `**ROLE:** You are an expert AI programmer. You have already provided a plan, which the user has approved. Now, you must execute that plan. **CHAT HISTORY:**\n${historyText}\n---\n**CONTEXT:**\n${currentContext || "No context provided."}\n---\n**INSTRUCTION:**\n${instruction}\n---\n**APPROVED PLAN:**\n- ${plan}\n---\n**TASK:** Generate the code changes based on the plan. **PROTOCOL:** Your response MUST be a JSON object with "modifications" (for changes) or "files" (for new files) keys, following the established format. **YOUR ENTIRE RESPONSE MUST BE A SINGLE, VALID JSON OBJECT ENCLOSED IN \`\`\`json ... \`\`\`.**`;
+
+        try {
+            let rawText;
+            if (state.provider === 'google') {
+                const url = `https://generativelanguage.googleapis.com/v1beta/models/${state.model}:generateContent?key=${state.apiKey}`;
+                const options = { method: 'POST', headers: {'Content-Type': 'application/json'}, body: JSON.stringify({ contents: [{ parts: [{ text: prompt }] }] }) };
+                const response = await fetch(url, options);
+                if (!response.ok) { const errorText = await response.text(); throw new Error(`Google API Error: ${response.status} - ${errorText}`); }
+                const data = await response.json();
+                if (!data.candidates?.[0]?.content?.parts?.[0]?.text) throw new Error("Unexpected Google API response structure.");
+                rawText = data.candidates[0].content.parts[0].text;
+            } else { // openrouter
+                const url = 'https://openrouter.ai/api/v1/chat/completions';
+                const options = {
+                    method: 'POST',
+                    headers: { 'Content-Type': 'application/json', 'Authorization': `Bearer ${state.apiKey}`, 'HTTP-Referer': window.location.origin, 'X-Title': 'BossCoder' },
+                    body: JSON.stringify({ model: state.model, messages: [{ role: 'user', content: prompt }], response_format: { type: "json_object" } })
+                };
+                const response = await fetch(url, options);
+                if (!response.ok) { const errorText = await response.text(); throw new Error(`OpenRouter API Error: ${response.status} - ${errorText}`); }
+                const data = await response.json();
+                if (!data.choices?.[0]?.message?.content) throw new Error("Unexpected OpenRouter API response structure.");
+                rawText = data.choices[0].message.content;
+            }
+
+            const jsonMatch = rawText.match(/```json\s*([\s\S]*?)\s*```/s) || [null, rawText];
+            if (!jsonMatch[1]) throw new Error("AI did not return a valid JSON format for the code. Response was: " + rawText.substring(0, 300));
+
+            const result = JSON.parse(jsonMatch[1]);
+            processAIResult(result);
+
+            // Update chat history
+            state.chatHistory.push({
+                user: instruction,
+                ai: `Okay, I will follow this plan:\n- ${plan}`
+            });
+            state.chatHistory.push({
+                user: "Yes, please proceed.",
+                ai: "Great! I have implemented the changes."
+            });
+
+
+            setStatus('Operation completed successfully.');
+        } catch (e) {
+            console.error(e);
+            setStatus(`Error: ${e.message}`, true);
+        } finally {
+            dom.runBtn.disabled = false;
+            state.proposedPlan = null;
+        }
+    }
+
+    function generateDiffString(changes) {
+        let diff = '';
         if (changes.files) {
             changes.files.forEach(file => {
-                html += `<h4>New File: ${escapeHTML(file.path)}</h4>`;
-                html += `<div class="diff-add">${escapeHTML(file.content)}</div>`;
+                diff += `--- a/new_file\n`;
+                diff += `+++ b/${file.path}\n`;
+                file.content.split('\n').forEach(line => {
+                    diff += `+${line}\n`;
+                });
             });
         }
         if (changes.modifications) {
             changes.modifications.forEach(mod => {
                 const originalFile = state.files.find(f => f.path === mod.path);
-                html += `<h4>Changes for: ${escapeHTML(mod.path)}</h4>`;
+                diff += `--- a/${mod.path}\n`;
+                diff += `+++ b/${mod.path}\n`;
                 if (originalFile) {
                     const originalLines = originalFile.content.split('\n');
                     const newLines = mod.newCode.split('\n');
-
                     const start = Math.max(1, mod.startLine);
                     const end = Math.max(start, mod.endLine);
-
-                    const deletedLines = originalLines.slice(start - 1, end).join('\n');
-                    if(deletedLines) html += `<div class="diff-del">${escapeHTML(deletedLines)}</div>`;
-
-                    const addedLines = newLines.join('\n');
-                     if(addedLines) html += `<div class="diff-add">${escapeHTML(addedLines)}</div>`;
-
+                    originalLines.slice(start - 1, end).forEach(line => {
+                        diff += `-${line}\n`;
+                    });
+                    newLines.forEach(line => {
+                        diff += `+${line}\n`;
+                    });
                 } else {
-                    html += `<div class="diff-add">${escapeHTML(mod.newCode)}</div>`;
+                    mod.newCode.split('\n').forEach(line => {
+                        diff += `+${line}\n`;
+                    });
                 }
             });
         }
-        return html;
+        return diff;
     }
 
-    function applyProposedChanges() {
-        if (!state.proposedChanges) return;
-        processAIResult(state.proposedChanges);
-        state.proposedChanges = null;
-        dom.diffModal.classList.add('hidden');
-        dom.runBtn.disabled = false;
-        setStatus('Changes applied successfully.');
-    }
-
-    function cancelProposedChanges() {
-        state.proposedChanges = null;
-        dom.diffModal.classList.add('hidden');
-        dom.runBtn.disabled = false;
-        setStatus('Operation cancelled.');
-    }
-    
     function processAIResult(result) {
+        const diffContent = generateDiffString(result);
+        state.files.push({ path: 'proposed.diff', content: diffContent });
+        setActiveFile('proposed.diff');
+
         state.highlightedChanges = [];
         if (result.files) {
             loadFiles(result.files, 'new-project');
