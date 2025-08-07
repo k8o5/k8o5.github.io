@@ -95,6 +95,17 @@
         .context-menu ul { list-style: none; padding: 0; margin: 0; }
         .context-menu li { padding: 8px 15px; cursor: pointer; font-size: 13px; color: var(--text-primary); }
         .context-menu li:hover { background-color: var(--accent-color); color: white; }
+
+        .modal-overlay { position: fixed; top: 0; left: 0; right: 0; bottom: 0; background-color: rgba(0, 0, 0, 0.6); z-index: 2000; display: flex; align-items: center; justify-content: center; }
+        .modal-content { background-color: var(--bg-sidebar); padding: 20px; border-radius: 6px; box-shadow: 0 5px 15px rgba(0,0,0,0.5); width: 90%; max-width: 800px; max-height: 80vh; display: flex; flex-direction: column; }
+        .modal-content h2 { margin-bottom: 15px; }
+        .diff-view { flex-grow: 1; overflow-y: auto; background: var(--bg-main); font-family: var(--font-mono); font-size: 13px; padding: 10px; border: 1px solid var(--border-color); white-space: pre-wrap; }
+        .diff-view .diff-add { background-color: rgba(40, 167, 69, 0.2); }
+        .diff-view .diff-del { background-color: rgba(220, 53, 69, 0.2); }
+        .modal-actions { margin-top: 15px; text-align: right; }
+        .modal-actions button { padding: 8px 15px; border-radius: 3px; cursor: pointer; border: 1px solid var(--border-color); }
+        #applyChangesBtn { background-color: var(--accent-color); color: white; }
+        #cancelChangesBtn { background-color: var(--bg-input); color: var(--text-primary); }
     </style>
 </head>
 <body>
@@ -167,6 +178,17 @@
     </ul>
 </div>
 
+<div id="diff-modal" class="modal-overlay hidden">
+    <div class="modal-content">
+        <h2>Proposed Changes</h2>
+        <div id="diff-view" class="diff-view"></div>
+        <div class="modal-actions">
+            <button id="applyChangesBtn">Apply Changes</button>
+            <button id="cancelChangesBtn">Cancel</button>
+        </div>
+    </div>
+</div>
+
 <script>
     let pyodide = null;
     let isPyodideLoading = false;
@@ -179,6 +201,7 @@
         apiKey: '',
         model: '',
         highlightedChanges: [],
+        proposedChanges: null,
         terminal: {
             currentDir: '/',
             history: [],
@@ -221,6 +244,10 @@
         terminalInput: document.getElementById('terminal-input'),
         terminalPromptPrefix: document.getElementById('terminal-prompt-prefix'),
         contextMenu: document.getElementById('context-menu'),
+        diffModal: document.getElementById('diff-modal'),
+        diffView: document.getElementById('diff-view'),
+        applyChangesBtn: document.getElementById('applyChangesBtn'),
+        cancelChangesBtn: document.getElementById('cancelChangesBtn'),
     };
     
     function escapeHTML(str) {
@@ -360,6 +387,8 @@
         dom.body.addEventListener('drop', handleDrop);
         dom.runBtn.addEventListener('click', handleRun);
         dom.instruction.addEventListener('keydown', (e) => { if (e.key === 'Enter' && !e.shiftKey) { e.preventDefault(); handleRun(); } });
+        dom.applyChangesBtn.addEventListener('click', applyProposedChanges);
+        dom.cancelChangesBtn.addEventListener('click', cancelProposedChanges);
        
         initResizer(dom.resizerV, dom.sidebar, 'horizontal');
         initResizer(dom.resizerH, dom.panelBottom, 'vertical');
@@ -733,15 +762,72 @@
 
             const jsonMatch = rawText.match(/```json\s*([\s\S]*?)\s*```/s) || [null, rawText];
             if (!jsonMatch[1]) throw new Error("AI did not return a valid JSON format. Response was: " + rawText.substring(0, 300));
-            const result = JSON.parse(jsonMatch[1]);
-            processAIResult(result);
-            setStatus('Operation completed successfully.');
+
+            state.proposedChanges = JSON.parse(jsonMatch[1]);
+            showProposedChanges();
+
         } catch (e) {
             console.error(e);
             setStatus(`Error: ${e.message}`, true);
-        } finally {
             dom.runBtn.disabled = false;
         }
+    }
+
+    function showProposedChanges() {
+        if (!state.proposedChanges) return;
+
+        setStatus('Waiting for user confirmation...');
+        dom.diffView.innerHTML = generateDiffHtml(state.proposedChanges);
+        dom.diffModal.classList.remove('hidden');
+    }
+
+    function generateDiffHtml(changes) {
+        let html = '';
+        if (changes.files) {
+            changes.files.forEach(file => {
+                html += `<h4>New File: ${escapeHTML(file.path)}</h4>`;
+                html += `<div class="diff-add">${escapeHTML(file.content)}</div>`;
+            });
+        }
+        if (changes.modifications) {
+            changes.modifications.forEach(mod => {
+                const originalFile = state.files.find(f => f.path === mod.path);
+                html += `<h4>Changes for: ${escapeHTML(mod.path)}</h4>`;
+                if (originalFile) {
+                    const originalLines = originalFile.content.split('\n');
+                    const newLines = mod.newCode.split('\n');
+
+                    const start = Math.max(1, mod.startLine);
+                    const end = Math.max(start, mod.endLine);
+
+                    const deletedLines = originalLines.slice(start - 1, end).join('\n');
+                    if(deletedLines) html += `<div class="diff-del">${escapeHTML(deletedLines)}</div>`;
+
+                    const addedLines = newLines.join('\n');
+                     if(addedLines) html += `<div class="diff-add">${escapeHTML(addedLines)}</div>`;
+
+                } else {
+                    html += `<div class="diff-add">${escapeHTML(mod.newCode)}</div>`;
+                }
+            });
+        }
+        return html;
+    }
+
+    function applyProposedChanges() {
+        if (!state.proposedChanges) return;
+        processAIResult(state.proposedChanges);
+        state.proposedChanges = null;
+        dom.diffModal.classList.add('hidden');
+        dom.runBtn.disabled = false;
+        setStatus('Changes applied successfully.');
+    }
+
+    function cancelProposedChanges() {
+        state.proposedChanges = null;
+        dom.diffModal.classList.add('hidden');
+        dom.runBtn.disabled = false;
+        setStatus('Operation cancelled.');
     }
     
     function processAIResult(result) {
