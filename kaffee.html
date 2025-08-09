@@ -1,0 +1,449 @@
+<!DOCTYPE html>
+<html lang="de">
+<head>
+<meta charset="utf-8" />
+<meta name="viewport" content="width=device-width,initial-scale=1" />
+<title>Gemini 2.5 Flash — ASCII Story Animator (Triple-A)</title>
+<style>
+:root{
+  --bg:#0b0b0d; --panel:#0f1720; --muted:#9aa4b2; --neon:#00f29b; --accent:#0ea5e9;
+  --mono: "Courier New", Courier, monospace;
+}
+*{box-sizing:border-box}
+html,body{height:100%}
+body{
+  margin:0; font-family:var(--mono); background:
+  radial-gradient(1200px 600px at 10% 10%, rgba(14,165,233,0.05), transparent),
+  radial-gradient(900px 500px at 90% 90%, rgba(0,242,155,0.035), transparent),
+  var(--bg); color:#e6eef8; display:flex; align-items:flex-start; justify-content:center; padding:28px;
+}
+.app{
+  width:100%; max-width:1100px; display:grid; grid-template-columns: 380px 1fr; gap:20px;
+  align-items:start;
+}
+
+/* Left panel controls */
+.panel{
+  background:linear-gradient(180deg, rgba(255,255,255,0.02), rgba(0,0,0,0.02));
+  border:1px solid rgba(255,255,255,0.04);
+  padding:18px; border-radius:14px; box-shadow: 0 10px 30px rgba(2,6,23,0.6);
+}
+.header{display:flex; gap:12px; align-items:center; margin-bottom:8px}
+.logo{
+  width:44px;height:44px;border-radius:10px;
+  background:linear-gradient(135deg,var(--neon),var(--accent)); box-shadow:0 6px 20px rgba(0,242,155,0.12);
+  display:flex;align-items:center;justify-content:center;font-weight:700;color:#071019;font-size:18px;
+}
+.h1{font-size:16px;margin:0}
+.h1 small{display:block;font-size:11px;color:var(--muted);margin-top:4px}
+
+/* inputs */
+.field{margin:10px 0}
+label{font-size:12px;color:var(--muted);display:block;margin-bottom:6px}
+input[type="password"], input[type="number"], textarea, select{
+  width:100%; padding:10px 12px; background:#071019; color:#d9f8ef; border:1px solid rgba(255,255,255,0.03);
+  border-radius:8px; font-family:var(--mono); font-size:13px; resize:vertical;
+}
+textarea{min-height:84px; max-height:220px}
+.row{display:flex; gap:8px}
+.btn{
+  display:inline-flex; align-items:center; justify-content:center; gap:8px;
+  padding:10px 12px; border-radius:10px; cursor:pointer; border:none; font-weight:600;
+  background:linear-gradient(90deg,var(--accent),var(--neon)); color:#00121a; box-shadow:0 8px 30px rgba(14,165,233,0.08);
+}
+.btn.ghost{background:transparent; border:1px solid rgba(255,255,255,0.04); color:var(--neon)}
+.btn:disabled{opacity:0.45; cursor:not-allowed}
+
+/* right display */
+.display{
+  display:flex; flex-direction:column; gap:12px;
+}
+.canvas{
+  background:#010101; border-radius:12px; padding:18px; min-height:520px; max-height:72vh;
+  overflow:auto; border:1px solid rgba(0,242,155,0.08); box-shadow:0 12px 40px rgba(0,0,0,0.7);
+  position:relative;
+}
+.ascii{
+  color:#a6f7c2; font-family:var(--mono); white-space:pre; font-size:12px; line-height:1.05;
+  text-shadow:0 1px 0 rgba(0,0,0,0.6);
+  width:fit-content;
+}
+.overlay{
+  position:absolute; right:14px; top:14px; display:flex; gap:8px;
+}
+.small{font-size:12px;color:var(--muted)}
+.statusbar{
+  display:flex; gap:12px; align-items:center; justify-content:space-between; padding:8px 12px;
+  background:linear-gradient(180deg, rgba(255,255,255,0.01), transparent); border-radius:10px;
+  border:1px solid rgba(255,255,255,0.02);
+}
+.kv{display:flex; gap:6px; align-items:center}
+.indicator{
+  width:10px;height:10px;border-radius:10px;background:transparent;border:1px solid rgba(255,255,255,0.05);
+  box-shadow:0 0 8px rgba(0,0,0,0.6) inset;
+}
+.indicator.live{background:linear-gradient(90deg,var(--neon),var(--accent)); box-shadow:0 6px 24px rgba(0,242,155,0.06)}
+
+/* fancy loader */
+.loader{
+  width:38px;height:38px;border-radius:10px; display:inline-grid; place-items:center;
+  background:linear-gradient(180deg, rgba(255,255,255,0.02), rgba(0,0,0,0.02));
+  border:1px solid rgba(255,255,255,0.03);
+  font-weight:700;color:var(--neon);
+}
+
+/* responsive */
+@media (max-width:980px){
+  .app{grid-template-columns:1fr; padding-bottom:60px}
+  .panel{order:2}
+}
+.footer-note{font-size:12px;color:var(--muted); margin-top:8px}
+</style>
+</head>
+<body>
+<div class="app">
+  <div class="panel">
+    <div class="header">
+      <div class="logo">G🔥</div>
+      <div>
+        <h2 class="h1">Gemini 2.5 Flash — ASCII Animator <small>Triple-A mode</small></h2>
+      </div>
+    </div>
+
+    <div class="field">
+      <label for="apiKey">Gemini API Key <small style="color:var(--muted)">— wird lokal gespeichert (session)</small></label>
+      <input id="apiKey" type="password" placeholder="sk-..." />
+    </div>
+
+    <div class="field">
+      <label for="storyTheme">Story Thema</label>
+      <textarea id="storyTheme">Ein kleiner, neugieriger Fuchs erkundet einen magischen Wald bei Nacht.</textarea>
+    </div>
+
+    <div class="row">
+      <div style="flex:1" class="field">
+        <label for="frameInterval">Frame Intervall (s)</label>
+        <input id="frameInterval" type="number" min="5" value="12" />
+      </div>
+      <div style="width:120px" class="field">
+        <label for="frameSize">Größe (HxW)</label>
+        <select id="frameSize">
+          <option value="20x60">20×60</option>
+          <option value="22x64" selected>22×64</option>
+          <option value="24x70">24×70</option>
+        </select>
+      </div>
+    </div>
+
+    <div style="display:flex; gap:8px; margin-top:6px">
+      <button id="startBtn" class="btn">▶ Start</button>
+      <button id="pauseBtn" class="btn ghost" disabled>⏸ Pause</button>
+      <button id="stopBtn" class="btn ghost" disabled>■ Stop</button>
+    </div>
+
+    <div style="display:flex; gap:8px; margin-top:8px">
+      <button id="downloadBtn" class="btn ghost" disabled>⬇️ Download Frame</button>
+      <button id="clearHistory" class="btn ghost">🧹 Clear History</button>
+    </div>
+
+    <div class="footer-note">
+      <div style="margin-top:10px;color:var(--muted);font-size:12px">
+        Tips: Für stabile Ergebnisse <strong>nutze einen eigenen Server-Proxy</strong> für den API Key. Die UI speichert den Key nur in sessionStorage.
+      </div>
+    </div>
+  </div>
+
+  <div class="display">
+    <div class="canvas" id="canvas">
+      <div class="overlay" id="overlay">
+        <div class="loader" id="loader" title="Generating" style="display:none">⚡</div>
+        <div class="small" id="frameLabel">Frame —</div>
+      </div>
+      <pre class="ascii" id="ascii">Warte auf Start…</pre>
+    </div>
+
+    <div class="statusbar">
+      <div class="kv"><div id="liveDot" class="indicator"></div><div class="small" id="statusText">Bereit.</div></div>
+      <div class="kv"><div class="small">Frames:</div><div id="framesCount" class="small">0</div></div>
+      <div class="kv"><div class="small">Last time:</div><div id="lastTime" class="small">—</div></div>
+    </div>
+  </div>
+</div>
+
+<script>
+/* Triple-A client for Gemini 2.5 Flash
+   - frame locking
+   - trimmed conversation history
+   - exponential backoff on errors
+   - download single frame
+   - sessionStorage for key (not permanent)
+   - strict prompt to avoid markdown/explanations
+*/
+
+(() => {
+  // UI nodes
+  const apiKeyInput = document.getElementById('apiKey');
+  const storyThemeEl = document.getElementById('storyTheme');
+  const frameIntervalEl = document.getElementById('frameInterval');
+  const frameSizeEl = document.getElementById('frameSize');
+
+  const startBtn = document.getElementById('startBtn');
+  const pauseBtn = document.getElementById('pauseBtn');
+  const stopBtn = document.getElementById('stopBtn');
+  const downloadBtn = document.getElementById('downloadBtn');
+  const clearHistoryBtn = document.getElementById('clearHistory');
+
+  const asciiEl = document.getElementById('ascii');
+  const loader = document.getElementById('loader');
+  const statusText = document.getElementById('statusText');
+  const liveDot = document.getElementById('liveDot');
+  const framesCountEl = document.getElementById('framesCount');
+  const lastTimeEl = document.getElementById('lastTime');
+  const frameLabel = document.getElementById('frameLabel');
+
+  // Config
+  const MODEL = "gemini-2.5-flash";
+  const BASE_API = `https://generativelanguage.googleapis.com/v1beta/models/${MODEL}:generateContent?key=`;
+  const MAX_HISTORY_TURNS = 8; // keep small for tokens
+  const DEFAULT_TEMPERATURE = 0.45;
+
+  // State
+  let sessionApiKey = sessionStorage.getItem('geminiApiKey') || '';
+  if (sessionApiKey) apiKeyInput.value = sessionApiKey;
+
+  let convo = []; // array of { role, parts:[{text}] }
+  let frameNumber = 0;
+  let running = false;
+  let paused = false;
+  let intervalId = null;
+  let frameLock = false; // prevents overlapping requests
+  let lastFrameText = '';
+  let backoffMs = 0;
+
+  // helpers
+  const nowISO = () => new Date().toISOString().replace('T',' ').split('.')[0];
+
+  function setStatus(text, live=false){
+    statusText.textContent = text;
+    if (live) liveDot.classList.add('live'); else liveDot.classList.remove('live');
+  }
+
+  function enableButtonsForRunning(isRunning){
+    startBtn.disabled = isRunning;
+    stopBtn.disabled = !isRunning;
+    pauseBtn.disabled = !isRunning;
+    downloadBtn.disabled = !isRunning && asciiEl.textContent.trim().length===0;
+  }
+
+  function trimHistory(){
+    // trim to last MAX_HISTORY_TURNS turns (user+model combined)
+    if (convo.length > MAX_HISTORY_TURNS){
+      convo = convo.slice(-MAX_HISTORY_TURNS);
+    }
+  }
+
+  function cleanAscii(raw){
+    if (!raw) return raw || '';
+    let art = raw.replace(/```(?:\w+)?\r?\n?/gi,'').replace(/```\s*$/,'');
+    // remove common leading phrases
+    art = art.replace(/^(hier ist (die|die nächste|der nächste).{0,30}|ascii[- ]?art[:\-]?)/i,'').trim();
+    // ensure lines trimmed to requested width
+    return art.replace(/\r\n/g,'\n').replace(/\t/g,'    ').trim();
+  }
+
+  function buildInitialPrompt(theme, size){
+    const [H,W] = size.split('x').map(s=>parseInt(s,10));
+    return [
+      `Du bist ein präziser ASCII-Art Generator.`,
+      `Thema: "${theme}"`,
+      `Anweisung: GIB AUSSCHLIESSLICH die reine ASCII-Art, KEINE Erklärungen, KEINE Codeblocks, KEINE Beschriftungen, KEINE Anführungszeichen.`,
+      `Größe: exakt etwa ${H} Zeilen hoch und ${W} Zeichen breit (wenn möglich).`,
+      `Stil: kohärent zwischen Frames — benutze dieselben visuellen Elemente wiedererkennbar.`,
+      `Output: nur die ASCII-Zeichen (plain text).`,
+      `Tone: mystisch, kinohaft, detailreich, aber kompakt.`,
+      `Beginne mit Frame 1.`
+    ].join('\n');
+  }
+
+  function buildFollowupPrompt(theme, lastSnapshot, size, frameNum){
+    const [H,W] = size.split('x').map(s=>parseInt(s,10));
+    // lastSnapshot should be a short excerpt (not full previous frame) to reduce tokens
+    return [
+      `Du bist ein präziser ASCII-Art Generator und setzt eine fortlaufende Geschichte grafisch fort.`,
+      `Thema: "${theme}"`,
+      `Vorherige Szene (Kurzer Ausschnitt):`,
+      lastSnapshot,
+      `Aufgabe: Generiere NUR den nächsten logischen Frame (Frame ${frameNum}) in ASCII. Keine Erklärungen, keine Codeblöcke, nur reine ASCII-Art.`,
+      `Größe: ca. ${H} Zeilen hoch und ${W} Zeichen breit.`,
+      `Achte auf stilistische Konsistenz mit der vorherigen Szene.`
+    ].join('\n');
+  }
+
+  async function callGemini(contents, apiKey, opts = {}){
+    const url = BASE_API + encodeURIComponent(apiKey);
+    const body = {
+      contents,
+      generationConfig: {
+        temperature: opts.temperature ?? DEFAULT_TEMPERATURE,
+        maxOutputTokens: opts.maxOutputTokens ?? 1400,
+        stopSequences: ["```","Erklärung:","Beschreibung:"]
+      }
+    };
+    const resp = await fetch(url, {method:'POST', headers:{'Content-Type':'application/json'}, body: JSON.stringify(body)});
+    if(!resp.ok){
+      let errText = `${resp.status} ${resp.statusText}`;
+      try {
+        const j = await resp.json();
+        errText = j.error?.message || errText;
+      } catch(e){}
+      const e = new Error(errText);
+      e.httpStatus = resp.status;
+      throw e;
+    }
+    return resp.json();
+  }
+
+  async function generateFrame(){
+    if (frameLock) {
+      console.warn('frame locked — skipping');
+      return;
+    }
+    frameLock = true;
+    loader.style.display = '';
+    setStatus(`Generiere Frame ${frameNumber}...`, true);
+
+    try {
+      const apiKey = sessionApiKey || apiKeyInput.value.trim();
+      if (!apiKey) throw new Error('API Key fehlt.');
+
+      // build prompt
+      const size = frameSizeEl.value;
+      let promptText;
+      if (frameNumber === 1){
+        promptText = buildInitialPrompt(storyThemeEl.value.trim(), size);
+      } else {
+        // provide only a snapshot to save tokens
+        const snapshot = (lastFrameText || '').split('\n').slice(0,6).join('\n').slice(0,800);
+        promptText = buildFollowupPrompt(storyThemeEl.value.trim(), snapshot, size, frameNumber);
+      }
+
+      // push user turn to convo for context
+      convo.push({ role: "user", parts: [{ text: promptText }] });
+      trimHistory();
+
+      const data = await callGemini(convo, apiKey, { temperature: DEFAULT_TEMPERATURE, maxOutputTokens: 1600 });
+
+      // parse response — robust checks
+      const candidate = data?.candidates?.[0];
+      if (!candidate || !candidate.content || !candidate.content.parts || !candidate.content.parts[0]) {
+        throw new Error('Ungültige Antwort vom Modell.');
+      }
+      const raw = candidate.content.parts[0].text || candidate.content.parts[0].textRaw || '';
+      const cleaned = cleanAscii(raw);
+      // append model answer to history
+      convo.push({ role: "model", parts: [{ text: cleaned }] });
+      trimHistory();
+
+      // display
+      asciiEl.textContent = cleaned || '— (leerer Frame)';
+      lastFrameText = cleaned;
+      framesCountEl.textContent = String(frameNumber);
+      frameLabel.textContent = `Frame ${frameNumber}`;
+      lastTimeEl.textContent = nowISO();
+      setStatus(`Frame ${frameNumber} ready.`, true);
+      downloadBtn.disabled = false;
+      backoffMs = 0; // reset errors
+    } catch (err) {
+      console.error('generateFrame error', err);
+      // backoff attempt
+      if (!backoffMs) backoffMs = 1000;
+      else backoffMs = Math.min(backoffMs*2, 20000);
+      setStatus(`Fehler: ${err.message || err}. Wiederhole in ${Math.round(backoffMs/1000)}s`, false);
+      // wait backoff delay before allowing next frame
+      await new Promise(r => setTimeout(r, backoffMs));
+    } finally {
+      loader.style.display = 'none';
+      frameLock = false;
+    }
+  }
+
+  // control flows
+  async function start(){
+    sessionApiKey = apiKeyInput.value.trim();
+    if (!sessionApiKey) { alert('Bitte API Key eingeben.'); return; }
+    sessionStorage.setItem('geminiApiKey', sessionApiKey);
+
+    running = true; paused = false;
+    frameNumber = 0;
+    convo = [];
+    enableButtonsForRunning(true);
+    setStatus('Starte Animation...', true);
+    // immediate first frame
+    await stepOnce();
+    // schedule repeating if interval > 0
+    const sec = Math.max(5, parseInt(frameIntervalEl.value,10) || 12);
+    intervalId = setInterval(() => { if (!paused) stepOnce(); }, sec*1000);
+  }
+
+  async function stepOnce(){
+    if (!running) return;
+    frameNumber++;
+    await generateFrame();
+  }
+
+  function pause(){
+    paused = !paused;
+    pauseBtn.textContent = paused ? '▶ Resume' : '⏸ Pause';
+    setStatus(paused ? 'Paused' : `Running — nächster Frame in ${frameIntervalEl.value}s`, !paused);
+  }
+
+  function stop(){
+    running = false; paused = false;
+    if (intervalId) { clearInterval(intervalId); intervalId = null; }
+    enableButtonsForRunning(false);
+    setStatus('Animation gestoppt.', false);
+    frameLabel.textContent = 'Stopped';
+  }
+
+  function downloadFrame(){
+    const text = asciiEl.textContent || '';
+    const blob = new Blob([text], { type: 'text/plain;charset=utf-8' });
+    const url = URL.createObjectURL(blob);
+    const a = document.createElement('a');
+    a.href = url;
+    a.download = `ascii_frame_${String(frameNumber).padStart(3,'0')}.txt`;
+    document.body.appendChild(a);
+    a.click();
+    a.remove();
+    URL.revokeObjectURL(url);
+  }
+
+  // bindings
+  startBtn.addEventListener('click', () => start());
+  pauseBtn.addEventListener('click', () => { pause(); });
+  stopBtn.addEventListener('click', () => { stop(); });
+  downloadBtn.addEventListener('click', () => downloadFrame());
+  clearHistoryBtn.addEventListener('click', () => { convo=[]; setStatus('History cleared', false); });
+
+  // toggle UI states
+  const observer = new MutationObserver(()=> {
+    enableButtonsForRunning(running);
+    pauseBtn.disabled = !running;
+    stopBtn.disabled = !running;
+  });
+  observer.observe(document.getElementById('canvas'), { childList:true, subtree:true });
+
+  // keyboard shortcuts
+  window.addEventListener('keydown', (e) => {
+    if (e.key === ' ' && running) { e.preventDefault(); pause(); }
+    if (e.key.toLowerCase() === 's' && !running) start();
+    if (e.key.toLowerCase() === 'x') stop();
+  });
+
+  // initial UI
+  enableButtonsForRunning(false);
+  setStatus('Bereit. Gib deinen API Key und Story ein.', false);
+})();
+</script>
+</body>
+</html>
