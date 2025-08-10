@@ -30,6 +30,18 @@
         canvas.width = window.innerWidth;
         canvas.height = window.innerHeight;
 
+        // Audio context for sounds
+        const audioCtx = new (window.AudioContext || window.webkitAudioContext)();
+
+        function playSound(frequency, duration, type = 'sine') {
+            const oscillator = audioCtx.createOscillator();
+            oscillator.type = type;
+            oscillator.frequency.setValueAtTime(frequency, audioCtx.currentTime);
+            oscillator.connect(audioCtx.destination);
+            oscillator.start();
+            setTimeout(() => oscillator.stop(), duration);
+        }
+
         // Game variables
         let bird = {
             x: 50,
@@ -37,18 +49,22 @@
             radius: 20,
             velocity: 0,
             gravity: 0.5,
-            lift: -10,
-            color: '#ffcc00'
+            lift: -12,
+            color: '#ffcc00',
+            rotation: 0
         };
 
         let pipes = [];
+        let collectibles = [];
         let pipeWidth = 80;
         let pipeGap = 150;
-        let pipeSpeed = 3;
+        let basePipeSpeed = 3;
+        let pipeSpeed = basePipeSpeed;
         let score = 0;
         let highScore = localStorage.getItem('highScore') || 0;
         let gameOver = false;
         let started = false;
+        let difficultyLevel = 1;
 
         // Background
         function drawBackground() {
@@ -58,13 +74,26 @@
             ctx.fillRect(0, canvas.height - 50, canvas.width, 50);
         }
 
-        // Draw bird
+        // Draw bird with rotation
         function drawBird() {
+            ctx.save();
+            ctx.translate(bird.x, bird.y);
+            ctx.rotate(bird.rotation);
             ctx.beginPath();
-            ctx.arc(bird.x, bird.y, bird.radius, 0, Math.PI * 2);
+            ctx.arc(0, 0, bird.radius, 0, Math.PI * 2);
             ctx.fillStyle = bird.color;
             ctx.fill();
-            ctx.closePath();
+            // Simple eye
+            ctx.beginPath();
+            ctx.arc(bird.radius / 2, -bird.radius / 3, bird.radius / 5, 0, Math.PI * 2);
+            ctx.fillStyle = '#000';
+            ctx.fill();
+            ctx.restore();
+        }
+
+        // Update bird rotation
+        function updateBirdRotation() {
+            bird.rotation = Math.min(Math.max(bird.velocity * 0.05, -0.5), 1);
         }
 
         // Draw pipes
@@ -74,7 +103,17 @@
                 // Top pipe
                 ctx.fillRect(pipe.x, 0, pipeWidth, pipe.top);
                 // Bottom pipe
-                ctx.fillRect(pipe.x, pipe.top + pipeGap, pipeWidth, canvas.height - pipe.top - pipeGap);
+                ctx.fillRect(pipe.x, pipe.top + pipeGap, pipeWidth, canvas.height - pipe.top - pipeGap - 50);
+            });
+        }
+
+        // Draw collectibles
+        function drawCollectibles() {
+            collectibles.forEach(coin => {
+                ctx.beginPath();
+                ctx.arc(coin.x, coin.y, 10, 0, Math.PI * 2);
+                ctx.fillStyle = '#ffd700';
+                ctx.fill();
             });
         }
 
@@ -94,20 +133,31 @@
             if (bird.y + bird.radius > canvas.height - 50) {
                 bird.y = canvas.height - 50 - bird.radius;
                 bird.velocity = 0;
-                if (started) gameOver = true;
+                if (started) {
+                    gameOver = true;
+                    playSound(200, 500, 'sawtooth'); // Die sound
+                }
             }
 
             if (bird.y - bird.radius < 0) {
                 bird.y = bird.radius;
                 bird.velocity = 0;
             }
+
+            updateBirdRotation();
         }
 
         // Generate pipes
         function generatePipes() {
-            if (pipes.length === 0 || pipes[pipes.length - 1].x < canvas.width - 200) {
+            if (pipes.length === 0 || pipes[pipes.length - 1].x < canvas.width - 300) {
                 let top = Math.floor(Math.random() * (canvas.height / 2 - pipeGap / 2)) + 50;
-                pipes.push({ x: canvas.width, top: top });
+                pipes.push({ x: canvas.width, top: top, passed: false });
+
+                // Occasionally add collectible in the gap
+                if (Math.random() < 0.3) { // 30% chance
+                    let coinY = top + pipeGap / 2;
+                    collectibles.push({ x: canvas.width + pipeWidth / 2, y: coinY });
+                }
             }
         }
 
@@ -120,24 +170,51 @@
                 if (pipe.x + pipeWidth < bird.x && !pipe.passed) {
                     score++;
                     pipe.passed = true;
+                    playSound(800, 100); // Score sound
                     if (score > highScore) {
                         highScore = score;
                         localStorage.setItem('highScore', highScore);
                     }
+                    // Increase difficulty every 5 points
+                    if (score % 5 === 0) {
+                        pipeSpeed += 0.5;
+                        pipeGap -= 5; // Make gap smaller
+                        if (pipeGap < 100) pipeGap = 100;
+                    }
                 }
 
-                // Collision detection
+                // Collision detection with pipes
                 if (
                     bird.x + bird.radius > pipe.x &&
                     bird.x - bird.radius < pipe.x + pipeWidth &&
                     (bird.y - bird.radius < pipe.top || bird.y + bird.radius > pipe.top + pipeGap)
                 ) {
                     gameOver = true;
+                    playSound(200, 500, 'sawtooth'); // Die sound
                 }
             });
 
             // Remove off-screen pipes
             pipes = pipes.filter(pipe => pipe.x + pipeWidth > 0);
+        }
+
+        // Update collectibles
+        function updateCollectibles() {
+            collectibles.forEach(coin => {
+                coin.x -= pipeSpeed;
+
+                // Collect if bird touches
+                let dx = bird.x - coin.x;
+                let dy = bird.y - coin.y;
+                if (Math.sqrt(dx * dx + dy * dy) < bird.radius + 10) {
+                    score += 5; // Bonus points
+                    playSound(1000, 200); // Collect sound
+                    coin.collected = true;
+                }
+            });
+
+            // Remove collected or off-screen
+            collectibles = collectibles.filter(coin => !coin.collected && coin.x > -10);
         }
 
         // Game loop
@@ -147,8 +224,10 @@
                 updateBird();
                 generatePipes();
                 updatePipes();
+                updateCollectibles();
             }
             drawPipes();
+            drawCollectibles();
             drawBird();
             drawScore();
 
@@ -169,16 +248,23 @@
         function jump() {
             if (!started) {
                 started = true;
+                pipeSpeed = basePipeSpeed;
+                pipeGap = 150;
             }
             if (gameOver) {
                 // Reset game
                 bird.y = canvas.height / 2;
                 bird.velocity = 0;
+                bird.rotation = 0;
                 pipes = [];
+                collectibles = [];
                 score = 0;
                 gameOver = false;
+                pipeSpeed = basePipeSpeed;
+                pipeGap = 150;
             } else {
                 bird.velocity = bird.lift;
+                playSound(600, 100, 'triangle'); // Flap sound
             }
         }
 
