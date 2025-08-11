@@ -16,7 +16,9 @@
     {
       "imports": {
         "@google/generative-ai": "https://esm.run/@google/generative-ai",
-        "marked": "https://esm.run/marked@4.0.12"
+        "marked": "https://esm.run/marked@4.0.12",
+        "three": "https://cdn.jsdelivr.net/npm/three@0.165.0/build/three.module.js",
+        "three/addons/": "https://cdn.jsdelivr.net/npm/three@0.165.0/examples/jsm/"
       }
     }
     </script>
@@ -325,6 +327,8 @@
         }
 
         #svg_svgContainer, #gifCreator_previewContainer { width: 100%; min-height: 200px; flex-grow: 1; border: 1px inset var(--win95-dark-gray); background-color: var(--win95-white); margin-top: 10px; display: flex; justify-content: center; align-items: center; overflow: auto; }
+        #svgTo3d_previewContainer { flex-grow: 1; border: 1px inset var(--win95-dark-gray); background-color: #000; margin-top: 10px; min-height: 200px; overflow: hidden; position: relative; }
+        #svgTo3d_canvas { width: 100%; height: 100%; display: block; }
         #svg_svgContainer svg, #gifCreator_previewContainer svg { max-width: 100%; max-height: 100%; }
         #svg_loadingIndicator, #gifCreator_loadingIndicator { font-style: italic; }
 
@@ -491,9 +495,11 @@
         <div class="desktop-icon" data-item-type="app" data-app-id="webBrowserLauncher"><div class="icon-placeholder">🌐</div><span>Browser</span></div>
         <div class="desktop-icon" data-item-type="app" data-app-id="svgGeneratorWindow"><div class="icon-placeholder">🎨</div><span>SVG Creator</span></div>
         <div class="desktop-icon" data-item-type="app" data-app-id="gifCreatorWindow"><div class="icon-placeholder">🎞️</div><span>GIF Creator</span></div>
+        <div class="desktop-icon" data-item-type="app" data-app-id="svgTo3dWindow"><div class="icon-placeholder">🧊</div><span>3D Creator</span></div>
         <div class="desktop-icon" data-item-type="app" data-app-id="gameGeneratorWindow"><div class="icon-placeholder">🕹️</div><span>Game Gen</span></div>
         <div class="desktop-icon" data-item-type="app" data-app-id="musicStudioWindow"><div class="icon-placeholder">🎶</div><span>Music Studio</span></div>
         <div class="desktop-icon" data-item-type="app" data-app-id="systemSettingsWindow"><div class="icon-placeholder">⚙️</div><span>Settings</span></div>
+        <div class="desktop-icon" data-item-type="app" data-app-id="trashWindow"><div class="icon-placeholder">🗑️</div><span>Trash</span></div>
         <!-- VFS Icons will be dynamically added here by JS -->
     </div>
 
@@ -568,6 +574,24 @@
             <div id="gifCreator_loadingIndicator" style="display: none; margin-top:5px;">Generating...</div>
             <div id="gifCreator_previewContainer" style="margin-top:10px;"><p>Animated SVG preview appears here.</p></div>
             <div id="gifCreator_errorDisplay" class="status-bar" style="color:red; font-size:11px; margin-top:5px; border-top: 1px solid var(--win95-dark-gray); padding-top: 3px;">Status: Idle</div>
+        </div>
+    </div>
+
+    <div id="svgTo3dWindow" class="window" style="width: 600px; height: 550px; top: 70px; left: 120px;">
+        <div class="title-bar"><span class="title-bar-text">🧊 3D Creator</span><div class="title-bar-controls"><button class="minimize-button" title="Minimize">0</button><button class="fullscreen-button" title="Toggle Fullscreen">1</button><button class="close-button" title="Close">r</button></div></div>
+        <div class="window-content">
+            <div class="import-section" style="margin-bottom:10px; padding:5px; border:1px dashed var(--win95-dark-gray);">
+                <label for="svgTo3d_svgInput">SVG code (from SVG Creator or pasted):</label>
+                <textarea id="svgTo3d_svgInput" rows="4" placeholder="Paste static SVG code here to convert..."></textarea>
+                <button id="svgTo3d_importSvgButton" style="margin-top:5px; font-size:10px; padding:2px 5px;">Import from SVG Creator</button>
+            </div>
+            <button id="svgTo3d_generateButton">Generate 3D Object</button>
+            <button id="svgTo3d_downloadButton" style="display: none; margin-top: 5px;">Download as .glb</button>
+            <div id="svgTo3d_loadingIndicator" style="display: none; margin-top:5px;">Generating...</div>
+            <div id="svgTo3d_previewContainer">
+                <canvas id="svgTo3d_canvas"></canvas>
+            </div>
+            <div id="svgTo3d_errorDisplay" class="status-bar" style="color:red; font-size:11px; margin-top:5px; border-top: 1px solid var(--win95-dark-gray); padding-top: 3px;">Status: Idle</div>
         </div>
     </div>
 
@@ -785,6 +809,17 @@
         </div>
     </div>
 
+    <div id="trashWindow" class="window" style="width: 450px; height: 400px; top: 40px; left: 400px;">
+        <div class="title-bar"><span class="title-bar-text">🗑️ Trash</span><div class="title-bar-controls"><button class="minimize-button" title="Minimize">0</button><button class="fullscreen-button" title="Toggle Fullscreen">1</button><button class="close-button" title="Close">r</button></div></div>
+        <div class="window-content">
+            <div style="margin-bottom: 5px; display: flex; gap: 5px;">
+                <button id="trash_emptyButton">Empty Trash</button>
+            </div>
+            <div id="trash_fileListContainer" style="flex-grow: 1; overflow-y: auto; border: 1px inset var(--win95-dark-gray); background-color: var(--win95-white); padding: 5px;"><ul id="trash_fileList"></ul></div>
+            <div id="trash_status" class="status-bar">Status: Idle</div>
+        </div>
+    </div>
+
 
     <div class="taskbar">
         <div class="start-button" id="startButton">Start</div>
@@ -909,6 +944,10 @@
     import { GoogleGenerativeAI, HarmCategory, HarmBlockThreshold } from "@google/generative-ai";
     import { marked, Renderer as MarkedRenderer } from 'marked';
     import { pipeline as transformersPipeline, env as transformersEnv } from 'https://cdn.jsdelivr.net/npm/@huggingface/transformers@3.5.1';
+    import * as THREE from 'three';
+    import { SVGLoader } from 'three/addons/loaders/SVGLoader.js';
+    import { OrbitControls } from 'three/addons/controls/OrbitControls.js';
+    import { GLTFExporter } from 'three/addons/exporters/GLTFExporter.js';
 
     // Transformers.js specific setup
     transformersEnv.allowLocalModels = false; // Only fetch from HF Hub
@@ -993,6 +1032,14 @@ Output ONLY the JSON array. No explanations, comments, or markdown outside the J
     const gifCreator_loadingIndicator = document.getElementById('gifCreator_loadingIndicator');
     const gifCreator_previewContainer = document.getElementById('gifCreator_previewContainer');
     const gifCreator_errorDisplay = document.getElementById('gifCreator_errorDisplay');
+    const svgTo3d_svgInput = document.getElementById('svgTo3d_svgInput');
+    const svgTo3d_importSvgButton = document.getElementById('svgTo3d_importSvgButton');
+    const svgTo3d_generateButton = document.getElementById('svgTo3d_generateButton');
+    const svgTo3d_downloadButton = document.getElementById('svgTo3d_downloadButton');
+    const svgTo3d_loadingIndicator = document.getElementById('svgTo3d_loadingIndicator');
+    const svgTo3d_previewContainer = document.getElementById('svgTo3d_previewContainer');
+    const svgTo3d_canvas = document.getElementById('svgTo3d_canvas');
+    const svgTo3d_errorDisplay = document.getElementById('svgTo3d_errorDisplay');
     const gameGen_promptInput = document.getElementById('gameGen_prompt');
     const gameGen_generateButton = document.getElementById('gameGen_generateButton');
     const gameGen_downloadZipButton = document.getElementById('gameGen_downloadZipButton');
@@ -1025,6 +1072,11 @@ Output ONLY the JSON array. No explanations, comments, or markdown outside the J
     const textEditor_status = document.getElementById('textEditor_status');
     const textEditor_currentFileName = document.getElementById('textEditor_currentFileName');
     let currentTextEditorFileId = null;
+
+    const trash_emptyButton = document.getElementById('trash_emptyButton');
+    const trash_fileListContainer = document.getElementById('trash_fileListContainer');
+    const trash_fileList = document.getElementById('trash_fileList');
+    const trash_status = document.getElementById('trash_status');
 
     const desktopElement = document.getElementById('desktop');
     const desktopContextMenu = document.getElementById('desktopContextMenu');
@@ -1130,9 +1182,11 @@ Output ONLY the JSON array. No explanations, comments, or markdown outside the J
     let browserWindowCounter = 0;
     let sparkyHtmlPopupCounter = 0;
     let contextMenuTargetVFSId = null;
+    const TRASH_VFS_ID = 'vfs_trash_bin';
 
 
     let gifCreator_currentAnimatedSvg = null;
+    let svgTo3d_appState = { renderer: null, scene: null, camera: null, controls: null, mesh: null, animationFrameId: null };
     let gifCreator_genAI_model;
     let svg_genAI_internal_model;
     let gameGen_main_model;
@@ -1312,14 +1366,31 @@ if __name__ == '__main__':
     }
     function getVFSEntry(id) { return VFS.items[id]; }
     function updateVFSEntry(id, updates) { if (VFS.items[id]) { VFS.items[id] = { ...VFS.items[id], ...updates, modified: Date.now() }; saveVFS(); return VFS.items[id]; } return null; }
-    function deleteVFSEntry(id) {
-        if (VFS.items[id]) {
-            const entryType = VFS.items[id].type; delete VFS.items[id];
-            if (entryType === 'folder') { const children = Object.values(VFS.items).filter(item => item.parentId === id); children.forEach(child => deleteVFSEntry(child.id)); }
-            saveVFS(); renderDesktopVFSIcons(); if(fe_fileListElement && currentFEVfsPathId) renderVFSFileList(currentFEVfsPathId); return true; // Refresh File Explorer if open
-        } return false;
+    function deleteVFSEntry(id, isPermanent = false) {
+        if (isPermanent) {
+            if (VFS.items[id]) {
+                const entryType = VFS.items[id].type;
+                delete VFS.items[id];
+                if (entryType === 'folder') {
+                    const children = Object.values(VFS.items).filter(item => item.parentId === id);
+                    children.forEach(child => deleteVFSEntry(child.id, true));
+                }
+                saveVFS();
+                return true;
+            }
+            return false;
+        } else {
+            const item = getVFSEntry(id);
+            if (item && !item.trashed) {
+                updateVFSEntry(id, { trashed: true, originalParentId: item.parentId, parentId: TRASH_VFS_ID });
+                renderDesktopVFSIcons();
+                if (fe_fileListElement && currentFEVfsPathId) renderVFSFileList(currentFEVfsPathId);
+                return true;
+            }
+            return false;
+        }
     }
-    function getVFSChildren(parentId) { return Object.values(VFS.items).filter(item => item.parentId === parentId).sort((a,b) => a.name.localeCompare(b.name)); }
+    function getVFSChildren(parentId) { return Object.values(VFS.items).filter(item => item.parentId === parentId && !item.trashed).sort((a,b) => a.name.localeCompare(b.name)); }
     function getVFSPathString(itemId) {
         let path = ''; let currentItem = getVFSEntry(itemId); const pathParts = [];
         while(currentItem && currentItem.parentId !== 'root') { pathParts.unshift(currentItem.name); currentItem = getVFSEntry(currentItem.parentId); if (!currentItem || pathParts.length > 10) break;  }
@@ -2513,6 +2584,7 @@ if __name__ == '__main__':
             bringToFront(windowEl);
             if (appId === 'fileExplorerWindow' && options.vfsPathId) { initFileExplorerAppForVFS(options); }
             else if (appId === 'textEditorWindow') { openTextEditorWindow(options); }
+            else if (appId === 'trashWindow') { renderTrashList(); }
 
             if (!isPopup && !windowEl.dataset.isPopup && appId !== 'setupGuideModal') { 
                  createTaskbarButton(windowEl);
@@ -2828,9 +2900,9 @@ if __name__ == '__main__':
     function deleteVFSEntryWithConfirmation(itemId) {
         const item = getVFSEntry(itemId);
         if (item) {
-            if (confirm(`Are you sure you want to delete "${item.name}"?${item.type === 'folder' ? ' This will also delete all its contents.' : ''}`)) {
-                deleteVFSEntry(itemId);
-                logK8osActivity("Context Menu", `Deleted ${item.type}: ${item.name}`);
+            if (confirm(`Are you sure you want to move "${item.name}" to the Trash?`)) {
+                deleteVFSEntry(itemId, false); // false means move to trash, not permanent delete
+                logK8osActivity("Context Menu", `Moved to Trash: ${item.type}: ${item.name}`);
             }
         }
     }
@@ -2843,6 +2915,71 @@ if __name__ == '__main__':
         } else if (item && item.type === 'folder') {
             downloadVFSEntryAsZip(itemId);
         }
+    }
+
+    function renderTrashList() {
+        if (!trash_fileList || !trash_status) return;
+        const trashedItems = Object.values(VFS.items).filter(item => item.trashed && item.parentId === TRASH_VFS_ID);
+        trash_fileList.innerHTML = '';
+        if (trashedItems.length === 0) {
+            trash_fileList.innerHTML = '<li>Trash is empty.</li>';
+            trash_status.textContent = 'Status: Trash is empty.';
+            trash_emptyButton.disabled = true;
+            return;
+        }
+        trash_emptyButton.disabled = false;
+        trashedItems.forEach(item => {
+            const listItem = document.createElement('li');
+            listItem.style.display = 'flex';
+            listItem.style.alignItems = 'center';
+            listItem.style.justifyContent = 'space-between';
+            const iconSpan = document.createElement('span');
+            iconSpan.className = 'fe-item-icon';
+            iconSpan.textContent = item.type === 'file' ? '📄' : '📁';
+            const nameSpan = document.createElement('span');
+            nameSpan.textContent = item.name;
+            const buttonsDiv = document.createElement('div');
+            const restoreButton = document.createElement('button');
+            restoreButton.textContent = 'Restore';
+            restoreButton.style.fontSize = '10px';
+            restoreButton.style.padding = '1px 3px';
+            restoreButton.onclick = () => {
+                updateVFSEntry(item.id, { trashed: false, parentId: item.originalParentId || 'root' });
+                renderTrashList();
+                renderDesktopVFSIcons();
+            };
+            const deleteButton = document.createElement('button');
+            deleteButton.textContent = 'Delete Permanently';
+            deleteButton.style.fontSize = '10px';
+            deleteButton.style.padding = '1px 3px';
+            deleteButton.style.marginLeft = '5px';
+            deleteButton.onclick = () => {
+                if (confirm(`Are you sure you want to permanently delete "${item.name}"? This cannot be undone.`)) {
+                    deleteVFSEntry(item.id, true);
+                    renderTrashList();
+                }
+            };
+            buttonsDiv.appendChild(restoreButton);
+            buttonsDiv.appendChild(deleteButton);
+            const leftDiv = document.createElement('div');
+            leftDiv.appendChild(iconSpan);
+            leftDiv.appendChild(nameSpan);
+            listItem.appendChild(leftDiv);
+            listItem.appendChild(buttonsDiv);
+            trash_fileList.appendChild(listItem);
+        });
+        trash_status.textContent = `Status: ${trashedItems.length} item(s) in Trash.`;
+    }
+
+    if (trash_emptyButton) {
+        trash_emptyButton.addEventListener('click', () => {
+            if (confirm("Are you sure you want to permanently empty the Trash? This cannot be undone.")) {
+                const trashedItems = Object.values(VFS.items).filter(item => item.trashed);
+                trashedItems.forEach(item => deleteVFSEntry(item.id, true));
+                renderTrashList();
+                logK8osActivity("Trash", "Emptied Trash.");
+            }
+        });
     }
     document.addEventListener('click', (e) => {
         if (desktopContextMenu && desktopContextMenu.style.display === 'block' && !e.target.closest('.context-menu')) {
@@ -3205,6 +3342,161 @@ if(gifCreator_downloadButton) gifCreator_downloadButton.addEventListener('click'
         alert("No animated SVG to download."); 
     } 
 });
+
+function initSvgTo3dScene() {
+    if (svgTo3d_appState.renderer) return;
+
+    const state = svgTo3d_appState;
+    const container = svgTo3d_previewContainer;
+
+    state.scene = new THREE.Scene();
+    state.scene.background = new THREE.Color(0x000000);
+
+    const width = container.clientWidth;
+    const height = container.clientHeight;
+
+    state.camera = new THREE.PerspectiveCamera(75, width / height, 0.1, 1000);
+    state.camera.position.set(0, 0, 150);
+
+    state.renderer = new THREE.WebGLRenderer({ canvas: svgTo3d_canvas, antialias: true });
+    state.renderer.setSize(width, height);
+    state.renderer.setPixelRatio(window.devicePixelRatio);
+
+    const ambientLight = new THREE.AmbientLight(0xffffff, 0.5);
+    state.scene.add(ambientLight);
+    const directionalLight = new THREE.DirectionalLight(0xffffff, 1);
+    directionalLight.position.set(0, 1, 1);
+    state.scene.add(directionalLight);
+
+    state.controls = new OrbitControls(state.camera, state.renderer.domElement);
+    state.controls.enableDamping = true;
+    state.controls.dampingFactor = 0.05;
+
+    function animate() {
+        state.animationFrameId = requestAnimationFrame(animate);
+        if (state.mesh) {
+            state.mesh.rotation.y += 0.005;
+        }
+        state.controls.update();
+        state.renderer.render(state.scene, state.camera);
+    }
+    animate();
+
+    const resizeObserver = new ResizeObserver(entries => {
+        const entry = entries[0];
+        const { width, height } = entry.contentRect;
+        state.camera.aspect = width / height;
+        state.camera.updateProjectionMatrix();
+        state.renderer.setSize(width, height);
+    });
+    resizeObserver.observe(container);
+}
+
+function svgTo3d_handleGenerate() {
+    initSvgTo3dScene();
+    const state = svgTo3d_appState;
+    if (state.mesh) {
+        state.scene.remove(state.mesh);
+        state.mesh.geometry.dispose();
+        state.mesh.material.dispose();
+        state.mesh = null;
+    }
+
+    const svgString = svgTo3d_svgInput.value;
+    if (!svgString) {
+        svgTo3d_errorDisplay.textContent = "Status: Please paste SVG code.";
+        return;
+    }
+
+    try {
+        const loader = new SVGLoader();
+        const data = loader.parse(svgString);
+        const paths = data.paths;
+        const group = new THREE.Group();
+        const material = new THREE.MeshStandardMaterial({
+            color: 0xCCCCCC,
+            metalness: 0.1,
+            roughness: 0.8,
+            flatShading: true,
+        });
+
+        for (let i = 0; i < paths.length; i++) {
+            const path = paths[i];
+            const shapes = SVGLoader.createShapes(path);
+            for (let j = 0; j < shapes.length; j++) {
+                const shape = shapes[j];
+                const geometry = new THREE.ExtrudeGeometry(shape, {
+                    depth: 10,
+                    bevelEnabled: false
+                });
+                const mesh = new THREE.Mesh(geometry, material);
+                group.add(mesh);
+            }
+        }
+
+        const box = new THREE.Box3().setFromObject(group);
+        const center = box.getCenter(new THREE.Vector3());
+        group.position.sub(center);
+
+        const sphere = box.getBoundingSphere(new THREE.Sphere());
+        const scale = 100 / sphere.radius;
+        group.scale.set(scale, scale, scale);
+
+        state.mesh = group;
+        state.scene.add(state.mesh);
+        svgTo3d_downloadButton.style.display = 'block';
+        svgTo3d_errorDisplay.textContent = "Status: 3D object generated.";
+    } catch (e) {
+        console.error("SVG to 3D generation error:", e);
+        svgTo3d_errorDisplay.textContent = "Status: Error generating 3D object. " + e.message;
+    }
+}
+
+if (svgTo3d_generateButton) {
+    svgTo3d_generateButton.addEventListener('click', svgTo3d_handleGenerate);
+}
+
+if (svgTo3d_importSvgButton) {
+    svgTo3d_importSvgButton.addEventListener('click', () => {
+        if (svg_currentSvgContent && svgTo3d_svgInput) {
+            svgTo3d_svgInput.value = svg_currentSvgContent;
+            svgTo3d_errorDisplay.textContent = "Status: SVG imported from SVG Creator.";
+        } else {
+            svgTo3d_errorDisplay.textContent = "Status: No SVG content in SVG Creator to import.";
+        }
+    });
+}
+
+function svgTo3d_handleDownload() {
+    const state = svgTo3d_appState;
+    if (!state.mesh) {
+        svgTo3d_errorDisplay.textContent = "Status: No 3D object to download.";
+        return;
+    }
+
+    const exporter = new GLTFExporter();
+    const options = {
+        binary: true
+    };
+
+    exporter.parse(
+        state.scene,
+        function (result) {
+            const blob = new Blob([result], { type: 'application/gltf-buffer' });
+            downloadFile(blob, '3d-object.glb', 'application/gltf-buffer');
+            svgTo3d_errorDisplay.textContent = "Status: Download started.";
+        },
+        function (error) {
+            console.error('An error happened during GLTF exportation:', error);
+            svgTo3d_errorDisplay.textContent = "Status: Error during download.";
+        },
+        options
+    );
+}
+
+if (svgTo3d_downloadButton) {
+    svgTo3d_downloadButton.addEventListener('click', svgTo3d_handleDownload);
+}
 
 function prepareGameHTMLWithLogger(htmlContent) { const errorLoggerScript = `<script> window.onerror = function(message, source, lineno, colno, error) { console.error("GameRuntimeError:", { message, source: source.substring(source.lastIndexOf('/') + 1), lineno, colno, error: error ? error.stack : 'N/A' }); return false; }; window.onunhandledrejection = function(event) { console.error("GameRuntimePromiseRejection:", { reason: event.reason ? (event.reason.message || event.reason) : 'Unknown reason', stack: event.reason ? event.reason.stack : 'N/A'}); }; <\/script>`; if (htmlContent.includes("</head>")) { return htmlContent.replace("</head>", errorLoggerScript + "</head>"); } else if (htmlContent.includes("<body>")) { return htmlContent.replace("<body>", errorLoggerScript + "<body>"); } return errorLoggerScript + htmlContent; }
 
