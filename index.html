@@ -456,6 +456,41 @@
         }
          /* End Assistant Styles */
 
+        /* Terminal Styles */
+        .terminal-window-content {
+            background-color: #000;
+            color: #0F0;
+            font-family: 'Courier New', Courier, monospace;
+            padding: 5px;
+        }
+        .terminal-window-content .terminal-output {
+            white-space: pre-wrap;
+            word-break: break-all;
+            flex-grow: 1; /* Allows output to push input down */
+        }
+        .terminal-window-content .terminal-input-line {
+            display: flex;
+        }
+        .terminal-window-content .terminal-prompt {
+            margin-right: 5px;
+            flex-shrink: 0;
+        }
+        .terminal-window-content #terminal_input {
+            background: transparent;
+            border: none;
+            color: #0F0;
+            outline: none;
+            width: 100%;
+            font-family: inherit;
+            font-size: inherit;
+            padding: 0;
+        }
+        .terminal-window-content #terminal_input:focus {
+             background-color: #0F0;
+             color: #000;
+        }
+        /* End Terminal Styles */
+
         @media (max-width: 768px) {
             .window.mobile-default-fullscreen {
                 top: 0 !important;
@@ -494,6 +529,7 @@
         <div class="desktop-icon" data-item-type="app" data-app-id="gameGeneratorWindow"><div class="icon-placeholder">🕹️</div><span>Game Gen</span></div>
         <div class="desktop-icon" data-item-type="app" data-app-id="musicStudioWindow"><div class="icon-placeholder">🎶</div><span>Music Studio</span></div>
         <div class="desktop-icon" data-item-type="app" data-app-id="systemSettingsWindow"><div class="icon-placeholder">⚙️</div><span>Settings</span></div>
+        <div class="desktop-icon" data-item-type="app" data-app-id="terminalWindow"><div class="icon-placeholder">💲</div><span>Terminal</span></div>
         <!-- VFS Icons will be dynamically added here by JS -->
     </div>
 
@@ -791,6 +827,17 @@
                 <p style="font-size:11px; margin-top:15px;">Uses Google Generative AI, Groq API, OpenRouter, DeepSeek API, Hugging Face Inference API, Transformers.js, MarkedJS, ES Module Shims, JSZip.</p>
             </div>
             <div id="systemSettings_status" class="status-bar">Settings panel.</div>
+        </div>
+    </div>
+
+    <div id="terminalWindow" class="window" style="width: 600px; height: 400px; top: 70px; left: 250px;">
+        <div class="title-bar"><span class="title-bar-text">💲 Terminal</span><div class="title-bar-controls"><button class="minimize-button" title="Minimize">0</button><button class="fullscreen-button" title="Toggle Fullscreen">1</button><button class="close-button" title="Close">r</button></div></div>
+        <div class="window-content terminal-window-content" id="terminal_content">
+            <div id="terminal_output" class="terminal-output"></div>
+            <div class="terminal-input-line">
+                <span class="terminal-prompt"></span>
+                <input type="text" id="terminal_input">
+            </div>
         </div>
     </div>
 
@@ -2574,6 +2621,15 @@ if __name__ == '__main__':
             bringToFront(windowEl);
             if (appId === 'fileExplorerWindow' && options.vfsPathId) { initFileExplorerAppForVFS(options); }
             else if (appId === 'textEditorWindow') { openTextEditorWindow(options); }
+            else if (appId === 'terminalWindow') {
+                initTerminalApp();
+                if (!windowEl.dataset.welcomed) {
+                     printToTerminal('Welcome to k8OS Terminal. Type "help" for a list of commands.');
+                     windowEl.dataset.welcomed = 'true';
+                }
+                updateTerminalPrompt();
+                setTimeout(() => terminalInput.focus(), 0);
+            }
 
             if (!isPopup && !windowEl.dataset.isPopup && appId !== 'setupGuideModal') { 
                  createTaskbarButton(windowEl);
@@ -3739,6 +3795,336 @@ function updateSparkyPosition() {
         sparkyVelX = (Math.random() < 0.5 ? -1 : 1) * (Math.random() * 1.5 + 0.5);
         sparkyVelY = (Math.random() < 0.5 ? -1 : 1) * (Math.random() * 1.5 + 0.5);
     }
+}
+
+// Terminal App
+let terminalWindow, terminalContent, terminalOutput, terminalInput, terminalPrompt;
+let terminalCurrentDirId = 'root';
+const terminalCommandHistory = [];
+let terminalHistoryIndex = -1;
+let terminalAppInitialized = false;
+
+function getVFSFullPath(itemId) {
+    if (itemId === 'root') return '/';
+    let currentItem = getVFSEntry(itemId);
+    if (!currentItem) return '/';
+    const pathParts = [];
+    while(currentItem && currentItem.id !== 'root') {
+        pathParts.unshift(currentItem.name);
+        currentItem = getVFSEntry(currentItem.parentId);
+    }
+    return '/' + pathParts.join('/');
+}
+
+function getTerminalPromptString() {
+    const pathString = getVFSFullPath(terminalCurrentDirId);
+    return `${pathString.replace(/ /g, '&nbsp;')}&nbsp;&gt;`;
+}
+
+function updateTerminalPrompt() {
+    if (terminalPrompt) {
+        terminalPrompt.innerHTML = getTerminalPromptString();
+    }
+}
+
+function escapeHtml(unsafe) {
+    return unsafe
+         .replace(/&/g, "&amp;")
+         .replace(/</g, "&lt;")
+         .replace(/>/g, "&gt;")
+         .replace(/"/g, "&quot;")
+         .replace(/'/g, "&#039;");
+}
+
+function printToTerminal(htmlOutput, isCommandOutput = false) {
+    if (terminalOutput) {
+        const line = document.createElement('div');
+        if(isCommandOutput) {
+            line.style.whiteSpace = 'pre';
+            line.style.fontFamily = 'inherit';
+        }
+        line.innerHTML = htmlOutput;
+        terminalOutput.appendChild(line);
+        terminalContent.scrollTop = terminalContent.scrollHeight;
+    }
+}
+
+function resolveVFSPath(path, currentDirId) {
+    if (!path || path === '.') return currentDirId;
+    if (path === '/') return 'root';
+
+    let pathSegments = path.split('/').filter(p => p);
+    let startDirId = path.startsWith('/') ? 'root' : currentDirId;
+
+    let currentId = startDirId;
+
+    for (const segment of pathSegments) {
+        if (segment === '..') {
+            const currentItem = getVFSEntry(currentId);
+            if (currentItem && currentItem.parentId) {
+                currentId = currentItem.parentId;
+            }
+        } else {
+            const children = getVFSChildren(currentId);
+            const foundItem = children.find(item => item.name.toLowerCase() === segment.toLowerCase());
+            if (foundItem) {
+                currentId = foundItem.id;
+            } else {
+                return null; // Path segment not found
+            }
+        }
+    }
+    return currentId;
+}
+
+
+const terminalCommands = {
+    help: {
+        description: "Shows a list of available commands.",
+        execute: (args) => {
+            let helpText = "k8OS Terminal - Available Commands:<br>";
+            Object.keys(terminalCommands).sort().forEach(cmd => {
+                 helpText += `<div style="display: flex; width: 100%;"><div style="width: 100px; flex-shrink: 0; color: #87CEFA;">${cmd}</div><div>${terminalCommands[cmd].description}</div></div>`;
+            });
+            printToTerminal(helpText);
+        }
+    },
+    clear: {
+        description: "Clears the terminal screen.",
+        execute: () => {
+            if (terminalOutput) terminalOutput.innerHTML = '';
+        }
+    },
+    echo: {
+        description: "Prints text to the terminal. Usage: echo [text]",
+        execute: (args) => {
+            printToTerminal(escapeHtml(args.join(' ')));
+        }
+    },
+    ls: {
+        description: "Lists files and folders. Usage: ls [path]",
+        execute: (args) => {
+            const path = args[0] || '.';
+            const targetId = resolveVFSPath(path, terminalCurrentDirId);
+            const targetItem = getVFSEntry(targetId);
+
+            if (!targetItem || (targetItem.type !== 'folder' && targetId !== 'root')) {
+                printToTerminal(`ls: cannot access '${escapeHtml(path)}': No such file or directory`);
+                return;
+            }
+
+            const children = getVFSChildren(targetId);
+            if (children.length === 0) {
+                return; // Nothing to print
+            }
+            let output = '';
+            children.forEach(child => {
+                if (child.type === 'folder') {
+                    output += `<span style="color: #87CEFA;">${escapeHtml(child.name)}/</span>\n`;
+                } else {
+                    output += `${escapeHtml(child.name)}\n`;
+                }
+            });
+            printToTerminal(output, true);
+        }
+    },
+    cd: {
+        description: "Changes the current directory. Usage: cd [path]",
+        execute: (args) => {
+            const path = args.length > 0 ? args.join(' ') : '/';
+            const targetId = resolveVFSPath(path, terminalCurrentDirId);
+            if (targetId) {
+                const targetItem = getVFSEntry(targetId);
+                 if (targetId === 'root' || (targetItem && targetItem.type === 'folder')) {
+                    terminalCurrentDirId = targetId;
+                } else {
+                    printToTerminal(`cd: not a directory: ${escapeHtml(path)}`);
+                }
+            } else {
+                printToTerminal(`cd: no such file or directory: ${escapeHtml(path)}`);
+            }
+        }
+    },
+    cat: {
+        description: "Displays the content of a file. Usage: cat [file_path]",
+        execute: (args) => {
+            const path = args[0];
+            if (!path) {
+                printToTerminal("cat: missing operand");
+                return;
+            }
+            const targetId = resolveVFSPath(path, terminalCurrentDirId);
+            const targetItem = getVFSEntry(targetId);
+
+            if (targetItem && targetItem.type === 'file') {
+                printToTerminal(escapeHtml(targetItem.content || ''), true);
+            } else if (targetItem && targetItem.type === 'folder') {
+                 printToTerminal(`cat: ${escapeHtml(path)}: Is a directory`);
+            } else {
+                printToTerminal(`cat: ${escapeHtml(path)}: No such file or directory`);
+            }
+        }
+    },
+    ps: {
+        description: "Lists currently running processes (open windows).",
+        execute: (args) => {
+            let output = 'ID                  TITLE\n';
+            output += '------------------- -----------------------------------\n';
+            const openWindows = document.querySelectorAll('.window:not(.minimized)');
+            let count = 0;
+            openWindows.forEach(win => {
+                if (win.style.display !== 'none' && win.id) {
+                    const id = win.id.padEnd(20);
+                    const titleEl = win.querySelector('.title-bar-text');
+                    const title = titleEl ? titleEl.textContent.substring(0, 35) : 'N/A';
+                    output += `${id}${title}\n`;
+                    count++;
+                }
+            });
+            if (count === 0) {
+                printToTerminal("No active windows.");
+            } else {
+                printToTerminal(output, true);
+            }
+        }
+    },
+    kill: {
+        description: "Closes a window by its ID. Usage: kill [window_id]",
+        execute: (args) => {
+            const windowId = args[0];
+            if (!windowId) {
+                printToTerminal("kill: missing operand. Usage: kill [window_id]");
+                return;
+            }
+            const windowEl = document.getElementById(windowId);
+            if (windowEl && windowEl.classList.contains('window') && windowEl.style.display !== 'none') {
+                closeWindow(windowEl);
+                printToTerminal(`Window ${escapeHtml(windowId)} closed.`);
+            } else {
+                printToTerminal(`kill: cannot find open window with ID: ${escapeHtml(windowId)}`);
+            }
+        }
+    },
+    open: {
+        description: "Opens a file or app. Usage: open [file_path_or_app_id]",
+        execute: (args) => {
+            const path = args[0];
+            if (!path) {
+                printToTerminal("open: missing operand");
+                return;
+            }
+            // First, check if it's a known app id
+            const appIcon = document.querySelector(`.desktop-icon[data-app-id="${path}"]`);
+            if (appIcon) {
+                handleDesktopIconDblClick(appIcon);
+                return;
+            }
+
+            const targetId = resolveVFSPath(path, terminalCurrentDirId);
+            const targetItem = getVFSEntry(targetId);
+
+            if (targetItem) {
+                const dummyIcon = document.createElement('div');
+                dummyIcon.dataset.itemId = targetItem.id;
+                dummyIcon.dataset.itemType = targetItem.type;
+                handleDesktopIconDblClick(dummyIcon);
+            } else {
+                printToTerminal(`open: ${escapeHtml(path)}: No such file, folder, or app`);
+            }
+        }
+    },
+    sparky: {
+        description: "Chat with the Sparky AI assistant. Usage: sparky [prompt]",
+        execute: async (args) => {
+            const prompt = args.join(' ');
+            if (!prompt) {
+                printToTerminal("sparky: you need to ask me something!");
+                return;
+            }
+            try {
+                const response = await callCurrentAiProviderForText(`You are a helpful, concise terminal assistant named Sparky. User prompt: "${prompt}"`, 200, 0.7);
+                printToTerminal(`<span style="color: #FFFFE1;">Sparky:</span> ${escapeHtml(response)}`);
+            } catch (e) {
+                printToTerminal(`<span style="color:red">Sparky error: ${e.message}</span>`);
+            }
+        }
+    },
+};
+
+async function processTerminalCommand(command) {
+    const parts = command.match(/(?:[^\s"]+|"[^"]*")+/g) || [];
+    if (parts.length === 0) return;
+    const cmd = parts[0].toLowerCase();
+    const args = parts.slice(1).map(arg => arg.startsWith('"') && arg.endsWith('"') ? arg.slice(1, -1) : arg);
+
+    if (cmd && terminalCommands[cmd]) {
+        try {
+            await terminalCommands[cmd].execute(args);
+        } catch (e) {
+            printToTerminal(`<span style="color: red;">Error executing command '${cmd}': ${e.message}</span>`);
+            console.error(`Error executing terminal command '${cmd}':`, e);
+        }
+    } else {
+        printToTerminal(`Command not found: ${escapeHtml(cmd)}. Type 'help' for a list of commands.`);
+    }
+    updateTerminalPrompt();
+}
+
+
+function initTerminalApp() {
+    if (terminalAppInitialized) return;
+
+    terminalWindow = document.getElementById('terminalWindow');
+    terminalContent = document.getElementById('terminal_content');
+    terminalOutput = document.getElementById('terminal_output');
+    terminalInput = document.getElementById('terminal_input');
+    terminalPrompt = terminalWindow.querySelector('.terminal-prompt');
+
+    if (!terminalInput) return;
+
+    terminalInput.addEventListener('keydown', (e) => {
+        if (e.key === 'Enter') {
+            e.preventDefault();
+            const command = terminalInput.value.trim();
+            terminalInput.value = '';
+
+            const promptHtml = `<span class="terminal-prompt">${getTerminalPromptString()}</span>`;
+            printToTerminal(`${promptHtml} ${escapeHtml(command)}`);
+
+            if (command) {
+                if(terminalCommandHistory[terminalCommandHistory.length - 1] !== command) {
+                    terminalCommandHistory.push(command);
+                }
+                terminalHistoryIndex = terminalCommandHistory.length;
+                processTerminalCommand(command);
+            }
+            terminalContent.scrollTop = terminalContent.scrollHeight;
+        } else if (e.key === 'ArrowUp') {
+            e.preventDefault();
+            if (terminalHistoryIndex > 0) {
+                terminalHistoryIndex--;
+                terminalInput.value = terminalCommandHistory[terminalHistoryIndex];
+                setTimeout(() => terminalInput.selectionStart = terminalInput.selectionEnd = terminalInput.value.length, 0);
+            }
+        } else if (e.key === 'ArrowDown') {
+            e.preventDefault();
+            if (terminalHistoryIndex < terminalCommandHistory.length - 1) {
+                terminalHistoryIndex++;
+                terminalInput.value = terminalCommandHistory[terminalHistoryIndex];
+                 setTimeout(() => terminalInput.selectionStart = terminalInput.selectionEnd = terminalInput.value.length, 0);
+            } else if (terminalHistoryIndex >= terminalCommandHistory.length - 1) {
+                 terminalHistoryIndex = terminalCommandHistory.length;
+                 terminalInput.value = '';
+            }
+        }
+    });
+
+    if(terminalContent) {
+        terminalContent.addEventListener('click', (e) => {
+            if(terminalInput && e.target.id !== 'terminal_input') terminalInput.focus();
+        });
+    }
+    terminalAppInitialized = true;
 }
 
 function initAllAiApps(){
