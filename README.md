@@ -38,7 +38,7 @@ k8OS comes with a variety of built-in applications:
 
 ## Getting Started
 
-1.  **Run k8OS:** Since this is a static web app, you can run it by simply opening the `index.html` file in a modern web browser. For the best experience (especially for loading local files in the browser app), it's recommended to serve the directory using a simple local web server (e.g., `python -m http.server`).
+1.  **Run k8OS:** Since this is a static web app, you can run it by simply opening the `index.html` file in a modern web browser.
 2.  **Set Up AI Features:**
     *   Upon first launch, the "API Key Settings" window will appear.
     *   Select your desired AI Provider from the dropdown menu.
