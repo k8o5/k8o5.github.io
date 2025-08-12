@@ -1,6 +1,6 @@
 # k8OS - A Web-based Desktop Environment
 
-A retro-inspired, AI-powered web desktop environment that runs entirely in your browser.
+A retro-inspired, AI-powered web desktop environment that runs entirely in your browser: https://k8o5.com .
 
 ![A picture of Sparky, the k8OS assistant](sparky.svg)
 
