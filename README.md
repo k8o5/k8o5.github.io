@@ -2,8 +2,7 @@
 
 A retro-inspired, AI-powered web desktop environment that runs entirely in your browser.
 
-![Screenshot of k8OS](https://i.imgur.com/your-screenshot.png)
-*(Note: Please replace this with an actual screenshot of the project.)*
+![A picture of Sparky, the k8OS assistant](sparky.svg)
 
 k8OS is a sophisticated, client-side web application that simulates a desktop operating system environment. It features a classic graphical user interface with windows, icons, a taskbar, and a start menu. What makes k8OS unique is its suite of integrated applications, many of which are powered by generative AI, allowing users to create games, music, and graphics with simple text prompts.
 
