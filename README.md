@@ -15,6 +15,7 @@ k8OS is a sophisticated, client-side web application that simulates a desktop op
     *   Groq
     *   OpenRouter
     *   DeepSeek
+    *   XAi
     *   Hugging Face (Inference API)
     *   Transformers.js (for running local, in-browser LLMs)
     *   Custom, user-hosted endpoints
