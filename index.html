@@ -944,6 +944,7 @@
                     <div class="workflow-node-item" data-node-type="execute-command" draggable="true">Execute Command</div>
                     <div class="workflow-node-item" data-node-type="http-request" draggable="true">HTTP Request</div>
                     <div class="workflow-node-item" data-node-type="execute-js" draggable="true">Execute JS</div>
+                    <div class="workflow-node-item" data-node-type="write-file" draggable="true">Write File</div>
                     <div class="workflow-node-item" data-node-type="if-else" draggable="true">If/Else</div>
                 </div>
                 <div id="workflowCanvas" style="flex-grow: 1; position: relative; overflow: auto; background-color: var(--win95-dark-gray);">
@@ -3372,25 +3373,69 @@ Available commands:
             windowEl.addEventListener('mousedown', () => bringToFront(windowEl), true);
         }
 
-        if (titleBar && windowEl.id !== 'setupGuideModal') { // No dragging for setup guide modal
-            titleBar.addEventListener('mousedown', (e) => {
-                if (e.target.classList.contains('close-button') || e.target.classList.contains('fullscreen-button') || e.target.classList.contains('minimize-button') ||
-                    e.target.closest('.title-bar-controls button') || e.target.tagName === 'BUTTON' ||
-                    windowEl.classList.contains('fullscreen') || windowEl.classList.contains('mobile-default-fullscreen') || windowEl.classList.contains('minimized')) {
-                    return;
-                }
+        if (titleBar && windowEl.id !== 'setupGuideModal') {
+            let isDragging = false;
+            let initialLeft, initialTop, startX, startY;
+
+            const onDragStart = (clientX, clientY) => {
+                isDragging = true;
                 bringToFront(windowEl);
-                const startX = e.clientX; const startY = e.clientY; const initialLeft = windowEl.offsetLeft; const initialTop = windowEl.offsetTop;
-                function onMouseMove(moveEvent) {
-                    let newX = initialLeft + (moveEvent.clientX - startX); let newY = initialTop + (moveEvent.clientY - startY);
-                    const desktopRect = desktopElement.getBoundingClientRect(); const taskbarHeight = document.querySelector('.taskbar')?.offsetHeight || 30;
-                    newX = Math.max(0, Math.min(newX, desktopRect.width - windowEl.offsetWidth));
-                    newY = Math.max(0, Math.min(newY, desktopRect.height - windowEl.offsetHeight - taskbarHeight + 20));
-                    windowEl.style.left = newX + 'px'; windowEl.style.top = newY + 'px';
+                initialLeft = windowEl.offsetLeft;
+                initialTop = windowEl.offsetTop;
+                startX = clientX;
+                startY = clientY;
+                titleBar.style.cursor = 'grabbing';
+            };
+
+            const onDragMove = (clientX, clientY) => {
+                if (!isDragging) return;
+                let newX = initialLeft + (clientX - startX);
+                let newY = initialTop + (clientY - startY);
+                const desktopRect = desktopElement.getBoundingClientRect();
+                const taskbarHeight = document.querySelector('.taskbar')?.offsetHeight || 30;
+                newX = Math.max(0, Math.min(newX, desktopRect.width - windowEl.offsetWidth));
+                newY = Math.max(0, Math.min(newY, desktopRect.height - windowEl.offsetHeight - taskbarHeight + 20));
+                windowEl.style.left = newX + 'px';
+                windowEl.style.top = newY + 'px';
+            };
+
+            const onDragEnd = () => {
+                isDragging = false;
+                titleBar.style.cursor = 'move';
+                document.removeEventListener('mousemove', onMouseMove);
+                document.removeEventListener('mouseup', onMouseUp);
+                document.removeEventListener('touchmove', onTouchMove);
+                document.removeEventListener('touchend', onTouchEnd);
+            };
+
+            const onMouseDown = (e) => {
+                if (e.target.closest('.title-bar-controls button') || windowEl.classList.contains('fullscreen') || windowEl.classList.contains('mobile-default-fullscreen')) return;
+                onDragStart(e.clientX, e.clientY);
+                document.addEventListener('mousemove', onMouseMove);
+                document.addEventListener('mouseup', onMouseUp);
+            };
+            const onMouseMove = (e) => onDragMove(e.clientX, e.clientY);
+            const onMouseUp = () => onDragEnd();
+
+            const onTouchStart = (e) => {
+                if (e.target.closest('.title-bar-controls button') || windowEl.classList.contains('fullscreen') || windowEl.classList.contains('mobile-default-fullscreen')) return;
+                if (e.touches.length === 1) {
+                    const touch = e.touches[0];
+                    onDragStart(touch.clientX, touch.clientY);
+                    document.addEventListener('touchmove', onTouchMove, { passive: false });
+                    document.addEventListener('touchend', onTouchEnd);
                 }
-                function onMouseUp() { document.removeEventListener('mousemove', onMouseMove); document.removeEventListener('mouseup', onMouseUp); }
-                document.addEventListener('mousemove', onMouseMove); document.addEventListener('mouseup', onMouseUp);
-            });
+            };
+            const onTouchMove = (e) => {
+                if (e.touches.length === 1) {
+                    e.preventDefault();
+                    onDragMove(e.touches[0].clientX, e.touches[0].clientY);
+                }
+            };
+            const onTouchEnd = () => onDragEnd();
+
+            titleBar.addEventListener('mousedown', onMouseDown);
+            titleBar.addEventListener('touchstart', onTouchStart, { passive: true });
         }
         // Close button for setupGuideModal is handled separately
         if (closeButton && windowEl.id !== 'setupGuideModal') { closeButton.addEventListener('click', () => closeWindow(windowEl)); }
@@ -4803,6 +4848,10 @@ function initAllAiApps(){
             const clickedNode = e.target.closest('.workflow-canvas-node');
             if (clickedNode) {
                 selectNode(clickedNode.dataset.nodeId);
+                if (window.innerWidth <= 768) {
+                    propertiesPanel.classList.add('mobile-visible');
+                    nodeSidebar.classList.remove('mobile-visible');
+                }
             } else {
                 selectNode(null);
             }
@@ -4891,6 +4940,21 @@ function initAllAiApps(){
                     document.getElementById('prop-js-env').addEventListener('change', (e) => nodeProperties[nodeId].environment = e.target.value);
                     document.getElementById('prop-js-code').addEventListener('input', (e) => nodeProperties[nodeId].code = e.target.value);
                     break;
+                case 'write-file':
+                    if (typeof nodeProperties[nodeId].path === 'undefined') {
+                        nodeProperties[nodeId] = { path: '/output.txt', content: '' };
+                    }
+                    propertiesPanel.innerHTML = `
+                        <h4>Write File</h4>
+                        <label for="prop-wf-path">File Path (VFS):</label>
+                        <input type="text" id="prop-wf-path" style="width: 95%;" value="${nodeProperties[nodeId].path || ''}">
+                        <label for="prop-wf-content">Content:</label>
+                        <textarea id="prop-wf-content" style="width: 95%; height: 120px;">${nodeProperties[nodeId].content || ''}</textarea>
+                        <small>You can use outputs from previous nodes, e.g., <code>{{node-0.output}}</code> in any field.</small>
+                    `;
+                    document.getElementById('prop-wf-path').addEventListener('input', (e) => nodeProperties[nodeId].path = e.target.value);
+                    document.getElementById('prop-wf-content').addEventListener('input', (e) => nodeProperties[nodeId].content = e.target.value);
+                    break;
                 // Other node types would go here
                 default:
                     propertiesPanel.innerHTML = `<h4>Properties for ${nodeType}</h4><p>No configurable properties.</p>`;
@@ -4912,7 +4976,7 @@ function initAllAiApps(){
             const startNodeId = nodeIds.find(id => !connections.some(c => c.toNodeId === id));
 
             if (!startNodeId) {
-                alert("Workflow has no starting point (a node with no inputs).");
+                printToTerminal("[Workflow] Error: Workflow has no starting point (a node with no inputs).");
                 return;
             }
 
@@ -4994,6 +5058,41 @@ function initAllAiApps(){
                                 }
                             }
                             break;
+                        case 'write-file':
+                            if (props && props.path && typeof props.content !== 'undefined') {
+                                const filePath = replacePlaceholders(props.path, nodeOutputs);
+                                const content = replacePlaceholders(props.content, nodeOutputs);
+
+                                const pathParts = filePath.split('/').filter(p => p);
+                                const fileName = pathParts.pop();
+                                let parentId = 'root';
+
+                                // Create parent directories if they don't exist
+                                for (const part of pathParts) {
+                                    let found = getVFSChildren(parentId).find(c => c.name === part && c.type === 'folder');
+                                    if (found) {
+                                        parentId = found.id;
+                                    } else {
+                                        const newFolder = createVFSEntry({ type: 'folder', name: part, parentId: parentId });
+                                        parentId = newFolder.id;
+                                    }
+                                }
+
+                                const existingFile = getVFSChildren(parentId).find(f => f.name === fileName);
+                                if (existingFile) {
+                                    updateVFSEntry(existingFile.id, { content: content });
+                                    printToTerminal(`[Workflow] Wrote to existing file: ${filePath}`);
+                                } else {
+                                    createVFSEntry({ type: 'file', name: fileName, content: content, parentId: parentId });
+                                    printToTerminal(`[Workflow] Created new file: ${filePath}`);
+                                }
+                                nodeOutputs[currentNodeId] = `Wrote ${content.length} chars to ${filePath}`;
+                                // Refresh file explorer if it's showing a relevant directory
+                                if(fe_fileListElement && (currentFEVfsPathId === parentId || parentId === 'root')) {
+                                    renderVFSFileList(currentFEVfsPathId);
+                                }
+                            }
+                            break;
                     }
                 } catch (e) {
                     printToTerminal(`[Workflow] Node ${currentNodeId} (${nodeType}) failed: ${e.message}`);
@@ -5040,7 +5139,7 @@ function initAllAiApps(){
             const existingFile = getVFSChildren(parentDirId).find(f => f.name === filename);
             if (existingFile) {
                 updateVFSEntry(existingFile.id, { content: fileContent });
-                alert(`Workflow overwritten in ${getVFSPathString(parentDirId)}`);
+                printToTerminal(`[Workflow] Workflow overwritten in ${getVFSPathString(parentDirId)}`);
             } else {
                 createVFSEntry({
                     type: 'file',
@@ -5049,7 +5148,7 @@ function initAllAiApps(){
                     parentId: parentDirId,
                     mimeType: 'application/json'
                 });
-                alert(`Workflow saved to ${getVFSPathString(parentDirId)}`);
+                printToTerminal(`[Workflow] Workflow saved to ${getVFSPathString(parentDirId)}`);
             }
              if (fe_fileListElement && parentDirId === currentFEVfsPathId) {
                 renderVFSFileList(currentFEVfsPathId);
@@ -5062,21 +5161,21 @@ function initAllAiApps(){
 
             const fileId = resolveVFSPath(filePath);
             if (!fileId) {
-                alert("File not found at that path.");
+                printToTerminal("[Workflow] Error: File not found at that path.");
                 return;
             }
             const fileEntry = getVFSEntry(fileId);
             if (!fileEntry || fileEntry.type !== 'file') {
-                alert("Invalid path or not a file.");
+                printToTerminal("[Workflow] Error: Invalid path or not a file.");
                 return;
             }
 
             try {
                 const workflowData = JSON.parse(fileEntry.content);
                 rebuildWorkflow(workflowData);
-                alert(`Workflow "${filePath}" loaded.`);
+                printToTerminal(`[Workflow] Workflow "${filePath}" loaded.`);
             } catch (e) {
-                alert("Failed to parse workflow file. Make sure it's valid JSON.");
+                printToTerminal("[Workflow] Error: Failed to parse workflow file. Make sure it's valid JSON.");
                 console.error("Workflow parse error:", e);
             }
         });
@@ -5226,7 +5325,7 @@ Output ONLY the JSON object. No explanations or markdown.
                 rebuildWorkflow(workflowData);
 
             } catch (e) {
-                alert("Failed to generate workflow from AI. Check the console for details.");
+                printToTerminal("[Workflow] Error: Failed to generate workflow from AI. Check console for details.");
                 console.error("AI Workflow Generation Error:", e);
             } finally {
                 aiGenButton.disabled = false;
