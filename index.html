@@ -943,6 +943,7 @@
                 <div id="workflowNodeSidebar" style="width: 150px; border-right: 1px solid var(--win95-dark-gray); padding: 5px; overflow-y: auto; background-color: var(--win95-light-gray);">
                     <div class="workflow-node-item" data-node-type="execute-command" draggable="true">Execute Command</div>
                     <div class="workflow-node-item" data-node-type="http-request" draggable="true">HTTP Request</div>
+                    <div class="workflow-node-item" data-node-type="execute-js" draggable="true">Execute JS</div>
                     <div class="workflow-node-item" data-node-type="if-else" draggable="true">If/Else</div>
                 </div>
                 <div id="workflowCanvas" style="flex-grow: 1; position: relative; overflow: auto; background-color: var(--win95-dark-gray);">
@@ -1389,15 +1390,21 @@ Output ONLY the JSON array. No explanations, comments, or markdown outside the J
     function getCustomSetupGuideContent() {
         const title = "⚙️ Custom Endpoint Setup Guide (Python/Flask)";
         const instructions = `
-            <p>This guide provides a basic Python Flask server to act as a custom LLM endpoint for k8OS.</p>
+            <p>This guide provides a Python Flask server that can act as a dual-purpose custom endpoint for k8OS.</p>
+            <p style="font-size:11px;">It can handle both <strong>LLM Prompts</strong> (from AI apps) and <strong>JavaScript Execution</strong> (from the Workflow app's 'Execute JS' node).</p>
             <ol style="margin-left: 20px; font-size:11px;">
                 <li>Save the code below as a Python file (e.g., <code>server.py</code>).</li>
-                <li>Install dependencies: <code>pip install Flask flask-cors</code>. You will also need a library for your chosen LLM (e.g., <code>transformers</code>, <code>openai</code>).</li>
+                <li>Install dependencies: <code>pip install Flask flask-cors</code>. For LLM requests, you'll need your own LLM library (e.g., <code>transformers</code>). For JS execution, you must have <strong>Node.js installed</strong> on the server.</li>
                 <li><strong>Important:</strong> Replace <code>'YOUR_VERY_SECRET_API_KEY'</code> with a strong, unique API key you create.</li>
-                <li><strong>LLM Integration:</strong> Implement your actual LLM call logic in the <code># TODO: LLM LOGIC</code> section. The example shows where to use the incoming prompt.</li>
+                <li><strong>Logic:</strong> The server checks for an <code>action</code> in the JSON payload.
+                    <ul>
+                        <li style="margin-top:4px;">If <code>action</code> is <code>"execute_js"</code>, it runs the provided code with Node.js.</li>
+                        <li>If <code>action</code> is <code>"llm_prompt"</code> or is missing, it passes the prompt to your LLM logic.</li>
+                    </ul>
+                </li>
                 <li>Run the server: <code>python server.py</code>.</li>
                 <li>Expose the server to the internet using a tool like <a href="https://ngrok.com/docs/getting-started" target="_blank" rel="noopener noreferrer">ngrok</a> (e.g., <code>ngrok http 5000</code>). This will give you a public URL.</li>
-                <li>The generation endpoint will be that URL + <code>/generate</code> (e.g., <code>https://xxxx...ngrok.io/generate</code>).</li>
+                <li>The endpoint for k8OS is the public URL + <code>/generate</code> (e.g., <code>https://xxxx...ngrok.io/generate</code>).</li>
                 <li>In k8OS API Key Settings, select "Custom Endpoint", enter the API key you created.</li>
                 <li>In k8OS System Settings, enter the full <code>.../generate</code> URL for "Custom Endpoint URL".</li>
             </ol>
@@ -1406,6 +1413,8 @@ Output ONLY the JSON array. No explanations, comments, or markdown outside the J
 from flask import Flask, request, jsonify
 from flask_cors import CORS
 import os
+import subprocess
+import json
 
 # --- Configuration ---
 # IMPORTANT: Use an environment variable in production for the API key
@@ -1416,8 +1425,55 @@ app = Flask(__name__)
 # IMPORTANT: Restrict the origin in a production environment for security
 CORS(app) # Enable CORS for all routes
 
+def handle_llm_request(data):
+    """Handles traditional Language Model requests."""
+    if 'prompt' not in data:
+        return jsonify({"error": "Bad Request: Missing 'prompt' in JSON payload for LLM request"}), 400
+
+    prompt = data.get('prompt')
+    model_id = data.get('model', 'default_custom_model')
+
+    # --- LLM LOGIC ---
+    # Replace this with your actual LLM call (e.g., to a local model)
+    llm_response = f"LLM received prompt: '{prompt[:80]}...'. Model: {model_id}."
+    # --- End LLM LOGIC ---
+
+    return jsonify({"response": llm_response})
+
+def handle_js_execution(data):
+    """Handles requests to execute JavaScript code using Node.js."""
+    if 'code' not in data:
+        return jsonify({"error": "Bad Request: Missing 'code' in JSON payload for JS execution"}), 400
+
+    js_code = data['code']
+
+    try:
+        # Execute the Node.js code in a subprocess
+        # IMPORTANT: Using a timeout is crucial for security and stability.
+        # Ensure the 'node' executable is in your system's PATH.
+        process = subprocess.run(
+            ['node', '-e', js_code],
+            capture_output=True,
+            text=True,
+            timeout=10  # 10-second timeout to prevent long-running scripts
+        )
+
+        if process.returncode == 0:
+            # Success
+            return jsonify({"result": process.stdout.strip()})
+        else:
+            # Error during execution
+            return jsonify({"error": "Node.js execution failed", "details": process.stderr.strip()}), 400
+
+    except FileNotFoundError:
+        return jsonify({"error": "Internal Server Error", "details": "'node' executable not found. Is Node.js installed and in your PATH?"}), 500
+    except subprocess.TimeoutExpired:
+        return jsonify({"error": "Request Timeout", "details": "Node.js script took too long to execute."}), 408
+    except Exception as e:
+        return jsonify({"error": "Internal Server Error", "details": str(e)}), 500
+
 @app.route('/generate', methods=['POST'])
-def generate_text():
+def generate():
     # 1. API Key Authentication
     auth_header = request.headers.get('Authorization')
     if not auth_header or not auth_header.startswith('Bearer '):
@@ -1427,32 +1483,20 @@ def generate_text():
     if token != ENDPOINT_API_KEY:
         return jsonify({"error": "Unauthorized: Invalid API Key"}), 401
 
-    # 2. Get data from the request
+    # 2. Get data and determine action
     try:
         data = request.get_json()
-        if not data or 'prompt' not in data:
-            return jsonify({"error": "Bad Request: Missing 'prompt' in JSON payload"}), 400
-        
-        prompt = data.get('prompt')
-        # Optional parameters you can use from k8OS
-        model_id = data.get('model', 'default_custom_model') 
-        max_tokens = data.get('max_tokens', 150)
-        temperature = data.get('temperature', 0.7)
+        if not data:
+            return jsonify({"error": "Bad Request: Missing JSON payload"}), 400
 
-        # 3. LLM LOGIC - Replace this with your actual LLM call
-        # This is where you would integrate with your LLM (e.g., using Hugging Face Transformers,
-        # making a call to another API like OpenAI, etc.)
-        #
-        # Example:
-        # from my_llm_library import generate
-        # llm_response = generate(prompt, model=model_id, max_length=max_tokens, temp=temperature)
-        #
-        # For now, we'll just echo the input
-        llm_response = f"Custom endpoint received prompt: '{prompt[:80]}...'. Model: {model_id}."
-        # --- End LLM LOGIC ---
+        action = data.get('action', 'llm_prompt') # Default to 'llm_prompt' if no action is specified
 
-        # 4. Send the response back in the expected format
-        return jsonify({"response": llm_response})
+        if action == 'execute_js':
+            return handle_js_execution(data)
+        elif action == 'llm_prompt':
+            return handle_llm_request(data)
+        else:
+            return jsonify({"error": "Bad Request", "details": f"Unknown action: {action}"}), 400
 
     except Exception as e:
         print(f"Error during generation: {e}")
@@ -2579,28 +2623,19 @@ Available commands:
         } catch (error) { if (statusUpdater) statusUpdater(`Error: ${error.message.substring(0,150)}`); throw error; }
     }
 
-    async function callCustomEndpointApi(endpointUrl, apiKey, modelId, promptContent, maxTokens, temperature) {
+    async function callCustomEndpointApi(endpointUrl, apiKey, payload) {
         if (!endpointUrl) {
             throw new Error("Custom Endpoint URL not configured.");
         }
-        if (!apiKey && selectedApiProvider !== 'transformersjs') { // Transformers.js doesn't use this API key path
+        if (!apiKey) {
             throw new Error("Custom Endpoint API Key not set.");
         }
-
-        const payload = {
-            prompt: promptContent,
-            model: modelId || undefined, // Send model ID if provided
-            max_tokens: maxTokens,
-            temperature: temperature,
-        };
 
         try {
             const headers = {
                 'Content-Type': 'application/json',
+                'Authorization': `Bearer ${apiKey}`
             };
-            if (apiKey) { // Only add auth header if API key is present
-                headers['Authorization'] = `Bearer ${apiKey}`;
-            }
 
             const response = await fetch(endpointUrl, {
                 method: 'POST',
@@ -2622,16 +2657,17 @@ Available commands:
             }
 
             const data = await response.json();
-            if (data && data.response) { // Expecting a { "response": "text output" } structure
+            // Expecting a { "response": "text output" } or { "result": "..." } structure
+            if (data && typeof data.response !== 'undefined') {
                 return data.response;
-            } else if (data && typeof data.text === 'string') { // Fallback for { "text": "..." }
-                return data.text;
-            } else if (data && typeof data === 'string'){ // Fallback for raw string
+            } else if (data && typeof data.result !== 'undefined') {
+                return data.result;
+            } else if (typeof data === 'string'){
                 return data;
-            }
-             else {
+            } else {
                 console.warn("Custom Endpoint API response format unexpected:", data);
-                throw new Error("Custom Endpoint API response format unexpected. Expected { \"response\": \"...\" }.");
+                // For flexibility, return the whole JSON object if it's not in the expected format.
+                return JSON.stringify(data);
             }
         } catch (error) {
             console.error("Error calling Custom Endpoint API:", error);
@@ -2687,13 +2723,16 @@ Available commands:
         } else if (selectedApiProvider === 'transformersjs') {
             return await callTransformersJsApi(promptContent, maxTokens, temperature, statusUpdater);
         } else if (selectedApiProvider === 'custom') {
+             const payload = {
+                prompt: promptContent,
+                model: getCurrentCustomModelId() || undefined,
+                max_tokens: maxTokens || DEFAULT_CUSTOM_MAX_TOKENS,
+                temperature: temperature,
+            };
             return await callCustomEndpointApi(
                 getCurrentCustomEndpointUrl(),
                 window.GLOBAL_CUSTOM_API_KEY,
-                getCurrentCustomModelId(),
-                promptContent,
-                maxTokens || DEFAULT_CUSTOM_MAX_TOKENS,
-                temperature
+                payload
             );
         }
         return "AI provider not supported for this operation yet.";
@@ -4758,6 +4797,7 @@ function initAllAiApps(){
         const togglePropsBtn = document.getElementById('workflowTogglePropsBtn');
         let selectedNodeId = null;
         let nodeProperties = {};
+        let nodeOutputs = {};
 
         canvas.addEventListener('click', (e) => {
             const clickedNode = e.target.closest('.workflow-canvas-node');
@@ -4800,12 +4840,56 @@ function initAllAiApps(){
                     propertiesPanel.innerHTML = `
                         <h4>Execute Command</h4>
                         <label for="prop-command">Command:</label>
-                        <textarea id="prop-command" style="width: 95%; height: 100px;">${nodeProperties[nodeId].command}</textarea>
+                        <textarea id="prop-command" style="width: 95%; height: 100px;">${nodeProperties[nodeId].command || ''}</textarea>
+                        <small>You can use outputs from previous nodes, e.g., <code>{{node-0.output}}</code></small>
                     `;
-                    const commandTextarea = document.getElementById('prop-command');
-                    commandTextarea.addEventListener('input', (e) => {
+                    document.getElementById('prop-command').addEventListener('input', (e) => {
                         nodeProperties[nodeId].command = e.target.value;
                     });
+                    break;
+                case 'http-request':
+                    if (typeof nodeProperties[nodeId].url === 'undefined') {
+                        nodeProperties[nodeId] = { url: '', method: 'GET', headers: '{}', body: '' };
+                    }
+                    propertiesPanel.innerHTML = `
+                        <h4>HTTP Request</h4>
+                        <label for="prop-url">URL:</label>
+                        <input type="text" id="prop-url" style="width: 95%;" value="${nodeProperties[nodeId].url || ''}">
+                        <label for="prop-method">Method:</label>
+                        <select id="prop-method" style="width: 95%;">
+                            <option value="GET" ${nodeProperties[nodeId].method === 'GET' ? 'selected' : ''}>GET</option>
+                            <option value="POST" ${nodeProperties[nodeId].method === 'POST' ? 'selected' : ''}>POST</option>
+                            <option value="PUT" ${nodeProperties[nodeId].method === 'PUT' ? 'selected' : ''}>PUT</option>
+                            <option value="DELETE" ${nodeProperties[nodeId].method === 'DELETE' ? 'selected' : ''}>DELETE</option>
+                        </select>
+                        <label for="prop-headers">Headers (JSON):</label>
+                        <textarea id="prop-headers" style="width: 95%; height: 60px;">${nodeProperties[nodeId].headers || '{}'}</textarea>
+                        <label for="prop-body">Body (JSON):</label>
+                        <textarea id="prop-body" style="width: 95%; height: 80px;">${nodeProperties[nodeId].body || ''}</textarea>
+                        <small>You can use outputs from previous nodes, e.g., <code>{{node-1.output}}</code> in any field.</small>
+                    `;
+                    document.getElementById('prop-url').addEventListener('input', (e) => nodeProperties[nodeId].url = e.target.value);
+                    document.getElementById('prop-method').addEventListener('change', (e) => nodeProperties[nodeId].method = e.target.value);
+                    document.getElementById('prop-headers').addEventListener('input', (e) => nodeProperties[nodeId].headers = e.target.value);
+                    document.getElementById('prop-body').addEventListener('input', (e) => nodeProperties[nodeId].body = e.target.value);
+                    break;
+                case 'execute-js':
+                    if (typeof nodeProperties[nodeId].code === 'undefined') {
+                        nodeProperties[nodeId] = { code: '', environment: 'browser' };
+                    }
+                    propertiesPanel.innerHTML = `
+                        <h4>Execute JS</h4>
+                        <label for="prop-js-env">Environment:</label>
+                        <select id="prop-js-env" style="width: 95%;">
+                            <option value="browser" ${nodeProperties[nodeId].environment === 'browser' ? 'selected' : ''}>Browser</option>
+                            <option value="nodejs" ${nodeProperties[nodeId].environment === 'nodejs' ? 'selected' : ''}>Node.js (via Custom Endpoint)</option>
+                        </select>
+                        <label for="prop-js-code">JavaScript Code:</label>
+                        <textarea id="prop-js-code" style="width: 95%; height: 150px;">${nodeProperties[nodeId].code || ''}</textarea>
+                        <small>Use <code>return</code> to provide an output. You can use variables like <code>{{node-0.output}}</code>.</small>
+                    `;
+                    document.getElementById('prop-js-env').addEventListener('change', (e) => nodeProperties[nodeId].environment = e.target.value);
+                    document.getElementById('prop-js-code').addEventListener('input', (e) => nodeProperties[nodeId].code = e.target.value);
                     break;
                 // Other node types would go here
                 default:
@@ -4813,10 +4897,17 @@ function initAllAiApps(){
             }
         }
 
+        function replacePlaceholders(inputStr, outputs) {
+            if (typeof inputStr !== 'string') return inputStr;
+            return inputStr.replace(/\{\{([\w-]+)\.output\}\}/g, (match, nodeId) => {
+                return outputs[nodeId] || '';
+            });
+        }
+
         runButton.addEventListener('click', async () => {
             if (!connections) return;
+            nodeOutputs = {}; // Reset outputs for each run
 
-            // Find starting node (no inputs)
             const nodeIds = Object.keys(nodeProperties);
             const startNodeId = nodeIds.find(id => !connections.some(c => c.toNodeId === id));
 
@@ -4837,35 +4928,84 @@ function initAllAiApps(){
                     break;
                 }
 
-                // Highlight executing node
                 nodeEl.style.boxShadow = '0 0 10px #FFFF00';
-
                 const nodeType = nodeEl.dataset.nodeType;
                 const props = nodeProperties[currentNodeId];
 
-                switch (nodeType) {
-                    case 'execute-command':
-                        if (props && props.command) {
-                            // Directly use the main terminal command processor
-                            const success = await processCommandChain(props.command);
-                            if (!success) {
-                                printToTerminal(`[Workflow] Error: Command "${props.command.substring(0, 20)}..." failed. Stopping workflow.`);
-                                executionSuccess = false;
+                try {
+                    switch (nodeType) {
+                        case 'execute-command':
+                            if (props && props.command) {
+                                const commandToRun = replacePlaceholders(props.command, nodeOutputs);
+                                const result = await processCommandChain(commandToRun);
+                                nodeOutputs[currentNodeId] = result.output; // Store output
+                                if (!result.success) {
+                                    printToTerminal(`[Workflow] Error: Command "${commandToRun.substring(0, 20)}..." failed. Stopping workflow.`);
+                                    executionSuccess = false;
+                                }
                             }
-                        }
-                        break;
+                            break;
+                        case 'http-request':
+                            if (props && props.url) {
+                                const url = replacePlaceholders(props.url, nodeOutputs);
+                                const method = props.method || 'GET';
+                                const headersStr = replacePlaceholders(props.headers, nodeOutputs);
+                                const bodyStr = replacePlaceholders(props.body, nodeOutputs);
+
+                                let headers = {};
+                                try {
+                                    headers = JSON.parse(headersStr);
+                                } catch (e) {
+                                    throw new Error(`Invalid JSON in headers: ${e.message}`);
+                                }
+
+                                const fetchOptions = { method, headers };
+                                if (method !== 'GET' && method !== 'HEAD' && bodyStr) {
+                                    fetchOptions.body = bodyStr;
+                                }
+
+                                const response = await fetch(url, fetchOptions);
+                                const responseText = await response.text();
+                                nodeOutputs[currentNodeId] = responseText; // Store response text as output
+
+                                if (!response.ok) {
+                                    throw new Error(`Request failed with status ${response.status}: ${responseText}`);
+                                }
+                                printToTerminal(`[Workflow] HTTP Request to ${url} finished with status ${response.status}.`);
+                            }
+                            break;
+                        case 'execute-js':
+                            if (props && props.code) {
+                                const codeToRun = replacePlaceholders(props.code, nodeOutputs);
+                                if (props.environment === 'nodejs') {
+                                    const endpointUrl = getCurrentCustomEndpointUrl();
+                                    const apiKey = window.GLOBAL_CUSTOM_API_KEY;
+                                    if (!endpointUrl || !apiKey) {
+                                        throw new Error("Custom Endpoint URL or API Key for Node.js execution is not configured.");
+                                    }
+                                    const payload = { action: 'execute_js', code: codeToRun };
+                                    const result = await callCustomEndpointApi(endpointUrl, apiKey, payload);
+                                    nodeOutputs[currentNodeId] = result;
+                                    printToTerminal(`[Workflow] Node.js code executed via custom endpoint.`);
+                                } else {
+                                    // Browser execution
+                                    const result = new Function(codeToRun)();
+                                    nodeOutputs[currentNodeId] = result;
+                                }
+                            }
+                            break;
+                    }
+                } catch (e) {
+                    printToTerminal(`[Workflow] Node ${currentNodeId} (${nodeType}) failed: ${e.message}`);
+                    executionSuccess = false;
                 }
 
-                // Un-highlight
                 nodeEl.style.boxShadow = '';
-
                 if (!executionSuccess) break;
 
-                // Find next node
                 const nextConnection = connections.find(c => c.fromNodeId === currentNodeId);
                 currentNodeId = nextConnection ? nextConnection.toNodeId : null;
 
-                // A small delay to see the execution flow
                 await new Promise(resolve => setTimeout(resolve, 100));
             }
 
