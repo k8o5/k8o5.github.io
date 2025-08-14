@@ -4807,6 +4807,34 @@ function initAllAiApps(){
                         nodeProperties[nodeId].command = e.target.value;
                     });
                     break;
+                case 'http-request':
+                    if (typeof nodeProperties[nodeId].url === 'undefined') {
+                        nodeProperties[nodeId].url = '';
+                        nodeProperties[nodeId].method = 'GET';
+                        nodeProperties[nodeId].headers = '{}';
+                        nodeProperties[nodeId].body = '{}';
+                    }
+                    propertiesPanel.innerHTML = `
+                        <h4>HTTP Request</h4>
+                        <label for="prop-url">URL:</label>
+                        <input type="text" id="prop-url" value="${nodeProperties[nodeId].url}">
+                        <label for="prop-method">Method:</label>
+                        <select id="prop-method">
+                            <option value="GET" ${nodeProperties[nodeId].method === 'GET' ? 'selected' : ''}>GET</option>
+                            <option value="POST" ${nodeProperties[nodeId].method === 'POST' ? 'selected' : ''}>POST</option>
+                            <option value="PUT" ${nodeProperties[nodeId].method === 'PUT' ? 'selected' : ''}>PUT</option>
+                            <option value="DELETE" ${nodeProperties[nodeId].method === 'DELETE' ? 'selected' : ''}>DELETE</option>
+                        </select>
+                        <label for="prop-headers">Headers (JSON):</label>
+                        <textarea id="prop-headers" style="width: 95%; height: 60px;">${nodeProperties[nodeId].headers}</textarea>
+                        <label for="prop-body">Body (JSON):</label>
+                        <textarea id="prop-body" style="width: 95%; height: 80px;">${nodeProperties[nodeId].body}</textarea>
+                    `;
+                    document.getElementById('prop-url').addEventListener('input', e => nodeProperties[nodeId].url = e.target.value);
+                    document.getElementById('prop-method').addEventListener('change', e => nodeProperties[nodeId].method = e.target.value);
+                    document.getElementById('prop-headers').addEventListener('input', e => nodeProperties[nodeId].headers = e.target.value);
+                    document.getElementById('prop-body').addEventListener('input', e => nodeProperties[nodeId].body = e.target.value);
+                    break;
                 // Other node types would go here
                 default:
                     propertiesPanel.innerHTML = `<h4>Properties for ${nodeType}</h4><p>No configurable properties.</p>`;
@@ -4852,6 +4880,40 @@ function initAllAiApps(){
                                 printToTerminal(`[Workflow] Error: Command "${props.command.substring(0, 20)}..." failed. Stopping workflow.`);
                                 executionSuccess = false;
                             }
+                        }
+                        break;
+                    case 'http-request':
+                        printToTerminal(`[Workflow] Executing HTTP Request to: ${props.url}`);
+                        try {
+                            if (!props.url) {
+                                throw new Error("URL is not defined in HTTP Request node.");
+                            }
+                            const headers = JSON.parse(props.headers || '{}');
+                            const body = (props.method === 'POST' || props.method === 'PUT') ? JSON.stringify(JSON.parse(props.body || '{}')) : null;
+
+                            const response = await fetch(props.url, {
+                                method: props.method,
+                                headers: headers,
+                                body: body
+                            });
+
+                            let responseData;
+                            const contentType = response.headers.get("content-type");
+                            if (contentType && contentType.indexOf("application/json") !== -1) {
+                                responseData = await response.json();
+                            } else {
+                                responseData = await response.text();
+                            }
+
+                            printToTerminal(`[HTTP Response] Status: ${response.status}`);
+                            printToTerminal(`Response Data: ${typeof responseData === 'object' ? JSON.stringify(responseData, null, 2) : responseData}`);
+
+                            if (!response.ok) {
+                                executionSuccess = false;
+                            }
+                        } catch (e) {
+                            printToTerminal(`[Workflow] Error during HTTP Request: ${e.message}`);
+                            executionSuccess = false;
                         }
                         break;
                 }
