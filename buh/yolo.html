@@ -1,0 +1,102 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>YOLO Object Detection with Webcam</title>
+    <style>
+        body {
+            font-family: Arial, sans-serif;
+            margin: 0;
+            padding: 20px;
+            display: flex;
+            flex-direction: column;
+            align-items: center;
+        }
+        #container {
+            position: relative;
+            display: inline-block;
+        }
+        #video, #canvas {
+            position: absolute;
+            top: 0;
+            left: 0;
+        }
+        #video {
+            z-index: -1;
+        }
+    </style>
+</head>
+<body>
+    <h1>YOLO Object Detection with Webcam</h1>
+    <p>Wait for the model to load, then allow webcam access.</p>
+    <div id="container">
+        <video id="video" autoplay muted playsinline></video>
+        <canvas id="canvas"></canvas>
+    </div>
+
+    <!-- Load TensorFlow.js and the COCO-SSD model -->
+    <script src="https://cdn.jsdelivr.net/npm/@tensorflow/tfjs@latest/dist/tf.min.js"></script>
+    <script src="https://cdn.jsdelivr.net/npm/@tensorflow-models/coco-ssd"></script>
+
+    <script>
+        const video = document.getElementById('video');
+        const canvas = document.getElementById('canvas');
+        const context = canvas.getContext('2d');
+        let model = undefined;
+
+        // Load the COCO-SSD model
+        cocoSsd.load().then(function (loadedModel) {
+            model = loadedModel;
+            // Start the webcam and object detection
+            initWebcam();
+        });
+
+        function initWebcam() {
+            // Check if the browser supports media devices
+            if (navigator.mediaDevices && navigator.mediaDevices.getUserMedia) {
+                navigator.mediaDevices.getUserMedia({ video: true })
+                    .then(function (stream) {
+                        video.srcObject = stream;
+                        video.addEventListener('loadeddata', predictWebcam);
+                    })
+                    .catch(function (error) {
+                        console.error("Error accessing webcam: ", error);
+                        alert("Error accessing webcam. Please ensure you have a webcam and have granted permission.");
+                    });
+            } else {
+                alert("Your browser does not support webcam access.");
+            }
+        }
+
+        function predictWebcam() {
+            // Set canvas dimensions to match the video
+            canvas.width = video.videoWidth;
+            canvas.height = video.videoHeight;
+
+            // Start detecting objects in the video stream
+            model.detect(video).then(function (predictions) {
+                // Draw the video frame to the canvas
+                context.drawImage(video, 0, 0, canvas.width, canvas.height);
+
+                // Draw bounding boxes and labels for each prediction
+                for (let i = 0; i < predictions.length; i++) {
+                    context.beginPath();
+                    context.rect(...predictions[i].bbox);
+                    context.lineWidth = 2;
+                    context.strokeStyle = 'red';
+                    context.fillStyle = 'red';
+                    context.stroke();
+                    context.fillText(
+                        predictions[i].class + ' - ' + Math.round(predictions[i].score * 100) + '%',
+                        predictions[i].bbox[0],
+                        predictions[i].bbox[1] > 10 ? predictions[i].bbox[1] - 5 : 10);
+                }
+
+                // Call the function again to continue predicting on the next frame
+                window.requestAnimationFrame(predictWebcam);
+            });
+        }
+    </script>
+</body>
+</html>
