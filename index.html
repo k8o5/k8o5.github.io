@@ -3916,7 +3916,17 @@ Available commands:
         const fullPrompt = instruction.replace("{USER_PROMPT}", userPrompt);
 
         try {
-            const resultText = await callCurrentAiProviderForText(fullPrompt, 80000, 0.7, vibeStatusUpdater);
+            let resultText = await callCurrentAiProviderForText(fullPrompt, 80000, 0.7, vibeStatusUpdater);
+
+            if (resultText && resultText.startsWith("```html")) {
+                resultText = resultText.substring(7).trim();
+            } else if (resultText && resultText.startsWith("```")) {
+                resultText = resultText.substring(3).trim();
+            }
+            if (resultText && resultText.endsWith("```")) {
+                resultText = resultText.substring(0, resultText.length - 3).trim();
+            }
+
             vibe_currentContent = resultText;
 
             if (!vibe_currentContent) {
@@ -4644,11 +4654,6 @@ function handleFactoryReset() {
 
     if (textEditor_sparkyAssistButton) {
         textEditor_sparkyAssistButton.addEventListener('click', () => {
-            const editorContent = textEditor_contentArea.value;
-            if (editorContent.trim() === '') {
-                textEditor_status.textContent = "Sparky Assist: Editor is empty. Please enter some code first.";
-                return;
-            }
             openTextEditorAssistModal();
         });
     }
@@ -4695,22 +4700,27 @@ JSON array of edits:`;
 
                 const aiResponse = await callCurrentAiProviderForText(fullPrompt, 4000, 0.2);
                 
-                let cleanedJsonString = aiResponse.replace(/```json\n?/g, "").replace(/```\n?/g, "").trim();
+                let cleanedJsonString = aiResponse;
                 const jsonStart = cleanedJsonString.indexOf('[');
                 const jsonEnd = cleanedJsonString.lastIndexOf(']');
-                if (jsonStart === -1 || jsonEnd === -1) {
-                    throw new Error("AI did not return a valid JSON array.");
+
+                if (jsonStart === -1 || jsonEnd === -1 || jsonEnd < jsonStart) {
+                    throw new Error(`AI did not return a valid JSON array. Response: ${aiResponse.substring(0, 100)}...`);
                 }
+
                 cleanedJsonString = cleanedJsonString.substring(jsonStart, jsonEnd + 1);
 
-                const edits = JSON.parse(cleanedJsonString);
-                applyCodeEdits(originalCode, edits);
-                
-                textEditor_status.textContent = "Status: Changes applied!";
-                closeTextEditorAssistModal();
+                try {
+                    const edits = JSON.parse(cleanedJsonString);
+                    applyCodeEdits(originalCode, edits);
+                    textEditor_status.textContent = "Status: Changes applied!";
+                    closeTextEditorAssistModal();
+                } catch (jsonError) {
+                    throw new Error(`Failed to parse JSON from AI response. Details: ${jsonError.message}. Raw response slice: ${cleanedJsonString.substring(0, 100)}...`);
+                }
 
             } catch (error) {
-                console.error("Error during AI code edit:", error);
+                console.error("Error during AI code edit:", error, "Raw AI Response:", aiResponse);
                 textEditorAssist_status.textContent = `Error: ${error.message}`;
                 alert(`An error occurred while assisting: ${error.message}`);
             } finally {
