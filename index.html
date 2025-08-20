@@ -4705,22 +4705,27 @@ JSON array of edits:`;
 
                 const aiResponse = await callCurrentAiProviderForText(fullPrompt, 4000, 0.2);
                 
-                let cleanedJsonString = aiResponse.replace(/```json\n?/g, "").replace(/```\n?/g, "").trim();
+                let cleanedJsonString = aiResponse;
                 const jsonStart = cleanedJsonString.indexOf('[');
                 const jsonEnd = cleanedJsonString.lastIndexOf(']');
-                if (jsonStart === -1 || jsonEnd === -1) {
-                    throw new Error("AI did not return a valid JSON array.");
+
+                if (jsonStart === -1 || jsonEnd === -1 || jsonEnd < jsonStart) {
+                    throw new Error(`AI did not return a valid JSON array. Response: ${aiResponse.substring(0, 100)}...`);
                 }
+                
                 cleanedJsonString = cleanedJsonString.substring(jsonStart, jsonEnd + 1);
 
-                const edits = JSON.parse(cleanedJsonString);
-                applyCodeEdits(originalCode, edits);
-                
-                textEditor_status.textContent = "Status: Changes applied!";
-                closeTextEditorAssistModal();
+                try {
+                    const edits = JSON.parse(cleanedJsonString);
+                    applyCodeEdits(originalCode, edits);
+                    textEditor_status.textContent = "Status: Changes applied!";
+                    closeTextEditorAssistModal();
+                } catch (jsonError) {
+                    throw new Error(`Failed to parse JSON from AI response. Details: ${jsonError.message}. Raw response slice: ${cleanedJsonString.substring(0, 100)}...`);
+                }
 
             } catch (error) {
-                console.error("Error during AI code edit:", error);
+                console.error("Error during AI code edit:", error, "Raw AI Response:", aiResponse);
                 textEditorAssist_status.textContent = `Error: ${error.message}`;
                 alert(`An error occurred while assisting: ${error.message}`);
             } finally {
