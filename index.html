@@ -2602,6 +2602,7 @@ Available commands:
                     }
                     promptSparkyForCommand();
                 });
+                initializeAssistantDrag();
             }
         }
         if (assistantContainer) {
@@ -2639,6 +2640,95 @@ Available commands:
         if (assistantSparkyMouth) { if (!isTemporaryThinkingMessage && message.length > 0) { assistantSparkyMouth.classList.add('talking'); } else { assistantSparkyMouth.classList.remove('talking'); } }
         clearTimeout(assistantSpeechTimeout);
         if (autoHide && !isTemporaryThinkingMessage) { assistantSpeechTimeout = setTimeout(() => { assistantSpeechBubble.classList.remove('visible'); if (assistantSparkyMouth) assistantSparkyMouth.classList.remove('talking'); }, keepVisibleLonger ? 10000 : 5000); } // Reduced duration
+    }
+
+    function initializeAssistantDrag() {
+        if (!assistantContainer || !assistantAvatarSVG) return;
+
+        let isDragging = false;
+        let initialLeft, initialTop, startX, startY;
+        const normalMouthPath = "M 40 60 Q 50 63 60 60";
+        const surprisedMouthPath = "M 45 60 a 5 5 0 1 0 10 0 a 5 5 0 1 0 -10 0";
+        const assistantAvatarContainer = document.getElementById('k8osAssistant_avatarContainer');
+
+        const onDragStart = (clientX, clientY) => {
+            isDragging = true;
+            stopSparkyMovement();
+            if (assistantSparkyMouth) {
+                assistantSparkyMouth.classList.remove('talking');
+                assistantSparkyMouth.setAttribute('d', surprisedMouthPath);
+            }
+            if (assistantAvatarContainer) assistantAvatarContainer.style.cursor = 'grabbing';
+
+
+            initialLeft = assistantContainer.offsetLeft;
+            initialTop = assistantContainer.offsetTop;
+            startX = clientX;
+            startY = clientY;
+
+            document.addEventListener('mousemove', onMouseMove);
+            document.addEventListener('mouseup', onMouseUp);
+            document.addEventListener('touchmove', onTouchMove, { passive: false });
+            document.addEventListener('touchend', onTouchEnd);
+        };
+
+        const onDragMove = (clientX, clientY) => {
+            if (!isDragging) return;
+            let newX = initialLeft + (clientX - startX);
+            let newY = initialTop + (clientY - startY);
+            const desktopRect = desktopElement.getBoundingClientRect();
+            const taskbarHeight = document.querySelector('.taskbar')?.offsetHeight || 30;
+
+            newX = Math.max(0, Math.min(newX, desktopRect.width - assistantContainer.offsetWidth));
+            newY = Math.max(0, Math.min(newY, desktopRect.height - assistantContainer.offsetHeight - taskbarHeight));
+            
+            assistantContainer.style.left = newX + 'px';
+            assistantContainer.style.top = newY + 'px';
+        };
+
+        const onDragEnd = () => {
+            if (!isDragging) return;
+            isDragging = false;
+
+            if (assistantSparkyMouth) {
+                assistantSparkyMouth.setAttribute('d', normalMouthPath);
+            }
+            if (assistantAvatarContainer) assistantAvatarContainer.style.cursor = 'pointer';
+
+            // Update the state variables to the new position
+            sparkyPosX = assistantContainer.offsetLeft;
+            sparkyPosY = assistantContainer.offsetTop;
+            
+            startSparkyMovement();
+
+            document.removeEventListener('mousemove', onMouseMove);
+            document.removeEventListener('mouseup', onMouseUp);
+            document.removeEventListener('touchmove', onTouchMove);
+            document.removeEventListener('touchend', onTouchEnd);
+        };
+
+        const onMouseDown = (e) => {
+            onDragStart(e.clientX, e.clientY);
+        };
+        const onMouseMove = (e) => onDragMove(e.clientX, e.clientY);
+        const onMouseUp = () => onDragEnd();
+
+        const onTouchStart = (e) => {
+            if (e.touches.length === 1) {
+                const touch = e.touches[0];
+                onDragStart(touch.clientX, touch.clientY);
+            }
+        };
+        const onTouchMove = (e) => {
+            if (e.touches.length === 1) {
+                e.preventDefault();
+                onDragMove(e.touches[0].clientX, e.touches[0].clientY);
+            }
+        };
+        const onTouchEnd = () => onDragEnd();
+
+        assistantAvatarSVG.addEventListener('mousedown', onMouseDown);
+        assistantAvatarSVG.addEventListener('touchstart', onTouchStart, { passive: true });
     }
 
 
