@@ -1,3 +1,4 @@
+
 <!--
     k8OS - Web-based Desktop Environment
     Created by: k8o5
@@ -39,6 +40,8 @@
     <script type="importmap">
     {
       "imports": {
+    "three": "https://unpkg.com/three@0.161.0/build/three.module.js",
+    "three/": "https://unpkg.com/three@0.161.0/",
         "@google/generative-ai": "https://esm.run/@google/generative-ai",
         "marked": "https://esm.run/marked@4.0.12"
       }
@@ -390,6 +393,23 @@
         .reboot-overlay p { margin: 5px; }
         .reboot-overlay .k8os-logo { font-size: 32px; font-weight: bold; color: #00FF00; margin-bottom: 20px; animation: pulse 1.5s infinite; }
         @keyframes pulse { 0% { opacity: 0.7; } 50% { opacity: 1; } 100% { opacity: 0.7; } }
+
+        #screensaver-overlay {
+            position: fixed;
+            top: 0;
+            left: 0;
+            width: 100vw;
+            height: 100vh;
+            background-color: #000;
+            display: none; /* Hidden by default */
+            z-index: 90000; /* Below reboot overlay, above everything else */
+        }
+        #screensaver-canvas {
+            width: 100%;
+            height: 100%;
+            display: block;
+        }
+
         .debug-section { border: 1px dotted var(--win95-dark-gray); padding: 8px; margin-top: 10px; }
         .debug-section h4 { font-size: 12px; margin-top:0; margin-bottom:5px; }
 
@@ -751,6 +771,7 @@
             <div class="settings-tabs">
                 <div class="settings-tab active" data-tab="appearance">Appearance</div>
                 <div class="settings-tab" data-tab="aiConfig">AI Config</div>
+                <div class="settings-tab" data-tab="screensaver">Screensaver</div>
                 <div class="settings-tab" data-tab="about">About</div>
             </div>
             <div id="settingsContent_appearance" class="settings-tab-content active">
@@ -881,6 +902,25 @@
                 <label for="systemSettings_ai_gifCreatorAnimateInstruction">Base prompt for animating existing SVG:</label>
                 <textarea id="systemSettings_ai_gifCreatorAnimateInstruction" rows="4"></textarea>
                 <button id="systemSettings_ai_saveGifCreatorAnimateInstructionButton">Save GIF (Animate) Instruction</button>
+            </div>
+            <div id="settingsContent_screensaver" class="settings-tab-content">
+                <h3>Screensaver</h3>
+                <label for="systemSettings_screensaver_modeSelect">Mode:</label>
+                <select id="systemSettings_screensaver_modeSelect" style="margin-bottom: 8px;">
+                    <option value="pipes">3D Pipes</option>
+                    <option value="text">3D Text</option>
+                    <option value="time">Time</option>
+                </select>
+                <div id="systemSettings_screensaver_textRow" style="margin-top: 8px;">
+                    <label for="systemSettings_screensaver_textInput">Custom Text:</label>
+                    <input type="text" id="systemSettings_screensaver_textInput">
+                </div>
+                <label for="systemSettings_screensaver_timeoutInput" style="margin-top: 8px;">Inactivity Timeout (minutes):</label>
+                <input type="number" id="systemSettings_screensaver_timeoutInput" min="1" step="1">
+                <div style="display: flex; justify-content: flex-end; margin-top: 15px;">
+                    <button id="systemSettings_screensaver_demoButton" style="margin-right: 5px;">Demo</button>
+                    <button id="systemSettings_screensaver_saveButton">Save Settings</button>
+                </div>
             </div>
             <div id="settingsContent_about" class="settings-tab-content">
                 <h3>About k8OS</h3>
@@ -1041,8 +1081,14 @@
         </div>
     </div>
 
+    <div id="screensaver-overlay">
+        <canvas id="screensaver-canvas"></canvas>
+    </div>
 
 <script type="module">
+    import * as T from "three";
+    import { FontLoader } from 'three/examples/jsm/loaders/FontLoader.js';
+    import { TextGeometry } from 'three/examples/jsm/geometries/TextGeometry.js';
     import { GoogleGenerativeAI, HarmCategory, HarmBlockThreshold } from "@google/generative-ai";
     import { marked, Renderer as MarkedRenderer } from 'marked';
     import { pipeline as transformersPipeline, env as transformersEnv } from 'https://cdn.jsdelivr.net/npm/@huggingface/transformers@3.5.1';
@@ -1268,6 +1314,256 @@ Output ONLY the JSON array. No explanations, comments, or markdown outside the J
     let highestZIndex = 100;
     let VFS = { items: {} };
     window.VFS = VFS; // Expose for testing
+
+    // --- Screensaver Class ---
+    class Screensaver {
+        constructor(canvas) {
+            this.canvas = canvas;
+            this.renderer = new T.WebGLRenderer({ canvas: this.canvas, antialias: true });
+            this.scene = new T.Scene();
+            this.scene.background = new T.Color(0x000000);
+            this.scene.fog = new T.Fog(0x000000, 20, 220);
+            this.camera = new T.PerspectiveCamera(55, this.canvas.clientWidth / this.canvas.clientHeight, 0.1, 1000);
+            
+            this.scene.add(new T.AmbientLight(0xffffff, .35));
+            const dirLight = new T.DirectionalLight(0xffffff, .9);
+            dirLight.position.set(1, 2, 1);
+            this.scene.add(dirLight);
+
+            this.animationFrameId = null;
+            this.sceneObjects = [];
+            this.pipes = [];
+            this.textMesh = null;
+            this.timeMesh = null;
+            this.font = null;
+            this.currentMode = '';
+
+            this.fit();
+            window.addEventListener('resize', () => this.fit());
+
+            const fontLoader = new FontLoader();
+            fontLoader.load(
+                'https://unpkg.com/three@0.161.0/examples/fonts/helvetiker_regular.typeface.json',
+                (loadedFont) => { // onLoad
+                    this.font = loadedFont;
+                    if (this.onFontLoad) this.onFontLoad();
+                },
+                undefined, // onProgress
+                (error) => { // onError
+                    console.error('An error occurred during font loading:', error);
+                }
+            );
+        }
+
+        fit() {
+            const W = this.canvas.clientWidth;
+            const H = this.canvas.clientHeight;
+            this.renderer.setSize(W, H, false);
+            this.camera.aspect = W / H;
+            this.camera.updateProjectionMatrix();
+        }
+
+        clearScene() {
+            this.sceneObjects.forEach(obj => this.scene.remove(obj));
+            this.sceneObjects = [];
+            this.pipes = [];
+            this.textMesh = null;
+            this.timeMesh = null;
+            
+            while(this.scene.children.length > 0){ 
+                const child = this.scene.children[0];
+                this.scene.remove(child); 
+                if (child.geometry) child.geometry.dispose();
+                if (child.material) child.material.dispose();
+            }
+
+            this.scene.add(new T.AmbientLight(0xffffff, .35));
+            const dirLight = new T.DirectionalLight(0xffffff, .9);
+            dirLight.position.set(1, 2, 1);
+            this.scene.add(dirLight);
+        }
+
+        start(mode, text) {
+            this.currentMode = mode;
+            this.customText = text;
+            this.clearScene();
+            this.camera.position.set(0, 10, 70);
+
+            const setup = () => {
+                switch (this.currentMode) {
+                    case 'pipes': this.setupPipes(); break;
+                    case 'text': this.setupText(); break;
+                    case 'time': this.setupTime(); break;
+                }
+            };
+
+            if ((mode === 'text' || mode === 'time') && !this.font) {
+                console.log("Waiting for font to load...");
+                this.onFontLoad = () => {
+                    setup();
+                    this.onFontLoad = null; // Clear callback
+                };
+            } else {
+                setup();
+            }
+
+            this.loop();
+        }
+
+        stop() {
+            if (this.animationFrameId) {
+                cancelAnimationFrame(this.animationFrameId);
+                this.animationFrameId = null;
+            }
+            this.clearScene();
+        }
+        
+        loop() {
+            this.animationFrameId = requestAnimationFrame(() => this.loop());
+            switch (this.currentMode) {
+                case 'pipes': this.animatePipes(); break;
+                case 'text': this.animateText(); break;
+                case 'time': this.animateTime(); break;
+            }
+            this.renderer.render(this.scene, this.camera);
+        }
+
+        // --- Pipes ---
+        setupPipes() {
+            const pipeCount = 3;
+            for (let i = 0; i < pipeCount; i++) {
+                const p = this.newPipe(i, pipeCount);
+                this.scene.add(p.mesh);
+                this.scene.add(p.elbows);
+                this.sceneObjects.push(p.mesh, p.elbows);
+                this.pipes.push(p);
+            }
+        }
+        newPipe(i, pipeCount) {
+            const grid=4, step=grid, rnd=(a,b)=>a+Math.random()*(b-a), pick=(arr)=>arr[(Math.random()*arr.length)|0];
+            const dirs=[new T.Vector3(1,0,0),new T.Vector3(-1,0,0),new T.Vector3(0,1,0),new T.Vector3(0,-1,0),new T.Vector3(0,0,1),new T.Vector3(0,0,-1)];
+            const makeMat=(h)=>new T.MeshPhongMaterial({color:new T.Color().setHSL(h,1,.55),specular:0xffffff,shininess:180,emissive:new T.Color().setHSL(h,.6,.06)});
+            const Tube=(pts,rad,radSeg,h)=>new T.Mesh(new T.TubeGeometry(new T.CatmullRomCurve3(pts),Math.max(3,pts.length*3),rad,radSeg,false),makeMat(h));
+
+            const hue = i / pipeCount;
+            let start = new T.Vector3(rnd(-8, 8), rnd(-8, 8), rnd(-8, 8)).multiplyScalar(grid);
+            let dir = pick(dirs);
+            let pts = [start, start.clone().add(dir.clone().multiplyScalar(step))];
+            let elbows = new T.Group();
+            let mesh = Tube(pts, .9, 16, hue);
+            return { hue, pts, dir, lastDir: dir.clone(), mesh, elbows, t: 0, dirs, rnd, pick, makeMat, Tube };
+        }
+        animatePipes() {
+            const grid=4, step=grid, lim=28, maxSegments=220;
+            this.pipes.forEach(P => {
+                P.t++;
+                let choices = P.dirs.filter(v => !v.equals(P.dir.clone().multiplyScalar(-1)));
+                if (Math.random() < 0.1) P.dir = P.pick(choices);
+                const nxt = P.pts[P.pts.length - 1].clone().add(P.dir.clone().multiplyScalar(step));
+                ["x", "y", "z"].forEach(k => { if (nxt[k] > lim * grid || nxt[k] < -lim * grid) { P.dir[k] *= -1; nxt.copy(P.pts[P.pts.length - 1]).add(P.dir.clone().multiplyScalar(step)) } });
+                const prev = P.pts[P.pts.length - 1];
+                if (!P.dir.equals(P.lastDir)) { const s = new T.Mesh(new T.SphereGeometry(1.05, 18, 12), P.makeMat((P.hue + 0.02) % 1)); s.position.copy(prev); P.elbows.add(s); }
+                P.lastDir = P.dir.clone();
+                P.pts.push(nxt);
+                if (P.pts.length > maxSegments) { P.pts.shift(); if (P.elbows.children.length > 0) P.elbows.children.shift(); }
+                this.scene.remove(P.mesh); P.mesh.geometry.dispose();
+                this.scene.remove(P.elbows);
+                P.mesh = P.Tube(P.pts, .9, 16, (P.hue + Math.sin(P.t * 0.002) * 0.02) % 1); 
+                this.scene.add(P.mesh);
+                this.scene.add(P.elbows);
+            });
+            let rot = Date.now() * 0.0002;
+            this.camera.position.x = Math.cos(rot) * 70;
+            this.camera.position.z = Math.sin(rot) * 70;
+            this.camera.lookAt(0, 0, 0);
+        }
+
+        // --- Text & Time ---
+        createTextMesh(text, size = 5) {
+            const geo = new TextGeometry(text, { font: this.font, size: size, height: 1, curveSegments: 12, bevelEnabled: true, bevelThickness: 0.3, bevelSize: 0.1, bevelOffset: 0, bevelSegments: 5 });
+            geo.center();
+            const mat = new T.MeshPhongMaterial({ color: 0x00ff00, specular: 0xffffff, shininess: 100 });
+            return new T.Mesh(geo, mat);
+        }
+        setupText() {
+            this.textMesh = this.createTextMesh(this.customText);
+            this.scene.add(this.textMesh);
+            this.sceneObjects.push(this.textMesh);
+        }
+        animateText() {
+            if (this.textMesh) {
+                this.textMesh.rotation.y += 0.005;
+                this.textMesh.rotation.x += 0.002;
+            }
+        }
+        setupTime() {
+            const now = new Date().toLocaleTimeString();
+            this.timeMesh = this.createTextMesh(now, 4);
+            this.scene.add(this.timeMesh);
+            this.sceneObjects.push(this.timeMesh);
+            this.lastTimeUpdate = 0;
+        }
+        animateTime() {
+            if (this.timeMesh) {
+                this.timeMesh.rotation.y += 0.005;
+                const now = Date.now();
+                if (now - this.lastTimeUpdate > 1000) {
+                    this.lastTimeUpdate = now;
+                    const timeString = new Date().toLocaleTimeString();
+                    const newGeo = new TextGeometry(timeString, { font: this.font, size: 4, height: 1, curveSegments: 12, bevelEnabled: true, bevelThickness: 0.3, bevelSize: 0.1, bevelOffset: 0, bevelSegments: 5 });
+                    newGeo.center();
+                    this.timeMesh.geometry.dispose();
+                    this.timeMesh.geometry = newGeo;
+                }
+            }
+        }
+    }
+
+    // --- Screensaver ---
+    let screensaverTimer;
+    let screensaverActive = false;
+    let screensaverSettings = JSON.parse(localStorage.getItem('k8os_screensaverSettings')) || {
+        mode: 'pipes',
+        timeout: 1, // minutes
+        text: 'k8OS'
+    };
+    const screensaverOverlay = document.getElementById('screensaver-overlay');
+    let screensaverInstance = null; // Will hold the animation object
+
+    function startScreensaver() {
+        if (screensaverActive) return;
+        screensaverActive = true;
+        screensaverOverlay.style.display = 'block';
+        if (!screensaverInstance) {
+            screensaverInstance = new Screensaver(document.getElementById('screensaver-canvas'));
+        }
+        screensaverInstance.start(screensaverSettings.mode, screensaverSettings.text);
+    }
+
+    function stopScreensaver() {
+        if (!screensaverActive) return;
+        screensaverActive = false;
+        screensaverOverlay.style.display = 'none';
+        if (screensaverInstance) {
+            screensaverInstance.stop();
+        }
+        resetInactivityTimer();
+    }
+
+    function resetInactivityTimer() {
+        if (screensaverActive) {
+            stopScreensaver();
+            return;
+        }
+        clearTimeout(screensaverTimer);
+        screensaverTimer = setTimeout(startScreensaver, screensaverSettings.timeout * 60 * 1000);
+    }
+
+    ['mousemove', 'mousedown', 'keydown', 'touchstart'].forEach(event => {
+        document.addEventListener(event, resetInactivityTimer, { passive: true });
+    });
+    // --- End Screensaver ---
+
     let gameGen_lastHtmlCode = null;
     let gameGen_lastGameAssetPackage = null;
     let gameGen_lastUserIdea = "";
@@ -4294,6 +4590,58 @@ Available commands:
         if(systemSettings_ai_saveMusicStudioInstructionButton) systemSettings_ai_saveMusicStudioInstructionButton.addEventListener('click', () => { localStorage.setItem('k8os_instr_musicStudio', systemSettings_ai_musicStudioInstruction.value); if(systemSettings_status) systemSettings_status.textContent = "Music Studio instruction saved."; initMusicStudioApp(); });
         if(systemSettings_ai_saveGifCreatorNewInstructionButton) systemSettings_ai_saveGifCreatorNewInstructionButton.addEventListener('click', () => { localStorage.setItem('k8os_instr_gifCreatorNew', systemSettings_ai_gifCreatorNewInstruction.value); if(systemSettings_status) systemSettings_status.textContent = "GIF Creator (New) instruction saved."; initGifCreatorApp(); });
         if(systemSettings_ai_saveGifCreatorAnimateInstructionButton) systemSettings_ai_saveGifCreatorAnimateInstructionButton.addEventListener('click', () => { localStorage.setItem('k8os_instr_gifCreatorAnimate', systemSettings_ai_gifCreatorAnimateInstruction.value); if(systemSettings_status) systemSettings_status.textContent = "GIF Creator (Animate) instruction saved."; initGifCreatorApp();});
+        
+        // Screensaver settings logic
+        const screensaverModeSelect = document.getElementById('systemSettings_screensaver_modeSelect');
+        const screensaverTextInput = document.getElementById('systemSettings_screensaver_textInput');
+        const screensaverTimeoutInput = document.getElementById('systemSettings_screensaver_timeoutInput');
+        const screensaverSaveButton = document.getElementById('systemSettings_screensaver_saveButton');
+        const screensaverTextRow = document.getElementById('systemSettings_screensaver_textRow');
+        const screensaverDemoButton = document.getElementById('systemSettings_screensaver_demoButton');
+
+        if (screensaverModeSelect) {
+            screensaverModeSelect.value = screensaverSettings.mode;
+            screensaverTextInput.value = screensaverSettings.text;
+            screensaverTimeoutInput.value = screensaverSettings.timeout;
+            screensaverTextRow.style.display = screensaverSettings.mode === 'text' ? 'flex' : 'none';
+
+            screensaverModeSelect.addEventListener('change', () => {
+                screensaverTextRow.style.display = screensaverModeSelect.value === 'text' ? 'flex' : 'none';
+            });
+
+            screensaverSaveButton.addEventListener('click', () => {
+                screensaverSettings.mode = screensaverModeSelect.value;
+                screensaverSettings.text = screensaverTextInput.value;
+                screensaverSettings.timeout = parseInt(screensaverTimeoutInput.value, 10) || 1;
+
+                localStorage.setItem('k8os_screensaverSettings', JSON.stringify(screensaverSettings));
+                
+                if(systemSettings_status) systemSettings_status.textContent = "Screensaver settings saved.";
+                resetInactivityTimer(); // Restart timer with new settings
+            });
+
+            screensaverDemoButton.addEventListener('click', () => {
+                const mode = screensaverModeSelect.value;
+                const text = screensaverTextInput.value;
+
+                closeWindow(document.getElementById('systemSettingsWindow'));
+                
+                clearTimeout(screensaverTimer);
+                if (screensaverActive) {
+                    // This will call resetInactivityTimer internally
+                    stopScreensaver();
+                }
+
+                // Start immediately for demo
+                screensaverActive = true;
+                screensaverOverlay.style.display = 'block';
+                if (!screensaverInstance) {
+                    screensaverInstance = new Screensaver(document.getElementById('screensaver-canvas'));
+                }
+                screensaverInstance.start(mode, text);
+            });
+        }
+        
         const tabs = document.querySelectorAll('#systemSettingsWindow .settings-tab'); const tabContents = document.querySelectorAll('#systemSettingsWindow .settings-tab-content');
         tabs.forEach(tab => { tab.addEventListener('click', () => { tabs.forEach(t => t.classList.remove('active')); tab.classList.add('active'); const targetContentId = "settingsContent_" + tab.dataset.tab; tabContents.forEach(content => { content.classList.toggle('active', content.id === targetContentId); }); }); });
     }
@@ -4980,6 +5328,7 @@ function initAllAiApps(){
     }
     }
 
+    resetInactivityTimer(); // Start the timer on load
     initializeTerminal();
     loadApiKey();
     openWindow('apiKeySettingsWindow');
