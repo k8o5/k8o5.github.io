@@ -935,7 +935,7 @@
     <!-- k8OS Assistant (Sparky) -->
     <div id="k8osAssistant">
         <div id="k8osAssistant_inputContainer">
-            <input type="text" id="k8osAssistant_commandInput" placeholder="Talk to Sparky..."/>
+            <input type="text" id="k8osAssistant_commandInput" placeholder="Talk to Sparky..." autocomplete="off"/>
             <button id="k8osAssistant_sendCommandButton">Send</button>
         </div>
         <div id="k8osAssistant_speechBubble"><span id="k8osAssistant_speechText">Hi there!</span></div>
@@ -1299,6 +1299,7 @@ Output ONLY the JSON array. No explanations, comments, or markdown outside the J
     let assistantSpeechTimeout;
     let assistantIsThinking = false;
     let assistantIsProcessingCommand = false;
+    let assistantWasDragging = false;
     let k8osActivityLog = [];
     const ACTIVITY_LOG_MAX_AGE = 5 * 60 * 1000;
     const ASSISTANT_SUMMARY_INTERVAL = 3 * 60 * 1000;
@@ -2600,7 +2601,19 @@ Available commands:
                         updateAssistantSpeech("Working...", true, false);
                         return;
                     }
-                    promptSparkyForCommand();
+                    
+                    if (assistantWasDragging) {
+                        return;
+                    }
+
+                    const inputContainer = document.getElementById('k8osAssistant_inputContainer');
+                    const isInputVisible = inputContainer.style.display === 'flex';
+
+                    if (isInputVisible) {
+                        inputContainer.style.display = 'none';
+                    } else {
+                        promptSparkyForCommand();
+                    }
                 });
                 initializeAssistantDrag();
             }
@@ -2653,6 +2666,7 @@ Available commands:
 
         const onDragStart = (clientX, clientY) => {
             isDragging = true;
+            assistantWasDragging = false; // Reset flag
             stopSparkyMovement();
             if (assistantSparkyMouth) {
                 assistantSparkyMouth.classList.remove('talking');
@@ -2674,6 +2688,7 @@ Available commands:
 
         const onDragMove = (clientX, clientY) => {
             if (!isDragging) return;
+            assistantWasDragging = true; // It's a drag if the mouse moves
             let newX = initialLeft + (clientX - startX);
             let newY = initialTop + (clientY - startY);
             const desktopRect = desktopElement.getBoundingClientRect();
