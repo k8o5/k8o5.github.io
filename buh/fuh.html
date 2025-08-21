@@ -1,0 +1,377 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="utf-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1" />
+  <title>Peak — A Tiny One‑File Climber</title>
+  <style>
+    :root{
+      --bg:#0b1220; --fg:#e6f0ff; --muted:#95a2bf; --accent:#6ee7ff; --accent2:#8fff88; --danger:#ff6e6e;
+    }
+    *{box-sizing:border-box;}
+    html,body{height:100%;}
+    body{
+      margin:0; font-family:system-ui,-apple-system,Segoe UI,Roboto,Inter,Ubuntu,Arial,sans-serif;
+      background:linear-gradient(#0b1220 0%, #12213d 55%, #1a2f57 100%);
+      color:var(--fg); display:grid; place-items:center;
+    }
+    .wrap{width:min(100vw,720px); height:min(100vh,1280px); aspect-ratio:9/16; position:relative;}
+    canvas{width:100%; height:100%; display:block; border-radius:24px; box-shadow:0 12px 30px rgba(0,0,0,.45); background:transparent;}
+    .hud{position:absolute; inset:0; pointer-events:none;}
+    .topbar{position:absolute; top:10px; left:10px; right:10px; display:flex; justify-content:space-between; align-items:center;}
+    .pill{background:rgba(255,255,255,.1); backdrop-filter:blur(6px); border:1px solid rgba(255,255,255,.15); padding:.5rem .75rem; border-radius:999px; font-weight:600; color:var(--fg);}
+    .btn{pointer-events:auto; cursor:pointer; user-select:none;}
+    .btn:active{transform:translateY(1px)}
+    .center{position:absolute; inset:0; display:grid; place-items:center;}
+    .modal{background:rgba(9,12,20,.85); border:1px solid rgba(255,255,255,.12); border-radius:20px; padding:20px; width:min(92%,520px); text-align:center; box-shadow:0 10px 30px rgba(0,0,0,.5)}
+    .title{font-size:28px; font-weight:800; letter-spacing:.5px; margin:0 0 6px}
+    .muted{color:var(--muted)}
+    .row{display:flex; gap:8px; justify-content:center; flex-wrap:wrap}
+    .cta{background:linear-gradient(90deg,var(--accent),#9aa8ff); color:#08121f; font-weight:900; padding:.7rem 1rem; border-radius:14px; border:none; cursor:pointer; box-shadow:0 4px 10px rgba(0,0,0,.3);}
+    .cta:active{transform:translateY(1px)}
+    .mobile-controls{position:absolute; bottom:14px; left:0; right:0; display:flex; justify-content:space-between; gap:14px; padding:0 14px;}
+    .pad{flex:1; background:rgba(255,255,255,.06); border:1px solid rgba(255,255,255,.1); border-radius:18px; height:64px; display:grid; place-items:center; font-weight:800; pointer-events:auto;}
+    @media (min-width: 820px){ .mobile-controls{display:none;} }
+    a{color:var(--accent)}
+  </style>
+  <!-- Babylon.js + Havok CDN -->
+  <script src="https://cdn.babylonjs.com/babylon.js"></script>
+  <script src="https://cdn.babylonjs.com/gui/babylon.gui.min.js"></script>
+  <script src="https://cdn.babylonjs.com/havok/HavokPhysics_umd.js"></script>
+</head>
+<body>
+  <div class="wrap">
+    <canvas id="game" width="360" height="640" aria-label="Peak game canvas"></canvas>
+    <div class="hud" aria-hidden="true">
+      <div class="topbar">
+        <div class="pill" id="score">0 m</div>
+        <div class="pill btn" id="pauseBtn">⏸️ Pause</div>
+      </div>
+      <div class="center" id="menu">
+        <div class="modal">
+          <h1 class="title">🏔️ PEAK</h1>
+          <p class="muted">Climb as high as you can by hopping across floating ledges. Don’t fall!</p>
+          <p class="muted">Controls: <strong>←/A</strong> & <strong>→/D</strong> to move, <strong>Space/↑/W</strong> to jump. On mobile, tap left/right pads.</p>
+          <div class="row" style="margin-top:10px;">
+            <button class="cta" id="playBtn">Play</button>
+            <button class="pill btn" id="howBtn">How to Play</button>
+          </div>
+          <div id="how" class="muted" style="display:none; margin-top:10px; text-align:left;">
+            <ul>
+              <li>Land on platforms to recharge a jump.</li>
+              <li>Hold jump to leap higher. Time your presses!</li>
+              <li>The world scrolls upward as you climb. Score = meters ascended.</li>
+              <li>Collect crystals for a burst of height.</li>
+              <li>If you fall off the bottom, it’s game over.</li>
+            </ul>
+          </div>
+        </div>
+      </div>
+      <div class="center" id="gameover" style="display:none;">
+        <div class="modal">
+          <h2 class="title">Game Over</h2>
+          <p class="muted">Final height: <strong id="finalScore">0 m</strong> · Best: <strong id="bestScore">0 m</strong></p>
+          <div class="row" style="margin-top:10px;">
+            <button class="cta" id="retryBtn">Retry</button>
+            <button class="pill btn" id="shareBtn">Share</button>
+          </div>
+        </div>
+      </div>
+      <div class="mobile-controls">
+        <div class="pad btn" id="leftPad">◀︎</div>
+        <div class="pad btn" id="jumpPad">⭡</div>
+        <div class="pad btn" id="rightPad">▶︎</div>
+      </div>
+    </div>
+  </div>
+
+  <script>
+  // PEAK (Babylon.js edition) — vertical 3D climber inspired prototype
+  // Goals: physics-y climbing, stamina, wind & crumble ledges, daily-seeded layout.
+
+  // --- DOM & HUD wiring (reuse existing UI) ---
+  const canvas = document.getElementById('game');
+  const $ = sel => document.querySelector(sel);
+  const ui = {
+    score: $('#score'),
+    pauseBtn: $('#pauseBtn'),
+    menu: $('#menu'),
+    gameover: $('#gameover'),
+    finalScore: $('#finalScore'),
+    bestScore: $('#bestScore'),
+    playBtn: $('#playBtn'),
+    retryBtn: $('#retryBtn'),
+    howBtn: $('#howBtn'),
+    shareBtn: $('#shareBtn')
+  };
+
+  // extra HUD chip for stamina
+  const staminaChip = document.createElement('div');
+  staminaChip.className = 'pill';
+  staminaChip.textContent = 'Stamina 100%';
+  document.querySelector('.topbar').insertBefore(staminaChip, ui.pauseBtn);
+
+  // State
+  const state = {
+    running:false, paused:false, over:false, score:0,
+    best: +(localStorage.getItem('peak3d-best')||0)
+  };
+
+  // Seeded RNG for daily map (UTC date so it’s consistent) — but still fun offline
+  function makeRNG(seed){ let s = seed>>>0; return ()=> (s = (s*1664525+1013904223)>>>0)/4294967296; }
+  function todaySeed(){ const d = new Date(); const y=d.getUTCFullYear(), m=d.getUTCMonth()+1, day=d.getUTCDate(); return (y*73856093)^(m*19349663)^(day*83492791); }
+
+  // Input
+  const keys = {left:false,right:false,up:false,forward:false,back:false,grab:false};
+  const onKey=(e,down)=>{
+    const k=e.key.toLowerCase();
+    if(['arrowleft','a'].includes(k)) keys.left=down;
+    if(['arrowright','d'].includes(k)) keys.right=down;
+    if(['arrowup','w',' '].includes(k)) keys.up=down; // jump
+    if(['s','arrowdown'].includes(k)) keys.back=down;
+    if(['shift'].includes(k)) keys.grab=down; // wall-grab prototype
+    if(['p'].includes(k) && down) togglePause();
+  };
+  addEventListener('keydown',e=>onKey(e,true));
+  addEventListener('keyup',e=>onKey(e,false));
+
+  // Babylon bootstrap
+  const engine = new BABYLON.Engine(canvas, true, { preserveDrawingBuffer: true, stencil: true, antialias: true });
+  let scene, camera, player, playerBody, startY=0, rng, platforms=[], windZones=[], crumbleMeta=new Map(), stamina=100, staminaMax=100, staminaRegen=14, staminaUse=22;
+
+  // Utility
+  const V3 = BABYLON.Vector3;
+  const clamp=(v,a,b)=>Math.max(a,Math.min(b,v));
+
+  async function createScene(){
+    scene = new BABYLON.Scene(engine);
+    scene.clearColor = new BABYLON.Color4(0,0,0,0); // let CSS bg show through
+
+    // Physics (Havok)
+    const havok = await HavokPhysics();
+    scene.enablePhysics(new V3(0,-9.81,0), new BABYLON.HavokPlugin(true, havok));
+
+    // Camera
+    camera = new BABYLON.ArcRotateCamera('cam', Math.PI/2, 1.1, 20, new V3(0,4,0), scene);
+    camera.lowerRadiusLimit = 12; camera.upperRadiusLimit = 24; camera.wheelPrecision = 40;
+    camera.attachControl(canvas, true);
+
+    // Lights
+    const sun = new BABYLON.HemisphericLight('sun', new V3(0.2,1,0.2), scene); sun.intensity = 0.9;
+    const dir = new BABYLON.DirectionalLight('dir', new V3(-0.3,-1,-0.2), scene); dir.position = new V3(30,80,30); dir.intensity=0.6;
+
+    // Sky gradient dome
+    const sky = BABYLON.MeshBuilder.CreateSphere('sky',{diameter:200, sideOrientation: BABYLON.Mesh.BACKSIDE}, scene);
+    sky.material = new BABYLON.StandardMaterial('skymat', scene);
+    sky.material.emissiveTexture = gradientTex([[0,'#0b1220'],[0.6,'#12213d'],[1,'#1a2f57']]);
+    sky.material.disableLighting = true;
+
+    // Start platform + kill floor far below
+    const ground = BABYLON.MeshBuilder.CreateBox('ground',{width:40,height:2,depth:20},scene); ground.position.y = 0;
+    addStatic(ground, 0.6, 0.9);
+
+    const kill = BABYLON.MeshBuilder.CreateBox('kill',{width:200,height:2,depth:200},scene); kill.position.y=-60; addStatic(kill,0,0);
+
+    // Player capsule
+    player = BABYLON.MeshBuilder.CreateCapsule('player',{height:1.6, radius:0.35, tessellation:12}, scene);
+    player.position = new V3(0,2,0);
+    player.material = toon('#e6f0ff');
+    playerBody = new BABYLON.PhysicsAggregate(player, BABYLON.PhysicsShapeType.CAPSULE, { mass:75, restitution:0.0, friction:0.6 }, scene);
+
+    // Decorative mountains (parallax feeling)
+    for(let i=0;i<6;i++){
+      const m = BABYLON.MeshBuilder.CreateCylinder('peak'+i,{diameterTop:0, diameterBottom: rand(30,50), height: rand(30,60), tessellation:4},scene);
+      m.rotation.y = Math.random()*Math.PI; m.position = new V3(rand(-70,70), -10, rand(-60,-30));
+      m.material = matte('#38598a',0.6); m.isPickable=false;
+    }
+
+    // Procedural tower
+    rng = makeRNG(todaySeed());
+    buildTower();
+
+    // Follow Y smoothly
+    scene.onBeforeRenderObservable.add(()=>{
+      const dt = engine.getDeltaTime()/1000;
+      // Camera target follows player upward
+      const tgt = player.position.clone();
+      camera.target = BABYLON.Vector3.Lerp(camera.target, new V3(tgt.x, tgt.y+1, tgt.z), 0.08);
+
+      // Score
+      state.score = Math.max(state.score, Math.floor((player.position.y - startY)*3));
+      ui.score.textContent = state.score+ ' m';
+
+      // Stamina
+      const onGround = isGrounded();
+      if(onGround) stamina = clamp(stamina + staminaRegen*dt, 0, staminaMax);
+      staminaChip.textContent = 'Stamina ' + Math.round(stamina) + '%';
+
+      // Wind fields
+      for(const z of windZones){ if(player.position.y>z.y && player.position.y<z.y+z.h){
+        const force = new V3(z.fx, 0, z.fz);
+        playerBody.body.applyForce(force, player.getAbsolutePosition());
+      }}
+
+      // Crumble check (raycast right beneath)
+      const hit = downPick(1.1);
+      if(hit && crumbleMeta.has(hit.pickedMesh)){
+        const meta = crumbleMeta.get(hit.pickedMesh);
+        if(!meta.timer){ meta.timer = 0.6; meta.orig = meta.orig||hit.pickedMesh.position.clone(); }
+      }
+      // advance crumble timers
+      for(const [mesh,meta] of [...crumbleMeta]){
+        if(meta.timer){ meta.timer -= dt; mesh.scaling.y = 0.5 + 0.5*Math.max(0,meta.timer)/0.6; if(meta.timer<=0){
+          mesh.setEnabled(false); if(mesh.physicsBody) mesh.physicsBody.setMassProperties({mass:0}); crumbleMeta.delete(mesh);
+        }}
+      }
+
+      // Death conditions
+      if(player.position.y < camera.target.y - 40){ gameOver(); }
+    });
+
+    // Controls tick
+    scene.onBeforeRenderObservable.add(()=>{
+      if(state.paused || state.over) return;
+      const dt = engine.getDeltaTime()/1000;
+      const move = new V3(0,0,0);
+      const speed = 7.5;
+      if(keys.left) move.x -= 1;
+      if(keys.right) move.x += 1;
+      if(keys.forward) move.z += 1; // (kept for completeness)
+      if(keys.back) move.z -= 1;
+      if(move.length()>0){ move.normalize().scaleInPlace(speed*75); playerBody.body.applyForce(move, player.getAbsolutePosition()); }
+
+      // Jump / wall-grab prototype
+      if(keys.up){
+        if(isGrounded() && stamina>8){
+          stamina = Math.max(0, stamina-8);
+          playerBody.body.applyImpulse(new V3(0, 210, 0), player.getAbsolutePosition());
+        } else if(keys.grab && stamina>0){
+          // if near wall, apply upward
+          const near = sidePick(0.6);
+          if(near){ stamina = Math.max(0, stamina - staminaUse*dt); playerBody.body.applyForce(new V3(0, 260, 0), player.getAbsolutePosition()); }
+        }
+      }
+    });
+
+    // Render loop
+    engine.runRenderLoop(()=>{ if(!state.paused) scene.render(); });
+
+    // Resize
+    addEventListener('resize', ()=>engine.resize());
+
+    startY = player.position.y;
+  }
+
+  function addStatic(mesh, friction=0.6, restitution=0.0){
+    mesh.material = matte('#ffffff',0.9);
+    const agg = new BABYLON.PhysicsAggregate(mesh, BABYLON.PhysicsShapeType.BOX, { mass:0, friction, restitution }, scene);
+    mesh.receiveShadows = true; return agg;
+  }
+
+  function matte(hex, alpha=1){ const m=new BABYLON.StandardMaterial('m'+Math.random(),scene); m.diffuseColor=BABYLON.Color3.FromHexString(hex); m.specularColor=new BABYLON.Color3(0,0,0); m.alpha=alpha; return m; }
+  function toon(hex){ const m=matte(hex); m.emissiveColor = m.diffuseColor.scale(0.05); return m; }
+  function rand(a,b){ return a + (b-a)*Math.random(); }
+
+  function buildTower(){
+    // Clear if rebuilding
+    for(const p of platforms){ p.dispose(); }
+    platforms = []; windZones=[]; crumbleMeta.clear();
+
+    const hMax = 220; // world height
+    const spanX = 12, spanZ = 6;
+
+    for(let y=4; y<hMax; ){
+      const w = 3 + rng()*6, d = 2 + rng()*4, x = (rng()*2-1)*spanX, z = (rng()*2-1)*spanZ;
+      const box = BABYLON.MeshBuilder.CreateBox('plat',{width:w,height:0.5,depth:d},scene);
+      box.position = new V3(x, y, z);
+      addStatic(box, 0.8, 0.0);
+      box.material = matte(rng()<0.15? '#ff6e6e' : '#e6f0ff');
+      platforms.push(box);
+
+      // 15% crumble platforms
+      if(rng()<0.15){ crumbleMeta.set(box, {timer:null}); }
+
+      // wind zones every ~30m
+      if(Math.abs((y|0)%30)===0 && rng()<0.6){ windZones.push({y:y-2, h:6, fx:(rng()*2-1)*180, fz:(rng()*2-1)*120}); }
+
+      y += 3 + rng()*4;
+    }
+
+    // Finish platform (goal)
+    const goal = BABYLON.MeshBuilder.CreateCylinder('goal',{diameter:6, height:1},scene); goal.position=new V3(0,hMax+3,0); addStatic(goal,0.9,0.0); goal.material=matte('#8fff88');
+
+    // Banner
+    const guiTex = BABYLON.GUI.AdvancedDynamicTexture.CreateFullscreenUI('ui');
+    const banner = new BABYLON.GUI.TextBlock(); banner.text = 'PEAK'; banner.color = '#e6f0ff'; banner.fontSize = 48; banner.alpha = 0.03; banner.top = '40%'; guiTex.addControl(banner);
+  }
+
+  // Raycasts
+  function downPick(dist){
+    const from = player.position.add(new V3(0,0.8,0));
+    const to = from.add(new V3(0,-dist,0));
+    const ray = new BABYLON.Ray(from, to.subtract(from).normalize(), dist);
+    return scene.pickWithRay(ray, m=>m!==player);
+  }
+  function sidePick(dist){
+    // Check around in 4 directions for a wall to grab
+    const dirs=[new V3(1,0,0),new V3(-1,0,0),new V3(0,0,1),new V3(0,0,-1)];
+    for(const d of dirs){
+      const from = player.position.add(new V3(0,0.6,0));
+      const ray = new BABYLON.Ray(from, d, dist);
+      const hit = scene.pickWithRay(ray, m=>m!==player);
+      if(hit && hit.pickedMesh && hit.hit) return hit;
+    }
+    return null;
+  }
+  function isGrounded(){ const hit = downPick(1.05); return !!(hit && hit.hit); }
+
+  function gradientTex(stops){
+    // tiny 1x256 gradient dynamic texture
+    const dt = new BABYLON.DynamicTexture('grad', {width:1, height:256}, scene, false);
+    const ctx = dt.getContext();
+    const g = ctx.createLinearGradient(0,0,0,256);
+    for(const [pos,col] of stops){ g.addColorStop(pos,col); }
+    ctx.fillStyle=g; ctx.fillRect(0,0,1,256); dt.update(false); return dt;
+  }
+
+  function gameOver(){
+    state.over=true; state.running=true; // keep render loop going for menu
+    ui.finalScore.textContent = state.score + ' m';
+    state.best = Math.max(state.best, state.score);
+    localStorage.setItem('peak3d-best', String(state.best));
+    ui.bestScore.textContent = state.best + ' m';
+    show('#gameover', true);
+  }
+  function togglePause(){ if(state.over || !state.running) return; state.paused=!state.paused; show('#menu', state.paused); }
+  function show(sel,visible){ const el=document.querySelector(sel); el.style.display = visible? 'grid':'none'; }
+
+  // Buttons
+  ui.playBtn.onclick = ()=>{ show('#menu', false); start(); };
+  ui.howBtn.onclick = ()=>{ const h=document.getElementById('how'); h.style.display = h.style.display==='none'?'block':'none'; };
+  ui.retryBtn.onclick = ()=>{ show('#gameover', false); start(); };
+  ui.shareBtn.onclick = async()=>{
+    const text=`I reached ${state.score} m in PEAK 3D!`; const url=location.href;
+    if(navigator.share){ try{ await navigator.share({title:'PEAK 3D score', text, url}); }catch(e){} }
+    else{ navigator.clipboard.writeText(text+" "+url); alert('Copied score to clipboard!'); }
+  };
+  ui.pauseBtn.onclick = ()=>togglePause();
+
+  function start(){
+    state.paused=false; state.over=false; state.score=0; stamina=100;
+    if(!scene){ createScene(); }
+    else {
+      // reset player & rebuild tower with same daily seed
+      player.position = new V3(0,2,0);
+      if(player.physicsBody){ player.physicsBody.setLinearVelocity(new V3(0,0,0)); player.physicsBody.setAngularVelocity(new V3(0,0,0)); }
+      buildTower();
+      startY = player.position.y;
+    }
+  }
+
+  // Boot to menu
+  state.paused=true; show('#menu', true);
+  // Start render loop so the 3D menu backdrop stays alive
+  (async()=>{ await createScene(); state.paused=true; })();
+</script>
+</body>
+</html>
