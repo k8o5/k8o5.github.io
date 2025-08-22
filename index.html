@@ -12,6 +12,7 @@
     <link id="favicon" rel="shortcut icon" href="data:image/svg+xml,%3Csvg viewBox='0 0 100 100' xmlns='http://www.w3.org/2000/svg'%3E%3Cdefs%3E%3ClinearGradient id='irisGradient' x1='0%25' y1='0%25' x2='0%25' y2='100%25'%3E%3Cstop offset='0%25' style='stop-color:rgb(0,150,255);stop-opacity:1' /%3E%3Cstop offset='100%25' style='stop-color:rgb(0,80,180);stop-opacity:1' /%3E%3C/linearGradient%3E%3C/defs%3E%3Crect width='100' height='100' fill='white'/%3E %3C!-- Optional: if you want a white background for the favicon itself --%3E%3Ccircle cx='50' cy='50' r='20' fill='url(%23irisGradient)'/%3E%3Ccircle cx='50' cy='50' r='10' fill='black'/%3E%3Cellipse cx='58' cy='42' rx='5' ry='7' fill='white' opacity='0.8'/%3E%3Cpath fill='white' stroke='black' stroke-width='1.5' stroke-linecap='round'%3E%3Canimate attributeName='d' dur='4s' repeatCount='indefinite' keyTimes='0; 0.05; 0.15; 0.25; 1' values='M 10 50 Q 50 15 90 50 L 90 0 L 10 0 Z; M 10 50 Q 50 45 90 50 L 90 0 L 10 0 Z; M 10 50 Q 50 50 90 50 L 90 0 L 10 0 Z; M 10 50 Q 50 45 90 50 L 90 0 L 10 0 Z; M 10 50 Q 50 15 90 50 L 90 0 L 10 0 Z' /%3E%3C/path%3E%3Cpath fill='white' stroke='black' stroke-width='1.5' stroke-linecap='round'%3E%3Canimate attributeName='d' dur='4s' repeatCount='indefinite' keyTimes='0; 0.05; 0.15; 0.25; 1' values='M 10 50 Q 50 85 90 50 L 90 100 L 10 100 Z; M 10 50 Q 50 55 90 50 L 90 100 L 10 100 Z; M 10 50 Q 50 50 90 50 L 90 100 L 10 100 Z; M 10 50 Q 50 55 90 50 L 90 100 L 10 100 Z; M 10 50 Q 50 85 90 50 L 90 100 L 10 100 Z' /%3E%3C/path%3E%3C/svg%3E">
     <script async src="https://ga.jspm.io/npm:es-module-shims@1.8.3/dist/es-module-shims.js" crossorigin="anonymous"></script>
     <script src="https://cdnjs.cloudflare.com/ajax/libs/jszip/3.10.1/jszip.min.js" crossorigin="anonymous" referrerpolicy="no-referrer"></script>
+    <script src="https://cdnjs.cloudflare.com/ajax/libs/html2canvas/1.4.1/html2canvas.min.js" integrity="sha512-BNaRQnYJYiPSqHHDb58B0yaPfCu+Wgds8Gp/gU33kqBtgNS4tSPHuGibyoeqMV/TJlSKda6FXzoEyYGjTe+vXA==" crossorigin="anonymous" referrerpolicy="no-referrer"></script>
     <script type="importmap">
     {
       "imports": {
@@ -818,6 +819,7 @@
     <div id="k8osAssistant">
         <div id="k8osAssistant_inputContainer">
             <input type="text" id="k8osAssistant_commandInput" placeholder="Talk to Sparky..."/>
+            <button id="k8osAssistant_screenshotButton" title="Take Screenshot" style="font-size: 10px; padding: 2px 5px; background-color: var(--win95-light-gray); border: 1px outset var(--win95-light-gray); margin-right: 5px;">📸</button>
             <button id="k8osAssistant_sendCommandButton">Send</button>
         </div>
         <div id="k8osAssistant_speechBubble"><span id="k8osAssistant_speechText">Hi there!</span></div>
@@ -1151,6 +1153,7 @@ Output ONLY the JSON array. No explanations, comments, or markdown outside the J
     let assistantSpeechTimeout;
     let assistantIsThinking = false;
     let assistantIsProcessingCommand = false;
+    let sparky_last_screenshot_base64 = null;
     let k8osActivityLog = [];
     const ACTIVITY_LOG_MAX_AGE = 5 * 60 * 1000;
     const ASSISTANT_SUMMARY_INTERVAL = 3 * 60 * 1000;
@@ -1748,7 +1751,7 @@ if __name__ == '__main__':
             let summaryComment = "You've been busy!";
             try {
                 const statusUpdater = (msg) => { /* Sparky doesn't need detailed model loading status here */ };
-                summaryComment = await callCurrentAiProviderForText(summaryPrompt, 30, 0.8, statusUpdater);
+                summaryComment = await callCurrentAiProvider(summaryPrompt, null, 30, 0.8, statusUpdater);
             } catch (error) { console.warn(`Assistant summary generation error:`, error); summaryComment = "You're doing great things!"; }  finally { assistantIsThinking = false; }
             summaryComment = summaryComment.replace(/^["']|["']$/g, '').replace(/\n/g, ' ').trim();
             if (summaryComment) updateAssistantSpeech(summaryComment, false);
@@ -1767,8 +1770,16 @@ if __name__ == '__main__':
             const assistantInputContainer = document.getElementById('k8osAssistant_inputContainer');
             const assistantCommandInput = document.getElementById('k8osAssistant_commandInput');
             const assistantSendCommandButton = document.getElementById('k8osAssistant_sendCommandButton');
+            const assistantScreenshotButton = document.getElementById('k8osAssistant_screenshotButton');
 
             if (assistantContainer && assistantAvatarSVG && assistantInputContainer && assistantCommandInput && assistantSendCommandButton) {
+                if (assistantScreenshotButton) {
+                    assistantScreenshotButton.addEventListener('click', () => {
+                        sparky_take_screenshot();
+                        // Hide the input container after clicking, as the user will talk to the bubble next
+                        if(assistantInputContainer) assistantInputContainer.style.display = 'none';
+                    });
+                }
                  assistantAvatarSVG.addEventListener('click', () => {
                     if (assistantIsProcessingCommand) {
                         updateAssistantSpeech("Working...", true, false);
@@ -1813,6 +1824,28 @@ if __name__ == '__main__':
         if (assistantSparkyMouth) { if (!isTemporaryThinkingMessage && message.length > 0) { assistantSparkyMouth.classList.add('talking'); } else { assistantSparkyMouth.classList.remove('talking'); } }
         clearTimeout(assistantSpeechTimeout);
         if (autoHide && !isTemporaryThinkingMessage) { assistantSpeechTimeout = setTimeout(() => { assistantSpeechBubble.classList.remove('visible'); if (assistantSparkyMouth) assistantSparkyMouth.classList.remove('talking'); }, keepVisibleLonger ? 10000 : 5000); } // Reduced duration
+    }
+
+    async function sparky_take_screenshot() {
+        if (typeof html2canvas === 'undefined') {
+            updateAssistantSpeech("Screenshot library not loaded!", true, false, true);
+            console.error("html2canvas is not defined.");
+            return;
+        }
+        updateAssistantSpeech("Capturing screen...", false, true);
+        try {
+            const canvas = await html2canvas(document.getElementById('desktop'), {
+                useCORS: true,
+                logging: false,
+                ignoreElements: (element) => element.id === 'k8osAssistant'
+            });
+            sparky_last_screenshot_base64 = canvas.toDataURL('image/jpeg', 0.7).split(',')[1];
+            updateAssistantSpeech("I've got the screenshot! What should I look for?", false, false, true);
+        } catch (error) {
+            console.error("Error taking screenshot:", error);
+            updateAssistantSpeech("Sorry, I couldn't take a screenshot. See console for errors.", true, false, true);
+            sparky_last_screenshot_base64 = null;
+        }
     }
 
 
@@ -1952,7 +1985,7 @@ if __name__ == '__main__':
     }
 
 
-    async function callCurrentAiProviderForText(promptContent, maxTokens = 50, temperature = 0.8, statusUpdater = null) {
+    async function callCurrentAiProvider(promptContent, base64ImageData = null, maxTokens = 50, temperature = 0.8, statusUpdater = null) {
         const keyAvailable = (selectedApiProvider === 'gemini' && window.GLOBAL_GEMINI_API_KEY) ||
                              (selectedApiProvider === 'groq' && window.GLOBAL_GROQ_API_KEY) ||
                              (selectedApiProvider === 'openrouter' && window.GLOBAL_OPENROUTER_API_KEY) ||
@@ -1968,6 +2001,17 @@ if __name__ == '__main__':
             throw new Error(`${missingInfo} for current provider not available/configured.`);
         }
 
+        if (base64ImageData && selectedApiProvider !== 'gemini') {
+            updateAssistantSpeech("The current AI provider doesn't support images. Switching to Gemini.", false, false, true);
+            // This is a soft switch for this call only, not changing the global provider
+            const genAI = new GoogleGenerativeAI(window.GLOBAL_GEMINI_API_KEY);
+            const model = genAI.getGenerativeModel({ model: "gemini-1.5-flash" }); // Use a known vision model
+            const imagePart = { inlineData: { mimeType: 'image/jpeg', data: base64ImageData } };
+            const result = await model.generateContent([promptContent, imagePart]);
+            return result.response.text().trim();
+        }
+
+
         if (selectedApiProvider === 'gemini') {
             if (!assistant_gemini_model) {
                 const genAI = new GoogleGenerativeAI(window.GLOBAL_GEMINI_API_KEY);
@@ -1976,8 +2020,14 @@ if __name__ == '__main__':
                     safetySettings: [ { category: HarmCategory.HARM_CATEGORY_HARASSMENT, threshold: HarmBlockThreshold.BLOCK_MEDIUM_AND_ABOVE }, { category: HarmCategory.HARM_CATEGORY_HATE_SPEECH, threshold: HarmBlockThreshold.BLOCK_MEDIUM_AND_ABOVE }, { category: HarmCategory.HARM_CATEGORY_SEXUALLY_EXPLICIT, threshold: HarmBlockThreshold.BLOCK_MEDIUM_AND_ABOVE }, { category: HarmCategory.HARM_CATEGORY_DANGEROUS_CONTENT, threshold: HarmBlockThreshold.BLOCK_MEDIUM_AND_ABOVE }, ],
                 });
             }
+
+            const parts = [{ text: promptContent }];
+            if (base64ImageData) {
+                parts.push({ inlineData: { mimeType: 'image/jpeg', data: base64ImageData } });
+            }
+
             const result = await assistant_gemini_model.generateContent({
-                contents: [{role: "user", parts: [{text: promptContent}]}],
+                contents: [{ role: "user", parts: parts }],
                 generationConfig: { temperature: temperature, maxOutputTokens: maxTokens }
             });
             return result.response.text().trim();
@@ -2118,6 +2168,21 @@ if __name__ == '__main__':
         const sparkyStatusUpdater = (msg) => updateAssistantSpeech(msg, true, true);
         updateAssistantSpeech("Working on it...", false, true);
 
+        if (sparky_last_screenshot_base64) {
+            const image_data = sparky_last_screenshot_base64;
+            sparky_last_screenshot_base64 = null; // Clear after use
+            try {
+                const response = await callCurrentAiProvider(command, image_data, 200, 0.5, sparkyStatusUpdater);
+                updateAssistantSpeech(response, false, false, true);
+            } catch (e) {
+                console.error("Error processing screenshot command:", e);
+                updateAssistantSpeech("Sorry, I had a problem analyzing the image.", true, false, true);
+            } finally {
+                assistantIsProcessingCommand = false;
+            }
+            return;
+        }
+
         const lowerCommand = command.toLowerCase();
         let baseParentIdForSparkyPlan = baseParentIdOverride || ensureSparkyCreationsFolder();
 
@@ -2200,7 +2265,7 @@ if __name__ == '__main__':
 
             let aiPlanResponseText;
             try {
-                aiPlanResponseText = await callCurrentAiProviderForText(finalSparkyFileSystemPrompt, 4000, 0.3, sparkyStatusUpdater);
+                aiPlanResponseText = await callCurrentAiProvider(finalSparkyFileSystemPrompt, null, 4000, 0.3, sparkyStatusUpdater);
                 let cleanedJsonString = aiPlanResponseText.replace(/```json\n?/g, "").replace(/```\n?/g, "").trim();
                 const jsonStart = cleanedJsonString.indexOf('['); const jsonEnd = cleanedJsonString.lastIndexOf(']');
                 if (jsonStart !== -1 && jsonEnd !== -1 && jsonEnd > jsonStart) { cleanedJsonString = cleanedJsonString.substring(jsonStart, jsonEnd + 1); }
@@ -2287,7 +2352,7 @@ if __name__ == '__main__':
             const htmlPrompt = DEFAULT_SPARKY_HTML_GENERATOR_PROMPT.replace("{USER_REQUEST}", command);
             let generatedHtml = "";
             try {
-                generatedHtml = await callCurrentAiProviderForText(htmlPrompt, 4000, 0.7, sparkyStatusUpdater);
+                generatedHtml = await callCurrentAiProvider(htmlPrompt, null, 4000, 0.7, sparkyStatusUpdater);
                 if (generatedHtml.startsWith("```html")) generatedHtml = generatedHtml.substring(7).trim();
                 else if (generatedHtml.startsWith("```")) generatedHtml = generatedHtml.substring(3).trim();
                 if (generatedHtml.endsWith("```")) generatedHtml = generatedHtml.substring(0, generatedHtml.length - 3).trim();
@@ -2333,7 +2398,7 @@ if __name__ == '__main__':
                 gameHtml = gameCodeResult.response.text().trim();
              } else if (['groq', 'openrouter', 'deepseek', 'huggingface', 'transformersjs', 'custom'].includes(selectedApiProvider)) {
                  if(statusUpdater) statusUpdater(`Generating final game code with ${selectedApiProvider}...`);
-                 gameHtml = await callCurrentAiProviderForText(finalGamePrompt, 8192, 0.7, statusUpdater);
+                 gameHtml = await callCurrentAiProvider(finalGamePrompt, null, 8192, 0.7, statusUpdater);
              }
             if (gameHtml && gameHtml.startsWith("```html")) gameHtml = gameHtml.substring(7).trim(); else if (gameHtml && gameHtml.startsWith("```")) gameHtml = gameHtml.substring(3).trim(); if (gameHtml && gameHtml.endsWith("```")) gameHtml = gameHtml.substring(0, gameHtml.length - 3).trim();
             return gameHtml;
@@ -2896,7 +2961,7 @@ if __name__ == '__main__':
                 }
                 const result = await modelToUse.generateContent(fullPrompt); svgText = result.response.text();
             } else if (['groq', 'openrouter', 'deepseek', 'huggingface', 'transformersjs', 'custom'].includes(selectedApiProvider)) {
-                 svgText = await callCurrentAiProviderForText(fullPrompt, 80000, isAnimated ? 0.4 : 0.2, statusUpdaterFn);
+                 svgText = await callCurrentAiProvider(fullPrompt, null, 80000, isAnimated ? 0.4 : 0.2, statusUpdaterFn);
             } else {
                  throw new Error(`Provider ${selectedApiProvider} not supported for internal SVG generation.`);
             }
@@ -3003,7 +3068,7 @@ if __name__ == '__main__':
                 }
                 const result = await modelToUse.generateContent(fullPrompt); jsCode = result.response.text().trim();
             } else if (['groq', 'openrouter', 'deepseek', 'huggingface', 'transformersjs', 'custom'].includes(selectedApiProvider)) {
-                 jsCode = await callCurrentAiProviderForText(fullPrompt, 8000, 0.6, statusUpdaterFn);
+                 jsCode = await callCurrentAiProvider(fullPrompt, null, 8000, 0.6, statusUpdaterFn);
                  if (selectedApiProvider === 'huggingface' || selectedApiProvider === 'transformersjs' || selectedApiProvider === 'custom') {
                      jsCode = `/* WARNING: JS code generated by ${selectedApiProvider}, may not be valid Web Audio API code. */\n` + jsCode;
                  }
@@ -3177,7 +3242,7 @@ if __name__ == '__main__':
         if (existingSvgCode) { baseInstruction = getAppInstruction('gifCreatorAnimate', DEFAULT_GIFCREATOR_ANIMATE_EXISTING_SVG_INSTRUCTION); fullPrompt = baseInstruction.replace("{STATIC_SVG_CODE}", existingSvgCode).replace("{ANIMATION_PROMPT}", animationPromptForExisting); }
         else { baseInstruction = getAppInstruction('gifCreatorNew', DEFAULT_GIFCREATOR_ANIMATED_SVG_INSTRUCTION); fullPrompt = baseInstruction.replace("{USER_PROMPT}", newGifPrompt); }
         try {
-            let animatedSvgText = await callCurrentAiProviderForText(fullPrompt, 80000, 0.4, gifCreatorStatusUpdater);
+            let animatedSvgText = await callCurrentAiProvider(fullPrompt, null, 80000, 0.4, gifCreatorStatusUpdater);
             if (animatedSvgText && animatedSvgText.startsWith("```svg")) animatedSvgText = animatedSvgText.substring(6).trim(); else if (animatedSvgText && animatedSvgText.startsWith("```")) animatedSvgText = animatedSvgText.substring(3).trim();
             if (animatedSvgText && animatedSvgText.endsWith("```")) animatedSvgText = animatedSvgText.substring(0, animatedSvgText.length - 3).trim();
             const svgMatch = animatedSvgText ? animatedSvgText.match(/<svg[\s\S]*?<\/svg>/im) : null;
@@ -3231,7 +3296,7 @@ async function executeGameGeneration(userGameIdea, isDebugAttempt = false, exist
         localGameGenStatusUpdater(`Attempting to debug game code with ${providerName}...`);
         const debugInstruction = getAppInstruction('gameGen_debug', DEFAULT_GAMEGEN_DEBUG_INSTRUCTION).replace("{USER_GAME_IDEA}", gameGen_lastUserIdea || "the previously described game").replace("{ERRORS_AND_HINTS}", errorsAndHints).replace("{PROBLEM_CODE}", existingCode);
         try {
-            let fixedHtml = await callCurrentAiProviderForText(debugInstruction, 8192, 0.5, localGameGenStatusUpdater);
+            let fixedHtml = await callCurrentAiProvider(debugInstruction, null, 8192, 0.5, localGameGenStatusUpdater);
             if (fixedHtml && fixedHtml.startsWith("```html")) fixedHtml = fixedHtml.substring(7).trim(); else if (fixedHtml && fixedHtml.startsWith("```")) fixedHtml = fixedHtml.substring(3).trim(); if (fixedHtml && fixedHtml.endsWith("```")) fixedHtml = fixedHtml.substring(0, fixedHtml.length - 3).trim();
             
             const fixedPackage = { html: fixedHtml, assets: gameGen_lastGameAssetPackage?.assets || [] };
@@ -3247,7 +3312,7 @@ async function executeGameGeneration(userGameIdea, isDebugAttempt = false, exist
         let gamePlan; let planResponseText = "";
         try {
             const planPrompt = DEFAULT_GAMEGEN_PLAN_INSTRUCTION.replace("{USER_GAME_IDEA}", userGameIdea);
-            planResponseText = await callCurrentAiProviderForText(planPrompt, 2048, 0.3, localGameGenStatusUpdater);
+            planResponseText = await callCurrentAiProvider(planPrompt, null, 2048, 0.3, localGameGenStatusUpdater);
             let cleanedJsonString = planResponseText.replace(/```json\n?/g, "").replace(/```\n?/g, "").trim();
             const jsonStart = cleanedJsonString.indexOf('{'); const jsonEnd = cleanedJsonString.lastIndexOf('}');
             if (jsonStart !== -1 && jsonEnd !== -1 && jsonEnd > jsonStart) { cleanedJsonString = cleanedJsonString.substring(jsonStart, jsonEnd + 1); }
@@ -3298,7 +3363,7 @@ async function executeGameGeneration(userGameIdea, isDebugAttempt = false, exist
                 const gameCodeResult = await gameGen_main_model.generateContent(finalGamePrompt);
                 gameHtml = gameCodeResult.response.text().trim();
             } else {
-                gameHtml = await callCurrentAiProviderForText(finalGamePrompt, 8192, 0.7, localGameGenStatusUpdater);
+                gameHtml = await callCurrentAiProvider(finalGamePrompt, null, 8192, 0.7, localGameGenStatusUpdater);
             }
             
             if (gameHtml && gameHtml.startsWith("```html")) gameHtml = gameHtml.substring(7).trim(); else if (gameHtml && gameHtml.startsWith("```")) gameHtml = gameHtml.substring(3).trim(); if (gameHtml && gameHtml.endsWith("```")) gameHtml = gameHtml.substring(0, gameHtml.length - 3).trim();
@@ -3377,7 +3442,7 @@ if(musicStudio_generateButton) musicStudio_generateButton.addEventListener('clic
     const fullPrompt = baseInstruction.replace("{USER_PROMPT}", userPrompt);
 
     try {
-        let text = await callCurrentAiProviderForText(fullPrompt, 16000, 0.6, musicStudioStatusUpdater);
+        let text = await callCurrentAiProvider(fullPrompt, null, 16000, 0.6, musicStudioStatusUpdater);
         if (text && typeof text === 'string') {
             if (text.startsWith("```javascript")) text = text.substring(13).trim();
             else if (text.startsWith("```")) text = text.substring(3).trim();
