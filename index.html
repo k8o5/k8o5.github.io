@@ -574,6 +574,110 @@
             }
         }
 
+/* --- Calendar Popup --- */
+.calendar-popup {
+    display: none; /* Hidden by default */
+    position: absolute;
+    bottom: 32px; /* Just above the taskbar */
+    right: 5px;
+    width: 220px;
+    background-color: var(--win95-light-gray);
+    border: 2px outset var(--win95-light-gray);
+    box-shadow: 2px -2px 5px rgba(0,0,0,0.3);
+    z-index: 21000; /* Above start menu */
+    padding: 5px;
+    font-family: var(--win95-font);
+}
+.calendar-header {
+    display: flex;
+    justify-content: space-between;
+    align-items: center;
+    padding-bottom: 5px;
+    margin-bottom: 5px;
+    border-bottom: 1px solid var(--win95-dark-gray);
+}
+#calendarMonthYear {
+    font-weight: bold;
+    font-size: 12px;
+}
+.calendar-nav-btn {
+    background-color: var(--win95-light-gray);
+    border: 1px outset var(--win95-light-gray);
+    font-size: 10px;
+    padding: 1px 4px;
+    cursor: pointer;
+}
+.calendar-nav-btn:active {
+    border-style: inset;
+}
+.calendar-grid {
+    width: 100%;
+    border-collapse: collapse;
+    font-size: 11px;
+    text-align: center;
+}
+.calendar-grid th {
+    font-weight: bold;
+    padding: 3px;
+}
+.calendar-grid td {
+    padding: 4px;
+    cursor: pointer;
+}
+.calendar-grid td:hover {
+    background-color: var(--win95-title-blue);
+    color: var(--win95-white);
+}
+.calendar-grid .today {
+    border: 1px solid var(--win95-title-blue);
+    font-weight: bold;
+}
+.calendar-grid .other-month {
+    color: var(--win95-dark-gray);
+}
+
+/* Calendar Aqua Theme Styles */
+body.aqua-theme .calendar-popup {
+    background: rgba(245, 245, 245, 0.95);
+    backdrop-filter: blur(10px);
+    -webkit-backdrop-filter: blur(10px);
+    border: 1px solid #bbb;
+    border-radius: 8px;
+    box-shadow: 0 5px 15px rgba(0,0,0,0.25);
+    font-family: var(--aqua-font);
+    color: #333;
+}
+body.aqua-theme .calendar-header {
+    border-bottom: 1px solid #bbb;
+}
+body.aqua-theme #calendarMonthYear {
+    font-weight: 600;
+}
+body.aqua-theme .calendar-nav-btn {
+    border-radius: 10px;
+    background: linear-gradient(to bottom, #fefefe, #dcdcdc);
+    border: 1px solid #999;
+    color: #333;
+    padding: 2px 8px;
+}
+body.aqua-theme .calendar-nav-btn:active {
+    background: linear-gradient(to top, #fefefe, #dcdcdc);
+}
+body.aqua-theme .calendar-grid td:hover {
+    background-color: #3465a4;
+    color: #fff;
+    border-radius: 4px;
+}
+body.aqua-theme .calendar-grid .today {
+    background-color: #3465a4;
+    color: #fff;
+    border-radius: 4px;
+    border: none;
+}
+body.aqua-theme .calendar-grid .other-month {
+    color: #aaa;
+}
+
 /* --- Aqua Theme --- */
 body.aqua-theme {
     --aqua-bg-start: #729fcf;
@@ -1191,6 +1295,31 @@ body.aqua-theme .context-menu-separator {
         </div>
         <div class="clock" id="taskbarClock">00:00:00</div>
     </div>
+
+    <!-- Calendar Popup -->
+    <div id="calendarPopup" class="calendar-popup">
+        <div class="calendar-header">
+            <button id="calendarPrevMonth" class="calendar-nav-btn">&lt;</button>
+            <span id="calendarMonthYear"></span>
+            <button id="calendarNextMonth" class="calendar-nav-btn">&gt;</button>
+        </div>
+        <table class="calendar-grid">
+            <thead>
+                <tr>
+                    <th>Su</th>
+                    <th>Mo</th>
+                    <th>Tu</th>
+                    <th>We</th>
+                    <th>Th</th>
+                    <th>Fr</th>
+                    <th>Sa</th>
+                </tr>
+            </thead>
+            <tbody id="calendarDays">
+            </tbody>
+        </table>
+    </div>
+
     <div class="reboot-overlay" id="rebootOverlay">
         <div id="rebootMessageContainer">
             <p class="k8os-logo">k8OS</p>
@@ -1522,6 +1651,13 @@ Output ONLY the JSON array. No explanations, comments, or markdown outside the J
     const hfModelSettingsDiv = document.getElementById('hfModelSettings');
     const transformersjsModelSettingsDiv = document.getElementById('transformersjsModelSettings');
     const customProviderSettingsDiv = document.getElementById('customProviderSettings');
+
+    // Calendar Elements
+    const calendarPopup = document.getElementById('calendarPopup');
+    const calendarMonthYear = document.getElementById('calendarMonthYear');
+    const calendarDays = document.getElementById('calendarDays');
+    const calendarPrevMonth = document.getElementById('calendarPrevMonth');
+    const calendarNextMonth = document.getElementById('calendarNextMonth');
 
     // Setup Guide Modal Elements
     const setupGuideModal = document.getElementById('setupGuideModal');
@@ -4450,9 +4586,15 @@ Available commands:
         }
     }
     document.addEventListener('click', (e) => {
+        // Hide context menus if click is outside
         if (!e.target.closest('.context-menu')) {
             hideAllContextMenus();
         }
+        // Hide calendar if click is outside
+        if (calendarPopup && calendarPopup.style.display === 'block' && !e.target.closest('.calendar-popup') && e.target !== taskbarClock && !taskbarClock.contains(e.target)) {
+            calendarPopup.style.display = 'none';
+        }
+        
          if (startMenu && startMenu.style.display === 'flex' && !e.target.closest('.start-button') && !e.target.closest('.start-menu')) {
             startMenu.style.display = 'none';
         }
@@ -4760,6 +4902,47 @@ Available commands:
         
         localStorage.setItem('k8os_theme', themeName);
         if(systemSettings_status) systemSettings_status.textContent = `Theme changed to ${themeName}.`;
+    }
+
+    let calendarCurrentDate = new Date();
+
+    function renderCalendar(year, month) {
+        calendarCurrentDate.setFullYear(year, month, 1);
+        const today = new Date();
+        
+        calendarMonthYear.textContent = calendarCurrentDate.toLocaleDateString('en-US', { month: 'long', year: 'numeric' });
+        
+        calendarDays.innerHTML = '';
+
+        const firstDayOfMonth = new Date(year, month, 1).getDay();
+        const daysInMonth = new Date(year, month + 1, 0).getDate();
+
+        let date = 1;
+        for (let i = 0; i < 6; i++) { // Max 6 weeks in a month
+            const row = document.createElement('tr');
+
+            for (let j = 0; j < 7; j++) {
+                const cell = document.createElement('td');
+                if (i === 0 && j < firstDayOfMonth) {
+                    const prevMonthDays = new Date(year, month, 0).getDate();
+                    cell.textContent = prevMonthDays - firstDayOfMonth + j + 1;
+                    cell.classList.add('other-month');
+                } else if (date > daysInMonth) {
+                    cell.textContent = date - daysInMonth;
+                    cell.classList.add('other-month');
+                    date++;
+                } else {
+                    cell.textContent = date;
+                    if (date === today.getDate() && year === today.getFullYear() && month === today.getMonth()) {
+                        cell.classList.add('today');
+                    }
+                    date++;
+                }
+                row.appendChild(cell);
+            }
+            calendarDays.appendChild(row);
+            if (date > daysInMonth && i > 3) break; // Stop if we've rendered all days
+        }
     }
 
     function initSystemSettingsApp() {
@@ -5574,8 +5757,36 @@ function initAllAiApps(){
     }
     }
 
+    function initCalendar() {
+        if (!taskbarClock || !calendarPopup) return;
+
+        taskbarClock.addEventListener('click', (e) => {
+            e.stopPropagation(); // Prevent the global click listener from hiding it immediately
+            const isVisible = calendarPopup.style.display === 'block';
+            hideAllContextMenus(); // Hide other menus when opening calendar
+            if (isVisible) {
+                calendarPopup.style.display = 'none';
+            } else {
+                const now = new Date();
+                renderCalendar(now.getFullYear(), now.getMonth());
+                calendarPopup.style.display = 'block';
+            }
+        });
+
+        calendarPrevMonth.addEventListener('click', () => {
+            const newMonth = calendarCurrentDate.getMonth() - 1;
+            renderCalendar(calendarCurrentDate.getFullYear(), newMonth);
+        });
+
+        calendarNextMonth.addEventListener('click', () => {
+            const newMonth = calendarCurrentDate.getMonth() + 1;
+            renderCalendar(calendarCurrentDate.getFullYear(), newMonth);
+        });
+    }
+
     initializeTerminal();
     loadApiKey();
+    initCalendar();
     openWindow('apiKeySettingsWindow');
 
 </script>
