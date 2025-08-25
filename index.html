@@ -934,6 +934,7 @@ body.aqua-theme .context-menu-separator {
         <div class="desktop-icon" data-item-type="app" data-app-id="textEditorWindow"><div class="icon-placeholder">🗒️</div><span>Editor</span></div>
         <div class="desktop-icon" data-item-type="app" data-app-id="systemSettingsWindow"><div class="icon-placeholder">⚙️</div><span>Settings</span></div>
         <div class="desktop-icon" data-item-type="app" data-app-id="terminalWindow"><div class="icon-placeholder">💲</div><span>Terminal</span></div>
+        <div class="desktop-icon" data-item-type="app" data-app-id="tabStreamerWindow"><div class="icon-placeholder">📺</div><span>Tab Streamer</span></div>
         <div class="desktop-icon" data-item-type="app" data-app-id="trashBin"><div class="icon-placeholder">🗑️</div><span>Trash</span></div>
         <!-- VFS Icons will be dynamically added here by JS -->
     </div>
@@ -1283,6 +1284,20 @@ body.aqua-theme .context-menu-separator {
                 <span class="terminal-prompt">$</span>
                 <input type="text" id="terminal_input" autocomplete="off" autocorrect="off" autocapitalize="off" spellcheck="false">
             </div>
+        </div>
+    </div>
+
+    <div id="tabStreamerWindow" class="window" style="width: 640px; height: 480px; top: 80px; left: 280px;">
+        <div class="title-bar"><span class="title-bar-text">📺 Tab Streamer</span><div class="title-bar-controls"><button class="minimize-button" title="Minimize">0</button><button class="fullscreen-button" title="Toggle Fullscreen">1</button><button class="close-button" title="Close">r</button></div></div>
+        <div class="window-content" style="background-color: #000; display: flex; flex-direction: column; justify-content: center; align-items: center; padding: 0; overflow:hidden;">
+            <video id="tabStreamerVideo" style="width: 100%; height: 100%; display: none;"></video>
+            <div id="tabStreamerInstructions">
+                <p style="color: #fff; text-align: center; margin: 20px;">Click the button below and select a browser tab to stream its content here.</p>
+                <div style="text-align: center;">
+                    <button id="startTabStreamButton">Start Stream</button>
+                </div>
+            </div>
+            <div id="tabStreamerStatus" class="status-bar" style="position: absolute; bottom: 0; width: 100%; box-sizing: border-box;">Status: Idle</div>
         </div>
     </div>
 
@@ -1673,6 +1688,13 @@ Output ONLY the JSON array. No explanations, comments, or markdown outside the J
     const calendarPrevMonth = document.getElementById('calendarPrevMonth');
     const calendarNextMonth = document.getElementById('calendarNextMonth');
 
+    // Tab Streamer Elements
+    const tabStreamerWindow = document.getElementById('tabStreamerWindow');
+    const tabStreamerVideo = document.getElementById('tabStreamerVideo');
+    const tabStreamerInstructions = document.getElementById('tabStreamerInstructions');
+    const startTabStreamButton = document.getElementById('startTabStreamButton');
+    const tabStreamerStatus = document.getElementById('tabStreamerStatus');
+
     // Setup Guide Modal Elements
     const setupGuideModal = document.getElementById('setupGuideModal');
     const setupGuideModalTitle = document.getElementById('setupGuideModalTitle');
@@ -1717,6 +1739,7 @@ Output ONLY the JSON array. No explanations, comments, or markdown outside the J
     let contextMenuTargetVFSId = null;
     let lastSelectedDesktopIcon = null;
     let lastSelectedFileExplorerRow = null;
+let tabStreamerActiveStream = null;
 
 
     let gifCreator_currentAnimatedSvg = null;
@@ -4203,6 +4226,16 @@ Available commands:
     function closeWindow(windowEl) {
         if (windowEl) {
             const windowId = windowEl.id;
+
+            if (windowId === 'tabStreamerWindow' && tabStreamerActiveStream) {
+                tabStreamerActiveStream.getTracks().forEach(track => track.stop());
+                tabStreamerActiveStream = null;
+                tabStreamerVideo.style.display = 'none';
+                tabStreamerVideo.srcObject = null;
+                tabStreamerInstructions.style.display = 'block';
+                tabStreamerStatus.textContent = 'Status: Idle';
+            }
+
             if (windowId.startsWith('webBrowserWindow-') && browserInstances[windowId]) {
                 browserInstances[windowId].iframe.srcdoc = ''; browserInstances[windowId].iframe.src = 'about:blank';
                 delete browserInstances[windowId]; windowEl.remove();
@@ -5851,9 +5884,44 @@ function initAllAiApps(){
         });
     }
 
+    function initTabStreamerApp() {
+        if (!startTabStreamButton) return;
+
+        startTabStreamButton.addEventListener('click', async () => {
+            try {
+                const stream = await navigator.mediaDevices.getDisplayMedia({
+                    video: { displaySurface: 'browser' },
+                    audio: { suppressLocalPlayback: false }
+                });
+
+                tabStreamerActiveStream = stream;
+
+                tabStreamerVideo.srcObject = stream;
+                tabStreamerVideo.style.display = 'block';
+                tabStreamerVideo.play();
+                tabStreamerInstructions.style.display = 'none';
+                tabStreamerStatus.textContent = 'Status: Streaming...';
+
+                const videoTrack = stream.getVideoTracks()[0];
+                videoTrack.onended = () => {
+                    tabStreamerStatus.textContent = 'Status: Stream ended.';
+                    tabStreamerVideo.style.display = 'none';
+                    tabStreamerVideo.srcObject = null;
+                    tabStreamerInstructions.style.display = 'block';
+                    tabStreamerActiveStream = null;
+                };
+
+            } catch (error) {
+                console.error("Error starting tab stream:", error);
+                tabStreamerStatus.textContent = `Error: ${error.message}`;
+            }
+        });
+    }
+
     initializeTerminal();
     loadApiKey();
     initCalendar();
+    initTabStreamerApp();
     openWindow('apiKeySettingsWindow');
 
 </script>
