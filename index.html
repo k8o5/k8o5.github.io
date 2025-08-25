@@ -365,12 +365,16 @@
         .get-api-key-link { font-size: 11px; color: var(--win95-title-blue); margin-right: 10px; }
         #fileExplorerWindow .window-content { overflow: hidden; }
         #fe_fileListContainer { flex-grow: 1; overflow-y: auto; border: 1px inset var(--win95-dark-gray); background-color: var(--win95-white); padding: 5px; margin-top: 5px; }
-        #fe_fileList { list-style: none; padding: 0; margin: 0; }
-        #fe_fileList li { padding: 3px 5px; cursor: pointer; border-bottom: 1px dotted var(--win95-dark-gray); display: flex; align-items: center;}
-        #fe_fileList li:last-child { border-bottom: none; }
-        #fe_fileList li:hover { background-color: #E0E0E0; }
-        #fe_fileList li .fe-item-icon { margin-right: 5px; font-family: "Segoe UI Symbol", "Apple Color Emoji", "Segoe UI Emoji";}
-        #fe_fileList a { text-decoration: none; color: var(--win95-black); display: block; flex-grow: 1;}
+        #fe_fileTable { width: 100%; border-collapse: collapse; font-size: 12px; }
+        #fe_fileTable thead { background-color: var(--win95-light-gray); }
+        #fe_fileTable th { text-align: left; padding: 2px 5px; border: 1px outset var(--win95-light-gray); font-weight: normal; }
+        .fe-sortable-header { cursor: pointer; }
+        .fe-sortable-header:hover { background-color: var(--win95-dark-gray); color: var(--win95-white); }
+        .fe-sortable-header.active-sort { border-style: inset; background-color: var(--win95-dark-gray); color: var(--win95-white); }
+        #fe_fileList tr:hover { background-color: var(--win95-title-blue); color: var(--win95-white); }
+        #fe_fileList td { padding: 2px 5px; white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
+        #fe_fileList td .fe-item-icon { margin-right: 5px; font-family: "Segoe UI Symbol", "Apple Color Emoji", "Segoe UI Emoji";}
+        #fe_fileList td a { text-decoration: none; color: inherit; display: flex; align-items: center; }
         #fe_fileSearchInput { margin-bottom: 5px; }
         #fe_folderNameDisplay { font-weight: bold; margin-bottom: 5px; padding-bottom: 3px; border-bottom: 1px solid var(--win95-dark-gray); }
 
@@ -626,7 +630,20 @@
         <div class="window-content">
             <div id="fe_folderNameDisplay">Loading folder...</div>
             <input type="text" id="fe_fileSearchInput" placeholder="Search files...">
-            <div id="fe_fileListContainer"><ul id="fe_fileList"></ul></div>
+            <div id="fe_fileListContainer">
+                <table id="fe_fileTable">
+                    <thead>
+                        <tr>
+                            <th data-sort-key="name" class="fe-sortable-header active-sort">Name &#x25B2;</th>
+                            <th data-sort-key="type" class="fe-sortable-header">Type</th>
+                            <th data-sort-key="modified" class="fe-sortable-header">Date Modified</th>
+                        </tr>
+                    </thead>
+                    <tbody id="fe_fileList">
+                        <!-- File and folder rows will be inserted here by JS -->
+                    </tbody>
+                </table>
+            </div>
             <div id="fe_status" class="status-bar">Status: Idle</div>
         </div>
     </div>
@@ -2019,7 +2036,41 @@ Available commands:
             saveVFS(); renderDesktopVFSIcons(); if(fe_fileListElement && currentFEVfsPathId) renderVFSFileList(currentFEVfsPathId); return true; // Refresh File Explorer if open
         } return false;
     }
-    function getVFSChildren(parentId) { return Object.values(VFS.items).filter(item => item.parentId === parentId).sort((a,b) => a.name.localeCompare(b.name)); }
+    function getVFSChildren(parentId, sortBy = 'name', sortDir = 'asc') {
+        let children = Object.values(VFS.items).filter(item => item.parentId === parentId);
+
+        children.sort((a, b) => {
+            // Always sort folders before files
+            if (a.type === 'folder' && b.type !== 'folder') return -1;
+            if (a.type !== 'folder' && b.type === 'folder') return 1;
+
+            const valA = getSortValue(a, sortBy);
+            const valB = getSortValue(b, sortBy);
+
+            let comparison = 0;
+            if (typeof valA === 'string' && typeof valB === 'string') {
+                comparison = valA.localeCompare(valB, undefined, { numeric: true, sensitivity: 'base' });
+            } else {
+                comparison = valA < valB ? -1 : (valA > valB ? 1 : 0);
+            }
+
+            return sortDir === 'asc' ? comparison : -comparison;
+        });
+
+        return children;
+    }
+
+    function getSortValue(item, sortBy) {
+        switch (sortBy) {
+            case 'type':
+                return item.type || '';
+            case 'modified':
+                return item.modified || 0;
+            case 'name':
+            default:
+                return item.name;
+        }
+    }
     function getVFSPathString(itemId) {
         if (itemId === 'root') return '/';
         const entry = getVFSEntry(itemId);
@@ -2241,64 +2292,94 @@ Available commands:
         desktopElement.addEventListener('contextmenu', handleDesktopContextMenu);
     }
     let currentFEVfsPathId = 'root';
+    let fe_currentSort = { key: 'name', dir: 'asc' };
+
     function initFileExplorerAppForVFS(options = {}) {
         currentFEVfsPathId = options.vfsPathId || 'root';
         if (!fe_folderNameDisplayElement || !fe_searchInput || !fe_statusElement) { console.error("File Explorer UI missing for VFS!"); return; }
+        
         const currentFolder = getVFSEntry(currentFEVfsPathId);
-        fe_folderNameDisplayElement.textContent = `Folder: ${currentFolder ? currentFolder.name : (currentFEVfsPathId === 'root' ? 'Files (Root)' : 'Unknown')}`;
-        fe_searchInput.value = ''; fe_searchInput.oninput = () => renderVFSFileList(currentFEVfsPathId, fe_searchInput.value.toLowerCase().trim());
+        fe_folderNameDisplayElement.textContent = `Folder: ${currentFolder ? getVFSPathString(currentFEVfsPathId) : 'Unknown'}`;
+        fe_searchInput.value = '';
+        fe_searchInput.oninput = () => renderVFSFileList(currentFEVfsPathId, fe_searchInput.value.toLowerCase().trim());
+
+        // Add sorting event listeners to headers (only once per window open)
+        const fileExplorerWindow = document.getElementById('fileExplorerWindow');
+        if (!fileExplorerWindow.dataset.sortListenersAdded) {
+             fileExplorerWindow.querySelectorAll('.fe-sortable-header').forEach(header => {
+                header.addEventListener('click', () => {
+                    const sortKey = header.dataset.sortKey;
+                    if (fe_currentSort.key === sortKey) {
+                        fe_currentSort.dir = fe_currentSort.dir === 'asc' ? 'desc' : 'asc';
+                    } else {
+                        fe_currentSort.key = sortKey;
+                        fe_currentSort.dir = 'asc';
+                    }
+                    renderVFSFileList(currentFEVfsPathId, fe_searchInput.value.toLowerCase().trim());
+                });
+            });
+            fileExplorerWindow.dataset.sortListenersAdded = 'true';
+        }
+
         renderVFSFileList(currentFEVfsPathId);
     }
+
     function renderVFSFileList(parentId, searchTerm = '') {
         if (!fe_fileListElement || !fe_statusElement) return;
-        let items = getVFSChildren(parentId); if (searchTerm) { items = items.filter(item => item.name.toLowerCase().includes(searchTerm)); }
-        fe_fileListElement.innerHTML = '';
+
+        // Update header visuals
+        document.querySelectorAll('#fileExplorerWindow .fe-sortable-header').forEach(h => {
+            let headerText = h.dataset.sortKey.charAt(0).toUpperCase() + h.dataset.sortKey.slice(1);
+            if (h.dataset.sortKey === fe_currentSort.key) {
+                headerText += fe_currentSort.dir === 'asc' ? ' &#x25B2;' : ' &#x25BC;';
+                h.classList.add('active-sort');
+            } else {
+                h.classList.remove('active-sort');
+            }
+            h.innerHTML = headerText.replace('Modified', 'Date Modified');
+        });
+
+        let items = getVFSChildren(parentId, fe_currentSort.key, fe_currentSort.dir);
+        if (searchTerm) {
+            items = items.filter(item => item.name.toLowerCase().includes(searchTerm));
+        }
+
+        fe_fileListElement.innerHTML = ''; // Clear the table body
+
+        // "Up" directory row
         if (parentId !== 'root') {
             const parentItem = getVFSEntry(parentId);
-            if (parentItem && parentItem.parentId) {
-                 const upListItem = document.createElement('li');
-                 upListItem.dataset.itemId = parentItem.parentId;
-                 upListItem.dataset.itemType = 'folder';
-                 const iconSpan = document.createElement('span'); iconSpan.className = 'fe-item-icon'; iconSpan.textContent = '⤴️';
-                 const link = document.createElement('a'); link.href = `#`; link.textContent = '.. (Up)';
-                 upListItem.appendChild(iconSpan); upListItem.appendChild(link);
-                 upListItem.addEventListener('dblclick', () => { initFileExplorerAppForVFS({ vfsPathId: parentItem.parentId }); });
-                 fe_fileListElement.appendChild(upListItem);
+            if (parentItem && parentItem.parentId !== undefined) {
+                const row = fe_fileListElement.insertRow();
+                row.dataset.itemId = parentItem.parentId;
+                row.dataset.itemType = 'folder';
+                row.style.cursor = 'pointer';
+                row.addEventListener('dblclick', () => { initFileExplorerAppForVFS({ vfsPathId: parentItem.parentId }); });
+
+                const nameCell = row.insertCell();
+                nameCell.innerHTML = `<span class="fe-item-icon">⤴️</span>..`;
+                row.insertCell().textContent = 'Folder';
+                row.insertCell();
             }
         }
-
-        if (parentId === 'root' && !items.find(item => item.id === SPARKY_CREATIONS_VFS_ID) && SPARKY_CREATIONS_VFS_ID) {
-            const sparkyFolderEntry = getVFSEntry(SPARKY_CREATIONS_VFS_ID);
-            if (sparkyFolderEntry && (!searchTerm || sparkyFolderEntry.name.toLowerCase().includes(searchTerm))) {
-                 items.unshift(sparkyFolderEntry);
-            }
+        
+        if (items.length === 0 && fe_fileListElement.rows.length === 0) {
+            const row = fe_fileListElement.insertRow();
+            const cell = row.insertCell();
+            cell.colSpan = 3;
+            cell.textContent = searchTerm ? 'No matches found.' : 'This folder is empty.';
+            cell.style.textAlign = 'center';
+            cell.style.padding = '10px';
         }
-
-
-        if (items.length === 0 && !fe_fileListElement.querySelector('li')) {
-            fe_fileListElement.innerHTML = `<li>${searchTerm ? 'No matches.' : 'This folder is empty.'}</li>`;
-        }
-
 
         items.forEach(item => {
-            const listItem = document.createElement('li'); listItem.dataset.itemId = item.id; listItem.dataset.itemType = item.type;
-            listItem.draggable = true; // Make it draggable
-            listItem.addEventListener('dragstart', (e) => {
-                e.dataTransfer.setData('text/vfs-item-id', item.id);
-                e.dataTransfer.effectAllowed = 'move';
-                const feWindow = document.getElementById('fileExplorerWindow');
-                if (feWindow) feWindow.style.display = 'none'; // Hide window to prevent interception
-            });
-            listItem.addEventListener('dragend', (e) => {
-                const feWindow = document.getElementById('fileExplorerWindow');
-                if (feWindow) feWindow.style.display = 'flex'; // Show window again
-            });
-
-            const iconSpan = document.createElement('span'); iconSpan.className = 'fe-item-icon';
-            iconSpan.textContent = item.type === 'file' ? (item.name.endsWith('.html') || item.name.endsWith('.htm') ? '🌐' : '📄') : '📁';
-            const link = document.createElement('a'); link.href = `#`; link.textContent = item.name;
-            listItem.appendChild(iconSpan); listItem.appendChild(link);
-            listItem.addEventListener('dblclick', () => {
+            const row = fe_fileListElement.insertRow();
+            row.dataset.itemId = item.id;
+            row.dataset.itemType = item.type;
+            row.draggable = true;
+            row.style.cursor = 'pointer';
+            
+            row.addEventListener('dblclick', () => {
                 if (item.type === 'folder') { initFileExplorerAppForVFS({ vfsPathId: item.id }); }
                 else if (item.type === 'file') {
                     if (item.mimeType === 'text/html' || item.name.endsWith('.html') || item.name.endsWith('.htm')) {
@@ -2308,38 +2389,39 @@ Available commands:
                     }
                 }
             });
-            listItem.addEventListener('contextmenu', (e) => handleDesktopContextMenu(e, item.id));
-
+            row.addEventListener('contextmenu', (e) => handleDesktopContextMenu(e, item.id));
+            
             if (item.type === 'folder') {
-                listItem.addEventListener('dragover', (e) => {
-                    e.preventDefault();
-                    e.dataTransfer.dropEffect = 'move';
-                    listItem.style.backgroundColor = '#E0E0E0'; // Highlight drop target
-                });
-                listItem.addEventListener('dragleave', (e) => {
-                    listItem.style.backgroundColor = ''; // Remove highlight
-                });
-                listItem.addEventListener('drop', (e) => {
-                    e.preventDefault();
-                    e.stopPropagation();
-                    listItem.style.backgroundColor = ''; // Remove highlight
+                 row.addEventListener('dragover', (e) => { e.preventDefault(); e.dataTransfer.dropEffect = 'move'; row.style.backgroundColor = '#E0E0E0'; });
+                 row.addEventListener('dragleave', () => { row.style.backgroundColor = ''; });
+                 row.addEventListener('drop', (e) => {
+                    e.preventDefault(); e.stopPropagation(); row.style.backgroundColor = '';
                     const draggedItemId = e.dataTransfer.getData('text/vfs-item-id');
                     const targetFolderId = item.id;
                     if (draggedItemId && targetFolderId && draggedItemId !== targetFolderId) {
                         const draggedItem = getVFSEntry(draggedItemId);
                         if(draggedItem.parentId !== targetFolderId) {
                             updateVFSEntry(draggedItemId, { parentId: targetFolderId });
-                            renderDesktopVFSIcons(); // Item may have been dragged from desktop
-                            renderVFSFileList(currentFEVfsPathId); // Refresh current view
+                            renderDesktopVFSIcons();
+                            renderVFSFileList(currentFEVfsPathId);
                             logK8osActivity("VFS", `Moved '${draggedItem.name}' to '${item.name}'.`);
                         }
                     }
                 });
             }
 
-            fe_fileListElement.appendChild(listItem);
+            const nameCell = row.insertCell();
+            const icon = item.type === 'file' ? (item.name.endsWith('.html') || item.name.endsWith('.htm') ? '🌐' : '📄') : '📁';
+            nameCell.innerHTML = `<span class="fe-item-icon">${icon}</span>${item.name}`;
+
+            const typeCell = row.insertCell();
+            typeCell.textContent = item.type === 'folder' ? 'Folder' : (item.mimeType ? item.mimeType.split('/')[1] : 'File');
+
+            const modifiedCell = row.insertCell();
+            modifiedCell.textContent = new Date(item.modified).toLocaleString();
         });
-        fe_statusElement.textContent = `Status: ${fe_fileListElement.querySelectorAll('li[data-item-id]').length} item(s).`;
+
+        fe_statusElement.textContent = `Status: ${items.length} item(s).`;
     }
 
     async function downloadVFSEntryAsZip(itemId) {
