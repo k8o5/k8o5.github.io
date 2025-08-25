@@ -371,6 +371,7 @@
         .fe-sortable-header { cursor: pointer; }
         .fe-sortable-header:hover { background-color: var(--win95-dark-gray); color: var(--win95-white); }
         .fe-sortable-header.active-sort { border-style: inset; background-color: var(--win95-dark-gray); color: var(--win95-white); }
+        #fe_fileList tr.selected { background-color: var(--win95-title-blue); color: var(--win95-white); }
         #fe_fileList tr:hover { background-color: var(--win95-title-blue); color: var(--win95-white); }
         #fe_fileList td { padding: 2px 5px; white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
         #fe_fileList td .fe-item-icon { margin-right: 5px; font-family: "Segoe UI Symbol", "Apple Color Emoji", "Segoe UI Emoji";}
@@ -1299,6 +1300,8 @@ Output ONLY the JSON array. No explanations, comments, or markdown outside the J
     let browserWindowCounter = 0;
     let sparkyHtmlPopupCounter = 0;
     let contextMenuTargetVFSId = null;
+    let lastSelectedDesktopIcon = null;
+    let lastSelectedFileExplorerRow = null;
 
 
     let gifCreator_currentAnimatedSvg = null;
@@ -2071,6 +2074,19 @@ Available commands:
                 return item.name;
         }
     }
+    function isAncestor(potentialAncestorId, childId) {
+        let current = getVFSEntry(childId);
+        if (!current) return false;
+        while (current.parentId && current.parentId !== 'root') {
+            if (current.parentId === potentialAncestorId) {
+                return true;
+            }
+            current = getVFSEntry(current.parentId);
+            if (!current) return false;
+        }
+        return false;
+    }
+
     function getVFSPathString(itemId) {
         if (itemId === 'root') return '/';
         const entry = getVFSEntry(itemId);
@@ -2149,16 +2165,81 @@ Available commands:
         initializeDesktopIconBehaviors();
     }
     function initializeDesktopIconBehaviors() {
+        // Clear selections when clicking on the desktop itself
+        desktopElement.addEventListener('click', (e) => {
+            if (e.target === desktopElement) {
+                document.querySelectorAll('.desktop-icon.selected').forEach(i => i.classList.remove('selected'));
+                lastSelectedDesktopIcon = null;
+            }
+        });
+
         document.querySelectorAll('.desktop-icon').forEach(icon => {
             const newIcon = icon.cloneNode(true); icon.parentNode.replaceChild(newIcon, icon);
             newIcon.addEventListener('dblclick', (e) => handleDesktopIconDblClick(e.currentTarget));
+            
+            newIcon.addEventListener('dragstart', (e) => {
+                const selectedIcons = document.querySelectorAll('.desktop-icon.selected[data-item-id]');
+                let draggedItemIds = [];
+
+                if (selectedIcons.length > 0 && newIcon.classList.contains('selected')) {
+                    selectedIcons.forEach(icon => {
+                        draggedItemIds.push(icon.dataset.itemId);
+                    });
+                } else {
+                    if (newIcon.dataset.itemId) {
+                        draggedItemIds.push(newIcon.dataset.itemId);
+                    }
+                }
+                
+                if (draggedItemIds.length > 0) {
+                    e.dataTransfer.setData('text/vfs-item-ids', draggedItemIds.join(','));
+                    e.dataTransfer.effectAllowed = 'move';
+                } else {
+                    e.preventDefault();
+                }
+            });
+
             newIcon.addEventListener('click', (e) => {
-                document.querySelectorAll('.desktop-icon.selected').forEach(i => i.classList.remove('selected'));
-                e.currentTarget.classList.add('selected');
-                contextMenuTargetVFSId = e.currentTarget.dataset.itemId || null;
+                const desktopIcons = Array.from(document.querySelectorAll('.desktop-icon'));
+                const clickedIcon = e.currentTarget;
+                const clickedIndex = desktopIcons.indexOf(clickedIcon);
+
+                const isCtrlOrMeta = e.ctrlKey || e.metaKey;
+                const isShift = e.shiftKey;
+
+                if (isShift && lastSelectedDesktopIcon) {
+                    const lastIndex = desktopIcons.indexOf(lastSelectedDesktopIcon);
+                    const start = Math.min(clickedIndex, lastIndex);
+                    const end = Math.max(clickedIndex, lastIndex);
+                    
+                    if (!isCtrlOrMeta) {
+                        desktopIcons.forEach(icon => icon.classList.remove('selected'));
+                    }
+
+                    for (let i = start; i <= end; i++) {
+                        desktopIcons[i].classList.add('selected');
+                    }
+                } else if (isCtrlOrMeta) {
+                    clickedIcon.classList.toggle('selected');
+                } else {
+                    desktopIcons.forEach(icon => {
+                        if (icon !== clickedIcon) icon.classList.remove('selected');
+                    });
+                    clickedIcon.classList.add('selected');
+                }
+                
+                if (clickedIcon.classList.contains('selected')) {
+                    lastSelectedDesktopIcon = clickedIcon;
+                } else {
+                    const selectedIcons = document.querySelectorAll('.desktop-icon.selected');
+                    lastSelectedDesktopIcon = selectedIcons.length > 0 ? selectedIcons[selectedIcons.length - 1] : null;
+                }
+                
+                contextMenuTargetVFSId = clickedIcon.dataset.itemId || null;
                 if(startMenu) startMenu.style.display = 'none';
                 if(desktopContextMenu) desktopContextMenu.style.display = 'none';
             });
+
             newIcon.addEventListener('contextmenu', (e) => handleDesktopContextMenu(e));
 
             // Add specific logic for the Trash Bin icon
@@ -2171,17 +2252,19 @@ Available commands:
                 newIcon.addEventListener('drop', (e) => {
                     e.preventDefault();
                     e.stopPropagation(); // Prevent desktop's drop handler from firing
-                    const vfsItemId = e.dataTransfer.getData('text/vfs-item-id');
-                    if (vfsItemId) {
-                        const item = getVFSEntry(vfsItemId);
-                        if (item && item.id !== TRASH_VFS_ID && item.parentId !== TRASH_VFS_ID) {
-                            updateVFSEntry(vfsItemId, { parentId: TRASH_VFS_ID });
-                            renderDesktopVFSIcons();
-                             const fileExplorerWindow = document.getElementById('fileExplorerWindow');
-                            if (fileExplorerWindow && fileExplorerWindow.style.display === 'flex') {
-                                renderVFSFileList(currentFEVfsPathId);
+                    const vfsItemIds = (e.dataTransfer.getData('text/vfs-item-ids') || "").split(',').filter(id => id);
+                     if (vfsItemIds.length > 0) {
+                        vfsItemIds.forEach(vfsItemId => {
+                            const item = getVFSEntry(vfsItemId);
+                            if (item && item.id !== TRASH_VFS_ID && item.parentId !== TRASH_VFS_ID) {
+                                updateVFSEntry(vfsItemId, { parentId: TRASH_VFS_ID });
+                                logK8osActivity("VFS", `Dragged '${item.name}' to trash.`);
                             }
-                            logK8osActivity("VFS", `Dragged '${item.name}' to trash.`);
+                        });
+                        renderDesktopVFSIcons();
+                        const fileExplorerWindow = document.getElementById('fileExplorerWindow');
+                        if (fileExplorerWindow && fileExplorerWindow.style.display === 'flex') {
+                            renderVFSFileList(currentFEVfsPathId);
                         }
                     }
                 });
@@ -2295,6 +2378,7 @@ Available commands:
     let fe_currentSort = { key: 'name', dir: 'asc' };
 
     function initFileExplorerAppForVFS(options = {}) {
+        lastSelectedFileExplorerRow = null; // Reset selection when changing folder
         currentFEVfsPathId = options.vfsPathId || 'root';
         if (!fe_folderNameDisplayElement || !fe_searchInput || !fe_statusElement) { console.error("File Explorer UI missing for VFS!"); return; }
         
@@ -2303,7 +2387,7 @@ Available commands:
         fe_searchInput.value = '';
         fe_searchInput.oninput = () => renderVFSFileList(currentFEVfsPathId, fe_searchInput.value.toLowerCase().trim());
 
-        // Add sorting event listeners to headers (only once per window open)
+        // Add sorting and selection-clearing event listeners to headers (only once per window open)
         const fileExplorerWindow = document.getElementById('fileExplorerWindow');
         if (!fileExplorerWindow.dataset.sortListenersAdded) {
              fileExplorerWindow.querySelectorAll('.fe-sortable-header').forEach(header => {
@@ -2318,6 +2402,18 @@ Available commands:
                     renderVFSFileList(currentFEVfsPathId, fe_searchInput.value.toLowerCase().trim());
                 });
             });
+
+            const fe_fileListContainer = document.getElementById('fe_fileListContainer');
+            if (fe_fileListContainer) {
+                fe_fileListContainer.addEventListener('click', (e) => {
+                    // If the click is on the container itself (or the table, but not a row), clear selection.
+                    if (!e.target.closest('tr[data-item-id]')) {
+                        document.querySelectorAll('#fe_fileList tr.selected').forEach(r => r.classList.remove('selected'));
+                        lastSelectedFileExplorerRow = null;
+                    }
+                });
+            }
+
             fileExplorerWindow.dataset.sortListenersAdded = 'true';
         }
 
@@ -2378,7 +2474,59 @@ Available commands:
             row.dataset.itemType = item.type;
             row.draggable = true;
             row.style.cursor = 'pointer';
+
+            row.addEventListener('dragstart', (e) => {
+                const selectedRows = fe_fileListElement.querySelectorAll('tr.selected[data-item-id]');
+                let draggedItemIds = [];
+
+                if (selectedRows.length > 0 && row.classList.contains('selected')) {
+                    selectedRows.forEach(r => {
+                        draggedItemIds.push(r.dataset.itemId);
+                    });
+                } else {
+                    draggedItemIds.push(item.id);
+                }
+
+                if (draggedItemIds.length > 0) {
+                    e.dataTransfer.setData('text/vfs-item-ids', draggedItemIds.join(','));
+                    e.dataTransfer.effectAllowed = 'move';
+                } else {
+                    e.preventDefault();
+                }
+            });
             
+            row.addEventListener('click', (e) => {
+                const fileRows = Array.from(fe_fileListElement.querySelectorAll('tr[data-item-id]'));
+                const clickedRow = e.currentTarget;
+                const clickedIndex = fileRows.indexOf(clickedRow);
+                const isCtrlOrMeta = e.ctrlKey || e.metaKey;
+                const isShift = e.shiftKey;
+
+                if (isShift && lastSelectedFileExplorerRow) {
+                    const lastIndex = fileRows.indexOf(lastSelectedFileExplorerRow);
+                    const start = Math.min(clickedIndex, lastIndex);
+                    const end = Math.max(clickedIndex, lastIndex);
+                    if (!isCtrlOrMeta) {
+                        fileRows.forEach(r => r.classList.remove('selected'));
+                    }
+                    for (let i = start; i <= end; i++) {
+                        fileRows[i].classList.add('selected');
+                    }
+                } else if (isCtrlOrMeta) {
+                    clickedRow.classList.toggle('selected');
+                } else {
+                    document.querySelectorAll('#fe_fileList tr.selected').forEach(r => r.classList.remove('selected'));
+                    clickedRow.classList.add('selected');
+                }
+
+                if (clickedRow.classList.contains('selected')) {
+                    lastSelectedFileExplorerRow = clickedRow;
+                } else {
+                    const selectedRows = fe_fileListElement.querySelectorAll('tr.selected');
+                    lastSelectedFileExplorerRow = selectedRows.length > 0 ? selectedRows[selectedRows.length - 1] : null;
+                }
+            });
+
             row.addEventListener('dblclick', () => {
                 if (item.type === 'folder') { initFileExplorerAppForVFS({ vfsPathId: item.id }); }
                 else if (item.type === 'file') {
@@ -2396,15 +2544,26 @@ Available commands:
                  row.addEventListener('dragleave', () => { row.style.backgroundColor = ''; });
                  row.addEventListener('drop', (e) => {
                     e.preventDefault(); e.stopPropagation(); row.style.backgroundColor = '';
-                    const draggedItemId = e.dataTransfer.getData('text/vfs-item-id');
+                    const vfsItemIds = (e.dataTransfer.getData('text/vfs-item-ids') || "").split(',').filter(id => id);
                     const targetFolderId = item.id;
-                    if (draggedItemId && targetFolderId && draggedItemId !== targetFolderId) {
-                        const draggedItem = getVFSEntry(draggedItemId);
-                        if(draggedItem.parentId !== targetFolderId) {
-                            updateVFSEntry(draggedItemId, { parentId: targetFolderId });
+                    
+                    if (vfsItemIds.length > 0 && targetFolderId) {
+                        let itemsMoved = false;
+                        vfsItemIds.forEach(draggedItemId => {
+                            // Prevent dropping a folder into itself or its own children
+                            if (draggedItemId && draggedItemId !== targetFolderId && !isAncestor(draggedItemId, targetFolderId)) {
+                                const draggedItem = getVFSEntry(draggedItemId);
+                                if(draggedItem && draggedItem.parentId !== targetFolderId) {
+                                    updateVFSEntry(draggedItemId, { parentId: targetFolderId });
+                                    logK8osActivity("VFS", `Moved '${draggedItem.name}' to '${item.name}'.`);
+                                    itemsMoved = true;
+                                }
+                            }
+                        });
+
+                        if (itemsMoved) {
                             renderDesktopVFSIcons();
                             renderVFSFileList(currentFEVfsPathId);
-                            logK8osActivity("VFS", `Moved '${draggedItem.name}' to '${item.name}'.`);
                         }
                     }
                 });
