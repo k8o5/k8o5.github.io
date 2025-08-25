@@ -947,6 +947,7 @@ body.aqua-theme .context-menu-separator {
             <select id="apiProviderSelect" style="margin-bottom: 10px;">
                 <option value="gemini">Google Gemini</option>
                 <option value="groq">Groq</option>
+                <option value="openai">OpenAI</option>
                 <option value="openrouter">OpenRouter</option>
                 <option value="xai">XAI</option>
                 <option value="deepseek">DeepSeek</option>
@@ -961,6 +962,7 @@ body.aqua-theme .context-menu-separator {
             <p id="apiKeyLinksContainer" style="margin-top:10px; font-size: 11px;">
                 <a href="https://aistudio.google.com/app/apikey" target="_blank" rel="noopener noreferrer" class="get-api-key-link" id="geminiApiKeyLink">Get a Gemini API Key</a>
                 <a href="https://console.groq.com/keys" target="_blank" rel="noopener noreferrer" class="get-api-key-link" id="groqApiKeyLink" style="display:none;">Get a Groq API Key</a>
+                <a href="https://platform.openai.com/api-keys" target="_blank" rel="noopener noreferrer" class="get-api-key-link" id="openaiApiKeyLink" style="display:none;">Get an OpenAI API Key</a>
                 <a href="https://openrouter.ai/keys" target="_blank" rel="noopener noreferrer" class="get-api-key-link" id="openrouterApiKeyLink" style="display:none;">Get an OpenRouter API Key</a>
                 <a href="https://console.x.ai/team/default/api-keys" target="_blank" rel="noopener noreferrer" class="get-api-key-link" id="xaiApiKeyLink" style="display:none;">Get an XAI API Key</a>
                 <a href="https://platform.deepseek.com/api_keys" target="_blank" rel="noopener noreferrer" class="get-api-key-link" id="deepseekApiKeyLink" style="display:none;">Get a DeepSeek API Key</a>
@@ -1176,6 +1178,13 @@ body.aqua-theme .context-menu-separator {
                     <input type="number" id="systemSettings_ai_groqMaxTokensInput" min="1" step="1" placeholder="e.g., 2048">
                     <button id="systemSettings_ai_saveGroqMaxTokensButton">Save Max Tokens</button>
                     <p class="provider-caveat">Lower values use less quota per request but might cut off long responses.</p>
+                </div>
+                <div id="openaiModelSettings" style="display:none;">
+                    <h3>Global AI Model (OpenAI)</h3>
+                    <label for="systemSettings_ai_openaiModelInput">Enter OpenAI Model Name:</label>
+                    <input type="text" id="systemSettings_ai_openaiModelInput" placeholder="e.g., gpt-4-turbo or gpt-3.5-turbo">
+                    <button id="systemSettings_ai_saveOpenaiModelButton">Save OpenAI Model</button>
+                    <p class="provider-caveat">Enter the exact model identifier from OpenAI.</p>
                 </div>
                 <div id="openrouterModelSettings" style="display:none;">
                     <h3>Global AI Model (OpenRouter)</h3>
@@ -1467,6 +1476,7 @@ body.aqua-theme .context-menu-separator {
     const K8OS_VERSION = "0.1.15"; // Version bump for OpenRouter and GameGen overhaul
     const DEFAULT_GEMINI_AI_MODEL = "gemini-1.5-flash";
     const DEFAULT_GROQ_AI_MODEL = "llama3-8b-8192";
+    const DEFAULT_OPENAI_MODEL = "gpt-4-turbo";
     const DEFAULT_OPENROUTER_AI_MODEL = "google/gemini-flash-1.5";
     const DEFAULT_XAI_MODEL = "grok-4";
     const DEFAULT_DEEPSEEK_CHAT_MODEL = "deepseek-chat";
@@ -1524,6 +1534,7 @@ Output ONLY the JSON array. No explanations, comments, or markdown outside the J
     const apiKeyLinksContainer = document.getElementById('apiKeyLinksContainer');
     const geminiApiKeyLink = document.getElementById('geminiApiKeyLink');
     const groqApiKeyLink = document.getElementById('groqApiKeyLink');
+    const openaiApiKeyLink = document.getElementById('openaiApiKeyLink');
     const openrouterApiKeyLink = document.getElementById('openrouterApiKeyLink');
     const xaiApiKeyLink = document.getElementById('xaiApiKeyLink');
     const deepseekApiKeyLink = document.getElementById('deepseekApiKeyLink');
@@ -1611,6 +1622,8 @@ Output ONLY the JSON array. No explanations, comments, or markdown outside the J
     const systemSettings_ai_saveGroqModelButton = document.getElementById('systemSettings_ai_saveGroqModelButton');
     const systemSettings_ai_groqMaxTokensInput = document.getElementById('systemSettings_ai_groqMaxTokensInput');
     const systemSettings_ai_saveGroqMaxTokensButton = document.getElementById('systemSettings_ai_saveGroqMaxTokensButton');
+    const systemSettings_ai_openaiModelInput = document.getElementById('systemSettings_ai_openaiModelInput');
+    const systemSettings_ai_saveOpenaiModelButton = document.getElementById('systemSettings_ai_saveOpenaiModelButton');
     const systemSettings_ai_openrouterModelInput = document.getElementById('systemSettings_ai_openrouterModelInput');
     const systemSettings_ai_saveOpenrouterModelButton = document.getElementById('systemSettings_ai_saveOpenrouterModelButton');
     const systemSettings_ai_xaiModelInput = document.getElementById('systemSettings_ai_xaiModelInput');
@@ -1645,6 +1658,7 @@ Output ONLY the JSON array. No explanations, comments, or markdown outside the J
     const systemSettings_about_version = document.getElementById('systemSettings_about_version');
     const geminiModelSettingsDiv = document.getElementById('geminiModelSettings');
     const groqModelSettingsDiv = document.getElementById('groqModelSettings');
+    const openaiModelSettingsDiv = document.getElementById('openaiModelSettings');
     const openrouterModelSettingsDiv = document.getElementById('openrouterModelSettings');
     const xaiModelSettingsDiv = document.getElementById('xaiModelSettings');
     const deepseekModelSettingsDiv = document.getElementById('deepseekModelSettings');
@@ -1671,6 +1685,7 @@ Output ONLY the JSON array. No explanations, comments, or markdown outside the J
 
     window.GLOBAL_GEMINI_API_KEY = null;
     window.GLOBAL_GROQ_API_KEY = null;
+    window.GLOBAL_OPENAI_API_KEY = null;
     window.GLOBAL_OPENROUTER_API_KEY = null;
     window.GLOBAL_XAI_API_KEY = null;
     window.GLOBAL_DEEPSEEK_API_KEY = null;
@@ -3074,6 +3089,7 @@ Available commands:
     function getStoredOrDefault(key, defaultValue) { return localStorage.getItem(key) || defaultValue; }
     function getCurrentGeminiModel() { return getStoredOrDefault('k8os_globalGeminiAiModel', DEFAULT_GEMINI_AI_MODEL); }
     function getCurrentGroqModel() { return getStoredOrDefault('k8os_globalGroqAiModel', DEFAULT_GROQ_AI_MODEL); }
+    function getCurrentOpenAiModel() { return getStoredOrDefault('k8os_globalOpenAiModel', DEFAULT_OPENAI_MODEL); }
     function getCurrentGroqMaxTokens() { return parseInt(getStoredOrDefault('k8os_globalGroqMaxTokens', DEFAULT_GROQ_MAX_TOKENS.toString()), 10); }
     function getCurrentOpenRouterModel() { return getStoredOrDefault('k8os_globalOpenRouterAiModel', DEFAULT_OPENROUTER_AI_MODEL); }
     function getCurrentXaiModel() { return getStoredOrDefault('k8os_globalXaiModel', DEFAULT_XAI_MODEL); }
@@ -3091,6 +3107,7 @@ Available commands:
         selectedApiProvider = getStoredOrDefault('k8os_apiProvider', 'gemini');
         window.GLOBAL_GEMINI_API_KEY = localStorage.getItem('k8os_GlobalGeminiApiKey');
         window.GLOBAL_GROQ_API_KEY = localStorage.getItem('k8os_GlobalGroqApiKey');
+        window.GLOBAL_OPENAI_API_KEY = localStorage.getItem('k8os_GlobalOpenAIApiKey');
         window.GLOBAL_OPENROUTER_API_KEY = localStorage.getItem('k8os_GlobalOpenRouterApiKey');
         window.GLOBAL_XAI_API_KEY = localStorage.getItem('k8os_GlobalXaiApiKey');
         window.GLOBAL_DEEPSEEK_API_KEY = localStorage.getItem('k8os_GlobalDeepSeekApiKey');
@@ -3127,14 +3144,15 @@ Available commands:
         }
     }
     function updateApiKeyUI() {
-        if (!apiKeyInputLabel || !apiKeyInput || !apiKeyStatus || !geminiApiKeyLink || !groqApiKeyLink || !openrouterApiKeyLink || !deepseekApiKeyLink || !hfApiKeyLink || !customSetupLink || !apiKeyInfoText || !apiKeyLinksContainer) return;
+        if (!apiKeyInputLabel || !apiKeyInput || !apiKeyStatus || !geminiApiKeyLink || !groqApiKeyLink || !openaiApiKeyLink || !openrouterApiKeyLink || !deepseekApiKeyLink || !hfApiKeyLink || !customSetupLink || !apiKeyInfoText || !apiKeyLinksContainer) return;
         let currentKey = null; let providerName = ''; let keyLabel = 'API Key/Token:';
         apiKeyInput.style.display = 'block'; apiKeyInputLabel.style.display = 'block';
         apiKeyInfoText.style.display = 'none'; apiKeyLinksContainer.style.display = 'block';
 
-        geminiApiKeyLink.style.display = 'none'; groqApiKeyLink.style.display = 'none'; openrouterApiKeyLink.style.display = 'none'; xaiApiKeyLink.style.display = 'none'; deepseekApiKeyLink.style.display = 'none'; hfApiKeyLink.style.display = 'none'; customSetupLink.style.display = 'none';
+        geminiApiKeyLink.style.display = 'none'; groqApiKeyLink.style.display = 'none'; openaiApiKeyLink.style.display = 'none'; openrouterApiKeyLink.style.display = 'none'; xaiApiKeyLink.style.display = 'none'; deepseekApiKeyLink.style.display = 'none'; hfApiKeyLink.style.display = 'none'; customSetupLink.style.display = 'none';
         if (geminiModelSettingsDiv) geminiModelSettingsDiv.style.display = 'none';
         if (groqModelSettingsDiv) groqModelSettingsDiv.style.display = 'none';
+        if (openaiModelSettingsDiv) openaiModelSettingsDiv.style.display = 'none';
         if (openrouterModelSettingsDiv) openrouterModelSettingsDiv.style.display = 'none';
         if (xaiModelSettingsDiv) xaiModelSettingsDiv.style.display = 'none';
         if (deepseekModelSettingsDiv) deepseekModelSettingsDiv.style.display = 'none';
@@ -3146,6 +3164,7 @@ Available commands:
         switch (selectedApiProvider) {
             case 'gemini': currentKey = window.GLOBAL_GEMINI_API_KEY; providerName = 'Gemini'; keyLabel = 'Gemini API Key:'; geminiApiKeyLink.style.display = 'inline'; if (geminiModelSettingsDiv) geminiModelSettingsDiv.style.display = 'block'; break;
             case 'groq': currentKey = window.GLOBAL_GROQ_API_KEY; providerName = 'Groq'; keyLabel = 'Groq API Key:'; groqApiKeyLink.style.display = 'inline'; if (groqModelSettingsDiv) groqModelSettingsDiv.style.display = 'block'; break;
+            case 'openai': currentKey = window.GLOBAL_OPENAI_API_KEY; providerName = 'OpenAI'; keyLabel = 'OpenAI API Key:'; openaiApiKeyLink.style.display = 'inline'; if (openaiModelSettingsDiv) openaiModelSettingsDiv.style.display = 'block'; break;
             case 'openrouter': currentKey = window.GLOBAL_OPENROUTER_API_KEY; providerName = 'OpenRouter'; keyLabel = 'OpenRouter API Key:'; openrouterApiKeyLink.style.display = 'inline'; if (openrouterModelSettingsDiv) openrouterModelSettingsDiv.style.display = 'block'; break;
             case 'xai': currentKey = window.GLOBAL_XAI_API_KEY; providerName = 'XAI'; keyLabel = 'XAI API Key:'; xaiApiKeyLink.style.display = 'inline'; if (xaiModelSettingsDiv) xaiModelSettingsDiv.style.display = 'block'; break;
             case 'deepseek': currentKey = window.GLOBAL_DEEPSEEK_API_KEY; providerName = 'DeepSeek'; keyLabel = 'DeepSeek API Key:'; deepseekApiKeyLink.style.display = 'inline'; if (deepseekModelSettingsDiv) deepseekModelSettingsDiv.style.display = 'block'; break;
@@ -3194,6 +3213,7 @@ Available commands:
             switch (selectedApiProvider) {
                 case 'gemini': storageKey = 'k8os_GlobalGeminiApiKey'; providerName = 'Gemini'; globalVarSetter = (k) => window.GLOBAL_GEMINI_API_KEY = k; break;
                 case 'groq': storageKey = 'k8os_GlobalGroqApiKey'; providerName = 'Groq'; globalVarSetter = (k) => window.GLOBAL_GROQ_API_KEY = k; break;
+                case 'openai': storageKey = 'k8os_GlobalOpenAIApiKey'; providerName = 'OpenAI'; globalVarSetter = (k) => window.GLOBAL_OPENAI_API_KEY = k; break;
                 case 'openrouter': storageKey = 'k8os_GlobalOpenRouterApiKey'; providerName = 'OpenRouter'; globalVarSetter = (k) => window.GLOBAL_OPENROUTER_API_KEY = k; break;
                 case 'xai': storageKey = 'k8os_GlobalXaiApiKey'; providerName = 'XAI'; globalVarSetter = (k) => window.GLOBAL_XAI_API_KEY = k; break;
                 case 'deepseek': storageKey = 'k8os_GlobalDeepSeekApiKey'; providerName = 'DeepSeek'; globalVarSetter = (k) => window.GLOBAL_DEEPSEEK_API_KEY = k; break;
@@ -3523,6 +3543,7 @@ Available commands:
     async function callCurrentAiProviderForText(promptContent, maxTokens = 50, temperature = 0.8, statusUpdater = null) {
         const keyAvailable = (selectedApiProvider === 'gemini' && window.GLOBAL_GEMINI_API_KEY) ||
                              (selectedApiProvider === 'groq' && window.GLOBAL_GROQ_API_KEY) ||
+                             (selectedApiProvider === 'openai' && window.GLOBAL_OPENAI_API_KEY) ||
                              (selectedApiProvider === 'openrouter' && window.GLOBAL_OPENROUTER_API_KEY) ||
                              (selectedApiProvider === 'xai' && window.GLOBAL_XAI_API_KEY) ||
                              (selectedApiProvider === 'deepseek' && window.GLOBAL_DEEPSEEK_API_KEY) ||
@@ -3553,6 +3574,9 @@ Available commands:
         } else if (selectedApiProvider === 'groq') {
             const messages = [{ role: "user", content: promptContent }];
             return await callGroqApi(messages, temperature, maxTokens);
+        } else if (selectedApiProvider === 'openai') {
+            const messages = [{ role: "user", content: promptContent }];
+            return await callOpenAiApi(messages, temperature, maxTokens);
         } else if (selectedApiProvider === 'openrouter') {
             const messages = [{ role: "user", content: promptContent }];
             return await callOpenRouterApi(messages, temperature, maxTokens);
@@ -3959,6 +3983,47 @@ Available commands:
             if (data.choices && data.choices.length > 0 && data.choices[0].message && data.choices[0].message.content) { return data.choices[0].message.content; }
             else { console.warn("Groq API response missing expected content:", data); throw new Error("Groq API response format unexpected."); }
         } catch (error) { console.error("Error calling Groq API:", error); throw error; }
+    }
+
+    async function callOpenAiApi(messages, temperature = 0.5, maxTokensOverride = null) {
+        if (!window.GLOBAL_OPENAI_API_KEY) { throw new Error("OpenAI API Key not set."); }
+        const OPENAI_API_URL = "https://api.openai.com/v1/chat/completions";
+        const modelToUse = getCurrentOpenAiModel();
+        
+        const body = {
+            model: modelToUse,
+            messages: messages,
+            temperature: temperature,
+        };
+        if (maxTokensOverride !== null) {
+            body.max_tokens = maxTokensOverride;
+        }
+
+        try {
+            const response = await fetch(OPENAI_API_URL, {
+                method: 'POST',
+                headers: {
+                    'Authorization': `Bearer ${window.GLOBAL_OPENAI_API_KEY}`,
+                    'Content-Type': 'application/json'
+                },
+                body: JSON.stringify(body)
+            });
+            if (!response.ok) {
+                const errorData = await response.json().catch(() => ({}));
+                console.error("OpenAI API Error Response:", errorData);
+                throw new Error(`OpenAI API request failed: ${response.status} ${response.statusText}. Model: ${modelToUse}. ${errorData?.error?.message || ''}`);
+            }
+            const data = await response.json();
+            if (data.choices && data.choices.length > 0 && data.choices[0].message && data.choices[0].message.content) {
+                return data.choices[0].message.content;
+            } else {
+                console.warn("OpenAI API response missing expected content:", data);
+                throw new Error("OpenAI API response format unexpected.");
+            }
+        } catch (error) {
+            console.error("Error calling OpenAI API:", error);
+            throw error;
+        }
     }
 
     async function callXaiApi(messages, temperature = 0.5, maxTokensOverride = null) {
@@ -4970,6 +5035,7 @@ Available commands:
 
         if (systemSettings_ai_modelNameInput) systemSettings_ai_modelNameInput.value = getCurrentGeminiModel();
         if (systemSettings_ai_groqModelInput) systemSettings_ai_groqModelInput.value = getCurrentGroqModel();
+        if (systemSettings_ai_openaiModelInput) systemSettings_ai_openaiModelInput.value = getCurrentOpenAiModel();
         if (systemSettings_ai_groqMaxTokensInput) systemSettings_ai_groqMaxTokensInput.value = getCurrentGroqMaxTokens();
         if (systemSettings_ai_openrouterModelInput) systemSettings_ai_openrouterModelInput.value = getCurrentOpenRouterModel();
         if (systemSettings_ai_xaiModelInput) systemSettings_ai_xaiModelInput.value = getCurrentXaiModel();
@@ -4991,6 +5057,7 @@ Available commands:
         updateApiKeyUI(); // This will show/hide the correct provider settings sections
         if (systemSettings_ai_saveModelButton) { systemSettings_ai_saveModelButton.addEventListener('click', () => { const newModel = systemSettings_ai_modelNameInput.value.trim(); if (newModel) { localStorage.setItem('k8os_globalGeminiAiModel', newModel); if (systemSettings_status) systemSettings_status.textContent = `Gemini Model set: ${newModel}. Re-init AI apps...`; initAllAiApps(); } else { if (systemSettings_status) systemSettings_status.textContent = "Gemini Model name cannot be empty."; } }); }
         if (systemSettings_ai_saveGroqModelButton) { systemSettings_ai_saveGroqModelButton.addEventListener('click', () => { const newModel = systemSettings_ai_groqModelInput.value.trim(); if (newModel) { localStorage.setItem('k8os_globalGroqAiModel', newModel); if (systemSettings_status) systemSettings_status.textContent = `Groq Model set: ${newModel}.`; } else { if (systemSettings_status) systemSettings_status.textContent = "Groq Model name cannot be empty."; } }); }
+        if (systemSettings_ai_saveOpenaiModelButton) { systemSettings_ai_saveOpenaiModelButton.addEventListener('click', () => { const newModel = systemSettings_ai_openaiModelInput.value.trim(); if (newModel) { localStorage.setItem('k8os_globalOpenAiModel', newModel); if (systemSettings_status) systemSettings_status.textContent = `OpenAI Model set: ${newModel}.`; } else { if (systemSettings_status) systemSettings_status.textContent = "OpenAI Model name cannot be empty."; } }); }
         if (systemSettings_ai_saveGroqMaxTokensButton) { systemSettings_ai_saveGroqMaxTokensButton.addEventListener('click', () => { const newMaxTokens = parseInt(systemSettings_ai_groqMaxTokensInput.value, 10); if (!isNaN(newMaxTokens) && newMaxTokens > 0) { localStorage.setItem('k8os_globalGroqMaxTokens', newMaxTokens.toString()); if (systemSettings_status) systemSettings_status.textContent = `Groq Max Tokens set: ${newMaxTokens}.`; } else { if (systemSettings_status) systemSettings_status.textContent = "Invalid Groq Max Tokens value."; } }); }
         if (systemSettings_ai_saveOpenrouterModelButton) { systemSettings_ai_saveOpenrouterModelButton.addEventListener('click', () => { const newModel = systemSettings_ai_openrouterModelInput.value.trim(); if (newModel) { localStorage.setItem('k8os_globalOpenRouterAiModel', newModel); if (systemSettings_status) systemSettings_status.textContent = `OpenRouter Model set: ${newModel}.`; } else { if (systemSettings_status) systemSettings_status.textContent = "OpenRouter Model name cannot be empty."; } }); }
         if (systemSettings_ai_saveXaiModelButton) { systemSettings_ai_saveXaiModelButton.addEventListener('click', () => { const newModel = systemSettings_ai_xaiModelInput.value.trim(); if (newModel) { localStorage.setItem('k8os_globalXaiModel', newModel); if (systemSettings_status) systemSettings_status.textContent = `XAI Model set: ${newModel}.`; } else { if (systemSettings_status) systemSettings_status.textContent = "XAI Model name cannot be empty."; } }); }
