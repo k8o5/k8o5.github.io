@@ -417,8 +417,8 @@
         }
 
         #k8osAssistant_avatarContainer {
-            width: 70px;
-            height: 70px;
+            width: 80px;
+            height: 80px;
             cursor: pointer;
         }
         #k8osAssistant_inputContainer {
@@ -816,6 +816,8 @@ body.aqua-theme .clock {
 body.aqua-theme .desktop-icon {
     color: #fff;
     text-shadow: 0 1px 3px rgba(0,0,0,0.6);
+    position: absolute;
+    margin: 0;
 }
 body.aqua-theme .desktop-icon:hover, body.aqua-theme .desktop-icon.selected {
     background-color: rgba(50, 100, 200, 0.4);
@@ -1749,8 +1751,8 @@ Output ONLY the JSON array. No explanations, comments, or markdown outside the J
     let sparkyVelX = 1, sparkyVelY = 1; // Pixels per update tick
     let sparkyIsMoving = true;
     let sparkyMoveIntervalId = null;
-    const SPARKY_CONTAINER_WIDTH = 70; // Approx width of #k8osAssistant_avatarContainer
-    const SPARKY_CONTAINER_HEIGHT = 120; // Approx height including potential bubble
+    const SPARKY_CONTAINER_WIDTH = 80;
+    const SPARKY_CONTAINER_HEIGHT = 130;
 
     // Sparky Creations Folder
     let SPARKY_CREATIONS_VFS_ID = null;
@@ -2555,28 +2557,104 @@ Available commands:
         }
     }
 
+    function createDesktopIconElement(item) {
+        const iconEl = document.createElement('div');
+        iconEl.className = 'desktop-icon';
+        iconEl.dataset.itemId = item.id;
+        iconEl.dataset.itemType = item.type;
+        iconEl.draggable = true;
+
+        iconEl.addEventListener('dragstart', (e) => {
+            const selectedIcons = document.querySelectorAll('.desktop-icon.selected[data-item-id]');
+            let draggedItemIds = [];
+            if (selectedIcons.length > 0 && iconEl.classList.contains('selected')) {
+                selectedIcons.forEach(icon => draggedItemIds.push(icon.dataset.itemId));
+            } else {
+                if (iconEl.dataset.itemId) draggedItemIds.push(iconEl.dataset.itemId);
+            }
+            if (draggedItemIds.length > 0) {
+                e.dataTransfer.setData('text/vfs-item-ids', draggedItemIds.join(','));
+                e.dataTransfer.effectAllowed = 'move';
+            } else {
+                e.preventDefault();
+            }
+        });
+
+        const placeholder = document.createElement('div');
+        placeholder.className = 'icon-placeholder';
+        const fileExtension = item.name.split('.').pop().toLowerCase();
+        const isKnownTextFile = ['txt', 'js', 'css', 'json', 'md', 'xml', 'yaml', 'yml'].includes(fileExtension);
+        placeholder.textContent = item.type === 'file'
+            ? (['html', 'htm'].includes(fileExtension) ? '🌐' : (['svg'].includes(fileExtension) ? '🖼️' : (isKnownTextFile ? '📄' : '❔')))
+            : '📁';
+
+        const span = document.createElement('span');
+        span.textContent = item.name;
+
+        iconEl.appendChild(placeholder);
+        iconEl.appendChild(span);
+        return iconEl;
+    }
+
     function renderDesktopVFSIcons() {
         document.querySelectorAll('.desktop-icon[data-item-type="file"], .desktop-icon[data-item-type="folder"]').forEach(icon => icon.remove());
         const desktopItems = getVFSChildren('root');
-        desktopItems.forEach(item => {
-            if ((item.name === SPARKY_CREATIONS_FOLDER_NAME || item.name === TRASH_FOLDER_NAME) && item.parentId === 'root') {
-                 if (item.name === SPARKY_CREATIONS_FOLDER_NAME && !SPARKY_CREATIONS_VFS_ID) SPARKY_CREATIONS_VFS_ID = item.id;
-                 if (item.name === TRASH_FOLDER_NAME && !TRASH_VFS_ID) TRASH_VFS_ID = item.id;
-                 return;
-            }
 
-            const iconEl = document.createElement('div'); iconEl.className = 'desktop-icon';
-            iconEl.dataset.itemId = item.id; iconEl.dataset.itemType = item.type;
-            iconEl.draggable = true;
-            iconEl.addEventListener('dragstart', (e) => {
-                e.dataTransfer.setData('text/vfs-item-id', item.id);
-                e.dataTransfer.effectAllowed = 'move';
-            });
-            const placeholder = document.createElement('div'); placeholder.className = 'icon-placeholder';
-            placeholder.textContent = item.type === 'file' ? (item.name.endsWith('.html') || item.name.endsWith('.htm') ? '🌐' : '📄') : '📁';
-            const span = document.createElement('span'); span.textContent = item.name;
-            iconEl.appendChild(placeholder); iconEl.appendChild(span); desktopElement.appendChild(iconEl);
+        const filteredDesktopItems = desktopItems.filter(item => {
+            if ((item.name === SPARKY_CREATIONS_FOLDER_NAME || item.name === TRASH_FOLDER_NAME) && item.parentId === 'root') {
+                if (item.name === SPARKY_CREATIONS_FOLDER_NAME && !SPARKY_CREATIONS_VFS_ID) SPARKY_CREATIONS_VFS_ID = item.id;
+                if (item.name === TRASH_FOLDER_NAME && !TRASH_VFS_ID) TRASH_VFS_ID = item.id;
+                return false;
+            }
+            return true;
         });
+
+        if (document.body.classList.contains('aqua-theme')) {
+            const GRID_SIZE = 90;
+            const occupiedSlots = new Set();
+            const desktopRect = desktopElement.getBoundingClientRect();
+            const cols = Math.floor(desktopRect.width / GRID_SIZE);
+
+            filteredDesktopItems.forEach(item => {
+                if (item.desktopX !== undefined && item.desktopY !== undefined) {
+                    const iconEl = createDesktopIconElement(item);
+                    iconEl.style.left = `${item.desktopX}px`;
+                    iconEl.style.top = `${item.desktopY}px`;
+                    desktopElement.appendChild(iconEl);
+                    const slotKey = `${Math.round(item.desktopX / GRID_SIZE)},${Math.round(item.desktopY / GRID_SIZE)}`;
+                    occupiedSlots.add(slotKey);
+                }
+            });
+
+            filteredDesktopItems.forEach(item => {
+                if (item.desktopX === undefined || item.desktopY === undefined) {
+                    let slotFound = false;
+                    for (let y = 0; y < 20; y++) {
+                        for (let x = 0; x < cols; x++) {
+                            const slotKey = `${x},${y}`;
+                            if (!occupiedSlots.has(slotKey)) {
+                                const newX = x * GRID_SIZE;
+                                const newY = y * GRID_SIZE;
+                                const iconEl = createDesktopIconElement(item);
+                                iconEl.style.left = `${newX}px`;
+                                iconEl.style.top = `${newY}px`;
+                                desktopElement.appendChild(iconEl);
+                                updateVFSEntry(item.id, { desktopX: newX, desktopY: newY });
+                                occupiedSlots.add(slotKey);
+                                slotFound = true;
+                                break;
+                            }
+                        }
+                        if (slotFound) break;
+                    }
+                }
+            });
+        } else {
+            filteredDesktopItems.forEach(item => {
+                const iconEl = createDesktopIconElement(item);
+                desktopElement.appendChild(iconEl);
+            });
+        }
         initializeDesktopIconBehaviors();
     }
     function initializeDesktopIconBehaviors() {
@@ -2667,7 +2745,7 @@ Available commands:
                 newIcon.addEventListener('drop', (e) => {
                     e.preventDefault();
                     e.stopPropagation(); // Prevent desktop's drop handler from firing
-                    const vfsItemIds = (e.dataTransfer.getData('text/vfs-item-ids') || "").split(',').filter(id => id);
+                    const vfsItemIds = (e.dataTransfer.getData('text/vfs-item-ids') || e.dataTransfer.getData('text/vfs-item-id') || "").split(',').filter(id => id);
                      if (vfsItemIds.length > 0) {
                         vfsItemIds.forEach(vfsItemId => {
                             const item = getVFSEntry(vfsItemId);
@@ -2757,32 +2835,55 @@ Available commands:
 
         desktopElement.addEventListener('drop', (event) => {
             event.preventDefault();
-            const vfsItemId = event.dataTransfer.getData('text/vfs-item-id');
+            const vfsItemIds = (event.dataTransfer.getData('text/vfs-item-ids') || event.dataTransfer.getData('text/vfs-item-id') || "").split(',').filter(id => id);
 
-            if (vfsItemId) {
-                // This is a VFS item being moved
-                const item = getVFSEntry(vfsItemId);
-                if (item && item.parentId !== 'root') {
-                    updateVFSEntry(vfsItemId, { parentId: 'root' });
-                    renderDesktopVFSIcons(); // Refresh desktop to show new icon
-                    // Refresh file explorer if it's open and showing the old parent folder
-                    const fileExplorerWindow = document.getElementById('fileExplorerWindow');
-                    if(fileExplorerWindow && fileExplorerWindow.style.display === 'flex' && currentFEVfsPathId === item.parentId) {
-                        renderVFSFileList(currentFEVfsPathId);
-                    }
-                    logK8osActivity("VFS", `Moved '${item.name}' to desktop.`);
+            if (vfsItemIds.length > 0) {
+                if (document.body.classList.contains('aqua-theme')) {
+                    const desktopRect = desktopElement.getBoundingClientRect();
+                    const dropX = event.clientX - desktopRect.left;
+                    const dropY = event.clientY - desktopRect.top;
+                    const GRID_SIZE = 90;
+
+                    let gridX = Math.floor(dropX / GRID_SIZE);
+                    let gridY = Math.floor(dropY / GRID_SIZE);
+
+                    vfsItemIds.forEach((vfsItemId) => {
+                        const item = getVFSEntry(vfsItemId);
+                        if (item) {
+                            if (item.parentId !== 'root') {
+                                updateVFSEntry(vfsItemId, { parentId: 'root' });
+                            }
+                            const newX = gridX * GRID_SIZE;
+                            const newY = gridY * GRID_SIZE;
+                            updateVFSEntry(vfsItemId, { desktopX: newX, desktopY: newY });
+                            gridY++;
+                        }
+                    });
+                    renderDesktopVFSIcons();
+                } else {
+                     vfsItemIds.forEach(vfsItemId => {
+                        const item = getVFSEntry(vfsItemId);
+                        if (item && item.parentId !== 'root') {
+                            updateVFSEntry(vfsItemId, { parentId: 'root' });
+                        }
+                     });
+                     renderDesktopVFSIcons();
                 }
-            } else {
-                // This is an external file drop
+            } else if (event.dataTransfer.files.length > 0) {
                 const files = event.dataTransfer.files;
-                if (files.length > 0) {
-                    for (const file of files) {
-                        if (file.type.startsWith('text/') || file.type === '' || file.type === 'application/octet-stream' || file.type.endsWith('json') || file.type.endsWith('javascript') || file.type.endsWith('xml') || file.type.endsWith('csv') || file.type.startsWith('image/svg+xml') || file.type.endsWith('html') || file.type.endsWith('htm')) {
-                            const reader = new FileReader();
-                            reader.onload = (e) => { createVFSEntry({ type: 'file', name: file.name, mimeType: file.type || 'text/plain', content: e.target.result, parentId: 'root' }); renderDesktopVFSIcons(); logK8osActivity("Desktop", `Dropped file: ${file.name}`); };
-                            reader.onerror = (e) => { console.error("Error reading dropped file:", file.name, e); alert(`Error reading file: ${file.name}`); };
-                            reader.readAsText(file);
-                        } else { alert(`File type '${file.type}' not supported for Text Editor/Browser via drop. Only text-based and HTML/SVG files can be dropped for now.`); logK8osActivity("Desktop", `Dropped unsupported file: ${file.name} (${file.type})`); }
+                for (const file of files) {
+                    if (file.type.startsWith('text/') || file.type === '' || file.type === 'application/octet-stream' || file.type.endsWith('json') || file.type.endsWith('javascript') || file.type.endsWith('xml') || file.type.endsWith('csv') || file.type.startsWith('image/svg+xml') || file.type.endsWith('html') || file.type.endsWith('htm')) {
+                        const reader = new FileReader();
+                        reader.onload = (e) => {
+                            const newFile = createVFSEntry({ type: 'file', name: file.name, mimeType: file.type || 'text/plain', content: e.target.result, parentId: 'root' });
+                            renderDesktopVFSIcons(); // Re-render to place new icon correctly
+                            logK8osActivity("Desktop", `Dropped file: ${file.name}`);
+                        };
+                        reader.onerror = (e) => { console.error("Error reading dropped file:", file.name, e); alert(`Error reading file: ${file.name}`); };
+                        reader.readAsText(file);
+                    } else {
+                        alert(`File type '${file.type}' not supported for Text Editor/Browser via drop. Only text-based and HTML/SVG files can be dropped for now.`);
+                        logK8osActivity("Desktop", `Dropped unsupported file: ${file.name} (${file.type})`);
                     }
                 }
             }
@@ -2959,7 +3060,7 @@ Available commands:
                  row.addEventListener('dragleave', () => { row.style.backgroundColor = ''; });
                  row.addEventListener('drop', (e) => {
                     e.preventDefault(); e.stopPropagation(); row.style.backgroundColor = '';
-                    const vfsItemIds = (e.dataTransfer.getData('text/vfs-item-ids') || "").split(',').filter(id => id);
+                    const vfsItemIds = (e.dataTransfer.getData('text/vfs-item-ids') || e.dataTransfer.getData('text/vfs-item-id') || "").split(',').filter(id => id);
                     const targetFolderId = item.id;
                     
                     if (vfsItemIds.length > 0 && targetFolderId) {
@@ -3338,6 +3439,7 @@ Available commands:
                 assistantSparkyMouth.setAttribute('d', surprisedMouthPath);
             }
             if (assistantAvatarContainer) assistantAvatarContainer.style.cursor = 'grabbing';
+            assistantContainer.style.transition = 'none';
 
 
             initialLeft = assistantContainer.offsetLeft;
@@ -3374,6 +3476,7 @@ Available commands:
                 assistantSparkyMouth.setAttribute('d', normalMouthPath);
             }
             if (assistantAvatarContainer) assistantAvatarContainer.style.cursor = 'pointer';
+            assistantContainer.style.transition = 'left 0.05s linear, top 0.05s linear';
 
             // Update the state variables to the new position
             sparkyPosX = assistantContainer.offsetLeft;
@@ -4381,6 +4484,8 @@ Available commands:
             if (!windowEl) return;
 
             taskbarContextMenu.innerHTML = ''; // Clear previous items
+
+            // Close item should be at the top as requested
             const closeItem = document.createElement('div');
             closeItem.className = 'context-menu-item';
             closeItem.textContent = 'Close';
@@ -4389,6 +4494,31 @@ Available commands:
                 hideAllContextMenus();
             });
             taskbarContextMenu.appendChild(closeItem);
+
+            const separator = document.createElement('div');
+            separator.className = 'context-menu-separator';
+            taskbarContextMenu.appendChild(separator);
+
+            const minimizeItem = document.createElement('div');
+            minimizeItem.className = 'context-menu-item';
+            minimizeItem.textContent = 'Minimize';
+            minimizeItem.addEventListener('click', () => {
+                handleMinimizeWindow(windowEl);
+                hideAllContextMenus();
+            });
+            taskbarContextMenu.appendChild(minimizeItem);
+
+            const maximizeItem = document.createElement('div');
+            maximizeItem.className = 'context-menu-item';
+            const isFullscreen = windowEl.classList.contains('fullscreen');
+            maximizeItem.textContent = isFullscreen ? 'Restore' : 'Maximize';
+            maximizeItem.addEventListener('click', () => {
+                windowEl.classList.toggle('fullscreen');
+                bringToFront(windowEl);
+                hideAllContextMenus();
+            });
+            taskbarContextMenu.appendChild(maximizeItem);
+
 
             const menuWidth = taskbarContextMenu.offsetWidth;
             const menuHeight = taskbarContextMenu.offsetHeight;
@@ -4667,6 +4797,18 @@ Available commands:
         if (setupGuideModal && setupGuideModal.style.display === 'flex' && !e.target.closest('#setupGuideModal') && !e.target.closest('#customSetupLink')) {
             closeSetupGuideModal();
         }
+    });
+
+    // Add a global listener to handle clicks on iframes, bringing their parent window to the front.
+    window.addEventListener('blur', () => {
+        setTimeout(() => {
+            if (document.activeElement?.tagName === 'IFRAME') {
+                const parentWindow = document.activeElement.closest('.window');
+                if (parentWindow) {
+                    bringToFront(parentWindow);
+                }
+            }
+        }, 0);
     });
 
 
