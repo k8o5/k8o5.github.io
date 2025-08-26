@@ -1,3 +1,4 @@
+
 <!--
     k8OS - Web-based Desktop Environment
     Created by: k8o5
@@ -1740,6 +1741,8 @@ Output ONLY the JSON array. No explanations, comments, or markdown outside the J
     let assistantIsProcessingCommand = false;
     let assistantWasDragging = false;
     let k8osActivityLog = [];
+    let sparkyCommandHistory = [];
+    let sparkyHistoryIndex = -1;
     const ACTIVITY_LOG_MAX_AGE = 5 * 60 * 1000;
     const ASSISTANT_SUMMARY_INTERVAL = 3 * 60 * 1000;
     let assistantSummaryIntervalId = null;
@@ -3627,15 +3630,40 @@ Available commands:
                 const userInput = newCommandInput.value.trim();
                 inputContainer.style.display = 'none';
                 if (userInput) {
+                    sparkyCommandHistory.push(userInput);
+                    sparkyHistoryIndex = sparkyCommandHistory.length;
                     processSparkyCommand(userInput);
                 } else {
                     updateAssistantSpeech("?", true);
                 }
             };
-            const handleEnterKey = (e) => { if (e.key === 'Enter') { e.preventDefault(); handleSendCommand(); } };
+            
+            const handleKeyDown = (e) => {
+                if (e.key === 'Enter') {
+                    e.preventDefault();
+                    handleSendCommand();
+                } else if (e.key === 'ArrowUp') {
+                    e.preventDefault();
+                    if (sparkyHistoryIndex > 0) {
+                        sparkyHistoryIndex--;
+                        newCommandInput.value = sparkyCommandHistory[sparkyHistoryIndex];
+                        newCommandInput.setSelectionRange(newCommandInput.value.length, newCommandInput.value.length);
+                    }
+                } else if (e.key === 'ArrowDown') {
+                    e.preventDefault();
+                    if (sparkyHistoryIndex < sparkyCommandHistory.length - 1) {
+                        sparkyHistoryIndex++;
+                        newCommandInput.value = sparkyCommandHistory[sparkyHistoryIndex];
+                        newCommandInput.setSelectionRange(newCommandInput.value.length, newCommandInput.value.length);
+                    } else {
+                        sparkyHistoryIndex = sparkyCommandHistory.length;
+                        newCommandInput.value = '';
+                    }
+                }
+            };
 
             newSendButton.addEventListener('click', handleSendCommand);
-            newCommandInput.addEventListener('keypress', handleEnterKey);
+            newCommandInput.addEventListener('keydown', handleKeyDown);
         } else {
             console.error("Sparky input UI elements not found!");
             const userInput = prompt("Sparky: What's up?");
