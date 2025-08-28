@@ -941,6 +941,7 @@ body.aqua-theme .context-menu-separator {
         <div class="desktop-icon" data-item-type="app" data-app-id="fileExplorerWindow" data-vfs-path-id="root"><div class="icon-placeholder">📁</div><span>Files</span></div>
         <div class="desktop-icon" data-item-type="app" data-app-id="webBrowserLauncher"><div class="icon-placeholder">🌐</div><span>Browser</span></div>
         <div class="desktop-icon" data-item-type="app" data-app-id="vibeCreatorWindow"><div class="icon-placeholder">✨</div><span>Vibe Creator</span></div>
+        <div class="desktop-icon" data-item-type="app" data-app-id="imageCreatorWindow"><div class="icon-placeholder">🖼️</div><span>Image Creator</span></div>
         <div class="desktop-icon" data-item-type="app" data-app-id="gifCreatorWindow"><div class="icon-placeholder">🎞️</div><span>GIF Creator</span></div>
         <div class="desktop-icon" data-item-type="app" data-app-id="gameGeneratorWindow"><div class="icon-placeholder">🕹️</div><span>Game Gen</span></div>
         <div class="desktop-icon" data-item-type="app" data-app-id="musicStudioWindow"><div class="icon-placeholder">🎶</div><span>Music Studio</span></div>
@@ -1028,6 +1029,21 @@ body.aqua-theme .context-menu-separator {
                 <p>Your vibe appears here.</p>
             </div>
             <div id="vibe_errorDisplay" class="status-bar" style="color:red; font-size:11px; margin-top:5px; border-top: 1px solid var(--win95-dark-gray); padding-top: 3px;">Status: Idle</div>
+        </div>
+    </div>
+
+    <div id="imageCreatorWindow" class="window" style="width: 500px; height: 450px; top: 50px; left: 50px;">
+        <div class="title-bar"><span class="title-bar-text">🖼️ Image Creator</span><div class="title-bar-controls"><button class="minimize-button" title="Minimize">0</button><button class="fullscreen-button" title="Toggle Fullscreen">1</button><button class="close-button" title="Close">r</button></div></div>
+        <div class="window-content">
+            <label for="image_promptInput">Describe your image:</label>
+            <textarea id="image_promptInput" rows="3" placeholder="e.g., a photorealistic cat wearing a wizard hat"></textarea>
+            <button id="image_generateButton" disabled>Generate</button>
+            <button id="image_downloadButton" style="display: none; margin-top: 5px;">Download</button>
+            <div id="image_loadingIndicator" style="display: none;">Generating...</div>
+            <div id="image_container" style="width: 100%; min-height: 200px; flex-grow: 1; border: 1px inset var(--win95-dark-gray); background-color: var(--win95-white); margin-top: 10px; display: flex; justify-content: center; align-items: center; overflow: auto;">
+                <p>Your image appears here.</p>
+            </div>
+            <div id="image_errorDisplay" class="status-bar" style="color:red; font-size:11px; margin-top:5px; border-top: 1px solid var(--win95-dark-gray); padding-top: 3px;">Status: Idle</div>
         </div>
     </div>
 
@@ -1570,6 +1586,12 @@ Output ONLY the JSON array. No explanations, comments, or markdown outside the J
     const vibe_loadingIndicator = document.getElementById('vibe_loadingIndicator');
     const vibe_errorDisplay = document.getElementById('vibe_errorDisplay');
     const vibe_creator_type_select = document.getElementById('vibe_creator_type_select');
+    const image_promptInput = document.getElementById('image_promptInput');
+    const image_generateButton = document.getElementById('image_generateButton');
+    const image_container = document.getElementById('image_container');
+    const image_downloadButton = document.getElementById('image_downloadButton');
+    const image_loadingIndicator = document.getElementById('image_loadingIndicator');
+    const image_errorDisplay = document.getElementById('image_errorDisplay');
     const gifCreator_promptInput = document.getElementById('gifCreator_promptInput');
     const gifCreator_svgInput = document.getElementById('gifCreator_svgInput');
     const gifCreator_importSvgButton = document.getElementById('gifCreator_importSvgButton');
@@ -3560,6 +3582,48 @@ Available commands:
         }
     }
 
+    async function callOpenRouterApiForImage(prompt) {
+        if (!window.GLOBAL_OPENROUTER_API_KEY) { throw new Error("OpenRouter API Key not set."); }
+        const OPENROUTER_API_URL = "https://openrouter.ai/api/v1/images/generations";
+        const modelToUse = "google/gemini-2.5-flash-image-preview:free"; // Hardcoded for now
+        const httpReferer = getCurrentOpenRouterHttpReferer();
+        const headers = {
+            'Authorization': `Bearer ${window.GLOBAL_OPENROUTER_API_KEY}`,
+            'Content-Type': 'application/json'
+        };
+        if (httpReferer) {
+            headers['HTTP-Referer'] = httpReferer;
+        }
+        try {
+            const body = {
+                model: modelToUse,
+                prompt: prompt,
+                n: 1,
+                size: "256x256"
+            };
+            const response = await fetch(OPENROUTER_API_URL, {
+                method: 'POST',
+                headers: headers,
+                body: JSON.stringify(body)
+            });
+            if (!response.ok) {
+                const errorData = await response.json().catch(() => ({}));
+                console.error("OpenRouter Image API Error Response:", errorData);
+                throw new Error(`OpenRouter Image API request failed: ${response.status} ${response.statusText}. Model: ${modelToUse}. ${errorData?.error?.message || ''}`);
+            }
+            const data = await response.json();
+            if (data.data && data.data.length > 0 && data.data[0].url) {
+                return data.data[0].url;
+            } else {
+                console.warn("OpenRouter Image API response missing expected content:", data);
+                throw new Error("OpenRouter Image API response format unexpected.");
+            }
+        } catch (error) {
+            console.error("Error calling OpenRouter Image API:", error);
+            throw error;
+        }
+    }
+
 
     async function callCurrentAiProviderForText(promptContent, maxTokens = 50, temperature = 0.8, statusUpdater = null) {
         const keyAvailable = (selectedApiProvider === 'gemini' && window.GLOBAL_GEMINI_API_KEY) ||
@@ -3925,6 +3989,17 @@ Available commands:
             } catch(e) {
                  console.error("Error in Sparky 'write html' command:", e);
                  updateAssistantSpeech("Error making HTML file: " + e.message.substring(0,100), false, false, true);
+            }
+        }
+        else if (lowerCommand.startsWith("sparky, create a picture of") || lowerCommand.startsWith("sparky, generate image")) {
+            const prompt = command.replace(/sparky, create a picture of/i, "").replace(/sparky, generate image/i, "").trim();
+            if (prompt) {
+                openWindow('imageCreatorWindow');
+                if (image_promptInput) image_promptInput.value = prompt;
+                if (image_generateButton) image_generateButton.click();
+                updateAssistantSpeech(`I'm creating a picture of "${prompt}" for you!`, false, false, true);
+            } else {
+                updateAssistantSpeech("What would you like a picture of?", false, false, true);
             }
         }
         else {
@@ -4718,6 +4793,7 @@ Available commands:
 
     let vibe_currentContent = null;
     let vibe_currentContentType = 'svg'; // svg, p5js, threejs, babylonjs
+    let image_currentContent = null;
     const vibeStatusUpdater = (msg) => { if(vibe_errorDisplay) vibe_errorDisplay.textContent = `Status: ${msg}`; if(vibe_loadingIndicator && msg.toLowerCase().includes("loading")) vibe_loadingIndicator.style.display = 'block'; else if(vibe_loadingIndicator) vibe_loadingIndicator.style.display = 'none';};
     function initVibeCreatorApp() {
         vibe_genAI_internal_model = null; // Gemini specific
@@ -5195,6 +5271,69 @@ Available commands:
 
     if (vibe_generateButton) vibe_generateButton.addEventListener('click', vibe_handleGenerate);
     if (vibe_downloadButton) vibe_downloadButton.addEventListener('click', vibe_handleDownload);
+
+    const imageStatusUpdater = (msg) => { if(image_errorDisplay) image_errorDisplay.textContent = `Status: ${msg}`; if(image_loadingIndicator && msg.toLowerCase().includes("loading")) image_loadingIndicator.style.display = 'block'; else if(image_loadingIndicator) image_loadingIndicator.style.display = 'none';};
+    function initImageCreatorApp() {
+        const keyAvailable = selectedApiProvider === 'openrouter' && window.GLOBAL_OPENROUTER_API_KEY;
+        if (keyAvailable) {
+            if (image_generateButton) image_generateButton.disabled = false;
+            imageStatusUpdater("Idle (OpenRouter)");
+        } else {
+            imageStatusUpdater("OpenRouter API Key not set.");
+            if (image_generateButton) image_generateButton.disabled = true;
+        }
+    }
+
+    async function image_handleGenerate() {
+        const keyAvailable = selectedApiProvider === 'openrouter' && window.GLOBAL_OPENROUTER_API_KEY;
+        if (!keyAvailable) {
+            imageStatusUpdater("OpenRouter API Key not set.");
+            return;
+        }
+
+        const userPrompt = image_promptInput.value.trim();
+        if (!userPrompt) {
+            imageStatusUpdater('Enter a description.');
+            return;
+        }
+
+        if (image_generateButton) image_generateButton.disabled = true;
+        if (image_downloadButton) image_downloadButton.style.display = 'none';
+        if (image_container) image_container.innerHTML = '';
+        imageStatusUpdater(`Generating image...`);
+        image_currentContent = null;
+
+        try {
+            const imageUrl = await callOpenRouterApiForImage(userPrompt);
+            image_currentContent = imageUrl;
+            image_container.innerHTML = `<img src="${imageUrl}" style="max-width: 100%; max-height: 100%;">`;
+            if (image_downloadButton) image_downloadButton.style.display = 'block';
+            imageStatusUpdater(`Image Generated.`);
+
+        } catch (error) {
+            console.error("Image Generation Error:", error);
+            imageStatusUpdater(`Error generating image: ${error.message}`);
+            if (image_container) image_container.innerHTML = `<p style="color:red;">Generation failed.</p>`;
+        } finally {
+            enableAppButtons();
+            if (image_loadingIndicator) image_loadingIndicator.style.display = 'none';
+        }
+    }
+
+    function image_handleDownload() {
+        if (image_currentContent) {
+            const fileName = image_promptInput.value.trim().toLowerCase().replace(/[^\w\s-]/g, '').replace(/\s+/g, '_') || "image";
+            // This will not work for a placeholder image, but is a placeholder for the real implementation
+            downloadFile(image_currentContent, `${fileName}.png`, "image/png");
+        } else {
+            alert("No content to download.");
+        }
+    }
+
+    if (image_generateButton) image_generateButton.addEventListener('click', image_handleGenerate);
+    if (image_downloadButton) image_downloadButton.addEventListener('click', image_handleDownload);
+
+
     if(gifCreator_importSvgButton) gifCreator_importSvgButton.addEventListener('click', () => { if (vibe_currentContent && vibe_currentContentType === 'svg' && gifCreator_svgInput) { gifCreator_svgInput.value = vibe_currentContent; gifCreatorStatusUpdater("SVG imported from Vibe Creator."); } else { gifCreatorStatusUpdater("No SVG content in Vibe Creator to import."); } });
     if(gifCreator_generateButton) gifCreator_generateButton.addEventListener('click', async () => {
         const keyAvailable = (selectedApiProvider === 'gemini' && window.GLOBAL_GEMINI_API_KEY) ||
@@ -5915,6 +6054,7 @@ function updateSparkyPosition() {
 
 function initAllAiApps(){
     initVibeCreatorApp();
+    initImageCreatorApp();
     initGameGeneratorApp();
     initMusicStudioApp();
     initGifCreatorApp();
