@@ -22,6 +22,16 @@ k8OS is a sophisticated, client-side web application that simulates a desktop op
 *   **Virtual File System (VFS):** A persistent file system that lives entirely in your browser's `localStorage`. Create, rename, delete, and download files and folders. You can even drag-and-drop files from your computer onto the k8OS desktop to import them.
 *   **No Backend Required:** The entire OS and its applications run statically in the browser. No server-side processing is needed (except for the AI API calls, which go directly from your browser to the provider).
 
+## The "Bring Your Own Key" (BYOK) Philosophy
+
+k8OS is built on a "Bring Your Own Key" (BYOK) model. This means:
+
+*   **You are in control:** You provide your own API keys for the AI services you want to use.
+*   **Privacy-focused:** Your keys are stored exclusively in your browser's `localStorage`. They are never sent to a k8OS server or any third party, ensuring your credentials remain private.
+*   **Flexibility:** You can use your existing accounts and billing relationships with various AI providers.
+
+This approach ensures that k8OS remains a free, open-source, and entirely client-side application, giving you maximum power and privacy.
+
 ## Applications
 
 k8OS comes with a variety of built-in applications:
