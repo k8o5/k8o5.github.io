@@ -572,6 +572,17 @@
                 max-width: 180px;
                 font-size: 11px;
             }
+            /* File Explorer Mobile Enhancements */
+            #fileExplorerWindow #fe_fileList td {
+                white-space: normal; /* Allow file names to wrap */
+                word-break: break-word; /* Nicer word breaking */
+                padding-top: 6px;
+                padding-bottom: 6px;
+            }
+            #fileExplorerWindow #fe_fileList td .fe-item-icon {
+                font-size: 1.2em; /* Slightly larger icons for touch */
+                margin-right: 8px;
+            }
         }
 
 /* --- Calendar Popup --- */
@@ -2449,6 +2460,31 @@ Available commands:
     // --- End Terminal ---
 
     // --- VFS Functions ---
+    function handleItemDropOnTrash(e) {
+        e.preventDefault();
+        e.stopPropagation();
+        const vfsItemIds = (e.dataTransfer.getData('text/vfs-item-ids') || e.dataTransfer.getData('text/vfs-item-id') || "").split(',').filter(id => id);
+        
+        if (vfsItemIds.length > 0) {
+            let itemsMoved = 0;
+            vfsItemIds.forEach(vfsItemId => {
+                const item = getVFSEntry(vfsItemId);
+                if (item && item.id !== TRASH_VFS_ID && item.parentId !== TRASH_VFS_ID) {
+                    updateVFSEntry(vfsItemId, { parentId: TRASH_VFS_ID });
+                    logK8osActivity("VFS", `Dragged '${item.name}' to trash.`);
+                    itemsMoved++;
+                }
+            });
+
+            if (itemsMoved > 0) {
+                renderDesktopVFSIcons();
+                const fileExplorerWindow = document.getElementById('fileExplorerWindow');
+                if (fileExplorerWindow && fileExplorerWindow.style.display === 'flex') {
+                    renderVFSFileList(currentFEVfsPathId);
+                }
+            }
+        }
+    }
     function generateUniqueId() { return Date.now().toString(36) + Math.random().toString(36).substring(2, 7); }
     function loadVFS() {
         const storedVFSItems = localStorage.getItem('k8os_vfs_items');
@@ -2684,26 +2720,7 @@ Available commands:
                     e.preventDefault();
                     e.dataTransfer.dropEffect = 'move';
                 });
-
-                newIcon.addEventListener('drop', (e) => {
-                    e.preventDefault();
-                    e.stopPropagation(); // Prevent desktop's drop handler from firing
-                    const vfsItemIds = (e.dataTransfer.getData('text/vfs-item-ids') || "").split(',').filter(id => id);
-                     if (vfsItemIds.length > 0) {
-                        vfsItemIds.forEach(vfsItemId => {
-                            const item = getVFSEntry(vfsItemId);
-                            if (item && item.id !== TRASH_VFS_ID && item.parentId !== TRASH_VFS_ID) {
-                                updateVFSEntry(vfsItemId, { parentId: TRASH_VFS_ID });
-                                logK8osActivity("VFS", `Dragged '${item.name}' to trash.`);
-                            }
-                        });
-                        renderDesktopVFSIcons();
-                        const fileExplorerWindow = document.getElementById('fileExplorerWindow');
-                        if (fileExplorerWindow && fileExplorerWindow.style.display === 'flex') {
-                            renderVFSFileList(currentFEVfsPathId);
-                        }
-                    }
-                });
+                newIcon.addEventListener('drop', handleItemDropOnTrash);
             }
         });
     }
@@ -2929,6 +2946,35 @@ Available commands:
                 } else {
                     e.preventDefault();
                 }
+            });
+
+            // Mobile long-press for selection
+            let longPressTimer;
+            let isLongPress = false;
+            row.addEventListener('touchstart', (e) => {
+                isLongPress = false;
+                longPressTimer = setTimeout(() => {
+                    isLongPress = true;
+                    // On long press, we toggle selection. This is the primary way to enter multi-select on mobile.
+                    row.classList.toggle('selected');
+                    if (navigator.vibrate) { navigator.vibrate(50); } // Haptic feedback
+                    
+                    // Update the last selected row, which is important for subsequent shift-clicks (on devices with both touch and keyboard)
+                    const selectedRows = fe_fileListElement.querySelectorAll('tr.selected');
+                    lastSelectedFileExplorerRow = selectedRows.length > 0 ? selectedRows[selectedRows.length - 1] : null;
+                }, 500);
+            });
+
+            row.addEventListener('touchend', (e) => {
+                clearTimeout(longPressTimer);
+                if (isLongPress) {
+                    e.preventDefault(); // Prevent the click event from firing after a long press to avoid double-toggling selection
+                }
+            });
+
+            row.addEventListener('touchmove', (e) => {
+                // If the user starts scrolling, it's not a long press
+                clearTimeout(longPressTimer);
             });
             
             row.addEventListener('click', (e) => {
