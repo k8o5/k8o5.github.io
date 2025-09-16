@@ -2403,11 +2403,44 @@ Available commands:
             return { output: `Set ${key} to ${value}`, success: true };
         },
         js: (args) => {
-            const code = args.join(' ');
-            if (!code) return { output: 'js: missing code to execute', success: false };
+            const input = args.join(' ');
+            if (!input) return { output: 'js: missing code or file operand', success: false };
+
+            const targetId = resolveVFSPath(input);
+            let codeToExecute = input;
+            let isFile = false;
+            let isMusicScript = false;
+            let entryName = input;
+
+            if (targetId) {
+                const entry = getVFSEntry(targetId);
+                if (entry && entry.type === 'file') {
+                    codeToExecute = entry.content || '';
+                    isFile = true;
+                    entryName = entry.name;
+                    if (entry.name.toLowerCase().endsWith('.js')) {
+                        isMusicScript = true;
+                    }
+                }
+            }
+
             try {
-                const result = eval(code);
-                return { output: String(result), success: true };
+                if (isFile && isMusicScript) {
+                    // It's a JS file, likely from Music Studio. Play it properly.
+                    stopAllMusicStudioSounds(); // Stop any previous sounds
+                    musicStudio_currentAudioContext = new (window.AudioContext || window.webkitAudioContext)();
+                    musicStudio_activeSources = [];
+
+                    const soundFunction = new Function('audioContext', 'activeSources', codeToExecute);
+                    soundFunction(musicStudio_currentAudioContext, musicStudio_activeSources);
+
+                    logK8osActivity("Terminal", `Played music script: ${entryName}`);
+                    return { output: `Playing music from ${entryName}...`, success: true };
+                } else {
+                    // It's raw code or a non-JS file's content
+                    const result = eval(codeToExecute);
+                    return { output: String(result), success: true };
+                }
             } catch (e) {
                 return { output: e.message, success: false };
             }
