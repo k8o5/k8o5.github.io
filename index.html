@@ -958,7 +958,6 @@ body.aqua-theme .context-menu-separator {
         <div class="desktop-icon" data-item-type="app" data-app-id="textEditorWindow"><div class="icon-placeholder">🗒️</div><span>Editor</span></div>
         <div class="desktop-icon" data-item-type="app" data-app-id="systemSettingsWindow"><div class="icon-placeholder">⚙️</div><span>Settings</span></div>
         <div class="desktop-icon" data-item-type="app" data-app-id="terminalWindow"><div class="icon-placeholder">💲</div><span>Terminal</span></div>
-        <div class="desktop-icon" data-item-type="app" data-app-id="imageToCodeWindow"><div class="icon-placeholder">🖼️</div><span>Image to Code</span></div>
         <div class="desktop-icon" data-item-type="app" data-app-id="trashBin"><div class="icon-placeholder">🗑️</div><span>Trash</span></div>
         <!-- VFS Icons will be dynamically added here by JS -->
     </div>
@@ -1308,35 +1307,6 @@ body.aqua-theme .context-menu-separator {
                 <span class="terminal-prompt">$</span>
                 <input type="text" id="terminal_input" autocomplete="off" autocorrect="off" autocapitalize="off" spellcheck="false">
             </div>
-        </div>
-    </div>
-
-    <div id="imageToCodeWindow" class="window" style="width: 750px; height: 650px; top: 80px; left: 80px;">
-        <div class="title-bar"><span class="title-bar-text">🖼️ Image to Code</span><div class="title-bar-controls"><button class="minimize-button" title="Minimize">0</button><button class="fullscreen-button" title="Toggle Fullscreen">1</button><button class="close-button" title="Close">r</button></div></div>
-        <div class="window-content" style="display: flex; flex-direction: column;">
-            <div style="padding: 5px; border-bottom: 1px solid var(--win95-dark-gray); flex-shrink: 0; display: flex; align-items: center; gap: 10px;">
-                <label for="imageToCode_fileInput">Upload Image:</label>
-                <input type="file" id="imageToCode_fileInput" accept="image/*">
-                <button id="imageToCode_generateButton" disabled>Generate Code</button>
-            </div>
-            <div style="display: flex; flex-grow: 1; margin-top: 5px; min-height: 0;">
-                <div style="flex: 1; display: flex; flex-direction: column; margin-right: 5px; min-width: 0;">
-                    <label>Image Preview:</label>
-                    <div id="imageToCode_imagePreviewContainer" style="flex-grow: 1; border: 1px inset var(--win95-dark-gray); background-color: var(--win95-white); display: flex; justify-content: center; align-items: center; overflow: auto;">
-                        <img id="imageToCode_imagePreview" style="max-width: 100%; max-height: 100%; display: none; object-fit: contain;">
-                        <p id="imageToCode_imagePlaceholder">Upload an image to begin</p>
-                    </div>
-                </div>
-                <div style="flex: 1; display: flex; flex-direction: column; min-width: 0;">
-                    <label for="imageToCode_generatedCode">Generated Code:</label>
-                    <textarea id="imageToCode_generatedCode" readonly style="flex-grow: 1; font-family: 'Courier New', monospace; font-size: 11px;"></textarea>
-                </div>
-            </div>
-            <div style="flex: 1; display: flex; flex-direction: column; margin-top: 5px; min-height: 0;">
-                 <label>Rendered Preview:</label>
-                 <iframe id="imageToCode_renderPreview" style="flex-grow: 1; width: 100%; border: 1px inset var(--win95-dark-gray); background-color: var(--win95-white);"></iframe>
-            </div>
-            <div id="imageToCode_status" class="status-bar" style="margin-top: 5px;">Status: Awaiting image upload.</div>
         </div>
     </div>
 
@@ -5989,130 +5959,11 @@ function updateSparkyPosition() {
     }
 }
 
-    let imageToCode_vision_model;
-    let imageToCode_uploadedFile = null;
-
-    function initImageToCodeApp() {
-        const statusEl = document.getElementById('imageToCode_status');
-        const fileInput = document.getElementById('imageToCode_fileInput');
-        const generateButton = document.getElementById('imageToCode_generateButton');
-
-        // This app specifically requires a vision model, which we've configured for Gemini.
-        if (selectedApiProvider === 'gemini' && window.GLOBAL_GEMINI_API_KEY) {
-            try {
-                if (!imageToCode_vision_model) {
-                    const genAI = new GoogleGenerativeAI(window.GLOBAL_GEMINI_API_KEY);
-                    imageToCode_vision_model = genAI.getGenerativeModel({ model: "gemini-1.5-flash" });
-                }
-                if (statusEl) statusEl.textContent = 'Status: Ready. Please upload an image.';
-                if (fileInput) fileInput.disabled = false;
-            } catch(e) {
-                console.error("Image to Code Gemini AI Init Error:", e);
-                if(statusEl) statusEl.textContent = `Status: AI Init Error: ${e.message}`;
-                if (fileInput) fileInput.disabled = true;
-                if (generateButton) generateButton.disabled = true;
-            }
-        } else {
-            if(statusEl) statusEl.textContent = 'Status: This app requires the Gemini API provider.';
-            if (fileInput) fileInput.disabled = true;
-            if (generateButton) generateButton.disabled = true;
-            imageToCode_vision_model = null;
-        }
-    }
-
-    async function fileToGenerativePart(file) {
-      const base64EncodedDataPromise = new Promise((resolve) => {
-        const reader = new FileReader();
-        reader.onloadend = () => resolve(reader.result.split(',')[1]);
-        reader.readAsDataURL(file);
-      });
-      return {
-        inlineData: { data: await base64EncodedDataPromise, mimeType: file.type },
-      };
-    }
-
-    const imageToCode_fileInput = document.getElementById('imageToCode_fileInput');
-    const imageToCode_generateButton = document.getElementById('imageToCode_generateButton');
-    const imageToCode_imagePreview = document.getElementById('imageToCode_imagePreview');
-    const imageToCode_imagePlaceholder = document.getElementById('imageToCode_imagePlaceholder');
-    const imageToCode_generatedCode = document.getElementById('imageToCode_generatedCode');
-    const imageToCode_renderPreview = document.getElementById('imageToCode_renderPreview');
-    const imageToCode_status = document.getElementById('imageToCode_status');
-
-    if (imageToCode_fileInput) {
-        imageToCode_fileInput.addEventListener('change', (e) => {
-            const file = e.target.files[0];
-            if (file && file.type.startsWith('image/')) {
-                imageToCode_uploadedFile = file;
-                const reader = new FileReader();
-                reader.onload = (event) => {
-                    imageToCode_imagePreview.src = event.target.result;
-                    imageToCode_imagePreview.style.display = 'block';
-                    if (imageToCode_imagePlaceholder) imageToCode_imagePlaceholder.style.display = 'none';
-                };
-                reader.readAsDataURL(file);
-                if (imageToCode_generateButton) imageToCode_generateButton.disabled = !imageToCode_vision_model;
-                if (imageToCode_status) imageToCode_status.textContent = 'Status: Image loaded. Ready to generate code.';
-            } else {
-                imageToCode_uploadedFile = null;
-                if (imageToCode_generateButton) imageToCode_generateButton.disabled = true;
-                if (imageToCode_status) imageToCode_status.textContent = 'Status: Please select a valid image file.';
-            }
-        });
-    }
-
-    if (imageToCode_generateButton) {
-        imageToCode_generateButton.addEventListener('click', async () => {
-            if (!imageToCode_uploadedFile || !imageToCode_vision_model) {
-                imageToCode_status.textContent = 'Status: Error - No image uploaded or AI model not ready.';
-                return;
-            }
-
-            imageToCode_generateButton.disabled = true;
-            imageToCode_status.textContent = 'Status: Generating description from image... (Step 1/2)';
-            imageToCode_generatedCode.value = '';
-            imageToCode_renderPreview.srcdoc = '';
-
-            try {
-                // Step 1: Image to Text using the vision model
-                const imagePart = await fileToGenerativePart(imageToCode_uploadedFile);
-                const descriptionPrompt = "Analyze this image from the perspective of a senior frontend web developer. Provide a detailed, structured description of its layout, components, color scheme (with hex codes), typography, and any text content. The goal is to give another developer enough information to recreate it with HTML and CSS.";
-                
-                const descriptionResult = await imageToCode_vision_model.generateContent([descriptionPrompt, imagePart]);
-                const description = descriptionResult.response.text();
-
-                imageToCode_status.textContent = 'Status: Description generated. Generating code... (Step 2/2)';
-
-                // Step 2: Text to Code using the standard text generation provider
-                const codeGenPrompt = `Based on the following detailed description of a webpage, generate a single, self-contained, and visually accurate HTML file. Use modern HTML5 and CSS3. Use inline or embedded CSS within a <style> tag. Do not use any external libraries, scripts, or images. The code should be complete and ready to be rendered in an iframe. Be as faithful to the description as possible.\n\nDESCRIPTION:\n${description}`;
-
-                const generatedHtml = await callCurrentAiProviderForText(codeGenPrompt, 8192, 0.2);
-
-                if (!generatedHtml || !generatedHtml.toLowerCase().includes('<html')) {
-                    throw new Error("AI did not return valid HTML content. It might have been filtered or the response was empty.");
-                }
-
-                imageToCode_generatedCode.value = generatedHtml;
-                imageToCode_renderPreview.srcdoc = generatedHtml;
-                imageToCode_status.textContent = 'Status: Code generation complete!';
-
-            } catch (error) {
-                console.error("Image to Code generation error:", error);
-                imageToCode_status.textContent = `Status: Error - ${error.message}`;
-            } finally {
-                if (imageToCode_uploadedFile) { // only re-enable if a file is still selected
-                    imageToCode_generateButton.disabled = false;
-                }
-            }
-        });
-    }
-
 function initAllAiApps(){
     initVibeCreatorApp();
     initGameGeneratorApp();
     initMusicStudioApp();
     initGifCreatorApp();
-        initImageToCodeApp();
     if (selectedApiProvider !== 'gemini' || !window.GLOBAL_GEMINI_API_KEY) { assistant_gemini_model = null; }
     if (selectedApiProvider === 'transformersjs' && window.GLOBAL_TRANSFORMERSJS_MODEL_ID) {
         ensureTransformersJsPipeline(window.GLOBAL_TRANSFORMERSJS_MODEL_ID, (progress) => {
