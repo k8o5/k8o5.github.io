@@ -3836,6 +3836,265 @@ Available commands:
         return windowEl;
     }
 
+    // Sparky Command: Helper function for parsing arguments from a command string.
+    function parseSparkyArgs(command) {
+        const args = {};
+        const keys = ["Idea", "Player SVG", "Item SVG", "Music"];
+        const regex = new RegExp(`\\b(${keys.join('|')}):`, 'ig');
+        const commandPrefix = "sparky, create game";
+        let content = command.substring(command.toLowerCase().indexOf(commandPrefix) + commandPrefix.length).trim();
+
+        const firstKeyMatch = content.match(regex);
+        if (firstKeyMatch) {
+            const firstKeyIndex = firstKeyMatch.index;
+            if (firstKeyIndex > 0) {
+                args.idea = content.substring(0, firstKeyIndex).trim();
+                content = content.substring(firstKeyIndex);
+            }
+        } else {
+            if (content) args.idea = content;
+            content = "";
+        }
+
+        if (content) {
+            const parts = content.split(regex);
+            for (let i = 1; i < parts.length; i += 2) {
+                let key = parts[i].toLowerCase().trim();
+                const value = parts[i+1] ? parts[i+1].trim() : '';
+                key = key.replace(/ (\w)/g, (match, p1) => p1.toUpperCase());
+                if (value) {
+                    args[key] = value;
+                }
+            }
+        }
+        return args;
+    }
+
+    // Sparky Command: Helper function for a specific 'create game' flow.
+    async function processAndDisplayGameCode(gameHtml, gameIdea) {
+        const sparkyFolderId = ensureSparkyCreationsFolder();
+        const filename = `sparky-game-${gameIdea.substring(0,15).replace(/[^a-z0-9]/gi, '_') || 'creation'}-${Date.now().toString(36)}.html`;
+        const newFile = createVFSEntry({ type: 'file', name: filename, mimeType: 'text/html', content: gameHtml, parentId: sparkyFolderId });
+        
+        if(fe_fileListElement && (currentFEVfsPathId === 'root' || currentFEVfsPathId === sparkyFolderId)) {
+             renderVFSFileList(currentFEVfsPathId);
+        }
+        openNewBrowserWindow(null, newFile.id);
+    }
+    // Sparky Command Handler: Create Game
+    async function handleCreateGameCommand(command, context) {
+        try {
+            const args = parseSparkyArgs(command);
+            const gameIdea = args.idea || "a simple game";
+            const playerSvgDesc = args.playerSvg || "player object";
+            const itemSvgDesc = args.itemSvg || "item object";
+            const musicDesc = args.music || "background music";
+
+            updateAssistantSpeech(`Making game: "${gameIdea.substring(0,20)}..."`, false, false, true);
+
+            const playerSvgCode = await internal_generateSingleSvg(playerSvgDesc, false, context.sparkyStatusUpdater);
+            if (!playerSvgCode) { updateAssistantSpeech("Player SVG failed. Stopping.", false, false, true); return; }
+
+            const itemSvgCode = await internal_generateSingleSvg(itemSvgDesc, false, context.sparkyStatusUpdater);
+            if (!itemSvgCode) { updateAssistantSpeech("Item SVG failed. Stopping.", false, false, true); return; }
+
+            const soundJsCode = await internal_generateSingleSoundJs(musicDesc, context.sparkyStatusUpdater);
+            if (!soundJsCode) { updateAssistantSpeech("Music code failed. Stopping.", false, false, true); return; }
+
+            const gamePlan = {
+                game_mechanic: gameIdea,
+                svg_assets: [ { description: playerSvgDesc, animated: false }, { description: itemSvgDesc, animated: false } ],
+                sound_effects: [ musicDesc ]
+            };
+            const svgAssetsArray = [playerSvgCode, itemSvgCode];
+            const soundJsArray = [soundJsCode];
+
+            const gameHtml = await executeGameGenerationFromPlan(gameIdea, gamePlan, svgAssetsArray, soundJsArray, context.sparkyStatusUpdater);
+
+            if (gameHtml) {
+                await processAndDisplayGameCode(gameHtml, gameIdea);
+                updateAssistantSpeech("Game ready! (And saved to Sparky's Creations)", false, false, true);
+            } else {
+                updateAssistantSpeech("Game creation failed.", false, false, true);
+            }
+        } catch (e) {
+            console.error("Error in Sparky 'create game' command:", e);
+            updateAssistantSpeech("Error creating game: " + e.message.substring(0,100), false, false, true);
+        }
+    }
+
+    // Sparky Command Helper: Execute File System Creation
+    async function executeFileSystemCreation(userRequest, explicitBaseParentId, statusUpdater) {
+        if (explicitBaseParentId !== 'root' && !getVFSEntry(explicitBaseParentId)) {
+             updateAssistantSpeech(`Error: Specified base parent folder ID '${explicitBaseParentId}' does not exist. Defaulting to Sparky's Creations folder.`, true, false, true);
+             explicitBaseParentId = ensureSparkyCreationsFolder();
+        }
+
+        const finalSparkyFileSystemPrompt = DEFAULT_SPARKY_FILESYSTEM_GENERATOR_PROMPT
+            .replace("{USER_REQUEST}", userRequest)
+            .replace(/{BASE_PARENT_ID}/g, explicitBaseParentId);
+
+        let aiPlanResponseText;
+        try {
+            aiPlanResponseText = await callCurrentAiProviderForText(finalSparkyFileSystemPrompt, 4000, 0.3, statusUpdater);
+            let cleanedJsonString = aiPlanResponseText.replace(/```json\n?/g, "").replace(/```\n?/g, "").trim();
+            const jsonStart = cleanedJsonString.indexOf('['); const jsonEnd = cleanedJsonString.lastIndexOf(']');
+            if (jsonStart !== -1 && jsonEnd !== -1 && jsonEnd > jsonStart) { cleanedJsonString = cleanedJsonString.substring(jsonStart, jsonEnd + 1); }
+
+            const planActions = JSON.parse(cleanedJsonString);
+            if (Array.isArray(planActions)) {
+                const tempIdToVfsIdMap = {};
+                tempIdToVfsIdMap[explicitBaseParentId] = explicitBaseParentId;
+                if (explicitBaseParentId !== 'root') { tempIdToVfsIdMap['root'] = 'root'; }
+
+                let successCount = 0;
+                for (const action of planActions) {
+                    if (!action.action || !action.name || !action.parentId || !action.id) {
+                        updateAssistantSpeech(`Skipping invalid action in plan: ${JSON.stringify(action).substring(0,50)}...`, true, false, true);
+                        continue;
+                    }
+                    let resolvedActionParentId = action.parentId === "{BASE_PARENT_ID}" ? explicitBaseParentId : action.parentId;
+                    const actualParentId = tempIdToVfsIdMap[resolvedActionParentId] || resolvedActionParentId;
+
+                    if (!getVFSEntry(actualParentId) && actualParentId !== 'root') {
+                         updateAssistantSpeech(`Error: Parent ID '${actualParentId}' (from AI's '${action.parentId}') for '${action.name}' not found. Skipping.`, true, false, true);
+                         continue;
+                    }
+
+                    let newEntry;
+                    if (action.action === "create_folder") {
+                        newEntry = createVFSEntry({ type: 'folder', name: action.name, parentId: actualParentId });
+                    } else if (action.action === "create_file") {
+                        newEntry = createVFSEntry({
+                            type: 'file',
+                            name: action.name,
+                            parentId: actualParentId,
+                            content: action.content || "",
+                            mimeType: action.mimeType || "text/plain"
+                        });
+                    }
+                    if (newEntry) {
+                        tempIdToVfsIdMap[action.id] = newEntry.id;
+                        successCount++;
+                    }
+                }
+                renderDesktopVFSIcons();
+                if(fe_fileListElement && (currentFEVfsPathId === 'root' || currentFEVfsPathId === explicitBaseParentId || getVFSChildren(explicitBaseParentId).length > 0)) {
+                    renderVFSFileList(currentFEVfsPathId);
+                }
+                const parentFolder = getVFSEntry(explicitBaseParentId);
+                const parentFolderName = parentFolder ? parentFolder.name : (explicitBaseParentId === 'root' ? "Files (Root)" : SPARKY_CREATIONS_FOLDER_NAME);
+                updateAssistantSpeech(`File system created in "${parentFolderName}"! ${successCount} items processed.`, true, false, true);
+            } else {
+                updateAssistantSpeech("Invalid plan format from AI. Expected a JSON array.", true, false, true);
+            }
+        } catch (e) {
+            console.error("Error processing Sparky file system plan:", e, "Raw AI:", aiPlanResponseText);
+            updateAssistantSpeech("Error processing file system plan: " + e.message.substring(0,100), true, false, true);
+        }
+    }
+
+    // Sparky Command Handlers: File System Variations
+    async function handleCreateFileSystemFromContent(command, context) {
+        updateAssistantSpeech("Processing editor content for file system structure...", false, true, true);
+        const explicitBaseParentId = context.baseParentIdOverride || ensureSparkyCreationsFolder();
+        await executeFileSystemCreation(command, explicitBaseParentId, context.sparkyStatusUpdater);
+    }
+
+    async function handleCreateFileSystemFromPlan(command, context) {
+        updateAssistantSpeech("Creating file system from plan...", false, true, true);
+        const planContentMatch = command.match(/plan:\s*([\s\S]+)$/i);
+        if (planContentMatch && planContentMatch[1]) {
+            const userRequestForAISystemPlan = planContentMatch[1].trim();
+            const explicitBaseParentId = context.baseParentIdOverride || ensureSparkyCreationsFolder();
+            await executeFileSystemCreation(userRequestForAISystemPlan, explicitBaseParentId, context.sparkyStatusUpdater);
+        } else {
+            updateAssistantSpeech("File system plan not found or invalid.", true, false, true);
+        }
+    }
+
+    async function handleCreateFileSystemFromRequest(command, context) {
+        updateAssistantSpeech("Interpreting file system request...", false, true, true);
+        const userRequestForAISystemPlan = command.substring("sparky, create file system.".length).trim();
+        const explicitBaseParentId = context.baseParentIdOverride || ensureSparkyCreationsFolder();
+        await executeFileSystemCreation(userRequestForAISystemPlan, explicitBaseParentId, context.sparkyStatusUpdater);
+    }
+
+    // Sparky Command Handler: Write HTML
+    async function handleWriteHtmlCommand(command, context) {
+        try {
+            const filenameMatch = command.match(/Filename:\s*([\w.-]+)\s*Content:/i);
+            const contentMatch = command.match(/Content:\s*([\s\S]+)$/i);
+
+            if (filenameMatch && contentMatch) {
+                const filename = filenameMatch[1].trim();
+                const htmlContent = contentMatch[1].trim();
+                updateAssistantSpeech(`Creating HTML file "${filename}"...`, false, true, true);
+
+                const sparkyFolderId = ensureSparkyCreationsFolder();
+                const newFile = createVFSEntry({ type: 'file', name: filename, mimeType: 'text/html', content: htmlContent, parentId: sparkyFolderId });
+                if(fe_fileListElement && (currentFEVfsPathId === 'root' || currentFEVfsPathId === sparkyFolderId)) {
+                     renderVFSFileList(currentFEVfsPathId);
+                }
+                updateAssistantSpeech(`Done! Saved "${filename}" to your "${SPARKY_CREATIONS_FOLDER_NAME}" folder.`, false, false, true);
+            } else {
+                updateAssistantSpeech("Usage: Sparky, write html. Filename: page.html. Content: <h1>Hello</h1>", false, false, true);
+            }
+        } catch(e) {
+             console.error("Error in Sparky 'write html' command:", e);
+             updateAssistantSpeech("Error making HTML file: " + e.message.substring(0,100), false, false, true);
+        }
+    }
+
+    // Sparky Command Handler: Default HTML Generation
+    async function handleDefaultHtmlGeneration(command, context) {
+        updateAssistantSpeech("Let me try to make that into HTML...", false, true, true);
+        const htmlPrompt = DEFAULT_SPARKY_HTML_GENERATOR_PROMPT.replace("{USER_REQUEST}", command);
+        let generatedHtml = "";
+        try {
+            generatedHtml = await callCurrentAiProviderForText(htmlPrompt, 4000, 0.7, context.sparkyStatusUpdater);
+            if (generatedHtml.startsWith("```html")) generatedHtml = generatedHtml.substring(7).trim();
+            else if (generatedHtml.startsWith("```")) generatedHtml = generatedHtml.substring(3).trim();
+            if (generatedHtml.endsWith("```")) generatedHtml = generatedHtml.substring(0, generatedHtml.length - 3).trim();
+
+            await createSparkyHtmlPopupWindow(generatedHtml, command);
+            updateAssistantSpeech(`Here's what I came up with! (And saved to your "${SPARKY_CREATIONS_FOLDER_NAME}" folder)`, true, false, true);
+
+        } catch (error) {
+            console.error("Sparky generic HTML generation error:", error);
+            await createSparkyHtmlPopupWindow(`<p style="color:red;">Sorry, I had trouble generating HTML for that: ${error.message}</p>`, command);
+            updateAssistantSpeech("Oops, couldn't make HTML for that.", true, false, true);
+        }
+    }
+
+    const sparkyCommands = [
+        {
+            name: 'create file system from content',
+            match: (lowerCommand) => lowerCommand.startsWith("sparky, create file system based on editor content"),
+            handler: handleCreateFileSystemFromContent
+        },
+        {
+            name: 'create file system from plan',
+            match: (lowerCommand) => lowerCommand.startsWith("sparky, create file system. plan:"),
+            handler: handleCreateFileSystemFromPlan
+        },
+        {
+            name: 'create file system',
+            match: (lowerCommand) => lowerCommand.startsWith("sparky, create file system."),
+            handler: handleCreateFileSystemFromRequest
+        },
+        {
+            name: 'create game',
+            match: (lowerCommand) => lowerCommand.startsWith("sparky, create game"),
+            handler: handleCreateGameCommand
+        },
+        {
+            name: 'write html',
+            match: (lowerCommand) => lowerCommand.startsWith("sparky, write html"),
+            handler: handleWriteHtmlCommand
+        }
+    ];
+
     async function processSparkyCommand(command, baseParentIdOverride = null) {
         logK8osActivity("Sparky Command", command);
         assistantIsProcessingCommand = true;
@@ -3843,188 +4102,19 @@ Available commands:
         updateAssistantSpeech("Working on it...", false, true);
 
         const lowerCommand = command.toLowerCase();
-        let baseParentIdForSparkyPlan = baseParentIdOverride || ensureSparkyCreationsFolder();
+        const context = {
+            sparkyStatusUpdater: sparkyStatusUpdater,
+            baseParentIdOverride: baseParentIdOverride
+        };
 
-        if (lowerCommand.startsWith("sparky, create game")) {
-             try {
-                const ideaMatch = command.match(/Idea:\s*(.+?)\s*(Player SVG:|Item SVG:|Music:|$)/i);
-                const playerSvgMatch = command.match(/Player SVG:\s*(.+?)\s*(Item SVG:|Music:|$)/i);
-                const itemSvgMatch = command.match(/Item SVG:\s*(.+?)\s*(Music:|$)/i);
-                const musicMatch = command.match(/Music:\s*(.+?)\s*$/i);
+        const matchedCommand = sparkyCommands.find(cmd => cmd.match(lowerCommand));
 
-                const gameIdea = ideaMatch ? ideaMatch[1].trim() : "a simple game";
-                const playerSvgDesc = playerSvgMatch ? playerSvgMatch[1].trim() : "player object";
-                const itemSvgDesc = itemSvgMatch ? itemSvgMatch[1].trim() : "item object";
-                const musicDesc = musicMatch ? musicMatch[1].trim() : "background music";
-
-                updateAssistantSpeech(`Making game: "${gameIdea.substring(0,20)}..."`, false, false, true);
-
-                const playerSvgCode = await internal_generateSingleSvg(playerSvgDesc, false, sparkyStatusUpdater);
-                if (!playerSvgCode) { updateAssistantSpeech("Player SVG failed. Stopping.", false, false, true); assistantIsProcessingCommand = false; return; }
-
-                const itemSvgCode = await internal_generateSingleSvg(itemSvgDesc, false, sparkyStatusUpdater);
-                if (!itemSvgCode) { updateAssistantSpeech("Item SVG failed. Stopping.", false, false, true); assistantIsProcessingCommand = false; return; }
-
-                const soundJsCode = await internal_generateSingleSoundJs(musicDesc, sparkyStatusUpdater);
-                if (!soundJsCode) { updateAssistantSpeech("Music code failed. Stopping.", false, false, true); assistantIsProcessingCommand = false; return; }
-
-                const gamePlan = {
-                    game_mechanic: gameIdea,
-                    svg_assets: [ { description: playerSvgDesc, animated: false }, { description: itemSvgDesc, animated: false } ],
-                    sound_effects: [ musicDesc ]
-                };
-                const svgAssetsArray = [playerSvgCode, itemSvgCode];
-                const soundJsArray = [soundJsCode];
-
-                const gameHtml = await executeGameGenerationFromPlan(gameIdea, gamePlan, svgAssetsArray, soundJsArray, sparkyStatusUpdater);
-
-                if (gameHtml) {
-                    await processAndDisplayGameCode(gameHtml, gameIdea);
-                    updateAssistantSpeech("Game ready! (And saved to Sparky's Creations)", false, false, true);
-                } else {
-                    updateAssistantSpeech("Game creation failed.", false, false, true);
-                }
-            } catch (e) {
-                console.error("Error in Sparky 'create game' command:", e);
-                updateAssistantSpeech("Error creating game: " + e.message.substring(0,100), false, false, true);
-            }
-        } else if (lowerCommand.startsWith("sparky, create file system based on editor content") || lowerCommand.startsWith("sparky, create file system. plan:") || lowerCommand.startsWith("sparky, create file system.")) {
-            let userRequestForAISystemPlan = command;
-            let explicitBaseParentId = baseParentIdForSparkyPlan;
-
-            if (lowerCommand.startsWith("sparky, create file system based on editor content")) {
-                updateAssistantSpeech("Processing editor content for file system structure...", false, true, true);
-                explicitBaseParentId = baseParentIdOverride || ensureSparkyCreationsFolder();
-            } else if (lowerCommand.startsWith("sparky, create file system. plan:")) {
-                 updateAssistantSpeech("Creating file system from plan...", false, true, true);
-                 const planContentMatch = command.match(/plan:\s*([\s\S]+)$/i);
-                 if (planContentMatch && planContentMatch[1]) {
-                     userRequestForAISystemPlan = planContentMatch[1].trim();
-                     explicitBaseParentId = baseParentIdForSparkyPlan;
-                 } else {
-                     updateAssistantSpeech("File system plan not found or invalid.", true, false, true);
-                     assistantIsProcessingCommand = false; return;
-                 }
-            } else if (lowerCommand.startsWith("sparky, create file system.")){
-                 updateAssistantSpeech("Interpreting file system request...", false, true, true);
-                 userRequestForAISystemPlan = command.substring("sparky, create file system.".length).trim();
-                 explicitBaseParentId = baseParentIdForSparkyPlan;
-            }
-
-
-            if (explicitBaseParentId !== 'root' && !getVFSEntry(explicitBaseParentId)) {
-                 updateAssistantSpeech(`Error: Specified base parent folder ID '${explicitBaseParentId}' does not exist. Defaulting to Sparky's Creations folder.`, true, false, true);
-                 explicitBaseParentId = ensureSparkyCreationsFolder();
-            }
-
-
-            const finalSparkyFileSystemPrompt = DEFAULT_SPARKY_FILESYSTEM_GENERATOR_PROMPT
-                .replace("{USER_REQUEST}", userRequestForAISystemPlan)
-                .replace(/{BASE_PARENT_ID}/g, explicitBaseParentId);
-
-            let aiPlanResponseText;
-            try {
-                aiPlanResponseText = await callCurrentAiProviderForText(finalSparkyFileSystemPrompt, 4000, 0.3, sparkyStatusUpdater);
-                let cleanedJsonString = aiPlanResponseText.replace(/```json\n?/g, "").replace(/```\n?/g, "").trim();
-                const jsonStart = cleanedJsonString.indexOf('['); const jsonEnd = cleanedJsonString.lastIndexOf(']');
-                if (jsonStart !== -1 && jsonEnd !== -1 && jsonEnd > jsonStart) { cleanedJsonString = cleanedJsonString.substring(jsonStart, jsonEnd + 1); }
-
-                const planActions = JSON.parse(cleanedJsonString);
-                if (Array.isArray(planActions)) {
-                    const tempIdToVfsIdMap = {};
-                    tempIdToVfsIdMap[explicitBaseParentId] = explicitBaseParentId;
-                    if (explicitBaseParentId !== 'root') { tempIdToVfsIdMap['root'] = 'root'; }
-
-
-                    let successCount = 0;
-                    for (const action of planActions) {
-                        if (!action.action || !action.name || !action.parentId || !action.id) {
-                            updateAssistantSpeech(`Skipping invalid action in plan: ${JSON.stringify(action).substring(0,50)}...`, true, false, true);
-                            continue;
-                        }
-                        let resolvedActionParentId = action.parentId === "{BASE_PARENT_ID}" ? explicitBaseParentId : action.parentId;
-                        const actualParentId = tempIdToVfsIdMap[resolvedActionParentId] || resolvedActionParentId;
-
-                        if (!getVFSEntry(actualParentId) && actualParentId !== 'root') {
-                             updateAssistantSpeech(`Error: Parent ID '${actualParentId}' (from AI's '${action.parentId}') for '${action.name}' not found. Skipping.`, true, false, true);
-                             continue;
-                        }
-
-                        let newEntry;
-                        if (action.action === "create_folder") {
-                            newEntry = createVFSEntry({ type: 'folder', name: action.name, parentId: actualParentId });
-                        } else if (action.action === "create_file") {
-                            newEntry = createVFSEntry({
-                                type: 'file',
-                                name: action.name,
-                                parentId: actualParentId,
-                                content: action.content || "",
-                                mimeType: action.mimeType || "text/plain"
-                            });
-                        }
-                        if (newEntry) {
-                            tempIdToVfsIdMap[action.id] = newEntry.id;
-                            successCount++;
-                        }
-                    }
-                    renderDesktopVFSIcons();
-                    if(fe_fileListElement && (currentFEVfsPathId === 'root' || currentFEVfsPathId === explicitBaseParentId || getVFSChildren(explicitBaseParentId).length > 0)) {
-                        renderVFSFileList(currentFEVfsPathId);
-                    }
-                    const parentFolder = getVFSEntry(explicitBaseParentId);
-                    const parentFolderName = parentFolder ? parentFolder.name : (explicitBaseParentId === 'root' ? "Files (Root)" : SPARKY_CREATIONS_FOLDER_NAME);
-                    updateAssistantSpeech(`File system created in "${parentFolderName}"! ${successCount} items processed.`, true, false, true);
-                } else {
-                    updateAssistantSpeech("Invalid plan format from AI. Expected a JSON array.", true, false, true);
-                }
-            } catch (e) {
-                console.error("Error processing Sparky file system plan:", e, "Raw AI:", aiPlanResponseText);
-                updateAssistantSpeech("Error processing file system plan: " + e.message.substring(0,100), true, false, true);
-            }
+        if (matchedCommand) {
+            await matchedCommand.handler(command, context);
+        } else {
+            await handleDefaultHtmlGeneration(command, context);
         }
-        else if (lowerCommand.startsWith("sparky, write html")) {
-            try {
-                const filenameMatch = command.match(/Filename:\s*([\w.-]+)\s*Content:/i);
-                const contentMatch = command.match(/Content:\s*([\s\S]+)$/i);
 
-                if (filenameMatch && contentMatch) {
-                    const filename = filenameMatch[1].trim();
-                    const htmlContent = contentMatch[1].trim();
-                    updateAssistantSpeech(`Creating HTML file "${filename}"...`, false, true, true);
-
-                    const sparkyFolderId = ensureSparkyCreationsFolder();
-                    const newFile = createVFSEntry({ type: 'file', name: filename, mimeType: 'text/html', content: htmlContent, parentId: sparkyFolderId });
-                    if(fe_fileListElement && (currentFEVfsPathId === 'root' || currentFEVfsPathId === sparkyFolderId)) {
-                         renderVFSFileList(currentFEVfsPathId);
-                    }
-                    updateAssistantSpeech(`Done! Saved "${filename}" to your "${SPARKY_CREATIONS_FOLDER_NAME}" folder.`, false, false, true);
-                } else {
-                    updateAssistantSpeech("Usage: Sparky, write html. Filename: page.html. Content: <h1>Hello</h1>", false, false, true);
-                }
-            } catch(e) {
-                 console.error("Error in Sparky 'write html' command:", e);
-                 updateAssistantSpeech("Error making HTML file: " + e.message.substring(0,100), false, false, true);
-            }
-        }
-        else {
-            updateAssistantSpeech("Let me try to make that into HTML...", false, true, true);
-            const htmlPrompt = DEFAULT_SPARKY_HTML_GENERATOR_PROMPT.replace("{USER_REQUEST}", command);
-            let generatedHtml = "";
-            try {
-                generatedHtml = await callCurrentAiProviderForText(htmlPrompt, 4000, 0.7, sparkyStatusUpdater);
-                if (generatedHtml.startsWith("```html")) generatedHtml = generatedHtml.substring(7).trim();
-                else if (generatedHtml.startsWith("```")) generatedHtml = generatedHtml.substring(3).trim();
-                if (generatedHtml.endsWith("```")) generatedHtml = generatedHtml.substring(0, generatedHtml.length - 3).trim();
-
-                await createSparkyHtmlPopupWindow(generatedHtml, command);
-                updateAssistantSpeech(`Here's what I came up with! (And saved to your "${SPARKY_CREATIONS_FOLDER_NAME}" folder)`, true, false, true);
-
-            } catch (error) {
-                console.error("Sparky generic HTML generation error:", error);
-                await createSparkyHtmlPopupWindow(`<p style="color:red;">Sorry, I had trouble generating HTML for that: ${error.message}</p>`, command);
-                updateAssistantSpeech("Oops, couldn't make HTML for that.", true, false, true);
-            }
-        }
         assistantIsProcessingCommand = false;
     }
 
@@ -5524,7 +5614,6 @@ if(musicStudio_generateButton) musicStudio_generateButton.addEventListener('clic
     finally { enableAppButtons(); }
 });
 
-// REPLACE IT WITH THIS
 function stopAllMusicStudioSounds() {
     if (musicStudio_currentAudioContext && musicStudio_currentAudioContext.state !== 'closed') {
         musicStudio_currentAudioContext.close().catch(e => console.error("Error closing previous AudioContext:", e));
@@ -5543,7 +5632,6 @@ function stopAllMusicStudioSounds() {
         musicStudio_playButton.disabled = false;
     }
 }
-// REPLACE IT WITH THIS
 if(musicStudio_playButton) musicStudio_playButton.addEventListener('click', () => {
     const code = musicStudio_generatedCode.value;
     if (code) {
