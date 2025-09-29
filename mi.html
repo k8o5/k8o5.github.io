@@ -1,0 +1,250 @@
+<!DOCTYPE html>
+<html lang="de">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Mario ∞</title>
+    <!-- Externe Schriftart für den Retro-Look -->
+    <link href="https://fonts.googleapis.com/css2?family=Press+Start+2P&amp;display=swap" rel="stylesheet">
+
+    <style>
+        body { margin: 0; display: flex; flex-direction: column; justify-content: center; align-items: center; height: 100vh; background-color: #2c3e50; font-family: 'Press Start 2P', cursive; color: white; text-align: center; }
+        h1 { text-shadow: 3px 3px 0 #000; }
+        p { text-shadow: 2px 2px 0 #000; }
+        canvas { border: 3px solid black; background-color: #5c94fc; box-shadow: 5px 5px 15px rgba(0,0,0,0.5); }
+        #gameOverText { position: absolute; top: 50%; left: 50%; transform: translate(-50%, -50%); font-size: 2em; color: #e74c3c; background-color: rgba(0, 0, 0, 0.7); padding: 20px; border-radius: 10px; }
+        .hidden { display: none; }
+    </style>
+</head>
+<body>
+    <h1>Mario ∞</h1>
+    <canvas id="gameCanvas" width="800" height="450"></canvas>
+    <p>Steuerung: Pfeiltasten, Leertaste zum Springen.</p>
+    <p id="gameOverText" class="hidden">Game Over!<br>Drücke 'R' zum Neustarten.</p>
+
+    <script>
+        const canvas = document.getElementById('gameCanvas');
+        const ctx = canvas.getContext('2d');
+        const gameOverText = document.getElementById('gameOverText');
+
+        let distance = 0, level = 1, gameOver = false, scrollOffset = 0;
+        const gravity = 0.5;
+        let lastPlatformX = 0, lastPlatformY = 400;
+
+        const player = {
+            x: 100, y: 100, width: 30, height: 40, speed: 5,
+            velocityX: 0, velocityY: 0, jumpPower: 13, onGround: false, color: '#e74c3c'
+        };
+
+        const keys = { right: false, left: false, space: false };
+        let platforms = [], enemies = [], coins = [], bouncyPlatforms = [];
+
+        // --- CHUNK GENERATOREN ---
+        // Jeder Generator erstellt ein Stück Level und gibt die Endkoordinaten zurück.
+        const chunkGenerators = [
+            function generateFlatRun(startX, startY, progress) {
+                const length = Math.max(250, 700 - progress / 5);
+                platforms.push({ x: startX, y: startY, width: length, height: 50, color: '#27ae60' });
+                // Gegner auf flachen Stücken
+                if (Math.random() < 0.3 + progress / 10000) {
+                    enemies.push({ x: startX + 150 + Math.random() * (length - 200), y: startY - 40, width: 30, height: 40, velocityX: -(1 + progress / 4000), color: '#8B4513' });
+                }
+                return { newX: startX + length, newY: startY };
+            },
+            function generateStairsUp(startX, startY, progress) {
+                let currentX = startX;
+                let currentY = startY;
+                const steps = 3 + Math.floor(Math.random() * 2);
+                const stepWidth = 100;
+                const stepHeight = 50;
+                for (let i = 0; i < steps; i++) {
+                    currentX += stepWidth;
+                    currentY -= stepHeight;
+                    platforms.push({ x: currentX, y: currentY, width: stepWidth, height: 20, color: '#d35400' });
+                }
+                return { newX: currentX + stepWidth, newY: currentY };
+            },
+            function generateFloatingBlocks(startX, startY, progress) {
+                let currentX = startX;
+                const blockCount = 3 + Math.floor(Math.random() * 3);
+                const gap = 100 + Math.min(100, progress / 100);
+                const blockWidth = Math.max(50, 120 - progress / 80);
+                for (let i = 0; i < blockCount; i++) {
+                    currentX += gap;
+                    platforms.push({ x: currentX, y: startY, width: blockWidth, height: 20, color: '#f39c12' });
+                    if (Math.random() < 0.5) { // Münze über Block
+                        coins.push({ x: currentX + blockWidth / 2 - 10, y: startY - 70, width: 20, height: 20, color: '#f1c40f' });
+                    }
+                }
+                return { newX: currentX + blockWidth, newY: startY };
+            },
+            function generatePitJump(startX, startY, progress) {
+                const pitWidth = 120 + Math.min(130, progress / 30);
+                const landingWidth = Math.max(100, 400 - progress / 10);
+                const newX = startX + pitWidth;
+                platforms.push({ x: newX, y: startY, width: landingWidth, height: 50, color: '#27ae60' });
+                return { newX: newX + landingWidth, newY: startY };
+            },
+            function generateBouncyMushroomPath(startX, startY, progress) {
+                 const newY = startY - 100 - Math.random() * 50;
+                 const highPlatformX = startX + 200 + Math.random() * 100;
+                 const highPlatformWidth = 200;
+                 bouncyPlatforms.push({x: startX + 50, y: startY, width: 50, height: 20, color: '#8e44ad'});
+                 platforms.push({x: highPlatformX, y: newY, width: highPlatformWidth, height: 20, color: '#f39c12'});
+                 // Belohnung für den hohen Sprung
+                 coins.push({x: highPlatformX + highPlatformWidth/2, y: newY - 50, width: 20, height: 20, color: '#f1c40f' });
+                 return { newX: highPlatformX + highPlatformWidth, newY: newY };
+            }
+        ];
+
+        function init() {
+            distance = 0; level = 1; gameOver = false; scrollOffset = 0;
+            player.x = 100; player.y = 100; player.velocityX = 0; player.velocityY = 0;
+            platforms = []; enemies = []; coins = []; bouncyPlatforms = [];
+            gameOverText.classList.add('hidden');
+            
+            platforms.push({ x: 0, y: 400, width: 500, height: 50, color: '#27ae60' });
+            lastPlatformX = 500; lastPlatformY = 400;
+        }
+
+        function generateWorld() {
+            while (lastPlatformX < player.x + canvas.width + 200) {
+                const progress = player.x; // Schwierigkeit basiert auf Spieler-Fortschritt
+                
+                // Wähle einen zufälligen Chunk-Generator
+                const generator = chunkGenerators[Math.floor(Math.random() * chunkGenerators.length)];
+                
+                // Stelle sicher, dass Y im Rahmen bleibt
+                let nextY = lastPlatformY + (Math.random() - 0.5) * 50;
+                nextY = Math.max(250, Math.min(400, nextY));
+
+                const { newX, newY } = generator(lastPlatformX, nextY, progress);
+                lastPlatformX = newX;
+                lastPlatformY = newY;
+            }
+        }
+        
+        function cleanupWorld() {
+            platforms = platforms.filter(p => p.x + p.width > scrollOffset);
+            enemies = enemies.filter(e => e.x + e.width > scrollOffset);
+            coins = coins.filter(c => c.x + c.width > scrollOffset);
+            bouncyPlatforms = bouncyPlatforms.filter(b => b.x + b.width > scrollOffset);
+        }
+
+        function draw() {
+            ctx.clearRect(0, 0, canvas.width, canvas.height);
+            ctx.save();
+            ctx.translate(-scrollOffset, 0);
+
+            [...platforms, ...enemies, ...bouncyPlatforms].forEach(obj => {
+                ctx.fillStyle = obj.color;
+                ctx.fillRect(obj.x, obj.y, obj.width, obj.height);
+            });
+            coins.forEach(c => {
+                ctx.fillStyle = c.color;
+                ctx.beginPath();
+                ctx.arc(c.x + c.width / 2, c.y + c.height / 2, c.width / 2, 0, Math.PI * 2);
+                ctx.fill();
+            });
+            ctx.fillStyle = player.color;
+            ctx.fillRect(player.x, player.y, player.width, player.height);
+            
+            ctx.restore();
+
+            ctx.fillStyle = 'white';
+            ctx.font = '20px "Press Start 2P"';
+            distance = Math.floor(player.x / 10);
+            level = 1 + Math.floor(player.x / 2000);
+            ctx.fillText('Distanz: ' + distance, 20, 40);
+            ctx.fillText('Level: ' + level, canvas.width - 200, 40);
+        }
+
+        function update() {
+            if (gameOver) return;
+            generateWorld();
+            cleanupWorld();
+
+            player.velocityX = 0;
+            if (keys.right) player.velocityX = player.speed;
+            if (keys.left && player.x > scrollOffset + player.width) player.velocityX = -player.speed;
+            player.x += player.velocityX;
+
+            player.velocityY += gravity;
+            player.y += player.velocityY;
+            player.onGround = false;
+
+            // Kollisionen
+            const allPlatforms = [...platforms, ...bouncyPlatforms];
+            allPlatforms.forEach(p => {
+                if (player.x < p.x + p.width && player.x + player.width > p.x &&
+                    player.y < p.y + p.height && player.y + player.height > p.y &&
+                    player.velocityY >= 0 && player.y + player.height - player.velocityY <= p.y + 1) {
+                        player.velocityY = 0;
+                        player.y = p.y - player.height;
+                        player.onGround = true;
+                        
+                        // Sprung-Pilz-Logik
+                        if (bouncyPlatforms.includes(p)) {
+                           player.velocityY = -player.jumpPower * 1.8; // Super-Sprung!
+                           player.onGround = false;
+                        }
+                }
+            });
+
+            if (keys.space && player.onGround) {
+                player.velocityY = -player.jumpPower;
+                player.onGround = false;
+            }
+            
+            enemies.forEach((enemy, index) => {
+                enemy.x += enemy.velocityX;
+                if (player.x < enemy.x + enemy.width && player.x + player.width > enemy.x &&
+                    player.y < enemy.y + enemy.height && player.y + player.height > enemy.y) {
+                    if (player.velocityY > 0 && player.y + player.height - player.velocityY <= enemy.y) {
+                        enemies.splice(index, 1);
+                        player.velocityY = -player.jumpPower / 1.5;
+                    } else {
+                        endGame();
+                    }
+                }
+            });
+
+            coins.forEach((coin, index) => {
+                if (player.x < coin.x + coin.width && player.x + player.width > coin.x &&
+                    player.y < coin.y + coin.height && player.y + player.height > coin.y) {
+                    coins.splice(index, 1);
+                }
+            });
+
+            scrollOffset = player.x - 200;
+            if (player.y > canvas.height * 1.5) endGame();
+        }
+        
+        function endGame() {
+            gameOver = true;
+            gameOverText.classList.remove('hidden');
+        }
+
+        function gameLoop() {
+            update();
+            draw();
+            requestAnimationFrame(gameLoop);
+        }
+
+        document.addEventListener('keydown', (e) => {
+            if (e.code === 'ArrowRight') keys.right = true;
+            if (e.code === 'ArrowLeft') keys.left = true;
+            if (e.code === 'Space') keys.space = true;
+            if (e.code === 'KeyR' && gameOver) init();
+        });
+        document.addEventListener('keyup', (e) => {
+            if (e.code === 'ArrowRight') keys.right = false;
+            if (e.code === 'ArrowLeft') keys.left = false;
+            if (e.code === 'Space') keys.space = false;
+        });
+
+        init();
+        gameLoop();
+    </script>
+</body>
+</html>
