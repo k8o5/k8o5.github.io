@@ -1,0 +1,473 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>macOS Web Emulation</title>
+<style>
+    :root {
+        --system-font: -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, Helvetica, Arial, sans-serif;
+        --menu-bar-height: 30px;
+        --dock-height: 70px;
+        --window-radius: 12px;
+        --accent-color: #007aff;
+    }
+
+    * { box-sizing: border-box; user-select: none; cursor: default; }
+    body, html {
+        margin: 0; padding: 0; overflow: hidden; height: 100vh; width: 100vw;
+        font-family: var(--system-font);
+    }
+
+    /* --- Desktop Wallpaper (CSS Gradient dynamic background) --- */
+    #desktop {
+        height: 100%; width: 100%;
+        background: linear-gradient(45deg, #ff9a9e 0%, #fad0c4 99%, #fad0c4 100%);
+        background-size: 400% 400%;
+        animation: gradientBG 15s ease infinite;
+        position: relative;
+        overflow: hidden;
+    }
+    @keyframes gradientBG {
+        0% { background-position: 0% 50%; }
+        50% { background-position: 100% 50%; }
+        100% { background-position: 0% 50%; }
+    }
+
+    /* --- Menu Bar --- */
+    #menu-bar {
+        position: absolute; top: 0; width: 100%; height: var(--menu-bar-height);
+        background-color: rgba(255, 255, 255, 0.3);
+        backdrop-filter: blur(20px); -webkit-backdrop-filter: blur(20px);
+        display: flex; justify-content: space-between; align-items: center;
+        padding: 0 15px; color: #000; font-size: 13px; font-weight: 500;
+        z-index: 9999; box-shadow: 0 1px 5px rgba(0,0,0,0.1);
+    }
+    .menu-group { display: flex; align-items: center; height: 100%; }
+    .menu-item { padding: 0 10px; height: 100%; display: flex; align-items: center; border-radius: 4px;}
+    .menu-item:hover { background-color: rgba(255,255,255,0.4); }
+    .apple-logo svg { width: 16px; height: 16px; fill: currentColor; }
+    .app-name { font-weight: 700; }
+    
+    .status-icon { margin-left: 10px; display: flex; align-items: center;}
+    .status-icon svg { width: 18px; height: 18px; fill: currentColor;}
+
+    /* --- The Dock --- */
+    #dock-container {
+        position: absolute; bottom: 10px; width: 100%;
+        display: flex; justify-content: center; z-index: 9000;
+    }
+    #dock {
+        background-color: rgba(255, 255, 255, 0.2);
+        backdrop-filter: blur(25px); -webkit-backdrop-filter: blur(25px);
+        border: 1px solid rgba(255, 255, 255, 0.2);
+        height: var(--dock-height); padding: 5px 10px;
+        border-radius: 20px; display: flex; align-items: center; gap: 8px;
+        box-shadow: 0 10px 20px rgba(0,0,0,0.15);
+        transition: all 0.2s ease;
+    }
+    .dock-item {
+        width: 55px; height: 55px; border-radius: 14px;
+        position: relative; display: flex; justify-content: center; align-items: center;
+        transition: transform 0.2s cubic-bezier(0.25, 1, 0.5, 1), margin 0.2s;
+        cursor: pointer;
+    }
+    .dock-item:hover { transform: scale(1.2) translateY(-10px); margin: 0 10px; }
+    
+    /* Self-generated App Icons via CSS/SVG */
+    .icon-finder { background: linear-gradient(180deg, #e6f2ff 0%, #c2e0ff 100%); box-shadow: inset 0 0 0 1px #a3cdff; }
+    .icon-safari { background: white; }
+    .icon-terminal { background: #222; color: white; font-family: monospace; font-size: 24px; font-weight: bold;}
+    .icon-settings { background: linear-gradient(180deg, #bababa 0%, #8a8a8a 100%); }
+    .icon-photos { background: white; overflow: hidden;}
+
+    .dock-item svg { width: 80%; height: 80%; filter: drop-shadow(0 2px 4px rgba(0,0,0,0.2)); }
+
+    /* Active Dot under dock item */
+    .dock-item.active::after {
+        content: ''; position: absolute; bottom: -5px; width: 5px; height: 5px;
+        background: rgba(0,0,0,0.7); border-radius: 50%;
+    }
+    
+    /* Tooltip */
+    .dock-item::before {
+        content: attr(data-title); position: absolute; top: -40px;
+        background: rgba(255,255,255,0.8); backdrop-filter: blur(10px);
+        padding: 4px 10px; border-radius: 6px; font-size: 12px;
+        opacity: 0; pointer-events: none; transition: opacity 0.2s;
+        box-shadow: 0 2px 10px rgba(0,0,0,0.1); color: #000; border: 1px solid rgba(0,0,0,0.1);
+    }
+    .dock-item:hover::before { opacity: 1; transition-delay: 0.1s; }
+
+    /* --- Windows System --- */
+    .window {
+        position: absolute; background: #fff;
+        border-radius: var(--window-radius);
+        box-shadow: 0 15px 40px rgba(0,0,0,0.25);
+        overflow: hidden; display: flex; flex-direction: column;
+        min-width: 300px; min-height: 200px;
+        /* Hidden by default, manipulated by JS */
+        transform: scale(0.95); opacity: 0; pointer-events: none;
+        transition: transform 0.2s ease, opacity 0.2s ease;
+    }
+    
+    .window.open {
+        transform: scale(1); opacity: 1; pointer-events: all;
+    }
+
+    .window-header {
+        height: 36px; background: linear-gradient(to bottom, #e6e6e6, #dcdcdc);
+        border-bottom: 1px solid #ccc; display: flex; align-items: center;
+        padding: 0 15px; position: relative;
+    }
+    
+    .traffic-lights { display: flex; gap: 7px; z-index: 2; }
+    .traffic-light { width: 12px; height: 12px; border-radius: 50%; position: relative; border: 0.5px solid rgba(0,0,0,0.1); }
+    .tl-red { background: #ff5f57; }
+    .tl-yellow { background: #febc2e; }
+    .tl-green { background: #28c840; }
+    
+    /* Traffic light hover symbols */
+    .traffic-lights:hover .tl-red::after { content: '×'; position: absolute; top:-1px; left:3px; font-size: 10px; color: rgba(0,0,0,0.5); }
+    .traffic-lights:hover .tl-yellow::after { content: '−'; position: absolute; top:-2px; left:3px; font-size: 10px; color: rgba(0,0,0,0.5); }
+    .traffic-lights:hover .tl-green::after { content: '+'; position: absolute; top:-1px; left:2.5px; font-size: 10px; color: rgba(0,0,0,0.5); }
+
+    .window-title {
+        position: absolute; left: 0; right: 0; text-align: center;
+        font-weight: 600; color: #444; font-size: 13px; pointer-events: none;
+    }
+
+    .window-body { flex: 1; overflow: auto; position: relative; cursor: text;}
+
+    /* Specific Window Styling */
+    /* Finder */
+    #win-finder { width: 700px; height: 450px; top: 100px; left: 150px; }
+    .finder-layout { display: flex; height: 100%; }
+    .finder-sidebar {
+        width: 180px; background: rgba(240,240,240,0.9); backdrop-filter: blur(10px);
+        padding: 20px 10px; font-size: 13px; color: #444; border-right: 1px solid #ddd;
+    }
+    .sidebar-group { margin-bottom: 15px; }
+    .sidebar-title { font-size: 11px; font-weight: 600; color: #888; margin-bottom: 5px; padding-left: 10px; }
+    .sidebar-item { padding: 5px 10px; border-radius: 5px; display: flex; align-items: center; gap: 8px;}
+    .sidebar-item.active { background: rgba(0,0,0,0.1); }
+    .sidebar-icon { width: 16px; height: 16px; fill: var(--accent-color); }
+    .finder-content { flex: 1; background: #fff; padding: 20px; display: grid; grid-template-columns: repeat(auto-fill, minmax(80px, 1fr)); grid-auto-rows: 90px; gap: 10px; }
+    .file-item { display: flex; flex-direction: column; align-items: center; text-align: center; font-size: 12px; }
+    .file-icon { width: 50px; height: 60px; background: #eee; border-radius: 5px; margin-bottom: 5px; position: relative; border: 1px solid #ddd;}
+    .file-icon::after { content: ''; position: absolute; top:0; right: 0; border-width: 0 12px 12px 0; border-style: solid; border-color: #ccc #fff; display: block; width: 0; }
+
+    /* Terminal */
+    #win-terminal { width: 500px; height: 350px; top: 150px; left: 250px; background: #1e1e1e; }
+    #win-terminal .window-header { background: #333; border-bottom: 1px solid #111; }
+    #win-terminal .window-title { color: #ccc; }
+    .terminal-body { padding: 10px; color: #28c840; font-family: 'Menlo', monospace; font-size: 13px; }
+    .blink { animation: blinker 1s linear infinite; }
+    @keyframes blinker { 50% { opacity: 0; } }
+
+    /* Safari */
+    #win-safari { width: 800px; height: 500px; top: 80px; left: 100px; background: #fff;}
+    .safari-toolbar { height: 40px; background: #f0f0f0; border-bottom: 1px solid #ccc; display: flex; align-items: center; padding: 0 15px; gap: 15px;}
+    .url-bar { flex: 1; height: 26px; background: #fff; border: 1px solid #ddd; border-radius: 5px; display: flex; align-items: center; justify-content: center; font-size: 12px; color: #555;}
+    .safari-content { flex: 1; background: #fff; display: flex; justify-content: center; align-items: center; flex-direction: column;}
+    .welcome-text { font-size: 3rem; font-weight: 200; background: -webkit-linear-gradient(#333, #999); -webkit-background-clip: text; -webkit-text-fill-color: transparent;}
+
+</style>
+</head>
+<body>
+
+<div id="desktop">
+
+    <!-- Menu Bar -->
+    <div id="menu-bar">
+        <div class="menu-group">
+            <div class="menu-item apple-logo">
+                <!-- Embedded SVG Apple Logo -->
+                <svg viewBox="0 0 384 512"><path d="M318.7 268.7c-.2-36.7 16.4-64.4 50-84.8-18.8-26.9-47.2-41.7-84.7-44.6-35.5-2.8-74.3 20.7-88.5 20.7-15 0-49.4-19.7-76.4-19.7C63.3 141.2 4 184.8 4 273.5q0 39.3 14.4 81.2c12.8 36.7 59 126.7 107.2 125.2 25.2-.6 43-17.9 75.8-17.9 31.8 0 48.3 17.9 76.4 17.9 48.6-.7 90.4-82.5 102.6-119.3-65.2-24.1-97.9-73.7-98.3-110.5zM200 111.4c33.2 0 60.7-23.6 67.8-55.2-35.9 1.8-68 22.6-74.3 56-1.6 8.5-1.2 17.1 0 23.9-1.1-3-1.9-6.5-1.9-10.3-3.2-7.7-1.4-16.1 2.4-23.6zM250.5 24.9c-5.5-7.2-13.7-11.4-22.6-11.6-24.3.6-47.9 16.4-59.9 38.4-11.1 20.5-19 46.6-2.9 70.1 5.5 8 14 12.7 23.1 12.9 22.3-.6 43.6-14.7 55-35.5 12.2-22.3 15.5-49.4 7.3-74.3z"/></svg>
+            </div>
+            <div class="menu-item app-name" id="active-app-name">Finder</div>
+            <div class="menu-item">File</div>
+            <div class="menu-item">Edit</div>
+            <div class="menu-item">View</div>
+            <div class="menu-item">Go</div>
+            <div class="menu-item">Window</div>
+            <div class="menu-item">Help</div>
+        </div>
+        <div class="menu-group">
+            <!-- Wifi Icon SVG -->
+            <div class="status-icon"><svg viewBox="0 0 24 24"><path d="M12 2C6.48 2 2 6.48 2 12s4.48 10 10 10 10-4.48 10-10S17.52 2 12 2zm0 18c-4.42 0-8-3.58-8-8s3.58-8 8-8 8 3.58 8 8-3.58 8-8 8z"/><path d="M12 6c-3.31 0-6 2.69-6 6s2.69 6 6 6 6-2.69 6-6-2.69-6-6-6zm0 10c-2.21 0-4-1.79-4-4s1.79-4 4-4 4 1.79 4 4-1.79 4-4 4z"/><circle cx="12" cy="12" r="2"/></svg></div>
+            <!-- Battery Icon SVG -->
+            <div class="status-icon"><svg viewBox="0 0 24 24" style="transform: rotate(90deg); width:20px;"><path fill-rule="evenodd" clip-rule="evenodd" d="M2 7C2 5.89543 2.89543 5 4 5H18C19.1046 5 20 5.89543 20 7V9H21.5C21.7761 9 22 9.22386 22 9.5V14.5C22 14.7761 21.7761 15 21.5 15H20V17C20 18.1046 19.1046 19 18 19H4C2.89543 19 2 18.1046 2 17V7ZM4 17H18V7H4V17Z"/><rect x="5" y="8" width="12" height="8" rx="1"/></svg></div>
+            <div class="menu-item" id="clock">Mon Jun 22 9:41 AM</div>
+        </div>
+    </div>
+
+    <!-- WINDOWS -->
+
+    <!-- 1. Finder Window -->
+    <div class="window" id="win-finder" data-app="Finder">
+        <div class="window-header">
+            <div class="traffic-lights">
+                <div class="traffic-light tl-red" onclick="closeWindow('win-finder')"></div>
+                <div class="traffic-light tl-yellow"></div>
+                <div class="traffic-light tl-green"></div>
+            </div>
+            <div class="window-title">Desktop</div>
+        </div>
+        <div class="window-body finder-layout">
+            <div class="finder-sidebar">
+                <div class="sidebar-group">
+                    <div class="sidebar-title">Favorites</div>
+                    <div class="sidebar-item active">
+                        <svg class="sidebar-icon" viewBox="0 0 24 24"><path d="M10 4H4c-1.1 0-1.99.9-1.99 2L2 18c0 1.1.9 2 2 2h16c1.1 0 2-.9 2-2V8c0-1.1-.9-2-2-2h-8l-2-2z" fill="#007aff"/></svg> Desktop
+                    </div>
+                    <div class="sidebar-item">
+                        <svg class="sidebar-icon" viewBox="0 0 24 24"><path d="M10 4H4c-1.1 0-1.99.9-1.99 2L2 18c0 1.1.9 2 2 2h16c1.1 0 2-.9 2-2V8c0-1.1-.9-2-2-2h-8l-2-2z" fill="#aaa"/></svg> Documents
+                    </div>
+                    <div class="sidebar-item">
+                        <svg class="sidebar-icon" viewBox="0 0 24 24"><path d="M12 21.35l-1.45-1.32C5.4 15.36 2 12.28 2 8.5 2 5.42 4.42 3 7.5 3c1.74 0 3.41.81 4.5 2.09C13.09 3.81 14.76 3 16.5 3 19.58 3 22 5.42 22 8.5c0 3.78-3.4 6.86-8.55 11.54L12 21.35z" fill="#aaa"/></svg> Downloads
+                    </div>
+                </div>
+            </div>
+            <div class="finder-content">
+                <div class="file-item">
+                    <div class="file-icon"></div>
+                    <span>resume.pdf</span>
+                </div>
+                <div class="file-item">
+                    <div class="file-icon" style="background: #a2d2ff;"></div>
+                    <span>project</span>
+                </div>
+                 <div class="file-item">
+                    <div class="file-icon" style="background: repeating-linear-gradient(45deg,#eee,#eee 10px,#fff 10px,#fff 20px);"></div>
+                    <span>notes.txt</span>
+                </div>
+            </div>
+        </div>
+    </div>
+
+    <!-- 2. Safari Window -->
+    <div class="window" id="win-safari" data-app="Safari">
+        <div class="window-header">
+            <div class="traffic-lights">
+                <div class="traffic-light tl-red" onclick="closeWindow('win-safari')"></div>
+                <div class="traffic-light tl-yellow"></div>
+                <div class="traffic-light tl-green"></div>
+            </div>
+        </div>
+        <div class="safari-toolbar">
+            <div style="color:#888;">&lt; &gt;</div>
+            <div class="url-bar">
+                <svg width="12" height="12" viewBox="0 0 24 24" fill="#888" style="margin-right:5px;"><path d="M18 8h-1V6c0-2.76-2.24-5-5-5S7 3.24 7 6v2H6c-1.1 0-2 .9-2 2v10c0 1.1.9 2 2 2h12c1.1 0 2-.9 2-2V10c0-1.1-.9-2-2-2zm-6 9c-1.1 0-2-.9-2-2s.9-2 2-2 2 .9 2 2-.9 2-2 2zm3.1-9H8.9V6c0-1.71 1.39-3.1 3.1-3.1 1.71 0 3.1 1.39 3.1 3.1v2z"/></svg>
+                apple.com
+            </div>
+            <div style="color:#888;">+</div>
+        </div>
+        <div class="window-body safari-content">
+            <svg viewBox="0 0 384 512" height="100" fill="#333"><path d="M318.7 268.7c-.2-36.7 16.4-64.4 50-84.8-18.8-26.9-47.2-41.7-84.7-44.6-35.5-2.8-74.3 20.7-88.5 20.7-15 0-49.4-19.7-76.4-19.7C63.3 141.2 4 184.8 4 273.5q0 39.3 14.4 81.2c12.8 36.7 59 126.7 107.2 125.2 25.2-.6 43-17.9 75.8-17.9 31.8 0 48.3 17.9 76.4 17.9 48.6-.7 90.4-82.5 102.6-119.3-65.2-24.1-97.9-73.7-98.3-110.5zM200 111.4c33.2 0 60.7-23.6 67.8-55.2-35.9 1.8-68 22.6-74.3 56-1.6 8.5-1.2 17.1 0 23.9-1.1-3-1.9-6.5-1.9-10.3-3.2-7.7-1.4-16.1 2.4-23.6z"/></svg>
+            <h1 class="welcome-text">Hello.</h1>
+        </div>
+    </div>
+
+    <!-- 3. Terminal Window -->
+    <div class="window" id="win-terminal" data-app="Terminal">
+        <div class="window-header">
+            <div class="traffic-lights">
+                <div class="traffic-light tl-red" onclick="closeWindow('win-terminal')"></div>
+                <div class="traffic-light tl-yellow"></div>
+                <div class="traffic-light tl-green"></div>
+            </div>
+            <div class="window-title">user@macbook ~</div>
+        </div>
+        <div class="window-body terminal-body" onclick="document.getElementById('term-input').focus()">
+            <div>Last login: Mon Jun 22 09:41:00 on ttys000</div>
+            <br>
+            <div>user@macbook ~ % <span id="typed-text">echo "Welcome to macOS in HTML"</span></div>
+            <div>Welcome to macOS in HTML</div>
+            <div>user@macbook ~ % <span class="blink">_</span></div>
+        </div>
+    </div>
+
+
+    <!-- Dock -->
+    <div id="dock-container">
+        <div id="dock">
+            <div class="dock-item icon-finder active" data-title="Finder" onclick="openWindow('win-finder')">
+                <!-- Finder Smile SVG -->
+                <svg viewBox="0 0 100 100">
+                    <path d="M30,35 Q50,20 70,35" stroke="#0058d0" stroke-width="6" fill="none" stroke-linecap="round"/>
+                    <path d="M50,20 L50,90" stroke="#0058d0" stroke-width="6" fill="none" stroke-linecap="round"/>
+                    <path d="M30,65 Q50,85 70,65" stroke="#0058d0" stroke-width="6" fill="none" stroke-linecap="round"/>
+                </svg>
+            </div>
+            <div class="dock-item icon-safari" data-title="Safari" onclick="openWindow('win-safari')">
+                <!-- Safari Compass SVG -->
+                <svg viewBox="0 0 100 100">
+                    <circle cx="50" cy="50" r="45" fill="#20a0ff"/>
+                    <circle cx="50" cy="50" r="38" fill="white"/>
+                    <path d="M50,15 L55,45 L85,50 L45,55 L15,50 L45,45 Z" fill="#ff3b30"/>
+                    <path d="M50,15 L55,45 L45,45 Z" fill="#ff3b30"/>
+                    <path d="M45,55 L15,50 L45,45 Z" fill="#ddd"/>
+                    <polygon points="50,10 60,40 50,50 40,40" fill="#ff3b30"/>
+                    <polygon points="50,90 40,60 50,50 60,60" fill="#ddd"/>
+                </svg>
+            </div>
+            <div class="dock-item icon-terminal" data-title="Terminal" onclick="openWindow('win-terminal')">
+                &gt;_
+            </div>
+            <div class="dock-item icon-photos" data-title="Photos">
+                <!-- Flower SVG -->
+                <svg viewBox="0 0 100 100">
+                    <rect width="100" height="100" fill="white"/>
+                    <ellipse cx="50" cy="30" rx="10" ry="25" fill="#ff9500" transform="rotate(0 50 50)" opacity="0.8"/>
+                    <ellipse cx="50" cy="30" rx="10" ry="25" fill="#ffcc00" transform="rotate(45 50 50)" opacity="0.8"/>
+                    <ellipse cx="50" cy="30" rx="10" ry="25" fill="#34c759" transform="rotate(90 50 50)" opacity="0.8"/>
+                    <ellipse cx="50" cy="30" rx="10" ry="25" fill="#30b0c7" transform="rotate(135 50 50)" opacity="0.8"/>
+                    <ellipse cx="50" cy="30" rx="10" ry="25" fill="#007aff" transform="rotate(180 50 50)" opacity="0.8"/>
+                    <ellipse cx="50" cy="30" rx="10" ry="25" fill="#5856d6" transform="rotate(225 50 50)" opacity="0.8"/>
+                    <ellipse cx="50" cy="30" rx="10" ry="25" fill="#af52de" transform="rotate(270 50 50)" opacity="0.8"/>
+                    <ellipse cx="50" cy="30" rx="10" ry="25" fill="#ff2d55" transform="rotate(315 50 50)" opacity="0.8"/>
+                </svg>
+            </div>
+            <div class="dock-item icon-settings" data-title="Settings">
+                 <!-- Gears SVG -->
+                <svg viewBox="0 0 100 100" fill="#ddd">
+                    <path d="M50,35 C41.7,35 35,41.7 35,50 C35,58.3 41.7,65 50,65 C58.3,65 65,58.3 65,50 C65,41.7 58.3,35 50,35 M88,46 L80.8,45.4 C80.1,43 79.1,40.7 77.8,38.6 L82.4,32.9 C83.2,31.9 83,30.5 82,29.7 L76.3,24 C75.3,23.2 73.9,23.2 73.1,24.1 L67.7,29 C65.5,27.8 63.2,26.8 60.7,26.2 L60,18.8 C59.9,17.5 58.8,16.5 57.5,16.5 L42.5,16.5 C41.2,16.5 40.1,17.5 40,18.8 L39.4,26.1 C36.9,26.7 34.6,27.7 32.4,28.9 L27,24 C26.2,23.1 24.8,23.1 23.8,23.9 L18.1,29.6 C17.1,30.4 17,31.8 17.7,32.8 L22.3,38.5 C21,40.6 20,42.9 19.3,45.3 L12.1,45.9 C10.8,46 9.8,47.1 9.8,48.4 L9.8,51.6 C9.8,52.9 10.8,54 12.1,54.1 L19.3,54.7 C20,57.1 21,59.4 22.3,61.5 L17.7,67.2 C17,68.2 17.1,69.6 18.1,70.4 L23.8,76.1 C24.8,76.9 26.2,76.9 27,76 L32.4,71.1 C34.6,72.3 36.9,73.3 39.4,73.9 L40,81.2 C40.1,82.5 41.2,83.5 42.5,83.5 L57.5,83.5 C58.8,83.5 59.9,82.5 60,81.2 L60.6,73.9 C63.1,73.3 65.4,72.3 67.6,71.1 L73,76 C73.8,76.9 75.2,76.9 76.2,76.1 L81.9,70.4 C82.9,69.6 83,68.2 82.3,67.2 L77.7,61.5 C79,59.4 80,57.1 80.7,54.7 L87.9,54.1 C89.2,54 90.2,52.9 90.2,51.6 L90.2,48.4 C90.2,47.1 89.2,46.1 88,46 Z"/>
+                </svg>
+            </div>
+        </div>
+    </div>
+</div>
+
+<script>
+    /* --- Clock Logic --- */
+    function updateClock() {
+        const now = new window.Date();
+        const options = { weekday: 'short', month: 'short', day: 'numeric', hour: 'numeric', minute: '2-digit' };
+        document.getElementById('clock').innerText = now.toLocaleDateString('en-US', options).replace(',', '');
+    }
+    setInterval(updateClock, 1000);
+    updateClock();
+
+    /* --- Window Management (Drag & Z-Index) --- */
+    let maxZIndex = 100;
+    let activeWindow = null;
+    let initialX, initialY, currentX, currentY;
+    let xOffset = 0, yOffset = 0;
+
+    const windows = document.querySelectorAll('.window');
+
+    windows.forEach(win => {
+        const header = win.querySelector('.window-header');
+        
+        // Bring to front on click
+        win.addEventListener('mousedown', () => {
+            maxZIndex++;
+            win.style.zIndex = maxZIndex;
+            updateMenuBarApp(win.dataset.app);
+        });
+
+        // Dragging logic
+        header.addEventListener('mousedown', (e) => dragStart(e, win));
+    });
+
+    document.addEventListener('mouseup', dragEnd);
+    document.addEventListener('mousemove', drag);
+
+    function dragStart(e, win) {
+        activeWindow = win;
+        // Calculate offset from current position
+        const style = window.getComputedStyle(win);
+        const matrix = new WebKitCSSMatrix(style.transform);
+        
+        // If window was scaled (closed), reset translation base
+        if(matrix.a !== 1) { xOffset = 0; yOffset = 0;}
+
+        initialX = e.clientX - xOffset;
+        initialY = e.clientY - yOffset;
+
+        // Don't drag if clicking traffic lights
+        if (e.target.classList.contains('traffic-light')) {
+            activeWindow = null;
+        }
+    }
+
+    function drag(e) {
+        if (activeWindow) {
+            e.preventDefault();
+            currentX = e.clientX - initialX;
+            currentY = e.clientY - initialY;
+
+            xOffset = currentX;
+            yOffset = currentY;
+
+            setTranslate(currentX, currentY, activeWindow);
+        }
+    }
+
+    function setTranslate(xPos, yPos, el) {
+        // Combine scale(1) to keep window open with translation
+        el.style.transform = `translate3d(${xPos}px, ${yPos}px, 0) scale(1)`;
+    }
+
+    function dragEnd() {
+        initialX = currentX;
+        initialY = currentY;
+        activeWindow = null;
+    }
+
+    /* --- Open/Close Logic --- */
+    function openWindow(id) {
+        const win = document.getElementById(id);
+        
+        // Reset position if previously closed
+        xOffset = 0; yOffset = 0;
+        win.style.transform = "translate3d(0,0,0) scale(0.95)"; // prepare for animation
+        
+        // Force reflow
+        void win.offsetWidth; 
+        
+        win.classList.add('open');
+        win.style.transform = "translate3d(0,0,0) scale(1)";
+        
+        maxZIndex++;
+        win.style.zIndex = maxZIndex;
+        
+        // Update Menu Bar name
+        updateMenuBarApp(win.dataset.app);
+
+        // Mark dock icon active
+        const dockItems = document.querySelectorAll('.dock-item');
+        dockItems.forEach(item => {
+            if(item.getAttribute('onclick').includes(id)) {
+                item.classList.add('active');
+            }
+        })
+    }
+
+    function closeWindow(id) {
+        const win = document.getElementById(id);
+        win.classList.remove('open');
+        updateMenuBarApp('Finder'); // Revert to Finder
+        
+        // Remove dock active state
+        const dockItems = document.querySelectorAll('.dock-item');
+        dockItems.forEach(item => {
+            if(item.getAttribute('onclick').includes(id)) {
+                item.classList.remove('active');
+            }
+        })
+    }
+
+    function updateMenuBarApp(appName) {
+        document.getElementById('active-app-name').innerText = appName;
+    }
+
+    // Open Finder on load for effect
+    setTimeout(() => {
+        openWindow('win-finder');
+    }, 500);
+
+</script>
+</body>
+</html>
