@@ -1,0 +1,661 @@
+<!DOCTYPE html>
+<html lang="de">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Jawaker</title>
+    <style>
+        body {
+            font-family: 'Segoe UI', Tahoma, Geneva, Verdana, sans-serif;
+            background-color: #0a3d24;
+            color: #fff;
+            display: flex;
+            justify-content: center;
+            align-items: center;
+            height: 100vh;
+            margin: 0;
+            overflow: hidden;
+        }
+
+        #game-container {
+            position: relative;
+            width: 95vmin;
+            height: 95vmin;
+            max-width: 800px;
+            max-height: 800px;
+        }
+
+        #game-table {
+            position: relative;
+            width: 100%;
+            height: 100%;
+            border: 2px solid #c9a443;
+            border-radius: 50%;
+            background-color: #0e5e37;
+            box-shadow: 0 0 20px rgba(0,0,0,0.5);
+        }
+
+        .player-area {
+            position: absolute;
+            width: 50%;
+            height: 25%;
+        }
+
+        #player-south { bottom: 0; left: 25%; text-align: center; }
+        #player-north { top: 0; left: 25%; text-align: center; transform: rotate(180deg); }
+        #player-west { top: 37.5%; left: -12.5%; width: 25%; height: 50%; transform: rotate(90deg); }
+        #player-east { top: 37.5%; right: -12.5%; width: 25%; height: 50%; transform: rotate(-90deg); }
+        
+        .player-name {
+            font-weight: bold;
+            background: rgba(0,0,0,0.3);
+            padding: 2px 8px;
+            border-radius: 5px;
+            display: inline-block;
+        }
+        
+        #player-south .player-name { position: absolute; bottom: 110%; left: 50%; transform: translateX(-50%); }
+        #player-north .player-name { position: absolute; bottom: 110%; left: 50%; transform: translateX(-50%) rotate(180deg); }
+        #player-west .player-name { position: absolute; bottom: 110%; left: 50%; transform: translateX(-50%) rotate(-90deg); }
+        #player-east .player-name { position: absolute; bottom: 110%; left: 50%; transform: translateX(-50%) rotate(90deg); }
+
+        .hand {
+            position: relative;
+            display: flex;
+            justify-content: center;
+            align-items: center;
+            height: 100%;
+        }
+
+        .card {
+            position: absolute;
+            width: 60px;
+            height: 90px;
+            border: 1px solid #000;
+            border-radius: 5px;
+            background-color: white;
+            color: black;
+            font-size: 18px;
+            font-weight: bold;
+            display: flex;
+            justify-content: center;
+            align-items: center;
+            box-shadow: 2px 2px 5px rgba(0,0,0,0.3);
+            transition: transform 0.2s ease-out, top 0.2s ease-out;
+        }
+
+        .card.red { color: red; }
+        .card.back { background: #b02a2a; }
+
+        #player-south .card {
+            cursor: pointer;
+        }
+        #player-south .card:hover {
+            transform: translateY(-20px) scale(1.1);
+            z-index: 100;
+        }
+        
+        #trick-area {
+            position: absolute;
+            width: 200px;
+            height: 140px;
+            top: 50%;
+            left: 50%;
+            transform: translate(-50%, -50%);
+        }
+
+        #trick-area .card {
+            transition: all 0.3s ease;
+        }
+        
+        #game-info {
+            position: absolute;
+            top: 10px;
+            left: 50%;
+            transform: translateX(-50%);
+            background-color: rgba(0,0,0,0.5);
+            padding: 10px 20px;
+            border-radius: 10px;
+            text-align: center;
+            z-index: 200;
+            min-width: 300px;
+        }
+
+        /* --- KORRIGIERTER BEREICH --- */
+        #controls {
+            position: absolute;
+            top: 50%;
+            left: 50%;
+            transform: translate(-50%, -50%);
+            z-index: 200;
+            background-color: rgba(0, 0, 0, 0.6);
+            padding: 20px;
+            border-radius: 10px;
+            text-align: center;
+            display: flex;
+            flex-direction: column;
+            align-items: center;
+            gap: 10px;
+        }
+        
+        #bidding-controls div, #trump-selection-controls div {
+             display: flex;
+             flex-wrap: wrap;
+             justify-content: center;
+             gap: 5px;
+        }
+        /* --- ENDE KORRIGIERTER BEREICH --- */
+        
+        button {
+            padding: 10px 15px;
+            font-size: 16px;
+            cursor: pointer;
+            border: none;
+            border-radius: 5px;
+            background-color: #f0c14b;
+            color: #111;
+        }
+        button:hover {
+            background-color: #d1ab40;
+        }
+        .hidden { display: none; }
+    </style>
+</head>
+<body>
+
+    <div id="game-container">
+        <div id="game-table">
+            <!-- Player Areas -->
+            <div id="player-north" class="player-area">
+                <div class="player-name">Norden (Partner)</div>
+                <div class="hand"></div>
+            </div>
+            <div id="player-west" class="player-area">
+                 <div class="player-name">Westen</div>
+                <div class="hand"></div>
+            </div>
+            <div id="player-east" class="player-area">
+                 <div class="player-name">Osten</div>
+                <div class="hand"></div>
+            </div>
+            <div id="player-south" class="player-area">
+                <div class="player-name">Du (Süden)</div>
+                <div class="hand"></div>
+            </div>
+
+            <!-- Trick Area -->
+            <div id="trick-area"></div>
+        </div>
+
+        <div id="game-info">
+            <p id="message">Willkommen! Klicke auf "Neues Spiel", um zu starten.</p>
+            <p id="score-info"></p>
+            <p id="trump-info"></p>
+        </div>
+
+        <div id="controls">
+            <button id="new-game-btn">Neues Spiel</button>
+            <div id="bidding-controls" class="hidden">
+                <span>Dein Gebot:</span>
+                <div>
+                    <button data-bid="7">7</button>
+                    <button data-bid="8">8</button>
+                    <button data-bid="9">9</button>
+                    <button data-bid="10">10</button>
+                    <button data-bid="11">11</button>
+                    <button data-bid="12">12</button>
+                    <button data-bid="13">13</button>
+                    <button data-bid="pass">Passen</button>
+                </div>
+            </div>
+             <div id="trump-selection-controls" class="hidden">
+                <span>Wähle Trumpf:</span>
+                 <div>
+                    <button data-suit="♥">♥</button>
+                    <button data-suit="♦">♦</button>
+                    <button data-suit="♣">♣</button>
+                    <button data-suit="♠">♠</button>
+                </div>
+            </div>
+        </div>
+    </div>
+
+    <script>
+        // DOM Elements
+        const messageEl = document.getElementById('message');
+        const scoreInfoEl = document.getElementById('score-info');
+        const trumpInfoEl = document.getElementById('trump-info');
+        const biddingControlsEl = document.getElementById('bidding-controls');
+        const trumpSelectionControlsEl = document.getElementById('trump-selection-controls');
+        const newGameBtn = document.getElementById('new-game-btn');
+        const trickAreaEl = document.getElementById('trick-area');
+        const playerAreas = {
+            north: document.querySelector('#player-north .hand'),
+            east: document.querySelector('#player-east .hand'),
+            south: document.querySelector('#player-south .hand'),
+            west: document.querySelector('#player-west .hand'),
+        };
+
+        // Game Constants
+        const SUITS = ['♥', '♦', '♣', '♠'];
+        const RANKS = ['2', '3', '4', '5', '6', '7', '8', '9', '10', 'J', 'Q', 'K', 'A'];
+        const RANK_VALUES = { '2': 2, '3': 3, '4': 4, '5': 5, '6': 6, '7': 7, '8': 8, '9': 9, '10': 10, 'J': 11, 'Q': 12, 'K': 13, 'A': 14 };
+        const PLAYER_IDS = ['south', 'west', 'north', 'east'];
+
+        // Game State
+        let gameState = {};
+
+        function initNewGame() {
+            gameState = {
+                deck: createDeck(),
+                players: {
+                    south: { id: 'south', hand: [], isAI: false },
+                    west: { id: 'west', hand: [], isAI: true },
+                    north: { id: 'north', hand: [], isAI: true },
+                    east: { id: 'east', hand: [], isAI: true },
+                },
+                phase: 'bidding', // bidding, trump_selection, playing, round_over
+                currentPlayerIndex: 0, // south starts bidding
+                bids: {},
+                highestBidder: null,
+                highestBid: 6,
+                trumpSuit: null,
+                currentTrick: [],
+                trickWinner: null,
+                tricksWon: { 'team_ns': 0, 'team_ew': 0 },
+                leadSuit: null,
+            };
+            dealCards();
+            renderAll();
+            startBiddingPhase();
+        }
+
+        function createDeck() {
+            const deck = [];
+            for (const suit of SUITS) {
+                for (const rank of RANKS) {
+                    deck.push({ suit, rank, value: RANK_VALUES[rank] });
+                }
+            }
+            // Shuffle deck
+            for (let i = deck.length - 1; i > 0; i--) {
+                const j = Math.floor(Math.random() * (i + 1));
+                [deck[i], deck[j]] = [deck[j], deck[i]];
+            }
+            return deck;
+        }
+
+        function dealCards() {
+            for (let i = 0; i < 13; i++) {
+                for (const id of PLAYER_IDS) {
+                    gameState.players[id].hand.push(gameState.deck.pop());
+                }
+            }
+            // Sort hands for better display and AI logic
+            for (const id of PLAYER_IDS) {
+                gameState.players[id].hand.sort((a, b) => {
+                    if (SUITS.indexOf(a.suit) !== SUITS.indexOf(b.suit)) {
+                        return SUITS.indexOf(a.suit) - SUITS.indexOf(b.suit);
+                    }
+                    return b.value - a.value;
+                });
+            }
+        }
+
+        // --- Bidding Phase ---
+        function startBiddingPhase() {
+            updateMessage("Bietrunde beginnt. Du bist dran.");
+            gameState.currentPlayerIndex = 0; // South starts
+            biddingControlsEl.classList.remove('hidden');
+            newGameBtn.classList.add('hidden');
+        }
+
+        function handleBid(bid) {
+            const playerID = PLAYER_IDS[gameState.currentPlayerIndex];
+            if (bid !== 'pass') {
+                bid = parseInt(bid);
+                if (bid <= gameState.highestBid) {
+                    updateMessage("Du musst höher als " + gameState.highestBid + " bieten.");
+                    return;
+                }
+                gameState.highestBid = bid;
+                gameState.highestBidder = playerID;
+            }
+            gameState.bids[playerID] = bid;
+            biddingControlsEl.classList.add('hidden');
+            updateMessage(`${playerID} bietet ${bid}.`);
+            
+            setTimeout(nextBidder, 1000);
+        }
+
+        function nextBidder() {
+            // Check if bidding is over (3 passes after a bid)
+            const bidsMade = Object.keys(gameState.bids);
+            if (bidsMade.length === 4 && bidsMade.filter(p => gameState.bids[p] === 'pass').length >= 3 && gameState.highestBidder) {
+                 endBiddingPhase();
+                 return;
+            }
+            if (bidsMade.length === 4 && !gameState.highestBidder) { // Everyone passed
+                updateMessage("Alle haben gepasst. Neues Spiel wird gestartet.");
+                setTimeout(initNewGame, 2000);
+                return;
+            }
+
+            gameState.currentPlayerIndex = (gameState.currentPlayerIndex + 1) % 4;
+            const nextPlayerID = PLAYER_IDS[gameState.currentPlayerIndex];
+            const nextPlayer = gameState.players[nextPlayerID];
+
+            if (nextPlayer.isAI) {
+                const aiBid = getAIBid(nextPlayer);
+                if (aiBid !== 'pass' && aiBid > gameState.highestBid) {
+                    gameState.highestBid = aiBid;
+                    gameState.highestBidder = nextPlayerID;
+                }
+                gameState.bids[nextPlayerID] = aiBid;
+                updateMessage(`${nextPlayerID} bietet ${aiBid}.`);
+                setTimeout(nextBidder, 1000);
+            } else {
+                updateMessage("Du bist dran mit Bieten.");
+                biddingControlsEl.classList.remove('hidden');
+            }
+        }
+        
+        function getAIBid(player) {
+            // Simple AI bidding logic
+            let highCards = 0;
+            player.hand.forEach(card => {
+                if (card.value > 12) highCards += 1; // Count Aces and Kings
+            });
+            let bid = 6 + Math.floor(highCards / 2);
+            return (bid > gameState.highestBid) ? bid : 'pass';
+        }
+
+        function endBiddingPhase() {
+            const winner = gameState.highestBidder;
+            if (!winner) {
+                 updateMessage("Alle haben gepasst. Neues Spiel.");
+                 setTimeout(initNewGame, 2000);
+                 return;
+            }
+
+            const winningTeam = (winner === 'south' || winner === 'north') ? 'Nord-Süd' : 'West-Ost';
+            updateMessage(`${winner} gewinnt das Bieten mit ${gameState.highestBid}! Team ${winningTeam} muss ${gameState.highestBid} Stiche machen.`);
+            
+            gameState.phase = 'trump_selection';
+            if (!gameState.players[winner].isAI) {
+                updateMessage("Wähle eine Trumpf-Farbe.");
+                trumpSelectionControlsEl.classList.remove('hidden');
+            } else {
+                 setTimeout(() => {
+                    const aiTrump = getAITrumpChoice(gameState.players[winner]);
+                    selectTrump(aiTrump);
+                }, 1500);
+            }
+        }
+        
+        // --- Trump Selection ---
+        function getAITrumpChoice(player) {
+            const suitCounts = { '♥': 0, '♦': 0, '♣': 0, '♠': 0 };
+            player.hand.forEach(card => suitCounts[card.suit]++);
+            let longestSuit = '♠';
+            let maxCount = 0;
+            for(const suit in suitCounts){
+                if(suitCounts[suit] > maxCount) {
+                    maxCount = suitCounts[suit];
+                    longestSuit = suit;
+                }
+            }
+            return longestSuit;
+        }
+
+        function selectTrump(suit) {
+            gameState.trumpSuit = suit;
+            trumpSelectionControlsEl.classList.add('hidden');
+            trumpInfoEl.textContent = `Trumpf: ${gameState.trumpSuit}`;
+            updateMessage(`${gameState.highestBidder} wählt ${suit} als Trumpf. Das Spiel beginnt.`);
+            startPlayingPhase();
+        }
+
+        // --- Playing Phase ---
+        function startPlayingPhase() {
+            gameState.phase = 'playing';
+            // Highest bidder starts the first trick
+            gameState.currentPlayerIndex = PLAYER_IDS.indexOf(gameState.highestBidder);
+            playTurn();
+        }
+
+        function playTurn() {
+            if(gameState.players.south.hand.length === 0) {
+                endRound();
+                return;
+            }
+            const playerID = PLAYER_IDS[gameState.currentPlayerIndex];
+            const player = gameState.players[playerID];
+            renderAll(); // Highlight active player
+
+            if (player.isAI) {
+                setTimeout(() => {
+                    const cardToPlay = getAICard(player);
+                    playCard(playerID, cardToPlay);
+                }, 1200);
+            } else {
+                updateMessage("Du bist dran. Wähle eine Karte.");
+            }
+        }
+
+        function getAICard(player) {
+            const validCards = getValidCards(player.hand, gameState.leadSuit);
+            // Very simple AI: play highest valid card if trying to win, lowest otherwise
+            let partnerTeam = (player.id === 'north' || player.id === 'south') ? 'team_ns' : 'team_ew';
+            
+            // Is partner currently winning the trick?
+            let partnerIsWinning = false;
+            if (gameState.currentTrick.length > 0) {
+                const trickWinner = determineTrickWinner(gameState.currentTrick);
+                const winnerPlayer = gameState.players[trickWinner.playerID];
+                let winnerTeam = (winnerPlayer.id === 'north' || winnerPlayer.id === 'south') ? 'team_ns' : 'team_ew';
+                if(winnerTeam === partnerTeam) {
+                    partnerIsWinning = true;
+                }
+            }
+
+            if(partnerIsWinning) {
+                // If partner is winning, play lowest possible card
+                 return validCards.sort((a,b) => a.value - b.value)[0];
+            } else {
+                // Try to win, play highest card
+                return validCards.sort((a,b) => b.value - a.value)[0];
+            }
+        }
+
+        function handleCardClick(suit, rank) {
+            const playerID = PLAYER_IDS[gameState.currentPlayerIndex];
+            if (playerID !== 'south' || gameState.phase !== 'playing') return;
+
+            const cardToPlay = gameState.players.south.hand.find(c => c.suit === suit && c.rank === rank);
+            const hand = gameState.players.south.hand;
+
+            if (!getValidCards(hand, gameState.leadSuit).includes(cardToPlay)) {
+                updateMessage(`Ungültiger Zug. Du musst der Farbe ${gameState.leadSuit} folgen.`);
+                return;
+            }
+            
+            playCard('south', cardToPlay);
+        }
+
+        function playCard(playerID, card) {
+            // Remove card from hand
+            const player = gameState.players[playerID];
+            player.hand = player.hand.filter(c => !(c.suit === card.suit && c.rank === card.rank));
+
+            // Add to trick
+            gameState.currentTrick.push({ playerID, card });
+            if (gameState.currentTrick.length === 1) {
+                gameState.leadSuit = card.suit;
+            }
+
+            renderAll();
+
+            if (gameState.currentTrick.length === 4) {
+                setTimeout(endTrick, 1500);
+            } else {
+                gameState.currentPlayerIndex = (gameState.currentPlayerIndex + 1) % 4;
+                playTurn();
+            }
+        }
+        
+        function getValidCards(hand, leadSuit) {
+            if (!leadSuit) return hand; // Can play anything if leading
+            const cardsInLeadSuit = hand.filter(c => c.suit === leadSuit);
+            return cardsInLeadSuit.length > 0 ? cardsInLeadSuit : hand;
+        }
+
+        function endTrick() {
+            const winner = determineTrickWinner(gameState.currentTrick);
+            gameState.trickWinner = winner.playerID;
+
+            const winningTeam = (winner.playerID === 'south' || winner.playerID === 'north') ? 'team_ns' : 'team_ew';
+            gameState.tricksWon[winningTeam]++;
+            
+            updateMessage(`${winner.playerID} gewinnt den Stich mit ${winner.card.rank}${winner.card.suit}.`);
+            scoreInfoEl.textContent = `Stiche: N-S: ${gameState.tricksWon.team_ns} | W-O: ${gameState.tricksWon.team_ew}`;
+            
+            setTimeout(() => {
+                gameState.currentTrick = [];
+                gameState.leadSuit = null;
+                gameState.currentPlayerIndex = PLAYER_IDS.indexOf(gameState.trickWinner);
+                playTurn();
+            }, 1500);
+        }
+        
+        function determineTrickWinner(trick) {
+            let winningCard = trick[0];
+            
+            for (let i = 1; i < trick.length; i++) {
+                const currentCard = trick[i];
+                // If current card is a trump and winning card is not
+                if (currentCard.card.suit === gameState.trumpSuit && winningCard.card.suit !== gameState.trumpSuit) {
+                    winningCard = currentCard;
+                }
+                // If both are trumps, check value
+                else if (currentCard.card.suit === gameState.trumpSuit && winningCard.card.suit === gameState.trumpSuit) {
+                    if (currentCard.card.value > winningCard.card.value) {
+                        winningCard = currentCard;
+                    }
+                }
+                // If both are same suit (and not trump), check value
+                else if (currentCard.card.suit === winningCard.card.suit && currentCard.card.suit !== gameState.trumpSuit) {
+                    if (currentCard.card.value > winningCard.card.value) {
+                        winningCard = currentCard;
+                    }
+                }
+            }
+            return winningCard;
+        }
+
+        function endRound() {
+            gameState.phase = 'round_over';
+            const biddingTeam = (gameState.highestBidder === 'south' || gameState.highestBidder === 'north') ? 'team_ns' : 'team_ew';
+            const tricksWonByBiddingTeam = gameState.tricksWon[biddingTeam];
+            
+            let resultMessage = "";
+            if (tricksWonByBiddingTeam >= gameState.highestBid) {
+                resultMessage = `Team ${biddingTeam.replace('_', '-')} hat sein Gebot von ${gameState.highestBid} erfüllt! (${tricksWonByBiddingTeam} Stiche)`;
+            } else {
+                resultMessage = `Team ${biddingTeam.replace('_', '-')} hat sein Gebot von ${gameState.highestBid} nicht erfüllt! (${tricksWonByBiddingTeam} Stiche)`;
+            }
+            updateMessage(resultMessage);
+            newGameBtn.classList.remove('hidden');
+        }
+
+        // --- Rendering ---
+        function renderAll() {
+            renderHands();
+            renderTrickArea();
+            highlightActivePlayer();
+        }
+
+        function renderHands() {
+            for (const id of PLAYER_IDS) {
+                const handEl = playerAreas[id];
+                handEl.innerHTML = '';
+                const hand = gameState.players[id].hand;
+                const cardCount = hand.length;
+                
+                hand.forEach((card, i) => {
+                    const cardDiv = document.createElement('div');
+                    cardDiv.className = 'card';
+                    const isPlayer = id === 'south';
+                    
+                    if (isPlayer) {
+                        cardDiv.innerHTML = `${card.rank}${card.suit}`;
+                        if (card.suit === '♥' || card.suit === '♦') cardDiv.classList.add('red');
+                        cardDiv.dataset.suit = card.suit;
+                        cardDiv.dataset.rank = card.rank;
+                        cardDiv.addEventListener('click', () => handleCardClick(card.suit, card.rank));
+                    } else {
+                        cardDiv.classList.add('back');
+                    }
+                    
+                    // Card fanning logic
+                    const spread = Math.min(300, cardCount * 25);
+                    const offset = -spread / 2;
+                    const cardOffset = (spread / (cardCount - 1) || 0) * i;
+                    cardDiv.style.left = `calc(50% + ${offset + cardOffset}px)`;
+                    cardDiv.style.transform = `translateX(-50%)`;
+                    
+                    handEl.appendChild(cardDiv);
+                });
+            }
+        }
+
+        function renderTrickArea() {
+            trickAreaEl.innerHTML = '';
+            gameState.currentTrick.forEach(({playerID, card}) => {
+                const cardDiv = document.createElement('div');
+                cardDiv.className = 'card';
+                cardDiv.innerHTML = `${card.rank}${card.suit}`;
+                if (card.suit === '♥' || card.suit === '♦') cardDiv.classList.add('red');
+                
+                switch (playerID) {
+                    case 'south': cardDiv.style.cssText = 'bottom: 0; left: 50%; transform: translateX(-50%);'; break;
+                    case 'west': cardDiv.style.cssText = 'top: 50%; left: 0; transform: translateY(-50%);'; break;
+                    case 'north': cardDiv.style.cssText = 'top: 0; left: 50%; transform: translateX(-50%);'; break;
+                    case 'east': cardDiv.style.cssText = 'top: 50%; right: 0; transform: translateY(-50%);'; break;
+                }
+                trickAreaEl.appendChild(cardDiv);
+            });
+        }
+        
+        function highlightActivePlayer() {
+            document.querySelectorAll('.player-area').forEach(el => el.style.border = 'none');
+            if (gameState.phase === 'playing' || gameState.phase === 'bidding') {
+                const activePlayerID = PLAYER_IDS[gameState.currentPlayerIndex];
+                const activePlayerEl = document.getElementById(`player-${activePlayerID}`);
+                if(activePlayerEl) {
+                    activePlayerEl.style.border = '3px solid #f0c14b';
+                    activePlayerEl.style.borderRadius = '10px';
+                }
+            }
+        }
+
+        function updateMessage(msg) {
+            messageEl.textContent = msg;
+        }
+
+        // --- Event Listeners ---
+        newGameBtn.addEventListener('click', initNewGame);
+        biddingControlsEl.addEventListener('click', (e) => {
+            if (e.target.tagName === 'BUTTON') {
+                handleBid(e.target.dataset.bid);
+            }
+        });
+        trumpSelectionControlsEl.addEventListener('click', (e) => {
+            if (e.target.tagName === 'BUTTON') {
+                selectTrump(e.target.dataset.suit);
+            }
+        });
+
+    </script>
+</body>
+</html>
