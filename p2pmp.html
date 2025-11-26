@@ -3,258 +3,335 @@
 <head>
     <meta charset="UTF-8">
     <meta name="viewport" content="width=device-width, initial-scale=1.0">
-    <title>QR Multiplayer</title>
-    <!-- PeerJS für P2P Networking -->
-    <script src="https://unpkg.com/peerjs@1.5.2/dist/peerjs.min.js"></script>
-    <!-- QRCode.js für die QR-Generierung -->
-    <script src="https://cdnjs.cloudflare.com/ajax/libs/qrcodejs/1.0.0/qrcode.min.js"></script>
+    <title>GitHub Chess Online</title>
     
-    <style>
-        body { font-family: 'Segoe UI', Tahoma, Geneva, Verdana, sans-serif; text-align: center; background: #222; color: white; margin: 0; }
-        .container { max-width: 800px; margin: 0 auto; padding: 20px; }
-        
-        /* Screens */
-        #menu-screen, #host-screen, #game-screen { display: none; }
-        .active { display: block !important; }
+    <!-- 1. JQUERY (Benötigt für Chessboard.js) -->
+    <script src="https://code.jquery.com/jquery-3.5.1.min.js"></script>
+    
+    <!-- 2. CHESSBOARD.JS (Grafik) -->
+    <link rel="stylesheet" href="https://unpkg.com/@chrisoakman/chessboardjs@1.0.0/dist/chessboard-1.0.0.min.css">
+    <script src="https://unpkg.com/@chrisoakman/chessboardjs@1.0.0/dist/chessboard-1.0.0.min.js"></script>
+    
+    <!-- 3. CHESS.JS (Logik) -->
+    <script src="https://cdnjs.cloudflare.com/ajax/libs/chess.js/0.10.3/chess.min.js"></script>
+    
+    <!-- 4. PEERJS (Netzwerk) & QR CODE -->
+    <script src="https://unpkg.com/peerjs@1.5.2/dist/peerjs.min.js"></script>
+    <script src="https://cdnjs.cloudflare.com/ajax/libs/qrcodejs/1.0.0/qrcode.min.js"></script>
 
-        /* UI Elemente */
-        .btn { background: #007bff; color: white; border: none; padding: 15px 30px; font-size: 1.2rem; cursor: pointer; border-radius: 8px; margin: 10px; transition: 0.2s; }
-        .btn:hover { background: #0056b3; transform: scale(1.05); }
-        .btn-green { background: #28a745; }
-        .btn-green:hover { background: #1e7e34; }
+    <style>
+        /* AAA STYLING */
+        body { 
+            font-family: 'Segoe UI', sans-serif; 
+            background: #1e1e1e; 
+            color: #e0e0e0; 
+            display: flex; 
+            flex-direction: column; 
+            align-items: center; 
+            min-height: 100vh; 
+            margin: 0; 
+        }
+
+        h1 { margin-bottom: 10px; font-weight: 300; letter-spacing: 2px; }
+
+        .container { 
+            width: 100%; 
+            max-width: 500px; 
+            padding: 20px; 
+            text-align: center; 
+        }
+
+        /* Screens */
+        .screen { display: none; animation: fadeIn 0.5s; }
+        .active { display: block; }
+
+        /* Buttons & Inputs */
+        .btn { 
+            background: #4caf50; 
+            color: white; 
+            border: none; 
+            padding: 15px 30px; 
+            font-size: 1.1rem; 
+            border-radius: 50px; 
+            cursor: pointer; 
+            margin: 10px; 
+            transition: all 0.3s; 
+            box-shadow: 0 4px 15px rgba(76, 175, 80, 0.3);
+        }
+        .btn:hover { transform: translateY(-2px); box-shadow: 0 6px 20px rgba(76, 175, 80, 0.4); }
+        .btn-outline { background: transparent; border: 2px solid #4caf50; color: #4caf50; }
+        .btn-outline:hover { background: #4caf50; color: white; }
+
+        input { 
+            background: #333; 
+            border: 1px solid #555; 
+            color: white; 
+            padding: 15px; 
+            border-radius: 8px; 
+            text-align: center; 
+            font-size: 1.2rem; 
+            width: 60%;
+            text-transform: uppercase;
+        }
+
+        /* Lobby */
+        #display-code { 
+            font-family: monospace; 
+            font-size: 2.5rem; 
+            color: #ffd700; 
+            background: #333; 
+            padding: 10px; 
+            border-radius: 8px; 
+            margin: 10px 0; 
+            letter-spacing: 5px;
+        }
+        #qrcode { 
+            background: white; 
+            padding: 15px; 
+            display: inline-block; 
+            border-radius: 10px; 
+            margin-top: 15px; 
+        }
+
+        /* Chess Board */
+        #myBoard { 
+            width: 100%; 
+            margin: 0 auto; 
+            border: 5px solid #444;
+            border-radius: 4px;
+        }
         
-        input { padding: 10px; font-size: 1.2rem; text-align: center; width: 150px; border-radius: 5px; border: none; }
+        .status-bar {
+            margin-top: 15px;
+            padding: 10px;
+            background: #333;
+            border-radius: 8px;
+            font-weight: bold;
+        }
+        .turn-indicator { color: #4caf50; }
+        .turn-wait { color: #ff9800; }
         
-        /* Lobby Styles */
-        .lobby-code { font-size: 3rem; letter-spacing: 5px; font-weight: bold; color: #ffc107; font-family: monospace; background: #333; padding: 10px 20px; border-radius: 10px; display: inline-block; margin: 10px 0; }
-        #qrcode { background: white; padding: 10px; display: inline-block; margin-top: 15px; border-radius: 5px; }
-        
-        /* Canvas */
-        canvas { background: #fff; border-radius: 4px; box-shadow: 0 0 20px rgba(0,0,0,0.5); max-width: 100%; }
+        @keyframes fadeIn { from { opacity: 0; } to { opacity: 1; } }
     </style>
 </head>
 <body>
 
-<div class="container">
+    <div class="container">
+        <h1>MASTER CHESS</h1>
 
-    <!-- 1. HAUPTMENÜ -->
-    <div id="menu-screen" class="active">
-        <h1>Multiplayer Demo</h1>
-        <p>Wähle eine Option:</p>
-        <button class="btn" onclick="startHost()">Spiel hosten (Lobby erstellen)</button>
-        <br>
-        <div style="margin-top: 30px; border-top: 1px solid #444; padding-top: 20px;">
-            <p>Oder Code eingeben:</p>
-            <input type="text" id="join-input" placeholder="CODE" maxlength="5" style="text-transform:uppercase;">
-            <button class="btn btn-green" onclick="joinGame()">Beitreten</button>
+        <!-- MENU SCREEN -->
+        <div id="menu-screen" class="screen active">
+            <p>Ein kostenloses P2P Schachspiel.</p>
+            <button class="btn" onclick="createLobby()">Spiel Hosten</button>
+            <br>
+            <div style="margin-top: 30px; border-top: 1px solid #333; padding-top: 20px;">
+                <input type="text" id="join-code" placeholder="CODE EINGEBEN" maxlength="4">
+                <br>
+                <button class="btn btn-outline" onclick="joinLobby()">Beitreten</button>
+            </div>
+        </div>
+
+        <!-- LOBBY SCREEN -->
+        <div id="lobby-screen" class="screen">
+            <h3>Lobby Code</h3>
+            <div id="display-code">...</div>
+            <div id="qrcode"></div>
+            <p style="color: #aaa; margin-top: 20px;">Warte auf Gegner...</p>
+        </div>
+
+        <!-- GAME SCREEN -->
+        <div id="game-screen" class="screen">
+            <div id="status" class="status-bar">Verbinde...</div>
+            <br>
+            <div id="myBoard"></div>
+            <p style="font-size: 0.8rem; color: #777; margin-top: 10px;">Auto-Queen Promotion aktiv</p>
         </div>
     </div>
 
-    <!-- 2. HOST LOBBY (Warten auf Spieler) -->
-    <div id="host-screen">
-        <h2>Lobby erstellt!</h2>
-        <p>Dein Lobby-Code:</p>
-        <div id="display-code" class="lobby-code">...</div>
-        <p>Scanne diesen QR-Code um beizutreten:</p>
-        <div id="qrcode"></div>
-        <p id="host-status" style="margin-top:20px; color: #aaa;">Warte auf Spieler...</p>
-    </div>
-
-    <!-- 3. SPIEL SCREEN -->
-    <div id="game-screen">
-        <canvas id="gameCanvas" width="600" height="400"></canvas>
-        <p><small>Steuerung: Pfeiltasten</small></p>
-        <div id="connection-status">Verbindung: OK</div>
-    </div>
-
-</div>
-
-<script>
-    // --- KONFIGURATION ---
-    const PREFIX = "gh-game-mp-"; // Prefix um Kollisionen auf dem Public Server zu vermeiden
-    let peer = null;
-    let conn = null;
-    let mySide = 'left'; // Host ist links, Joiner ist rechts
-    
-    // UI Elemente
-    const menuScreen = document.getElementById('menu-screen');
-    const hostScreen = document.getElementById('host-screen');
-    const gameScreen = document.getElementById('game-screen');
-    const displayCode = document.getElementById('display-code');
-    const hostStatus = document.getElementById('host-status');
-
-    // Spiel Variablen
-    const canvas = document.getElementById('gameCanvas');
-    const ctx = canvas.getContext('2d');
-    
-    let players = {
-        self: { x: 50, y: 180, color: '#007bff' },
-        peer: { x: 500, y: 180, color: '#dc3545' }
-    };
-    
-    // URL Parameter prüfen (Auto-Join)
-    window.onload = () => {
-        const urlParams = new URLSearchParams(window.location.search);
-        const joinCode = urlParams.get('join');
-        if (joinCode) {
-            document.getElementById('join-input').value = joinCode;
-            joinGame();
-        }
-    };
-
-    // --- FUNKTIONEN: NETZWERK ---
-
-    // 1. HOSTEN
-    function startHost() {
-        // Zufälligen 4-stelligen Code generieren
-        const shortCode = Math.random().toString(36).substring(2, 6).toUpperCase();
-        const peerId = PREFIX + shortCode;
-
-        showScreen('host-screen');
-        displayCode.innerText = shortCode;
-
-        // QR Code generieren
-        const joinUrl = window.location.href.split('?')[0] + '?join=' + shortCode;
-        new QRCode(document.getElementById("qrcode"), {
-            text: joinUrl,
-            width: 128,
-            height: 128
-        });
-
-        // PeerJS initialisieren
-        peer = new Peer(peerId);
-
-        peer.on('open', (id) => {
-            console.log('Host ID:', id);
-        });
-
-        peer.on('connection', (c) => {
-            // Wenn sich jemand verbindet
-            conn = c;
-            setupConnection();
-            hostStatus.innerText = "Spieler gefunden! Starte Spiel...";
-            setTimeout(startGame, 1000);
-        });
+    <script>
+        // --- KONFIGURATION ---
+        const PREFIX = "gh-chess-aaa-";
+        let peer = null;
+        let conn = null;
+        let myColor = 'white'; // Host ist immer Weiß
         
-        peer.on('error', (err) => {
-            alert("Fehler: ID wahrscheinlich schon vergeben. Versuch es nochmal.");
-            location.reload();
-        });
-    }
+        // --- SCHACH VARIABLEN ---
+        let board = null;
+        let game = new Chess();
+        
+        // --- UI FUNKTIONEN ---
+        function showScreen(id) {
+            document.querySelectorAll('.screen').forEach(s => s.classList.remove('active'));
+            document.getElementById(id).classList.add('active');
+        }
 
-    // 2. BEITRETEN
-    function joinGame() {
-        const inputCode = document.getElementById('join-input').value.toUpperCase().trim();
-        if(inputCode.length < 3) return alert("Bitte Code eingeben");
-
-        // Wir brauchen keine feste ID, PeerJS gibt uns eine zufällige
-        peer = new Peer();
-
-        peer.on('open', (id) => {
-            // Verbinden zum Host
-            const hostId = PREFIX + inputCode;
-            console.log("Verbinde zu:", hostId);
-            conn = peer.connect(hostId);
-            
-            // Da wir beitreten, sind wir Player 2 (rechts)
-            mySide = 'right';
-            players.self.x = 500; 
-            players.peer.x = 50;
-
-            setupConnection();
-        });
-
-        peer.on('error', (err) => {
-            alert("Verbindung fehlgeschlagen. Ist der Code richtig?");
-            showScreen('menu-screen');
-        });
-    }
-
-    // Verbindung einrichten (für beide gleich)
-    function setupConnection() {
-        conn.on('open', () => {
-            console.log("Verbindung hergestellt!");
-            if(mySide === 'right') startGame(); // Joiner startet auch das Spiel UI
-        });
-
-        conn.on('data', (data) => {
-            // Daten empfangen
-            if(data.type === 'move') {
-                players.peer.x = data.x;
-                players.peer.y = data.y;
+        // URL Check (Auto-Join via QR)
+        window.onload = () => {
+            const params = new URLSearchParams(window.location.search);
+            if(params.has('join')) {
+                document.getElementById('join-code').value = params.get('join');
+                joinLobby();
             }
-        });
+        };
 
-        conn.on('close', () => {
-            alert("Mitspieler hat die Verbindung getrennt.");
-            location.href = window.location.href.split('?')[0]; // Reset
-        });
-    }
+        // --- NETZWERK LOGIK ---
 
-    // --- FUNKTIONEN: SPIEL ---
+        function createLobby() {
+            const code = Math.random().toString(36).substring(2, 6).toUpperCase();
+            const peerId = PREFIX + code;
 
-    function showScreen(id) {
-        document.querySelectorAll('.container > div').forEach(div => div.classList.remove('active'));
-        document.getElementById(id).classList.add('active');
-    }
+            showScreen('lobby-screen');
+            document.getElementById('display-code').innerText = code;
 
-    function startGame() {
-        showScreen('game-screen');
-        gameLoop();
-        canvas.focus();
-    }
+            // QR Code
+            const url = window.location.href.split('?')[0] + '?join=' + code;
+            new QRCode(document.getElementById("qrcode"), { text: url, width: 150, height: 150 });
 
-    // Input Handling
-    const keys = {};
-    window.addEventListener('keydown', e => keys[e.key] = true);
-    window.addEventListener('keyup', e => keys[e.key] = false);
-
-    function update() {
-        if (!conn || !conn.open) return;
-
-        const speed = 5;
-        let moved = false;
-
-        if (keys['ArrowUp']) { players.self.y -= speed; moved = true; }
-        if (keys['ArrowDown']) { players.self.y += speed; moved = true; }
-        if (keys['ArrowLeft']) { players.self.x -= speed; moved = true; }
-        if (keys['ArrowRight']) { players.self.x += speed; moved = true; }
-
-        // Grenzen
-        if(players.self.x < 0) players.self.x = 0;
-        if(players.self.y < 0) players.self.y = 0;
-        if(players.self.x > 580) players.self.x = 580;
-        if(players.self.y > 380) players.self.y = 380;
-
-        if (moved) {
-            conn.send({ type: 'move', x: players.self.x, y: players.self.y });
+            peer = new Peer(peerId);
+            
+            peer.on('open', (id) => { console.log('Lobby offen:', id); });
+            
+            peer.on('connection', (c) => {
+                conn = c;
+                setupConnection();
+            });
+            
+            peer.on('error', (err) => { 
+                alert("Verbindungsfehler oder Code belegt."); 
+                location.reload(); 
+            });
         }
-    }
 
-    function draw() {
-        ctx.clearRect(0, 0, canvas.width, canvas.height);
+        function joinLobby() {
+            const code = document.getElementById('join-code').value.toUpperCase().trim();
+            if(code.length < 4) return alert("Code ungültig");
 
-        // Mich selbst zeichnen
-        ctx.fillStyle = players.self.color;
-        ctx.fillRect(players.self.x, players.self.y, 20, 20);
+            myColor = 'black'; // Joiner ist Schwarz
+            peer = new Peer(); // Zufalls-ID für den Joiner
 
-        // Gegner zeichnen
-        ctx.fillStyle = players.peer.color;
-        ctx.fillRect(players.peer.x, players.peer.y, 20, 20);
-        
-        // Label
-        ctx.fillStyle = "#333";
-        ctx.font = "12px Arial";
-        ctx.fillText("DU", players.self.x, players.self.y - 5);
-        ctx.fillText("GEGNER", players.peer.x, players.peer.y - 5);
-    }
+            peer.on('open', () => {
+                const hostId = PREFIX + code;
+                conn = peer.connect(hostId);
+                setupConnection();
+            });
 
-    function gameLoop() {
-        update();
-        draw();
-        requestAnimationFrame(gameLoop);
-    }
+            peer.on('error', () => { alert("Host nicht gefunden."); showScreen('menu-screen'); });
+        }
 
-</script>
+        function setupConnection() {
+            conn.on('open', () => {
+                console.log("Verbunden!");
+                startGame();
+            });
+
+            conn.on('data', (data) => {
+                // Wir empfangen einen Zug vom Gegner
+                handleRemoteMove(data);
+            });
+            
+            conn.on('close', () => {
+                alert("Gegner hat die Verbindung getrennt.");
+                location.href = window.location.href.split('?')[0];
+            });
+        }
+
+        // --- SCHACH LOGIK ---
+
+        function startGame() {
+            showScreen('game-screen');
+            
+            // Brett Konfiguration
+            const config = {
+                draggable: true,
+                position: 'start',
+                orientation: myColor, // Brett drehen für Schwarz
+                onDragStart: onDragStart,
+                onDrop: onDrop,
+                onSnapEnd: onSnapEnd
+            };
+            
+            board = Chessboard('myBoard', config);
+            updateStatus();
+            
+            // Responsive resize hack
+            window.addEventListener('resize', board.resize);
+        }
+
+        function onDragStart(source, piece, position, orientation) {
+            // Spiel vorbei?
+            if (game.game_over()) return false;
+
+            // Ist es mein Zug?
+            if ((game.turn() === 'w' && myColor !== 'white') ||
+                (game.turn() === 'b' && myColor !== 'black')) {
+                return false;
+            }
+
+            // Darf ich diese Figur bewegen?
+            if ((game.turn() === 'w' && piece.search(/^b/) !== -1) ||
+                (game.turn() === 'b' && piece.search(/^w/) !== -1)) {
+                return false;
+            }
+        }
+
+        function onDrop(source, target) {
+            // Versuche den Zug in der Chess.js Engine auszuführen
+            const move = game.move({
+                from: source,
+                to: target,
+                promotion: 'q' // HINWEIS: Vereinfachung - immer Dame bei Bauerumwandlung
+            });
+
+            // Ungültiger Zug?
+            if (move === null) return 'snapback';
+
+            updateStatus();
+
+            // Zug an Gegner senden
+            if(conn && conn.open) {
+                conn.send({
+                    from: source,
+                    to: target,
+                    promotion: 'q'
+                });
+            }
+        }
+
+        // Empfange Zug vom Gegner
+        function handleRemoteMove(moveData) {
+            game.move(moveData);
+            board.position(game.fen());
+            updateStatus();
+        }
+
+        // Aktualisiert das Brett nach Animation (wichtig für Rochade/En Passant)
+        function onSnapEnd() {
+            board.position(game.fen());
+        }
+
+        function updateStatus() {
+            let status = '';
+            const moveColor = (game.turn() === 'w') ? 'Weiß' : 'Schwarz';
+            
+            // Checkmate?
+            if (game.in_checkmate()) {
+                status = 'Spiel vorbei: ' + moveColor + ' ist Schachmatt.';
+            } else if (game.in_draw()) {
+                status = 'Spiel vorbei: Remis.';
+            } else {
+                if (game.turn() === myColor.charAt(0)) {
+                    status = "<span class='turn-indicator'>Du bist am Zug!</span>";
+                } else {
+                    status = "<span class='turn-wait'>Gegner überlegt...</span>";
+                }
+                
+                if (game.in_check()) {
+                    status += " (SCHACH!)";
+                }
+            }
+            
+            document.getElementById('status').innerHTML = status;
+        }
+    </script>
 </body>
 </html>
