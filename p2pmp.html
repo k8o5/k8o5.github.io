@@ -1,0 +1,260 @@
+<!DOCTYPE html>
+<html lang="de">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>QR Multiplayer</title>
+    <!-- PeerJS für P2P Networking -->
+    <script src="https://unpkg.com/peerjs@1.5.2/dist/peerjs.min.js"></script>
+    <!-- QRCode.js für die QR-Generierung -->
+    <script src="https://cdnjs.cloudflare.com/ajax/libs/qrcodejs/1.0.0/qrcode.min.js"></script>
+    
+    <style>
+        body { font-family: 'Segoe UI', Tahoma, Geneva, Verdana, sans-serif; text-align: center; background: #222; color: white; margin: 0; }
+        .container { max-width: 800px; margin: 0 auto; padding: 20px; }
+        
+        /* Screens */
+        #menu-screen, #host-screen, #game-screen { display: none; }
+        .active { display: block !important; }
+
+        /* UI Elemente */
+        .btn { background: #007bff; color: white; border: none; padding: 15px 30px; font-size: 1.2rem; cursor: pointer; border-radius: 8px; margin: 10px; transition: 0.2s; }
+        .btn:hover { background: #0056b3; transform: scale(1.05); }
+        .btn-green { background: #28a745; }
+        .btn-green:hover { background: #1e7e34; }
+        
+        input { padding: 10px; font-size: 1.2rem; text-align: center; width: 150px; border-radius: 5px; border: none; }
+        
+        /* Lobby Styles */
+        .lobby-code { font-size: 3rem; letter-spacing: 5px; font-weight: bold; color: #ffc107; font-family: monospace; background: #333; padding: 10px 20px; border-radius: 10px; display: inline-block; margin: 10px 0; }
+        #qrcode { background: white; padding: 10px; display: inline-block; margin-top: 15px; border-radius: 5px; }
+        
+        /* Canvas */
+        canvas { background: #fff; border-radius: 4px; box-shadow: 0 0 20px rgba(0,0,0,0.5); max-width: 100%; }
+    </style>
+</head>
+<body>
+
+<div class="container">
+
+    <!-- 1. HAUPTMENÜ -->
+    <div id="menu-screen" class="active">
+        <h1>Multiplayer Demo</h1>
+        <p>Wähle eine Option:</p>
+        <button class="btn" onclick="startHost()">Spiel hosten (Lobby erstellen)</button>
+        <br>
+        <div style="margin-top: 30px; border-top: 1px solid #444; padding-top: 20px;">
+            <p>Oder Code eingeben:</p>
+            <input type="text" id="join-input" placeholder="CODE" maxlength="5" style="text-transform:uppercase;">
+            <button class="btn btn-green" onclick="joinGame()">Beitreten</button>
+        </div>
+    </div>
+
+    <!-- 2. HOST LOBBY (Warten auf Spieler) -->
+    <div id="host-screen">
+        <h2>Lobby erstellt!</h2>
+        <p>Dein Lobby-Code:</p>
+        <div id="display-code" class="lobby-code">...</div>
+        <p>Scanne diesen QR-Code um beizutreten:</p>
+        <div id="qrcode"></div>
+        <p id="host-status" style="margin-top:20px; color: #aaa;">Warte auf Spieler...</p>
+    </div>
+
+    <!-- 3. SPIEL SCREEN -->
+    <div id="game-screen">
+        <canvas id="gameCanvas" width="600" height="400"></canvas>
+        <p><small>Steuerung: Pfeiltasten</small></p>
+        <div id="connection-status">Verbindung: OK</div>
+    </div>
+
+</div>
+
+<script>
+    // --- KONFIGURATION ---
+    const PREFIX = "gh-game-mp-"; // Prefix um Kollisionen auf dem Public Server zu vermeiden
+    let peer = null;
+    let conn = null;
+    let mySide = 'left'; // Host ist links, Joiner ist rechts
+    
+    // UI Elemente
+    const menuScreen = document.getElementById('menu-screen');
+    const hostScreen = document.getElementById('host-screen');
+    const gameScreen = document.getElementById('game-screen');
+    const displayCode = document.getElementById('display-code');
+    const hostStatus = document.getElementById('host-status');
+
+    // Spiel Variablen
+    const canvas = document.getElementById('gameCanvas');
+    const ctx = canvas.getContext('2d');
+    
+    let players = {
+        self: { x: 50, y: 180, color: '#007bff' },
+        peer: { x: 500, y: 180, color: '#dc3545' }
+    };
+    
+    // URL Parameter prüfen (Auto-Join)
+    window.onload = () => {
+        const urlParams = new URLSearchParams(window.location.search);
+        const joinCode = urlParams.get('join');
+        if (joinCode) {
+            document.getElementById('join-input').value = joinCode;
+            joinGame();
+        }
+    };
+
+    // --- FUNKTIONEN: NETZWERK ---
+
+    // 1. HOSTEN
+    function startHost() {
+        // Zufälligen 4-stelligen Code generieren
+        const shortCode = Math.random().toString(36).substring(2, 6).toUpperCase();
+        const peerId = PREFIX + shortCode;
+
+        showScreen('host-screen');
+        displayCode.innerText = shortCode;
+
+        // QR Code generieren
+        const joinUrl = window.location.href.split('?')[0] + '?join=' + shortCode;
+        new QRCode(document.getElementById("qrcode"), {
+            text: joinUrl,
+            width: 128,
+            height: 128
+        });
+
+        // PeerJS initialisieren
+        peer = new Peer(peerId);
+
+        peer.on('open', (id) => {
+            console.log('Host ID:', id);
+        });
+
+        peer.on('connection', (c) => {
+            // Wenn sich jemand verbindet
+            conn = c;
+            setupConnection();
+            hostStatus.innerText = "Spieler gefunden! Starte Spiel...";
+            setTimeout(startGame, 1000);
+        });
+        
+        peer.on('error', (err) => {
+            alert("Fehler: ID wahrscheinlich schon vergeben. Versuch es nochmal.");
+            location.reload();
+        });
+    }
+
+    // 2. BEITRETEN
+    function joinGame() {
+        const inputCode = document.getElementById('join-input').value.toUpperCase().trim();
+        if(inputCode.length < 3) return alert("Bitte Code eingeben");
+
+        // Wir brauchen keine feste ID, PeerJS gibt uns eine zufällige
+        peer = new Peer();
+
+        peer.on('open', (id) => {
+            // Verbinden zum Host
+            const hostId = PREFIX + inputCode;
+            console.log("Verbinde zu:", hostId);
+            conn = peer.connect(hostId);
+            
+            // Da wir beitreten, sind wir Player 2 (rechts)
+            mySide = 'right';
+            players.self.x = 500; 
+            players.peer.x = 50;
+
+            setupConnection();
+        });
+
+        peer.on('error', (err) => {
+            alert("Verbindung fehlgeschlagen. Ist der Code richtig?");
+            showScreen('menu-screen');
+        });
+    }
+
+    // Verbindung einrichten (für beide gleich)
+    function setupConnection() {
+        conn.on('open', () => {
+            console.log("Verbindung hergestellt!");
+            if(mySide === 'right') startGame(); // Joiner startet auch das Spiel UI
+        });
+
+        conn.on('data', (data) => {
+            // Daten empfangen
+            if(data.type === 'move') {
+                players.peer.x = data.x;
+                players.peer.y = data.y;
+            }
+        });
+
+        conn.on('close', () => {
+            alert("Mitspieler hat die Verbindung getrennt.");
+            location.href = window.location.href.split('?')[0]; // Reset
+        });
+    }
+
+    // --- FUNKTIONEN: SPIEL ---
+
+    function showScreen(id) {
+        document.querySelectorAll('.container > div').forEach(div => div.classList.remove('active'));
+        document.getElementById(id).classList.add('active');
+    }
+
+    function startGame() {
+        showScreen('game-screen');
+        gameLoop();
+        canvas.focus();
+    }
+
+    // Input Handling
+    const keys = {};
+    window.addEventListener('keydown', e => keys[e.key] = true);
+    window.addEventListener('keyup', e => keys[e.key] = false);
+
+    function update() {
+        if (!conn || !conn.open) return;
+
+        const speed = 5;
+        let moved = false;
+
+        if (keys['ArrowUp']) { players.self.y -= speed; moved = true; }
+        if (keys['ArrowDown']) { players.self.y += speed; moved = true; }
+        if (keys['ArrowLeft']) { players.self.x -= speed; moved = true; }
+        if (keys['ArrowRight']) { players.self.x += speed; moved = true; }
+
+        // Grenzen
+        if(players.self.x < 0) players.self.x = 0;
+        if(players.self.y < 0) players.self.y = 0;
+        if(players.self.x > 580) players.self.x = 580;
+        if(players.self.y > 380) players.self.y = 380;
+
+        if (moved) {
+            conn.send({ type: 'move', x: players.self.x, y: players.self.y });
+        }
+    }
+
+    function draw() {
+        ctx.clearRect(0, 0, canvas.width, canvas.height);
+
+        // Mich selbst zeichnen
+        ctx.fillStyle = players.self.color;
+        ctx.fillRect(players.self.x, players.self.y, 20, 20);
+
+        // Gegner zeichnen
+        ctx.fillStyle = players.peer.color;
+        ctx.fillRect(players.peer.x, players.peer.y, 20, 20);
+        
+        // Label
+        ctx.fillStyle = "#333";
+        ctx.font = "12px Arial";
+        ctx.fillText("DU", players.self.x, players.self.y - 5);
+        ctx.fillText("GEGNER", players.peer.x, players.peer.y - 5);
+    }
+
+    function gameLoop() {
+        update();
+        draw();
+        requestAnimationFrame(gameLoop);
+    }
+
+</script>
+</body>
+</html>
