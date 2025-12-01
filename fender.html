@@ -1,0 +1,1748 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>fender Web - Full 3D Editor</title>
+    <style>
+        * {
+            margin: 0;
+            padding: 0;
+            box-sizing: border-box;
+            font-family: 'Segoe UI', sans-serif;
+            font-size: 12px;
+        }
+        body {
+            background: #1e1e1e;
+            color: #e0e0e0;
+            overflow: hidden;
+            height: 100vh;
+            display: flex;
+            flex-direction: column;
+        }
+        
+        /* Top Menu Bar */
+        .menu-bar {
+            background: #2d2d2d;
+            border-bottom: 1px solid #1a1a1a;
+            display: flex;
+            padding: 2px 5px;
+            gap: 2px;
+        }
+        .menu-item {
+            padding: 5px 12px;
+            cursor: pointer;
+            border-radius: 3px;
+            position: relative;
+        }
+        .menu-item:hover {
+            background: #4a4a4a;
+        }
+        .dropdown {
+            display: none;
+            position: absolute;
+            top: 100%;
+            left: 0;
+            background: #3d3d3d;
+            border: 1px solid #1a1a1a;
+            min-width: 180px;
+            z-index: 1000;
+            border-radius: 4px;
+            box-shadow: 0 4px 12px rgba(0,0,0,0.5);
+        }
+        .menu-item:hover .dropdown {
+            display: block;
+        }
+        .dropdown-item {
+            padding: 8px 15px;
+            display: flex;
+            justify-content: space-between;
+        }
+        .dropdown-item:hover {
+            background: #5680c2;
+        }
+        .shortcut {
+            color: #888;
+            margin-left: 20px;
+        }
+        
+        /* Main Layout */
+        .main-container {
+            display: flex;
+            flex: 1;
+            overflow: hidden;
+        }
+        
+        /* Left Toolbar */
+        .toolbar {
+            width: 45px;
+            background: #2d2d2d;
+            border-right: 1px solid #1a1a1a;
+            display: flex;
+            flex-direction: column;
+            padding: 5px;
+            gap: 3px;
+        }
+        .tool-btn {
+            width: 35px;
+            height: 35px;
+            border: none;
+            background: transparent;
+            color: #e0e0e0;
+            cursor: pointer;
+            border-radius: 4px;
+            display: flex;
+            align-items: center;
+            justify-content: center;
+            font-size: 16px;
+        }
+        .tool-btn:hover, .tool-btn.active {
+            background: #4a4a4a;
+        }
+        .tool-btn.active {
+            background: #5680c2;
+        }
+        .tool-separator {
+            height: 1px;
+            background: #1a1a1a;
+            margin: 5px 0;
+        }
+        
+        /* 3D Viewport */
+        .viewport-container {
+            flex: 1;
+            display: flex;
+            flex-direction: column;
+            position: relative;
+        }
+        .viewport-header {
+            background: #2d2d2d;
+            padding: 3px 10px;
+            border-bottom: 1px solid #1a1a1a;
+            display: flex;
+            gap: 10px;
+            align-items: center;
+        }
+        .viewport-header select {
+            background: #3d3d3d;
+            border: 1px solid #1a1a1a;
+            color: #e0e0e0;
+            padding: 3px 8px;
+            border-radius: 3px;
+        }
+        #viewport {
+            flex: 1;
+            cursor: crosshair;
+        }
+        .viewport-overlay {
+            position: absolute;
+            bottom: 10px;
+            left: 10px;
+            background: rgba(0,0,0,0.6);
+            padding: 8px 12px;
+            border-radius: 4px;
+            font-size: 11px;
+        }
+        .gizmo-container {
+            position: absolute;
+            bottom: 10px;
+            right: 10px;
+            width: 100px;
+            height: 100px;
+        }
+        
+        /* Right Panel */
+        .right-panel {
+            width: 280px;
+            background: #2d2d2d;
+            border-left: 1px solid #1a1a1a;
+            display: flex;
+            flex-direction: column;
+            overflow-y: auto;
+        }
+        .panel-section {
+            border-bottom: 1px solid #1a1a1a;
+        }
+        .panel-header {
+            background: #3d3d3d;
+            padding: 8px 10px;
+            cursor: pointer;
+            display: flex;
+            align-items: center;
+            gap: 8px;
+        }
+        .panel-header:hover {
+            background: #4a4a4a;
+        }
+        .panel-content {
+            padding: 10px;
+            display: none;
+        }
+        .panel-content.open {
+            display: block;
+        }
+        .property-row {
+            display: flex;
+            align-items: center;
+            margin-bottom: 8px;
+        }
+        .property-label {
+            width: 70px;
+            color: #aaa;
+        }
+        .property-input {
+            flex: 1;
+            display: flex;
+            gap: 4px;
+        }
+        .property-input input {
+            flex: 1;
+            background: #1e1e1e;
+            border: 1px solid #1a1a1a;
+            color: #e0e0e0;
+            padding: 4px 8px;
+            border-radius: 3px;
+            width: 50px;
+        }
+        .property-input input:focus {
+            border-color: #5680c2;
+            outline: none;
+        }
+        .xyz-label {
+            width: 18px;
+            text-align: center;
+            border-radius: 3px;
+            padding: 4px 0;
+        }
+        .x-label { background: #a34040; }
+        .y-label { background: #40a340; }
+        .z-label { background: #4040a3; }
+        
+        /* Outliner */
+        .outliner {
+            max-height: 200px;
+            overflow-y: auto;
+        }
+        .outliner-item {
+            padding: 5px 10px;
+            cursor: pointer;
+            display: flex;
+            align-items: center;
+            gap: 8px;
+        }
+        .outliner-item:hover {
+            background: #3d3d3d;
+        }
+        .outliner-item.selected {
+            background: #5680c2;
+        }
+        .outliner-icon {
+            font-size: 14px;
+        }
+        
+        /* Color Picker */
+        .color-picker {
+            width: 100%;
+            height: 30px;
+            border: none;
+            border-radius: 3px;
+            cursor: pointer;
+        }
+        
+        /* Timeline */
+        .timeline {
+            height: 120px;
+            background: #2d2d2d;
+            border-top: 1px solid #1a1a1a;
+            display: flex;
+            flex-direction: column;
+        }
+        .timeline-header {
+            display: flex;
+            padding: 5px 10px;
+            gap: 10px;
+            align-items: center;
+            border-bottom: 1px solid #1a1a1a;
+        }
+        .timeline-btn {
+            background: #3d3d3d;
+            border: none;
+            color: #e0e0e0;
+            padding: 5px 10px;
+            cursor: pointer;
+            border-radius: 3px;
+        }
+        .timeline-btn:hover {
+            background: #4a4a4a;
+        }
+        .timeline-track {
+            flex: 1;
+            position: relative;
+            overflow-x: auto;
+        }
+        .timeline-ruler {
+            height: 20px;
+            background: #1e1e1e;
+            display: flex;
+        }
+        .timeline-frame {
+            min-width: 30px;
+            border-right: 1px solid #3d3d3d;
+            text-align: center;
+            font-size: 10px;
+            line-height: 20px;
+        }
+        .timeline-content {
+            height: 60px;
+            position: relative;
+        }
+        .timeline-playhead {
+            position: absolute;
+            top: 0;
+            width: 2px;
+            height: 100%;
+            background: #ff5555;
+            z-index: 10;
+        }
+        .keyframe {
+            position: absolute;
+            width: 10px;
+            height: 10px;
+            background: #f0a030;
+            transform: rotate(45deg);
+            cursor: pointer;
+        }
+        
+        /* Modal */
+        .modal-overlay {
+            display: none;
+            position: fixed;
+            top: 0;
+            left: 0;
+            right: 0;
+            bottom: 0;
+            background: rgba(0,0,0,0.7);
+            z-index: 2000;
+            align-items: center;
+            justify-content: center;
+        }
+        .modal {
+            background: #3d3d3d;
+            padding: 20px;
+            border-radius: 8px;
+            min-width: 300px;
+        }
+        .modal h3 {
+            margin-bottom: 15px;
+        }
+        .modal-btn {
+            background: #5680c2;
+            border: none;
+            color: white;
+            padding: 8px 20px;
+            border-radius: 4px;
+            cursor: pointer;
+            margin-right: 10px;
+        }
+        .modal-btn.secondary {
+            background: #4a4a4a;
+        }
+        
+        /* Context Menu */
+        .context-menu {
+            display: none;
+            position: fixed;
+            background: #3d3d3d;
+            border: 1px solid #1a1a1a;
+            border-radius: 4px;
+            min-width: 160px;
+            z-index: 1500;
+            box-shadow: 0 4px 12px rgba(0,0,0,0.5);
+        }
+        .context-menu-item {
+            padding: 8px 15px;
+            cursor: pointer;
+        }
+        .context-menu-item:hover {
+            background: #5680c2;
+        }
+        
+        /* Status Bar */
+        .status-bar {
+            background: #2d2d2d;
+            border-top: 1px solid #1a1a1a;
+            padding: 4px 10px;
+            display: flex;
+            justify-content: space-between;
+            font-size: 11px;
+            color: #888;
+        }
+        
+        /* Slider */
+        input[type="range"] {
+            width: 100%;
+            height: 4px;
+            -webkit-appearance: none;
+            background: #1e1e1e;
+            border-radius: 2px;
+        }
+        input[type="range"]::-webkit-slider-thumb {
+            -webkit-appearance: none;
+            width: 12px;
+            height: 12px;
+            background: #5680c2;
+            border-radius: 50%;
+            cursor: pointer;
+        }
+        
+        /* Checkbox */
+        .checkbox-wrapper {
+            display: flex;
+            align-items: center;
+            gap: 8px;
+        }
+        
+        /* Tabs */
+        .tabs {
+            display: flex;
+            background: #1e1e1e;
+        }
+        .tab {
+            padding: 8px 15px;
+            cursor: pointer;
+            border-bottom: 2px solid transparent;
+        }
+        .tab:hover {
+            background: #2d2d2d;
+        }
+        .tab.active {
+            background: #2d2d2d;
+            border-bottom-color: #5680c2;
+        }
+    </style>
+</head>
+<body>
+    <!-- Menu Bar -->
+    <div class="menu-bar">
+        <div class="menu-item">
+            File
+            <div class="dropdown">
+                <div class="dropdown-item" onclick="newProject()">New <span class="shortcut">Ctrl+N</span></div>
+                <div class="dropdown-item" onclick="openProject()">Open <span class="shortcut">Ctrl+O</span></div>
+                <div class="dropdown-item" onclick="saveProject()">Save <span class="shortcut">Ctrl+S</span></div>
+                <div class="dropdown-item" onclick="exportScene()">Export <span class="shortcut">Ctrl+E</span></div>
+                <div class="dropdown-item" onclick="importModel()">Import</div>
+            </div>
+        </div>
+        <div class="menu-item">
+            Edit
+            <div class="dropdown">
+                <div class="dropdown-item" onclick="undo()">Undo <span class="shortcut">Ctrl+Z</span></div>
+                <div class="dropdown-item" onclick="redo()">Redo <span class="shortcut">Ctrl+Y</span></div>
+                <div class="dropdown-item" onclick="duplicateSelected()">Duplicate <span class="shortcut">Shift+D</span></div>
+                <div class="dropdown-item" onclick="deleteSelected()">Delete <span class="shortcut">X</span></div>
+                <div class="dropdown-item" onclick="selectAll()">Select All <span class="shortcut">A</span></div>
+            </div>
+        </div>
+        <div class="menu-item">
+            Add
+            <div class="dropdown">
+                <div class="dropdown-item" onclick="addMesh('cube')">🔲 Cube</div>
+                <div class="dropdown-item" onclick="addMesh('sphere')">🔵 Sphere</div>
+                <div class="dropdown-item" onclick="addMesh('cylinder')">🔷 Cylinder</div>
+                <div class="dropdown-item" onclick="addMesh('cone')">🔺 Cone</div>
+                <div class="dropdown-item" onclick="addMesh('torus')">⭕ Torus</div>
+                <div class="dropdown-item" onclick="addMesh('plane')">⬜ Plane</div>
+                <div class="dropdown-item" onclick="addMesh('icosahedron')">💎 Icosahedron</div>
+                <div class="dropdown-item" onclick="addLight('point')">💡 Point Light</div>
+                <div class="dropdown-item" onclick="addLight('directional')">☀️ Directional Light</div>
+                <div class="dropdown-item" onclick="addLight('spot')">🔦 Spot Light</div>
+                <div class="dropdown-item" onclick="addCamera()">📷 Camera</div>
+                <div class="dropdown-item" onclick="addText()">📝 Text</div>
+            </div>
+        </div>
+        <div class="menu-item">
+            Object
+            <div class="dropdown">
+                <div class="dropdown-item" onclick="transformMode('translate')">Move <span class="shortcut">G</span></div>
+                <div class="dropdown-item" onclick="transformMode('rotate')">Rotate <span class="shortcut">R</span></div>
+                <div class="dropdown-item" onclick="transformMode('scale')">Scale <span class="shortcut">S</span></div>
+                <div class="dropdown-item" onclick="resetTransform()">Reset Transform <span class="shortcut">Alt+G</span></div>
+                <div class="dropdown-item" onclick="centerOrigin()">Center Origin</div>
+            </div>
+        </div>
+        <div class="menu-item">
+            View
+            <div class="dropdown">
+                <div class="dropdown-item" onclick="setView('front')">Front <span class="shortcut">1</span></div>
+                <div class="dropdown-item" onclick="setView('right')">Right <span class="shortcut">3</span></div>
+                <div class="dropdown-item" onclick="setView('top')">Top <span class="shortcut">7</span></div>
+                <div class="dropdown-item" onclick="setView('perspective')">Perspective <span class="shortcut">5</span></div>
+                <div class="dropdown-item" onclick="toggleOrtho()">Toggle Ortho <span class="shortcut">Numpad 5</span></div>
+                <div class="dropdown-item" onclick="focusSelected()">Focus Selected <span class="shortcut">.</span></div>
+                <div class="dropdown-item" onclick="resetView()">Reset View <span class="shortcut">Home</span></div>
+            </div>
+        </div>
+        <div class="menu-item">
+            Render
+            <div class="dropdown">
+                <div class="dropdown-item" onclick="renderImage()">Render Image <span class="shortcut">F12</span></div>
+                <div class="dropdown-item" onclick="renderAnimation()">Render Animation</div>
+                <div class="dropdown-item" onclick="toggleRenderMode()">Toggle Render Preview</div>
+            </div>
+        </div>
+        <div class="menu-item">
+            Help
+            <div class="dropdown">
+                <div class="dropdown-item" onclick="showShortcuts()">Keyboard Shortcuts</div>
+                <div class="dropdown-item" onclick="showAbout()">About</div>
+            </div>
+        </div>
+    </div>
+
+    <!-- Main Container -->
+    <div class="main-container">
+        <!-- Left Toolbar -->
+        <div class="toolbar">
+            <button class="tool-btn active" id="selectTool" onclick="setTool('select')" title="Select (W)">↖</button>
+            <button class="tool-btn" id="moveTool" onclick="setTool('translate')" title="Move (G)">✥</button>
+            <button class="tool-btn" id="rotateTool" onclick="setTool('rotate')" title="Rotate (R)">↻</button>
+            <button class="tool-btn" id="scaleTool" onclick="setTool('scale')" title="Scale (S)">⤢</button>
+            <div class="tool-separator"></div>
+            <button class="tool-btn" onclick="addMesh('cube')" title="Add Cube">🔲</button>
+            <button class="tool-btn" onclick="addMesh('sphere')" title="Add Sphere">🔵</button>
+            <button class="tool-btn" onclick="addMesh('cylinder')" title="Add Cylinder">🔷</button>
+            <button class="tool-btn" onclick="addLight('point')" title="Add Light">💡</button>
+            <div class="tool-separator"></div>
+            <button class="tool-btn" onclick="toggleWireframe()" title="Wireframe (Z)">⬡</button>
+            <button class="tool-btn" onclick="toggleGrid()" title="Toggle Grid">▦</button>
+            <button class="tool-btn" onclick="toggleSnap()" title="Toggle Snap">🧲</button>
+        </div>
+
+        <!-- Viewport -->
+        <div class="viewport-container">
+            <div class="viewport-header">
+                <select id="viewMode" onchange="changeViewMode(this.value)">
+                    <option value="solid">Solid</option>
+                    <option value="wireframe">Wireframe</option>
+                    <option value="material">Material Preview</option>
+                    <option value="rendered">Rendered</option>
+                </select>
+                <select id="shadingMode" onchange="changeShadingMode(this.value)">
+                    <option value="flat">Flat</option>
+                    <option value="smooth">Smooth</option>
+                </select>
+                <span id="viewportLabel">Perspective</span>
+            </div>
+            <div id="viewport"></div>
+            <div class="viewport-overlay">
+                <div id="objectInfo">Objects: 0 | Vertices: 0 | Faces: 0</div>
+            </div>
+            <div class="gizmo-container" id="gizmoViewport"></div>
+        </div>
+
+        <!-- Right Panel -->
+        <div class="right-panel">
+            <!-- Tabs -->
+            <div class="tabs">
+                <div class="tab active" onclick="showTab('scene')">Scene</div>
+                <div class="tab" onclick="showTab('object')">Object</div>
+                <div class="tab" onclick="showTab('material')">Material</div>
+                <div class="tab" onclick="showTab('world')">World</div>
+            </div>
+
+            <!-- Scene Tab -->
+            <div id="sceneTab">
+                <!-- Outliner -->
+                <div class="panel-section">
+                    <div class="panel-header" onclick="togglePanel(this)">
+                        ▼ Outliner
+                    </div>
+                    <div class="panel-content open">
+                        <div class="outliner" id="outliner">
+                            <!-- Objects listed here -->
+                        </div>
+                    </div>
+                </div>
+
+                <!-- Scene Properties -->
+                <div class="panel-section">
+                    <div class="panel-header" onclick="togglePanel(this)">
+                        ▼ Scene
+                    </div>
+                    <div class="panel-content open">
+                        <div class="property-row">
+                            <span class="property-label">Unit:</span>
+                            <select style="flex:1; background:#1e1e1e; border:1px solid #1a1a1a; color:#e0e0e0; padding:4px;">
+                                <option>Meters</option>
+                                <option>Centimeters</option>
+                                <option>Millimeters</option>
+                            </select>
+                        </div>
+                        <div class="property-row">
+                            <span class="property-label">Gravity:</span>
+                            <input type="number" value="9.81" style="flex:1;">
+                        </div>
+                    </div>
+                </div>
+            </div>
+
+            <!-- Object Tab -->
+            <div id="objectTab" style="display:none;">
+                <!-- Transform -->
+                <div class="panel-section">
+                    <div class="panel-header" onclick="togglePanel(this)">
+                        ▼ Transform
+                    </div>
+                    <div class="panel-content open">
+                        <div class="property-row">
+                            <span class="property-label">Location</span>
+                            <div class="property-input">
+                                <span class="xyz-label x-label">X</span>
+                                <input type="number" id="posX" step="0.1" value="0" onchange="updateTransform()">
+                                <span class="xyz-label y-label">Y</span>
+                                <input type="number" id="posY" step="0.1" value="0" onchange="updateTransform()">
+                                <span class="xyz-label z-label">Z</span>
+                                <input type="number" id="posZ" step="0.1" value="0" onchange="updateTransform()">
+                            </div>
+                        </div>
+                        <div class="property-row">
+                            <span class="property-label">Rotation</span>
+                            <div class="property-input">
+                                <span class="xyz-label x-label">X</span>
+                                <input type="number" id="rotX" step="1" value="0" onchange="updateTransform()">
+                                <span class="xyz-label y-label">Y</span>
+                                <input type="number" id="rotY" step="1" value="0" onchange="updateTransform()">
+                                <span class="xyz-label z-label">Z</span>
+                                <input type="number" id="rotZ" step="1" value="0" onchange="updateTransform()">
+                            </div>
+                        </div>
+                        <div class="property-row">
+                            <span class="property-label">Scale</span>
+                            <div class="property-input">
+                                <span class="xyz-label x-label">X</span>
+                                <input type="number" id="scaleX" step="0.1" value="1" onchange="updateTransform()">
+                                <span class="xyz-label y-label">Y</span>
+                                <input type="number" id="scaleY" step="0.1" value="1" onchange="updateTransform()">
+                                <span class="xyz-label z-label">Z</span>
+                                <input type="number" id="scaleZ" step="0.1" value="1" onchange="updateTransform()">
+                            </div>
+                        </div>
+                    </div>
+                </div>
+
+                <!-- Object Properties -->
+                <div class="panel-section">
+                    <div class="panel-header" onclick="togglePanel(this)">
+                        ▼ Object Properties
+                    </div>
+                    <div class="panel-content open">
+                        <div class="property-row">
+                            <span class="property-label">Name:</span>
+                            <input type="text" id="objectName" style="flex:1;" onchange="renameObject()">
+                        </div>
+                        <div class="property-row">
+                            <span class="property-label">Visible:</span>
+                            <input type="checkbox" id="objectVisible" checked onchange="toggleVisibility()">
+                        </div>
+                    </div>
+                </div>
+            </div>
+
+            <!-- Material Tab -->
+            <div id="materialTab" style="display:none;">
+                <div class="panel-section">
+                    <div class="panel-header" onclick="togglePanel(this)">
+                        ▼ Material
+                    </div>
+                    <div class="panel-content open">
+                        <div class="property-row">
+                            <span class="property-label">Color:</span>
+                            <input type="color" id="materialColor" class="color-picker" value="#4a90d9" onchange="updateMaterial()">
+                        </div>
+                        <div class="property-row">
+                            <span class="property-label">Metallic:</span>
+                        </div>
+                        <input type="range" id="metallic" min="0" max="1" step="0.01" value="0" onchange="updateMaterial()">
+                        <div class="property-row">
+                            <span class="property-label">Roughness:</span>
+                        </div>
+                        <input type="range" id="roughness" min="0" max="1" step="0.01" value="0.5" onchange="updateMaterial()">
+                        <div class="property-row">
+                            <span class="property-label">Opacity:</span>
+                        </div>
+                        <input type="range" id="opacity" min="0" max="1" step="0.01" value="1" onchange="updateMaterial()">
+                        <div class="property-row">
+                            <span class="property-label">Emissive:</span>
+                            <input type="color" id="emissiveColor" class="color-picker" value="#000000" onchange="updateMaterial()">
+                        </div>
+                    </div>
+                </div>
+            </div>
+
+            <!-- World Tab -->
+            <div id="worldTab" style="display:none;">
+                <div class="panel-section">
+                    <div class="panel-header" onclick="togglePanel(this)">
+                        ▼ World Settings
+                    </div>
+                    <div class="panel-content open">
+                        <div class="property-row">
+                            <span class="property-label">Background:</span>
+                            <input type="color" id="bgColor" class="color-picker" value="#1a1a2e" onchange="updateBackground()">
+                        </div>
+                        <div class="property-row">
+                            <span class="property-label">Ambient:</span>
+                            <input type="color" id="ambientColor" class="color-picker" value="#404040" onchange="updateAmbient()">
+                        </div>
+                        <div class="property-row">
+                            <span class="property-label">Fog:</span>
+                            <input type="checkbox" id="fogEnabled" onchange="toggleFog()">
+                        </div>
+                        <div class="property-row">
+                            <span class="property-label">Fog Color:</span>
+                            <input type="color" id="fogColor" class="color-picker" value="#1a1a2e" onchange="updateFog()">
+                        </div>
+                    </div>
+                </div>
+
+                <div class="panel-section">
+                    <div class="panel-header" onclick="togglePanel(this)">
+                        ▼ Render Settings
+                    </div>
+                    <div class="panel-content open">
+                        <div class="property-row">
+                            <span class="property-label">Resolution:</span>
+                        </div>
+                        <div class="property-row">
+                            <input type="number" id="resX" value="1920" style="flex:1;"> x
+                            <input type="number" id="resY" value="1080" style="flex:1;">
+                        </div>
+                        <div class="property-row">
+                            <span class="property-label">Samples:</span>
+                            <input type="number" id="samples" value="128" style="flex:1;">
+                        </div>
+                    </div>
+                </div>
+            </div>
+        </div>
+    </div>
+
+    <!-- Timeline -->
+    <div class="timeline">
+        <div class="timeline-header">
+            <button class="timeline-btn" onclick="firstFrame()">⏮</button>
+            <button class="timeline-btn" onclick="prevFrame()">◀</button>
+            <button class="timeline-btn" id="playBtn" onclick="togglePlay()">▶</button>
+            <button class="timeline-btn" onclick="nextFrame()">▶</button>
+            <button class="timeline-btn" onclick="lastFrame()">⏭</button>
+            <span>Frame: <input type="number" id="currentFrame" value="1" style="width:50px;background:#1e1e1e;border:1px solid #1a1a1a;color:#e0e0e0;padding:2px;"> / <input type="number" id="endFrame" value="250" style="width:50px;background:#1e1e1e;border:1px solid #1a1a1a;color:#e0e0e0;padding:2px;"></span>
+            <button class="timeline-btn" onclick="insertKeyframe()">🔑 Insert Keyframe</button>
+            <button class="timeline-btn" onclick="autoKeyframe = !autoKeyframe">🔴 Auto Key</button>
+        </div>
+        <div class="timeline-track">
+            <div class="timeline-ruler" id="timelineRuler"></div>
+            <div class="timeline-content" id="timelineContent">
+                <div class="timeline-playhead" id="playhead" style="left: 30px;"></div>
+            </div>
+        </div>
+    </div>
+
+    <!-- Status Bar -->
+    <div class="status-bar">
+        <span id="statusLeft">Ready | fender Web 1.0</span>
+        <span id="statusRight">Memory: 0 MB | FPS: 60</span>
+    </div>
+
+    <!-- Context Menu -->
+    <div class="context-menu" id="contextMenu">
+        <div class="context-menu-item" onclick="duplicateSelected()">Duplicate</div>
+        <div class="context-menu-item" onclick="deleteSelected()">Delete</div>
+        <div class="context-menu-item" onclick="hideSelected()">Hide</div>
+        <div class="context-menu-item" onclick="focusSelected()">Focus</div>
+        <div class="context-menu-item" onclick="resetTransform()">Reset Transform</div>
+    </div>
+
+    <!-- Modal -->
+    <div class="modal-overlay" id="modalOverlay">
+        <div class="modal" id="modal">
+            <h3 id="modalTitle">Modal</h3>
+            <div id="modalContent"></div>
+            <div style="margin-top:15px;">
+                <button class="modal-btn" onclick="closeModal()">OK</button>
+                <button class="modal-btn secondary" onclick="closeModal()">Cancel</button>
+            </div>
+        </div>
+    </div>
+
+    <!-- Three.js Library -->
+    <script src="https://cdnjs.cloudflare.com/ajax/libs/three.js/r128/three.min.js"></script>
+    <script src="https://cdn.jsdelivr.net/npm/three@0.128.0/examples/js/controls/OrbitControls.js"></script>
+    <script src="https://cdn.jsdelivr.net/npm/three@0.128.0/examples/js/controls/TransformControls.js"></script>
+
+    <script>
+        // Global Variables
+        let scene, camera, renderer, controls, transformControls;
+        let objects = [];
+        let selectedObject = null;
+        let currentTool = 'select';
+        let isPlaying = false;
+        let currentFrame = 1;
+        let endFrame = 250;
+        let fps = 24;
+        let autoKeyframe = false;
+        let keyframes = {};
+        let undoStack = [];
+        let redoStack = [];
+        let gridHelper, axesHelper;
+        let snapEnabled = false;
+        let wireframeMode = false;
+        let gizmoScene, gizmoCamera, gizmoRenderer;
+
+        // Initialize
+        function init() {
+            // Scene
+            scene = new THREE.Scene();
+            scene.background = new THREE.Color(0x1a1a2e);
+
+            // Camera
+            camera = new THREE.PerspectiveCamera(75, 1, 0.1, 1000);
+            camera.position.set(5, 5, 5);
+            camera.lookAt(0, 0, 0);
+
+            // Renderer
+            const viewport = document.getElementById('viewport');
+            renderer = new THREE.WebGLRenderer({ antialias: true });
+            renderer.setSize(viewport.clientWidth, viewport.clientHeight);
+            renderer.shadowMap.enabled = true;
+            renderer.shadowMap.type = THREE.PCFSoftShadowMap;
+            viewport.appendChild(renderer.domElement);
+
+            // Controls
+            controls = new THREE.OrbitControls(camera, renderer.domElement);
+            controls.enableDamping = true;
+            controls.dampingFactor = 0.05;
+
+            // Transform Controls
+            transformControls = new THREE.TransformControls(camera, renderer.domElement);
+            transformControls.addEventListener('change', render);
+            transformControls.addEventListener('dragging-changed', (event) => {
+                controls.enabled = !event.value;
+                if (!event.value && selectedObject) {
+                    updatePropertiesPanel();
+                    if (autoKeyframe) insertKeyframe();
+                }
+            });
+            scene.add(transformControls);
+
+            // Grid
+            gridHelper = new THREE.GridHelper(20, 20, 0x444444, 0x333333);
+            scene.add(gridHelper);
+
+            // Axes
+            axesHelper = new THREE.AxesHelper(5);
+            scene.add(axesHelper);
+
+            // Lights
+            const ambientLight = new THREE.AmbientLight(0x404040, 0.5);
+            scene.add(ambientLight);
+
+            const directionalLight = new THREE.DirectionalLight(0xffffff, 1);
+            directionalLight.position.set(5, 10, 7.5);
+            directionalLight.castShadow = true;
+            directionalLight.shadow.mapSize.width = 2048;
+            directionalLight.shadow.mapSize.height = 2048;
+            scene.add(directionalLight);
+
+            // Add default cube
+            addMesh('cube');
+
+            // Event Listeners
+            window.addEventListener('resize', onWindowResize);
+            renderer.domElement.addEventListener('click', onViewportClick);
+            renderer.domElement.addEventListener('contextmenu', onContextMenu);
+            document.addEventListener('keydown', onKeyDown);
+            document.addEventListener('click', hideContextMenu);
+
+            // Initialize Timeline
+            initTimeline();
+
+            // Initialize Gizmo
+            initGizmo();
+
+            // Start Animation Loop
+            animate();
+        }
+
+        // Gizmo View
+        function initGizmo() {
+            const gizmoContainer = document.getElementById('gizmoViewport');
+            gizmoScene = new THREE.Scene();
+            gizmoCamera = new THREE.PerspectiveCamera(50, 1, 0.1, 100);
+            gizmoCamera.position.set(0, 0, 3);
+            
+            gizmoRenderer = new THREE.WebGLRenderer({ antialias: true, alpha: true });
+            gizmoRenderer.setSize(100, 100);
+            gizmoContainer.appendChild(gizmoRenderer.domElement);
+
+            const gizmoAxes = new THREE.AxesHelper(1);
+            gizmoScene.add(gizmoAxes);
+        }
+
+        function updateGizmo() {
+            gizmoCamera.position.copy(camera.position).normalize().multiplyScalar(3);
+            gizmoCamera.lookAt(0, 0, 0);
+            gizmoRenderer.render(gizmoScene, gizmoCamera);
+        }
+
+        // Timeline
+        function initTimeline() {
+            const ruler = document.getElementById('timelineRuler');
+            ruler.innerHTML = '';
+            for (let i = 1; i <= endFrame; i += 10) {
+                const frame = document.createElement('div');
+                frame.className = 'timeline-frame';
+                frame.textContent = i;
+                ruler.appendChild(frame);
+            }
+        }
+
+        // Add Mesh
+        function addMesh(type) {
+            let geometry, mesh;
+            const material = new THREE.MeshStandardMaterial({ 
+                color: Math.random() * 0xffffff,
+                metalness: 0,
+                roughness: 0.5
+            });
+
+            switch(type) {
+                case 'cube':
+                    geometry = new THREE.BoxGeometry(1, 1, 1);
+                    break;
+                case 'sphere':
+                    geometry = new THREE.SphereGeometry(0.5, 32, 32);
+                    break;
+                case 'cylinder':
+                    geometry = new THREE.CylinderGeometry(0.5, 0.5, 1, 32);
+                    break;
+                case 'cone':
+                    geometry = new THREE.ConeGeometry(0.5, 1, 32);
+                    break;
+                case 'torus':
+                    geometry = new THREE.TorusGeometry(0.5, 0.2, 16, 100);
+                    break;
+                case 'plane':
+                    geometry = new THREE.PlaneGeometry(2, 2);
+                    break;
+                case 'icosahedron':
+                    geometry = new THREE.IcosahedronGeometry(0.5);
+                    break;
+            }
+
+            mesh = new THREE.Mesh(geometry, material);
+            mesh.name = type.charAt(0).toUpperCase() + type.slice(1) + '.' + (objects.length + 1).toString().padStart(3, '0');
+            mesh.castShadow = true;
+            mesh.receiveShadow = true;
+            mesh.userData.type = 'mesh';
+
+            scene.add(mesh);
+            objects.push(mesh);
+            selectObject(mesh);
+            updateOutliner();
+            updateStats();
+            saveState();
+        }
+
+        // Add Light
+        function addLight(type) {
+            let light, helper;
+            
+            switch(type) {
+                case 'point':
+                    light = new THREE.PointLight(0xffffff, 1, 100);
+                    light.position.set(2, 3, 2);
+                    helper = new THREE.PointLightHelper(light, 0.3);
+                    break;
+                case 'directional':
+                    light = new THREE.DirectionalLight(0xffffff, 1);
+                    light.position.set(5, 5, 5);
+                    helper = new THREE.DirectionalLightHelper(light, 1);
+                    break;
+                case 'spot':
+                    light = new THREE.SpotLight(0xffffff, 1);
+                    light.position.set(0, 5, 0);
+                    light.angle = Math.PI / 6;
+                    helper = new THREE.SpotLightHelper(light);
+                    break;
+            }
+
+            light.name = type.charAt(0).toUpperCase() + type.slice(1) + 'Light.' + (objects.length + 1).toString().padStart(3, '0');
+            light.userData.type = 'light';
+            light.userData.helper = helper;
+            
+            scene.add(light);
+            scene.add(helper);
+            objects.push(light);
+            selectObject(light);
+            updateOutliner();
+            saveState();
+        }
+
+        // Add Camera
+        function addCamera() {
+            const cam = new THREE.PerspectiveCamera(50, 16/9, 0.1, 1000);
+            cam.position.set(5, 2, 5);
+            cam.lookAt(0, 0, 0);
+            cam.name = 'Camera.' + (objects.length + 1).toString().padStart(3, '0');
+            cam.userData.type = 'camera';
+            
+            const helper = new THREE.CameraHelper(cam);
+            cam.userData.helper = helper;
+            
+            scene.add(cam);
+            scene.add(helper);
+            objects.push(cam);
+            selectObject(cam);
+            updateOutliner();
+            saveState();
+        }
+
+        // Selection
+        function onViewportClick(event) {
+            if (transformControls.dragging) return;
+
+            const rect = renderer.domElement.getBoundingClientRect();
+            const mouse = new THREE.Vector2(
+                ((event.clientX - rect.left) / rect.width) * 2 - 1,
+                -((event.clientY - rect.top) / rect.height) * 2 + 1
+            );
+
+            const raycaster = new THREE.Raycaster();
+            raycaster.setFromCamera(mouse, camera);
+            
+            const intersects = raycaster.intersectObjects(objects, true);
+            
+            if (intersects.length > 0) {
+                let obj = intersects[0].object;
+                while (obj.parent && !objects.includes(obj)) {
+                    obj = obj.parent;
+                }
+                if (objects.includes(obj)) {
+                    selectObject(obj);
+                }
+            } else {
+                deselectAll();
+            }
+        }
+
+        function selectObject(obj) {
+            deselectAll();
+            selectedObject = obj;
+            
+            if (obj.userData.type === 'mesh') {
+                obj.material.emissive = new THREE.Color(0x333333);
+            }
+            
+            transformControls.attach(obj);
+            updatePropertiesPanel();
+            updateOutliner();
+        }
+
+        function deselectAll() {
+            if (selectedObject && selectedObject.userData.type === 'mesh') {
+                selectedObject.material.emissive = new THREE.Color(0x000000);
+            }
+            selectedObject = null;
+            transformControls.detach();
+            updatePropertiesPanel();
+            updateOutliner();
+        }
+
+        // Update Properties Panel
+        function updatePropertiesPanel() {
+            if (selectedObject) {
+                document.getElementById('posX').value = selectedObject.position.x.toFixed(2);
+                document.getElementById('posY').value = selectedObject.position.y.toFixed(2);
+                document.getElementById('posZ').value = selectedObject.position.z.toFixed(2);
+                document.getElementById('rotX').value = THREE.MathUtils.radToDeg(selectedObject.rotation.x).toFixed(1);
+                document.getElementById('rotY').value = THREE.MathUtils.radToDeg(selectedObject.rotation.y).toFixed(1);
+                document.getElementById('rotZ').value = THREE.MathUtils.radToDeg(selectedObject.rotation.z).toFixed(1);
+                document.getElementById('scaleX').value = selectedObject.scale.x.toFixed(2);
+                document.getElementById('scaleY').value = selectedObject.scale.y.toFixed(2);
+                document.getElementById('scaleZ').value = selectedObject.scale.z.toFixed(2);
+                document.getElementById('objectName').value = selectedObject.name;
+                document.getElementById('objectVisible').checked = selectedObject.visible;
+
+                if (selectedObject.material) {
+                    document.getElementById('materialColor').value = '#' + selectedObject.material.color.getHexString();
+                    document.getElementById('metallic').value = selectedObject.material.metalness || 0;
+                    document.getElementById('roughness').value = selectedObject.material.roughness || 0.5;
+                    document.getElementById('opacity').value = selectedObject.material.opacity || 1;
+                }
+            }
+        }
+
+        function updateTransform() {
+            if (!selectedObject) return;
+            
+            selectedObject.position.set(
+                parseFloat(document.getElementById('posX').value),
+                parseFloat(document.getElementById('posY').value),
+                parseFloat(document.getElementById('posZ').value)
+            );
+            selectedObject.rotation.set(
+                THREE.MathUtils.degToRad(parseFloat(document.getElementById('rotX').value)),
+                THREE.MathUtils.degToRad(parseFloat(document.getElementById('rotY').value)),
+                THREE.MathUtils.degToRad(parseFloat(document.getElementById('rotZ').value))
+            );
+            selectedObject.scale.set(
+                parseFloat(document.getElementById('scaleX').value),
+                parseFloat(document.getElementById('scaleY').value),
+                parseFloat(document.getElementById('scaleZ').value)
+            );
+            
+            render();
+        }
+
+        function updateMaterial() {
+            if (!selectedObject || !selectedObject.material) return;
+            
+            selectedObject.material.color.setStyle(document.getElementById('materialColor').value);
+            selectedObject.material.metalness = parseFloat(document.getElementById('metallic').value);
+            selectedObject.material.roughness = parseFloat(document.getElementById('roughness').value);
+            selectedObject.material.opacity = parseFloat(document.getElementById('opacity').value);
+            selectedObject.material.transparent = selectedObject.material.opacity < 1;
+            selectedObject.material.emissive.setStyle(document.getElementById('emissiveColor').value);
+            
+            render();
+        }
+
+        // Outliner
+        function updateOutliner() {
+            const outliner = document.getElementById('outliner');
+            outliner.innerHTML = '';
+            
+            objects.forEach((obj, index) => {
+                const item = document.createElement('div');
+                item.className = 'outliner-item' + (obj === selectedObject ? ' selected' : '');
+                
+                let icon = '🔲';
+                if (obj.userData.type === 'light') icon = '💡';
+                if (obj.userData.type === 'camera') icon = '📷';
+                
+                item.innerHTML = `<span class="outliner-icon">${icon}</span> ${obj.name}`;
+                item.onclick = () => selectObject(obj);
+                outliner.appendChild(item);
+            });
+        }
+
+        // Tools
+        function setTool(tool) {
+            currentTool = tool;
+            document.querySelectorAll('.tool-btn').forEach(btn => btn.classList.remove('active'));
+            
+            if (tool === 'select') {
+                document.getElementById('selectTool').classList.add('active');
+                transformControls.detach();
+            } else {
+                document.getElementById(tool + 'Tool')?.classList.add('active');
+                transformControls.setMode(tool);
+                if (selectedObject) {
+                    transformControls.attach(selectedObject);
+                }
+            }
+        }
+
+        function transformMode(mode) {
+            setTool(mode);
+        }
+
+        // View Controls
+        function setView(view) {
+            const distance = 10;
+            switch(view) {
+                case 'front':
+                    camera.position.set(0, 0, distance);
+                    break;
+                case 'right':
+                    camera.position.set(distance, 0, 0);
+                    break;
+                case 'top':
+                    camera.position.set(0, distance, 0);
+                    break;
+                case 'perspective':
+                    camera.position.set(5, 5, 5);
+                    break;
+            }
+            camera.lookAt(0, 0, 0);
+            controls.target.set(0, 0, 0);
+            document.getElementById('viewportLabel').textContent = view.charAt(0).toUpperCase() + view.slice(1);
+        }
+
+        function toggleOrtho() {
+            const isOrtho = camera.type === 'OrthographicCamera';
+            const aspect = renderer.domElement.width / renderer.domElement.height;
+            const frustum = 5;
+            
+            if (isOrtho) {
+                const newCam = new THREE.PerspectiveCamera(75, aspect, 0.1, 1000);
+                newCam.position.copy(camera.position);
+                newCam.rotation.copy(camera.rotation);
+                camera = newCam;
+            } else {
+                const newCam = new THREE.OrthographicCamera(
+                    -frustum * aspect, frustum * aspect,
+                    frustum, -frustum,
+                    0.1, 1000
+                );
+                newCam.position.copy(camera.position);
+                newCam.rotation.copy(camera.rotation);
+                camera = newCam;
+            }
+            
+            controls.object = camera;
+            transformControls.camera = camera;
+        }
+
+        function focusSelected() {
+            if (!selectedObject) return;
+            controls.target.copy(selectedObject.position);
+            camera.position.copy(selectedObject.position).add(new THREE.Vector3(5, 5, 5));
+        }
+
+        function resetView() {
+            camera.position.set(5, 5, 5);
+            controls.target.set(0, 0, 0);
+        }
+
+        // Toggle Functions
+        function toggleWireframe() {
+            wireframeMode = !wireframeMode;
+            objects.forEach(obj => {
+                if (obj.material) {
+                    obj.material.wireframe = wireframeMode;
+                }
+            });
+        }
+
+        function toggleGrid() {
+            gridHelper.visible = !gridHelper.visible;
+            axesHelper.visible = !axesHelper.visible;
+        }
+
+        function toggleSnap() {
+            snapEnabled = !snapEnabled;
+            transformControls.setTranslationSnap(snapEnabled ? 0.5 : null);
+            transformControls.setRotationSnap(snapEnabled ? THREE.MathUtils.degToRad(15) : null);
+            transformControls.setScaleSnap(snapEnabled ? 0.25 : null);
+        }
+
+        function toggleVisibility() {
+            if (selectedObject) {
+                selectedObject.visible = document.getElementById('objectVisible').checked;
+                if (selectedObject.userData.helper) {
+                    selectedObject.userData.helper.visible = selectedObject.visible;
+                }
+            }
+        }
+
+        // Object Operations
+        function deleteSelected() {
+            if (!selectedObject) return;
+            
+            saveState();
+            const index = objects.indexOf(selectedObject);
+            if (index > -1) objects.splice(index, 1);
+            
+            if (selectedObject.userData.helper) {
+                scene.remove(selectedObject.userData.helper);
+            }
+            scene.remove(selectedObject);
+            transformControls.detach();
+            selectedObject = null;
+            
+            updateOutliner();
+            updateStats();
+        }
+
+        function duplicateSelected() {
+            if (!selectedObject) return;
+            
+            saveState();
+            const clone = selectedObject.clone();
+            clone.position.x += 1;
+            clone.name = selectedObject.name + '.copy';
+            
+            if (selectedObject.material) {
+                clone.material = selectedObject.material.clone();
+            }
+            
+            scene.add(clone);
+            objects.push(clone);
+            selectObject(clone);
+            updateOutliner();
+            updateStats();
+        }
+
+        function selectAll() {
+            objects.forEach(obj => {
+                if (obj.userData.type === 'mesh') {
+                    obj.material.emissive = new THREE.Color(0x333333);
+                }
+            });
+        }
+
+        function hideSelected() {
+            if (selectedObject) {
+                selectedObject.visible = false;
+                if (selectedObject.userData.helper) {
+                    selectedObject.userData.helper.visible = false;
+                }
+            }
+        }
+
+        function resetTransform() {
+            if (!selectedObject) return;
+            saveState();
+            selectedObject.position.set(0, 0, 0);
+            selectedObject.rotation.set(0, 0, 0);
+            selectedObject.scale.set(1, 1, 1);
+            updatePropertiesPanel();
+        }
+
+        function renameObject() {
+            if (selectedObject) {
+                selectedObject.name = document.getElementById('objectName').value;
+                updateOutliner();
+            }
+        }
+
+        // View Mode
+        function changeViewMode(mode) {
+            objects.forEach(obj => {
+                if (obj.material) {
+                    switch(mode) {
+                        case 'wireframe':
+                            obj.material.wireframe = true;
+                            break;
+                        case 'solid':
+                        case 'material':
+                        case 'rendered':
+                            obj.material.wireframe = false;
+                            break;
+                    }
+                }
+            });
+        }
+
+        function changeShadingMode(mode) {
+            objects.forEach(obj => {
+                if (obj.geometry) {
+                    if (mode === 'flat') {
+                        obj.geometry.computeFlatVertexNormals?.();
+                    } else {
+                        obj.geometry.computeVertexNormals();
+                    }
+                }
+            });
+        }
+
+        // World Settings
+        function updateBackground() {
+            scene.background = new THREE.Color(document.getElementById('bgColor').value);
+        }
+
+        function updateAmbient() {
+            const ambientLight = scene.children.find(c => c.type === 'AmbientLight');
+            if (ambientLight) {
+                ambientLight.color.setStyle(document.getElementById('ambientColor').value);
+            }
+        }
+
+        function toggleFog() {
+            if (document.getElementById('fogEnabled').checked) {
+                scene.fog = new THREE.Fog(document.getElementById('fogColor').value, 1, 50);
+            } else {
+                scene.fog = null;
+            }
+        }
+
+        function updateFog() {
+            if (scene.fog) {
+                scene.fog.color.setStyle(document.getElementById('fogColor').value);
+            }
+        }
+
+        // Animation/Playback
+        function togglePlay() {
+            isPlaying = !isPlaying;
+            document.getElementById('playBtn').textContent = isPlaying ? '⏸' : '▶';
+        }
+
+        function firstFrame() { 
+            currentFrame = 1; 
+            updatePlayhead(); 
+        }
+        
+        function lastFrame() { 
+            currentFrame = endFrame; 
+            updatePlayhead(); 
+        }
+        
+        function prevFrame() { 
+            if (currentFrame > 1) currentFrame--; 
+            updatePlayhead(); 
+        }
+        
+        function nextFrame() { 
+            if (currentFrame < endFrame) currentFrame++; 
+            updatePlayhead(); 
+        }
+
+        function updatePlayhead() {
+            document.getElementById('currentFrame').value = currentFrame;
+            document.getElementById('playhead').style.left = (currentFrame * 3) + 'px';
+            applyKeyframes();
+        }
+
+        function insertKeyframe() {
+            if (!selectedObject) return;
+            
+            if (!keyframes[selectedObject.uuid]) {
+                keyframes[selectedObject.uuid] = {};
+            }
+            
+            keyframes[selectedObject.uuid][currentFrame] = {
+                position: selectedObject.position.clone(),
+                rotation: selectedObject.rotation.clone(),
+                scale: selectedObject.scale.clone()
+            };
+            
+            // Visual keyframe
+            const kf = document.createElement('div');
+            kf.className = 'keyframe';
+            kf.style.left = (currentFrame * 3 - 5) + 'px';
+            kf.style.top = '25px';
+            document.getElementById('timelineContent').appendChild(kf);
+        }
+
+        function applyKeyframes() {
+            // Simple keyframe interpolation
+            objects.forEach(obj => {
+                const objKf = keyframes[obj.uuid];
+                if (!objKf) return;
+                
+                const frames = Object.keys(objKf).map(Number).sort((a, b) => a - b);
+                if (frames.length === 0) return;
+                
+                // Find surrounding keyframes
+                let prev = frames[0], next = frames[0];
+                for (let i = 0; i < frames.length; i++) {
+                    if (frames[i] <= currentFrame) prev = frames[i];
+                    if (frames[i] >= currentFrame && next === frames[0]) next = frames[i];
+                }
+                
+                if (prev === next) {
+                    obj.position.copy(objKf[prev].position);
+                    obj.rotation.copy(objKf[prev].rotation);
+                    obj.scale.copy(objKf[prev].scale);
+                } else {
+                    const t = (currentFrame - prev) / (next - prev);
+                    obj.position.lerpVectors(objKf[prev].position, objKf[next].position, t);
+                }
+            });
+        }
+
+        // Undo/Redo
+        function saveState() {
+            const state = objects.map(obj => ({
+                uuid: obj.uuid,
+                position: obj.position.clone(),
+                rotation: obj.rotation.clone(),
+                scale: obj.scale.clone()
+            }));
+            undoStack.push(state);
+            if (undoStack.length > 50) undoStack.shift();
+            redoStack = [];
+        }
+
+        function undo() {
+            if (undoStack.length === 0) return;
+            const current = objects.map(obj => ({
+                uuid: obj.uuid,
+                position: obj.position.clone(),
+                rotation: obj.rotation.clone(),
+                scale: obj.scale.clone()
+            }));
+            redoStack.push(current);
+            
+            const state = undoStack.pop();
+            state.forEach(s => {
+                const obj = objects.find(o => o.uuid === s.uuid);
+                if (obj) {
+                    obj.position.copy(s.position);
+                    obj.rotation.copy(s.rotation);
+                    obj.scale.copy(s.scale);
+                }
+            });
+            updatePropertiesPanel();
+        }
+
+        function redo() {
+            if (redoStack.length === 0) return;
+            const current = objects.map(obj => ({
+                uuid: obj.uuid,
+                position: obj.position.clone(),
+                rotation: obj.rotation.clone(),
+                scale: obj.scale.clone()
+            }));
+            undoStack.push(current);
+            
+            const state = redoStack.pop();
+            state.forEach(s => {
+                const obj = objects.find(o => o.uuid === s.uuid);
+                if (obj) {
+                    obj.position.copy(s.position);
+                    obj.rotation.copy(s.rotation);
+                    obj.scale.copy(s.scale);
+                }
+            });
+            updatePropertiesPanel();
+        }
+
+        // File Operations
+        function newProject() {
+            if (confirm('Create new project? Unsaved changes will be lost.')) {
+                objects.forEach(obj => {
+                    if (obj.userData.helper) scene.remove(obj.userData.helper);
+                    scene.remove(obj);
+                });
+                objects = [];
+                selectedObject = null;
+                transformControls.detach();
+                keyframes = {};
+                updateOutliner();
+                updateStats();
+            }
+        }
+
+        function saveProject() {
+            const data = {
+                objects: objects.map(obj => ({
+                    type: obj.userData.type,
+                    geometry: obj.geometry?.type,
+                    position: obj.position.toArray(),
+                    rotation: [obj.rotation.x, obj.rotation.y, obj.rotation.z],
+                    scale: obj.scale.toArray(),
+                    name: obj.name,
+                    color: obj.material?.color?.getHex()
+                })),
+                keyframes: keyframes
+            };
+            
+            const blob = new Blob([JSON.stringify(data)], { type: 'application/json' });
+            const url = URL.createObjectURL(blob);
+            const a = document.createElement('a');
+            a.href = url;
+            a.download = 'scene.json';
+            a.click();
+        }
+
+        function exportScene() {
+            // Simple OBJ export
+            let obj = '# fender Web Export\n';
+            let vertexOffset = 1;
+            
+            objects.forEach(mesh => {
+                if (!mesh.geometry) return;
+                
+                obj += `o ${mesh.name}\n`;
+                const pos = mesh.geometry.attributes.position;
+                
+                for (let i = 0; i < pos.count; i++) {
+                    const v = new THREE.Vector3().fromBufferAttribute(pos, i);
+                    v.applyMatrix4(mesh.matrixWorld);
+                    obj += `v ${v.x.toFixed(6)} ${v.y.toFixed(6)} ${v.z.toFixed(6)}\n`;
+                }
+                
+                const idx = mesh.geometry.index;
+                if (idx) {
+                    for (let i = 0; i < idx.count; i += 3) {
+                        obj += `f ${idx.getX(i) + vertexOffset} ${idx.getX(i+1) + vertexOffset} ${idx.getX(i+2) + vertexOffset}\n`;
+                    }
+                }
+                
+                vertexOffset += pos.count;
+            });
+            
+            const blob = new Blob([obj], { type: 'text/plain' });
+            const url = URL.createObjectURL(blob);
+            const a = document.createElement('a');
+            a.href = url;
+            a.download = 'scene.obj';
+            a.click();
+        }
+
+        function renderImage() {
+            renderer.render(scene, camera);
+            const dataURL = renderer.domElement.toDataURL('image/png');
+            const a = document.createElement('a');
+            a.href = dataURL;
+            a.download = 'render.png';
+            a.click();
+        }
+
+        // Context Menu
+        function onContextMenu(event) {
+            event.preventDefault();
+            const menu = document.getElementById('contextMenu');
+            menu.style.display = 'block';
+            menu.style.left = event.clientX + 'px';
+            menu.style.top = event.clientY + 'px';
+        }
+
+        function hideContextMenu() {
+            document.getElementById('contextMenu').style.display = 'none';
+        }
+
+        // Keyboard Shortcuts
+        function onKeyDown(event) {
+            if (event.target.tagName === 'INPUT') return;
+            
+            switch(event.key.toLowerCase()) {
+                case 'g': setTool('translate'); break;
+                case 'r': setTool('rotate'); break;
+                case 's': setTool('scale'); break;
+                case 'w': setTool('select'); break;
+                case 'x': 
+                case 'delete': deleteSelected(); break;
+                case 'a': if (event.shiftKey) addMesh('cube'); else selectAll(); break;
+                case 'd': if (event.shiftKey) duplicateSelected(); break;
+                case 'z': if (event.ctrlKey) { event.shiftKey ? redo() : undo(); } else toggleWireframe(); break;
+                case 'h': hideSelected(); break;
+                case '1': setView('front'); break;
+                case '3': setView('right'); break;
+                case '7': setView('top'); break;
+                case '5': toggleOrtho(); break;
+                case '.': focusSelected(); break;
+                case ' ': togglePlay(); break;
+                case 'arrowleft': prevFrame(); break;
+                case 'arrowright': nextFrame(); break;
+                case 'f12': event.preventDefault(); renderImage(); break;
+            }
+        }
+
+        // UI Functions
+        function togglePanel(header) {
+            const content = header.nextElementSibling;
+            content.classList.toggle('open');
+            header.textContent = (content.classList.contains('open') ? '▼ ' : '▶ ') + header.textContent.substring(2);
+        }
+
+        function showTab(tabName) {
+            document.querySelectorAll('.tab').forEach(t => t.classList.remove('active'));
+            event.target.classList.add('active');
+            
+            document.getElementById('sceneTab').style.display = tabName === 'scene' ? 'block' : 'none';
+            document.getElementById('objectTab').style.display = tabName === 'object' ? 'block' : 'none';
+            document.getElementById('materialTab').style.display = tabName === 'material' ? 'block' : 'none';
+            document.getElementById('worldTab').style.display = tabName === 'world' ? 'block' : 'none';
+        }
+
+        function showModal(title, content) {
+            document.getElementById('modalTitle').textContent = title;
+            document.getElementById('modalContent').innerHTML = content;
+            document.getElementById('modalOverlay').style.display = 'flex';
+        }
+
+        function closeModal() {
+            document.getElementById('modalOverlay').style.display = 'none';
+        }
+
+        function showShortcuts() {
+            showModal('Keyboard Shortcuts', `
+                <table style="width:100%">
+                    <tr><td>G</td><td>Move</td></tr>
+                    <tr><td>R</td><td>Rotate</td></tr>
+                    <tr><td>S</td><td>Scale</td></tr>
+                    <tr><td>X/Delete</td><td>Delete</td></tr>
+                    <tr><td>Shift+D</td><td>Duplicate</td></tr>
+                    <tr><td>Z</td><td>Wireframe</td></tr>
+                    <tr><td>Ctrl+Z</td><td>Undo</td></tr>
+                    <tr><td>Ctrl+Shift+Z</td><td>Redo</td></tr>
+                    <tr><td>1/3/7</td><td>Front/Right/Top View</td></tr>
+                    <tr><td>5</td><td>Toggle Ortho</td></tr>
+                    <tr><td>Space</td><td>Play/Pause</td></tr>
+                    <tr><td>F12</td><td>Render</td></tr>
+                </table>
+            `);
+        }
+
+        function showAbout() {
+            showModal('About fender Web', `
+                <p>fender Web v1.0</p>
+                <p>A browser-based 3D editor inspired by fender.</p>
+                <p>Built with Three.js</p>
+            `);
+        }
+
+        // Stats
+        function updateStats() {
+            let vertices = 0, faces = 0;
+            objects.forEach(obj => {
+                if (obj.geometry) {
+                    vertices += obj.geometry.attributes.position?.count || 0;
+                    faces += (obj.geometry.index?.count || obj.geometry.attributes.position?.count || 0) / 3;
+                }
+            });
+            document.getElementById('objectInfo').textContent = 
+                `Objects: ${objects.length} | Vertices: ${vertices} | Faces: ${Math.floor(faces)}`;
+        }
+
+        // Window Resize
+        function onWindowResize() {
+            const viewport = document.getElementById('viewport');
+            camera.aspect = viewport.clientWidth / viewport.clientHeight;
+            camera.updateProjectionMatrix();
+            renderer.setSize(viewport.clientWidth, viewport.clientHeight);
+        }
+
+        // Render
+        function render() {
+            renderer.render(scene, camera);
+        }
+
+        // Animation Loop
+        let lastTime = 0;
+        let frameCount = 0;
+        
+        function animate(time) {
+            requestAnimationFrame(animate);
+            
+            // FPS counter
+            frameCount++;
+            if (time - lastTime >= 1000) {
+                document.getElementById('statusRight').textContent = 
+                    `Memory: ${Math.round(performance.memory?.usedJSHeapSize / 1048576) || 0} MB | FPS: ${frameCount}`;
+                frameCount = 0;
+                lastTime = time;
+            }
+            
+            // Playback
+            if (isPlaying) {
+                currentFrame++;
+                if (currentFrame > endFrame) currentFrame = 1;
+                updatePlayhead();
+            }
+            
+            controls.update();
+            updateGizmo();
+            render();
+        }
+
+        // Initialize on load
+        window.onload = init;
+    </script>
+</body>
+</html>
