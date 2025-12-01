@@ -1,0 +1,1068 @@
+<!DOCTYPE html>
+<html>
+<head>
+    <title>3D Bird Simulator - 3 in 1 Multiplayer</title>
+    <style>
+        * { margin: 0; padding: 0; box-sizing: border-box; }
+        body { font-family: Arial, sans-serif; overflow: hidden; background: #1a1a2e; }
+        #gameContainer { width: 100vw; height: 100vh; position: relative; }
+        
+        #mainMenu {
+            position: absolute; top: 50%; left: 50%;
+            transform: translate(-50%, -50%);
+            text-align: center; background: rgba(0,0,0,0.85);
+            padding: 40px; border-radius: 20px; color: white; z-index: 100;
+            border: 3px solid #4ecdc4;
+        }
+        #mainMenu h1 { font-size: 48px; margin-bottom: 10px; color: #4ecdc4; }
+        #mainMenu h3 { margin-bottom: 30px; color: #888; }
+        
+        .menuBtn {
+            display: block; width: 280px; margin: 15px auto;
+            padding: 18px 30px; font-size: 20px; font-weight: bold;
+            border: none; border-radius: 10px; cursor: pointer;
+            transition: all 0.3s; color: white;
+        }
+        .menuBtn:hover { transform: scale(1.05); box-shadow: 0 0 20px rgba(255,255,255,0.3); }
+        #freeFlyBtn { background: linear-gradient(135deg, #11998e, #38ef7d); }
+        #racingBtn { background: linear-gradient(135deg, #f093fb, #f5576c); }
+        #survivalBtn { background: linear-gradient(135deg, #4facfe, #00f2fe); }
+        
+        #playerSetup {
+            position: absolute; top: 50%; left: 50%;
+            transform: translate(-50%, -50%);
+            background: rgba(0,0,0,0.9); padding: 30px;
+            border-radius: 15px; color: white; z-index: 100;
+            text-align: center; border: 2px solid #4ecdc4;
+        }
+        #playerSetup input {
+            padding: 12px 20px; font-size: 18px; margin: 15px;
+            border-radius: 8px; border: none; width: 250px;
+        }
+        .birdColors { display: flex; justify-content: center; gap: 10px; margin: 20px 0; }
+        .birdColor {
+            width: 50px; height: 50px; border-radius: 50%; cursor: pointer;
+            border: 3px solid transparent; transition: all 0.3s;
+        }
+        .birdColor:hover, .birdColor.selected { border-color: white; transform: scale(1.2); }
+        
+        #hud {
+            position: absolute; top: 15px; left: 15px;
+            color: white; font-size: 16px; z-index: 50;
+            background: rgba(0,0,0,0.6); padding: 15px;
+            border-radius: 10px; min-width: 180px;
+        }
+        #hud div { margin: 5px 0; }
+        
+        #controls {
+            position: absolute; bottom: 15px; left: 15px;
+            color: white; font-size: 13px; z-index: 50;
+            background: rgba(0,0,0,0.6); padding: 12px;
+            border-radius: 8px;
+        }
+        
+        #backBtn {
+            position: absolute; top: 15px; right: 15px;
+            padding: 12px 25px; background: #e74c3c; color: white;
+            border: none; border-radius: 8px; cursor: pointer;
+            z-index: 50; font-size: 16px; font-weight: bold;
+        }
+        #backBtn:hover { background: #c0392b; }
+        
+        #minimap {
+            position: absolute; bottom: 15px; right: 15px;
+            width: 160px; height: 160px; z-index: 50;
+            background: rgba(0,0,0,0.5); border-radius: 50%;
+            border: 3px solid white;
+        }
+        
+        #chat {
+            position: absolute; top: 15px; right: 100px;
+            width: 280px; z-index: 50;
+        }
+        #chatMessages {
+            height: 120px; overflow-y: auto;
+            background: rgba(0,0,0,0.6); padding: 10px;
+            border-radius: 8px 8px 0 0; color: #0f0; font-size: 12px;
+        }
+        #chatInput {
+            width: 100%; padding: 10px; border: none;
+            border-radius: 0 0 8px 8px; background: rgba(255,255,255,0.9);
+        }
+        
+        #leaderboard {
+            position: absolute; top: 150px; left: 15px;
+            background: rgba(0,0,0,0.6); padding: 15px;
+            border-radius: 10px; color: white; z-index: 50;
+            min-width: 180px;
+        }
+        #leaderboard h4 { color: #ffd700; margin-bottom: 10px; }
+        .leaderEntry { font-size: 13px; margin: 5px 0; }
+        
+        .hidden { display: none !important; }
+        
+        #mobileControls {
+            position: absolute; bottom: 20px; left: 50%;
+            transform: translateX(-50%); z-index: 60;
+            display: none;
+        }
+        .mobileBtn {
+            width: 60px; height: 60px; border-radius: 50%;
+            background: rgba(255,255,255,0.3); border: 2px solid white;
+            color: white; font-size: 24px; margin: 5px;
+        }
+        @media (max-width: 768px) { #mobileControls { display: flex; } }
+    </style>
+</head>
+<body>
+<div id="gameContainer">
+    <div id="mainMenu">
+        <h1>🐦 Bird Simulator 3D</h1>
+        <h3>3 Games in 1 • Multiplayer</h3>
+        <button class="menuBtn" id="freeFlyBtn">🌲 Free Fly Mode</button>
+        <button class="menuBtn" id="racingBtn">🏁 Racing Mode</button>
+        <button class="menuBtn" id="survivalBtn">⚡ Survival Mode</button>
+        <p style="margin-top:20px;color:#666;font-size:12px">Use WASD to fly • SPACE to flap • SHIFT to glide</p>
+    </div>
+    
+    <div id="playerSetup" class="hidden">
+        <h2>🐦 Create Your Bird</h2>
+        <input type="text" id="playerName" placeholder="Enter your name" maxlength="12">
+        <div class="birdColors">
+            <div class="birdColor selected" data-color="#ff6b6b" style="background:#ff6b6b"></div>
+            <div class="birdColor" data-color="#4ecdc4" style="background:#4ecdc4"></div>
+            <div class="birdColor" data-color="#ffe66d" style="background:#ffe66d"></div>
+            <div class="birdColor" data-color="#a855f7" style="background:#a855f7"></div>
+            <div class="birdColor" data-color="#22c55e" style="background:#22c55e"></div>
+        </div>
+        <button class="menuBtn" id="startBtn" style="background:#4ecdc4">🚀 Start Game</button>
+    </div>
+    
+    <div id="hud" class="hidden">
+        <div>🎯 Score: <span id="score">0</span></div>
+        <div>📍 Altitude: <span id="altitude">0</span>m</div>
+        <div>💨 Speed: <span id="speed">0</span></div>
+        <div>⏱️ Time: <span id="timer">0:00</span></div>
+        <div id="modeInfo"></div>
+    </div>
+    
+    <div id="leaderboard" class="hidden">
+        <h4>🏆 Leaderboard</h4>
+        <div id="leaderList"></div>
+    </div>
+    
+    <div id="controls" class="hidden">
+        W/S - Pitch Up/Down<br>
+        A/D - Roll Left/Right<br>
+        Q/E - Turn Left/Right<br>
+        SPACE - Flap Wings<br>
+        SHIFT - Glide
+    </div>
+    
+    <button id="backBtn" class="hidden">← Menu</button>
+    <canvas id="minimap" class="hidden"></canvas>
+    
+    <div id="chat" class="hidden">
+        <div id="chatMessages"></div>
+        <input type="text" id="chatInput" placeholder="Press Enter to chat...">
+    </div>
+</div>
+
+<script src="https://cdnjs.cloudflare.com/ajax/libs/three.js/r134/three.min.js"></script>
+<script>
+// ==================== GAME CONFIGURATION ====================
+const CONFIG = {
+    worldSize: 500,
+    gravity: -0.008,
+    flapForce: 0.04,
+    maxSpeed: 1.5,
+    drag: 0.985,
+    turnSpeed: 0.025,
+    aiCount: 5,
+    collectibleCount: 40,
+    checkpointCount: 8,
+    obstacleCount: 25,
+    predatorCount: 3
+};
+
+// ==================== GAME STATE ====================
+let scene, camera, renderer, clock;
+let playerBird, playerVelocity = new THREE.Vector3();
+let playerName = "Player", playerColor = "#ff6b6b";
+let currentMode = null, isPlaying = false;
+let score = 0, gameTime = 0;
+let keys = {};
+
+let aiBirds = [];
+let collectibles = [];
+let checkpoints = [], currentCheckpoint = 0;
+let obstacles = [];
+let predators = [];
+let trees = [];
+let clouds = [];
+
+// ==================== INITIALIZATION ====================
+function init() {
+    scene = new THREE.Scene();
+    scene.background = new THREE.Color(0x87CEEB);
+    scene.fog = new THREE.FogExp2(0x87CEEB, 0.002);
+    
+    camera = new THREE.PerspectiveCamera(75, window.innerWidth / window.innerHeight, 0.1, 1000);
+    
+    renderer = new THREE.WebGLRenderer({ antialias: true });
+    renderer.setSize(window.innerWidth, window.innerHeight);
+    renderer.shadowMap.enabled = true;
+    renderer.shadowMap.type = THREE.PCFSoftShadowMap;
+    document.getElementById('gameContainer').appendChild(renderer.domElement);
+    
+    clock = new THREE.Clock();
+    
+    // Lighting
+    const ambient = new THREE.AmbientLight(0xffffff, 0.5);
+    scene.add(ambient);
+    
+    const sun = new THREE.DirectionalLight(0xffffff, 0.8);
+    sun.position.set(100, 100, 50);
+    sun.castShadow = true;
+    sun.shadow.mapSize.width = 2048;
+    sun.shadow.mapSize.height = 2048;
+    sun.shadow.camera.near = 10;
+    sun.shadow.camera.far = 400;
+    sun.shadow.camera.left = -200;
+    sun.shadow.camera.right = 200;
+    sun.shadow.camera.top = 200;
+    sun.shadow.camera.bottom = -200;
+    scene.add(sun);
+    
+    createWorld();
+    setupEventListeners();
+    menuAnimation();
+}
+
+// ==================== WORLD CREATION ====================
+function createWorld() {
+    // Terrain
+    const terrainGeo = new THREE.PlaneGeometry(CONFIG.worldSize * 2, CONFIG.worldSize * 2, 128, 128);
+    const vertices = terrainGeo.attributes.position.array;
+    for (let i = 0; i < vertices.length; i += 3) {
+        const x = vertices[i], y = vertices[i + 1];
+        vertices[i + 2] = Math.sin(x * 0.02) * 8 + Math.cos(y * 0.02) * 8 + Math.random() * 2;
+    }
+    terrainGeo.computeVertexNormals();
+    
+    const terrainMat = new THREE.MeshLambertMaterial({ color: 0x3d8b40 });
+    const terrain = new THREE.Mesh(terrainGeo, terrainMat);
+    terrain.rotation.x = -Math.PI / 2;
+    terrain.receiveShadow = true;
+    scene.add(terrain);
+    
+    // Water
+    const waterGeo = new THREE.CircleGeometry(80, 32);
+    const waterMat = new THREE.MeshLambertMaterial({ 
+        color: 0x4a90d9, transparent: true, opacity: 0.8 
+    });
+    const water = new THREE.Mesh(waterGeo, waterMat);
+    water.rotation.x = -Math.PI / 2;
+    water.position.set(100, 0.5, -100);
+    scene.add(water);
+    
+    // Trees
+    for (let i = 0; i < 80; i++) {
+        const tree = createTree();
+        tree.position.set(
+            (Math.random() - 0.5) * CONFIG.worldSize * 1.5,
+            0,
+            (Math.random() - 0.5) * CONFIG.worldSize * 1.5
+        );
+        scene.add(tree);
+        trees.push(tree);
+    }
+    
+    // Clouds
+    for (let i = 0; i < 25; i++) {
+        const cloud = createCloud();
+        cloud.position.set(
+            (Math.random() - 0.5) * CONFIG.worldSize * 2,
+            60 + Math.random() * 40,
+            (Math.random() - 0.5) * CONFIG.worldSize * 2
+        );
+        scene.add(cloud);
+        clouds.push(cloud);
+    }
+    
+    // Mountains
+    for (let i = 0; i < 8; i++) {
+        const mountain = createMountain();
+        const angle = (i / 8) * Math.PI * 2;
+        mountain.position.set(
+            Math.cos(angle) * 400,
+            0,
+            Math.sin(angle) * 400
+        );
+        scene.add(mountain);
+    }
+}
+
+function createTree() {
+    const tree = new THREE.Group();
+    
+    const trunkGeo = new THREE.CylinderGeometry(0.5, 0.8, 6, 8);
+    const trunkMat = new THREE.MeshLambertMaterial({ color: 0x8B4513 });
+    const trunk = new THREE.Mesh(trunkGeo, trunkMat);
+    trunk.position.y = 3;
+    trunk.castShadow = true;
+    tree.add(trunk);
+    
+    const leavesGeo = new THREE.ConeGeometry(4, 10, 8);
+    const leavesMat = new THREE.MeshLambertMaterial({ color: 0x228B22 });
+    const leaves = new THREE.Mesh(leavesGeo, leavesMat);
+    leaves.position.y = 10;
+    leaves.castShadow = true;
+    tree.add(leaves);
+    
+    const scale = 0.5 + Math.random() * 1;
+    tree.scale.set(scale, scale, scale);
+    
+    return tree;
+}
+
+function createCloud() {
+    const cloud = new THREE.Group();
+    
+    for (let i = 0; i < 6; i++) {
+        const geo = new THREE.SphereGeometry(5 + Math.random() * 5, 8, 8);
+        const mat = new THREE.MeshLambertMaterial({ color: 0xffffff, transparent: true, opacity: 0.9 });
+        const puff = new THREE.Mesh(geo, mat);
+        puff.position.set(
+            (Math.random() - 0.5) * 15,
+            (Math.random() - 0.5) * 5,
+            (Math.random() - 0.5) * 15
+        );
+        cloud.add(puff);
+    }
+    
+    return cloud;
+}
+
+function createMountain() {
+    const geo = new THREE.ConeGeometry(40 + Math.random() * 30, 80 + Math.random() * 40, 8);
+    const mat = new THREE.MeshLambertMaterial({ color: 0x6b7280 });
+    const mountain = new THREE.Mesh(geo, mat);
+    mountain.position.y = 30;
+    mountain.castShadow = true;
+    return mountain;
+}
+
+// ==================== BIRD CREATION ====================
+function createBird(color, size = 1) {
+    const bird = new THREE.Group();
+    const col = new THREE.Color(color);
+    
+    // Body
+    const bodyGeo = new THREE.SphereGeometry(1, 16, 16);
+    bodyGeo.scale(1.8, 1, 1.2);
+    const bodyMat = new THREE.MeshLambertMaterial({ color: col });
+    const body = new THREE.Mesh(bodyGeo, bodyMat);
+    body.castShadow = true;
+    bird.add(body);
+    
+    // Head
+    const headGeo = new THREE.SphereGeometry(0.6, 12, 12);
+    const head = new THREE.Mesh(headGeo, bodyMat);
+    head.position.set(1.8, 0.4, 0);
+    bird.add(head);
+    
+    // Beak
+    const beakGeo = new THREE.ConeGeometry(0.2, 0.8, 6);
+    const beakMat = new THREE.MeshLambertMaterial({ color: 0xffa500 });
+    const beak = new THREE.Mesh(beakGeo, beakMat);
+    beak.rotation.z = -Math.PI / 2;
+    beak.position.set(2.5, 0.4, 0);
+    bird.add(beak);
+    
+    // Eyes
+    const eyeGeo = new THREE.SphereGeometry(0.12, 8, 8);
+    const eyeMat = new THREE.MeshBasicMaterial({ color: 0x000000 });
+    const leftEye = new THREE.Mesh(eyeGeo, eyeMat);
+    leftEye.position.set(2, 0.6, 0.35);
+    bird.add(leftEye);
+    const rightEye = new THREE.Mesh(eyeGeo, eyeMat);
+    rightEye.position.set(2, 0.6, -0.35);
+    bird.add(rightEye);
+    
+    // Wings
+    const wingGeo = new THREE.BoxGeometry(1.2, 0.15, 3);
+    const wingMat = new THREE.MeshLambertMaterial({ color: col.clone().multiplyScalar(0.8) });
+    
+    const leftWing = new THREE.Mesh(wingGeo, wingMat);
+    leftWing.position.set(0, 0.2, 1.8);
+    leftWing.name = 'leftWing';
+    leftWing.castShadow = true;
+    bird.add(leftWing);
+    
+    const rightWing = new THREE.Mesh(wingGeo, wingMat);
+    rightWing.position.set(0, 0.2, -1.8);
+    rightWing.name = 'rightWing';
+    rightWing.castShadow = true;
+    bird.add(rightWing);
+    
+    // Tail
+    const tailGeo = new THREE.BoxGeometry(2, 0.1, 1);
+    const tail = new THREE.Mesh(tailGeo, wingMat);
+    tail.position.set(-2, 0, 0);
+    tail.rotation.x = 0.1;
+    bird.add(tail);
+    
+    bird.scale.set(size, size, size);
+    
+    return bird;
+}
+
+function createNameTag(name) {
+    const canvas = document.createElement('canvas');
+    const ctx = canvas.getContext('2d');
+    canvas.width = 256;
+    canvas.height = 64;
+    
+    ctx.fillStyle = 'rgba(0,0,0,0.6)';
+    ctx.roundRect(0, 0, 256, 64, 10);
+    ctx.fill();
+    
+    ctx.fillStyle = 'white';
+    ctx.font = 'bold 28px Arial';
+    ctx.textAlign = 'center';
+    ctx.textBaseline = 'middle';
+    ctx.fillText(name, 128, 32);
+    
+    const texture = new THREE.CanvasTexture(canvas);
+    const material = new THREE.SpriteMaterial({ map: texture });
+    const sprite = new THREE.Sprite(material);
+    sprite.scale.set(8, 2, 1);
+    sprite.position.y = 4;
+    
+    return sprite;
+}
+
+// ==================== GAME OBJECTS ====================
+function createCollectibles() {
+    collectibles.forEach(c => scene.remove(c.mesh));
+    collectibles = [];
+    
+    for (let i = 0; i < CONFIG.collectibleCount; i++) {
+        const geo = new THREE.OctahedronGeometry(0.8);
+        const mat = new THREE.MeshLambertMaterial({ 
+            color: 0xffd700, emissive: 0xffd700, emissiveIntensity: 0.3 
+        });
+        const gem = new THREE.Mesh(geo, mat);
+        gem.position.set(
+            (Math.random() - 0.5) * CONFIG.worldSize,
+            20 + Math.random() * 50,
+            (Math.random() - 0.5) * CONFIG.worldSize
+        );
+        scene.add(gem);
+        collectibles.push({ mesh: gem, collected: false });
+    }
+}
+
+function createCheckpoints() {
+    checkpoints.forEach(c => scene.remove(c.mesh));
+    checkpoints = [];
+    currentCheckpoint = 0;
+    
+    for (let i = 0; i < CONFIG.checkpointCount; i++) {
+        const angle = (i / CONFIG.checkpointCount) * Math.PI * 2;
+        const radius = 80 + Math.random() * 60;
+        
+        const geo = new THREE.TorusGeometry(10, 1.5, 8, 24);
+        const mat = new THREE.MeshLambertMaterial({ 
+            color: i === 0 ? 0x00ff00 : 0xffff00,
+            emissive: i === 0 ? 0x00ff00 : 0x555500,
+            emissiveIntensity: 0.5
+        });
+        const ring = new THREE.Mesh(geo, mat);
+        ring.position.set(
+            Math.cos(angle) * radius,
+            30 + Math.random() * 30,
+            Math.sin(angle) * radius
+        );
+        ring.rotation.y = angle + Math.PI / 2;
+        scene.add(ring);
+        checkpoints.push({ mesh: ring, passed: false, index: i });
+    }
+}
+
+function createObstacles() {
+    obstacles.forEach(o => scene.remove(o.mesh));
+    obstacles = [];
+    
+    for (let i = 0; i < CONFIG.obstacleCount; i++) {
+        const geo = new THREE.SphereGeometry(2 + Math.random() * 2, 12, 12);
+        const mat = new THREE.MeshLambertMaterial({ 
+            color: 0xff4444, transparent: true, opacity: 0.7 
+        });
+        const obs = new THREE.Mesh(geo, mat);
+        obs.position.set(
+            (Math.random() - 0.5) * 250,
+            25 + Math.random() * 40,
+            (Math.random() - 0.5) * 250
+        );
+        scene.add(obs);
+        obstacles.push({
+            mesh: obs,
+            velocity: new THREE.Vector3(
+                (Math.random() - 0.5) * 0.3,
+                (Math.random() - 0.5) * 0.1,
+                (Math.random() - 0.5) * 0.3
+            )
+        });
+    }
+}
+
+function createPredators() {
+    predators.forEach(p => scene.remove(p.mesh));
+    predators = [];
+    
+    for (let i = 0; i < CONFIG.predatorCount; i++) {
+        const predator = createBird('#1a1a1a', 2);
+        predator.position.set(
+            (Math.random() - 0.5) * 200,
+            50 + Math.random() * 20,
+            (Math.random() - 0.5) * 200
+        );
+        scene.add(predator);
+        predators.push({
+            mesh: predator,
+            velocity: new THREE.Vector3()
+        });
+    }
+}
+
+function createAIBirds() {
+    aiBirds.forEach(ai => scene.remove(ai.mesh));
+    aiBirds = [];
+    
+    const colors = ['#4ecdc4', '#ffe66d', '#a855f7', '#22c55e', '#f97316'];
+    const names = ['SkyDancer', 'WindRider', 'CloudHopper', 'AirMaster', 'FeatherKing'];
+    
+    for (let i = 0; i < CONFIG.aiCount; i++) {
+        const bird = createBird(colors[i], 1);
+        bird.position.set(
+            (Math.random() - 0.5) * 100,
+            30 + Math.random() * 20,
+            (Math.random() - 0.5) * 100
+        );
+        
+        const nameTag = createNameTag(names[i]);
+        bird.add(nameTag);
+        
+        scene.add(bird);
+        aiBirds.push({
+            mesh: bird,
+            name: names[i],
+            velocity: new THREE.Vector3(),
+            target: new THREE.Vector3(),
+            score: Math.floor(Math.random() * 500),
+            checkpointIndex: 0
+        });
+    }
+}
+
+// ==================== PLAYER CONTROLS ====================
+function updatePlayer(delta) {
+    if (!playerBird) return;
+    
+    // Wing animation
+    const leftWing = playerBird.getObjectByName('leftWing');
+    const rightWing = playerBird.getObjectByName('rightWing');
+    const isFlapping = keys['Space'];
+    
+    if (leftWing && rightWing) {
+        const flapAnim = Math.sin(Date.now() * 0.02) * 0.6;
+        leftWing.rotation.x = isFlapping ? flapAnim : Math.sin(Date.now() * 0.005) * 0.1;
+        rightWing.rotation.x = isFlapping ? -flapAnim : -Math.sin(Date.now() * 0.005) * 0.1;
+    }
+    
+    // Controls
+    if (keys['KeyW']) playerBird.rotation.x -= CONFIG.turnSpeed;
+    if (keys['KeyS']) playerBird.rotation.x += CONFIG.turnSpeed;
+    if (keys['KeyA']) playerBird.rotation.z += CONFIG.turnSpeed;
+    if (keys['KeyD']) playerBird.rotation.z -= CONFIG.turnSpeed;
+    if (keys['KeyQ']) playerBird.rotation.y += CONFIG.turnSpeed;
+    if (keys['KeyE']) playerBird.rotation.y -= CONFIG.turnSpeed;
+    
+    // Clamp pitch
+    playerBird.rotation.x = Math.max(-1, Math.min(1, playerBird.rotation.x));
+    
+    // Flapping
+    if (isFlapping) {
+        const forward = new THREE.Vector3(1, 0, 0);
+        forward.applyQuaternion(playerBird.quaternion);
+        playerVelocity.add(forward.multiplyScalar(CONFIG.flapForce));
+        playerVelocity.y += 0.015;
+    }
+    
+    // Gliding
+    if (keys['ShiftLeft'] || keys['ShiftRight']) {
+        const forward = new THREE.Vector3(1, 0, 0);
+        forward.applyQuaternion(playerBird.quaternion);
+        playerVelocity.add(forward.multiplyScalar(0.01));
+    }
+    
+    // Physics
+    playerVelocity.y += CONFIG.gravity;
+    playerVelocity.multiplyScalar(CONFIG.drag);
+    
+    if (playerVelocity.length() > CONFIG.maxSpeed) {
+        playerVelocity.normalize().multiplyScalar(CONFIG.maxSpeed);
+    }
+    
+    playerBird.position.add(playerVelocity);
+    
+    // Boundaries
+    playerBird.position.y = Math.max(3, Math.min(120, playerBird.position.y));
+    playerBird.position.x = Math.max(-CONFIG.worldSize, Math.min(CONFIG.worldSize, playerBird.position.x));
+    playerBird.position.z = Math.max(-CONFIG.worldSize, Math.min(CONFIG.worldSize, playerBird.position.z));
+    
+    // Camera follow
+    const camOffset = new THREE.Vector3(-12, 5, 0);
+    camOffset.applyQuaternion(playerBird.quaternion);
+    camera.position.lerp(playerBird.position.clone().add(camOffset), 0.08);
+    camera.lookAt(playerBird.position);
+    
+    // Update HUD
+    document.getElementById('altitude').textContent = Math.round(playerBird.position.y);
+    document.getElementById('speed').textContent = (playerVelocity.length() * 100).toFixed(0);
+}
+
+// ==================== AI UPDATE ====================
+function updateAI(delta) {
+    aiBirds.forEach(ai => {
+        // Update target
+        if (ai.mesh.position.distanceTo(ai.target) < 15 || ai.target.length() === 0) {
+            if (currentMode === 'racing' && checkpoints.length > 0) {
+                const cp = checkpoints[ai.checkpointIndex % checkpoints.length];
+                ai.target.copy(cp.mesh.position);
+            } else {
+                ai.target.set(
+                    (Math.random() - 0.5) * 300,
+                    25 + Math.random() * 50,
+                    (Math.random() - 0.5) * 300
+                );
+            }
+        }
+        
+        // Move towards target
+        const dir = ai.target.clone().sub(ai.mesh.position).normalize();
+        ai.velocity.lerp(dir.multiplyScalar(0.15), 0.03);
+        ai.mesh.position.add(ai.velocity);
+        
+        // Look direction
+        if (ai.velocity.length() > 0.01) {
+            const lookTarget = ai.mesh.position.clone().add(ai.velocity.clone().normalize());
+            ai.mesh.lookAt(lookTarget);
+            ai.mesh.rotation.z = 0;
+        }
+        
+        // Wing animation
+        const lw = ai.mesh.getObjectByName('leftWing');
+        const rw = ai.mesh.getObjectByName('rightWing');
+        if (lw && rw) {
+            const flap = Math.sin(Date.now() * 0.015 + ai.mesh.id) * 0.4;
+            lw.rotation.x = flap;
+            rw.rotation.x = -flap;
+        }
+        
+        // Racing checkpoint detection
+        if (currentMode === 'racing' && checkpoints.length > 0) {
+            const cp = checkpoints[ai.checkpointIndex % checkpoints.length];
+            if (ai.mesh.position.distanceTo(cp.mesh.position) < 12) {
+                ai.checkpointIndex++;
+                ai.score += 100;
+                addChat(`${ai.name} passed checkpoint ${ai.checkpointIndex}!`, '#ffff00');
+            }
+        }
+        
+        // Random score for other modes
+        if (Math.random() < 0.001) ai.score += 10;
+    });
+}
+
+// ==================== GAME LOGIC ====================
+function updateCollectibles() {
+    collectibles.forEach(c => {
+        if (c.collected) return;
+        
+        c.mesh.rotation.y += 0.03;
+        c.mesh.position.y += Math.sin(Date.now() * 0.003 + c.mesh.id) * 0.02;
+        
+        if (playerBird && c.mesh.position.distanceTo(playerBird.position) < 4) {
+            c.collected = true;
+            scene.remove(c.mesh);
+            score += 10;
+            document.getElementById('score').textContent = score;
+            addChat('✨ Gem collected! +10', '#ffd700');
+        }
+    });
+}
+
+function updateCheckpoints() {
+    if (currentMode !== 'racing') return;
+    
+    checkpoints.forEach((cp, i) => {
+        cp.mesh.rotation.z += 0.01;
+        
+        if (!cp.passed && i === currentCheckpoint && playerBird) {
+            if (playerBird.position.distanceTo(cp.mesh.position) < 12) {
+                cp.passed = true;
+                cp.mesh.material.color.setHex(0x00ff00);
+                cp.mesh.material.emissive.setHex(0x00ff00);
+                currentCheckpoint++;
+                score += 100;
+                document.getElementById('score').textContent = score;
+                
+                addChat(`🏁 Checkpoint ${currentCheckpoint}/${checkpoints.length}!`, '#00ff00');
+                
+                if (currentCheckpoint < checkpoints.length) {
+                    checkpoints[currentCheckpoint].mesh.material.color.setHex(0x00ff00);
+                    checkpoints[currentCheckpoint].mesh.material.emissive.setHex(0x00ff00);
+                }
+                
+                if (currentCheckpoint >= checkpoints.length) {
+                    addChat(`🏆 RACE COMPLETE! Time: ${formatTime(gameTime)}`, '#ffd700');
+                }
+            }
+        }
+    });
+    
+    document.getElementById('modeInfo').innerHTML = `🏁 ${currentCheckpoint}/${checkpoints.length}`;
+}
+
+function updateObstacles() {
+    if (currentMode !== 'survival') return;
+    
+    obstacles.forEach(obs => {
+        obs.mesh.position.add(obs.velocity);
+        
+        // Bounce
+        ['x', 'z'].forEach(axis => {
+            if (Math.abs(obs.mesh.position[axis]) > 150) obs.velocity[axis] *= -1;
+        });
+        if (obs.mesh.position.y < 15 || obs.mesh.position.y > 70) obs.velocity.y *= -1;
+        
+        obs.mesh.rotation.x += 0.02;
+        obs.mesh.rotation.y += 0.01;
+        
+        // Collision
+        if (playerBird && obs.mesh.position.distanceTo(playerBird.position) < 5) {
+            score = Math.max(0, score - 25);
+            document.getElementById('score').textContent = score;
+            addChat('💥 Hit obstacle! -25', '#ff4444');
+            
+            const knockback = playerBird.position.clone().sub(obs.mesh.position).normalize();
+            playerVelocity.add(knockback.multiplyScalar(0.3));
+        }
+    });
+}
+
+function updatePredators() {
+    if (currentMode !== 'survival') return;
+    
+    predators.forEach(pred => {
+        if (!playerBird) return;
+        
+        const dir = playerBird.position.clone().sub(pred.mesh.position).normalize();
+        pred.velocity.lerp(dir.multiplyScalar(0.1), 0.02);
+        pred.mesh.position.add(pred.velocity);
+        
+        pred.mesh.lookAt(playerBird.position);
+        pred.mesh.rotation.z = 0;
+        
+        // Wing animation
+        const lw = pred.mesh.getObjectByName('leftWing');
+        const rw = pred.mesh.getObjectByName('rightWing');
+        if (lw && rw) {
+            const flap = Math.sin(Date.now() * 0.025) * 0.5;
+            lw.rotation.x = flap;
+            rw.rotation.x = -flap;
+        }
+        
+        // Catch player
+        if (pred.mesh.position.distanceTo(playerBird.position) < 5) {
+            score = Math.max(0, score - 100);
+            document.getElementById('score').textContent = score;
+            addChat('🦅 Caught by predator! -100', '#ff0000');
+            
+            pred.mesh.position.set(
+                (Math.random() - 0.5) * 200,
+                50,
+                (Math.random() - 0.5) * 200
+            );
+        }
+    });
+}
+
+function updateLeaderboard() {
+    const allPlayers = [
+        { name: playerName, score: score, isPlayer: true },
+        ...aiBirds.map(ai => ({ name: ai.name, score: ai.score, isPlayer: false }))
+    ];
+    
+    allPlayers.sort((a, b) => b.score - a.score);
+    
+    const list = document.getElementById('leaderList');
+    list.innerHTML = allPlayers.slice(0, 6).map((p, i) => 
+        `<div class="leaderEntry" style="color:${p.isPlayer ? '#4ecdc4' : '#fff'}">
+            ${i + 1}. ${p.name}: ${p.score}
+        </div>`
+    ).join('');
+}
+
+function updateMinimap() {
+    const canvas = document.getElementById('minimap');
+    const ctx = canvas.getContext('2d');
+    const w = canvas.width = 160;
+    const h = canvas.height = 160;
+    
+    ctx.clearRect(0, 0, w, h);
+    
+    // Background
+    ctx.fillStyle = 'rgba(34, 139, 34, 0.4)';
+    ctx.beginPath();
+    ctx.arc(w/2, h/2, 70, 0, Math.PI * 2);
+    ctx.fill();
+    
+    const scale = 70 / CONFIG.worldSize;
+    
+    // Checkpoints
+    if (currentMode === 'racing') {
+        checkpoints.forEach((cp, i) => {
+            ctx.fillStyle = cp.passed ? '#00ff00' : (i === currentCheckpoint ? '#ffff00' : '#888');
+            ctx.beginPath();
+            ctx.arc(
+                w/2 + cp.mesh.position.x * scale,
+                h/2 + cp.mesh.position.z * scale,
+                3, 0, Math.PI * 2
+            );
+            ctx.fill();
+        });
+    }
+    
+    // AI birds
+    aiBirds.forEach(ai => {
+        ctx.fillStyle = '#ffe66d';
+        ctx.beginPath();
+        ctx.arc(
+            w/2 + ai.mesh.position.x * scale,
+            h/2 + ai.mesh.position.z * scale,
+            3, 0, Math.PI * 2
+        );
+        ctx.fill();
+    });
+    
+    // Player
+    if (playerBird) {
+        ctx.fillStyle = playerColor;
+        const px = w/2 + playerBird.position.x * scale;
+        const py = h/2 + playerBird.position.z * scale;
+        ctx.beginPath();
+        ctx.arc(px, py, 5, 0, Math.PI * 2);
+        ctx.fill();
+        
+        // Direction
+        const forward = new THREE.Vector3(1, 0, 0);
+        forward.applyQuaternion(playerBird.quaternion);
+        ctx.strokeStyle = 'white';
+        ctx.lineWidth = 2;
+        ctx.beginPath();
+        ctx.moveTo(px, py);
+        ctx.lineTo(px + forward.x * 12, py + forward.z * 12);
+        ctx.stroke();
+    }
+}
+
+// ==================== UTILITIES ====================
+function formatTime(sec) {
+    const m = Math.floor(sec / 60);
+    const s = Math.floor(sec % 60);
+    return `${m}:${s.toString().padStart(2, '0')}`;
+}
+
+function addChat(msg, color = '#0f0') {
+    const chat = document.getElementById('chatMessages');
+    const div = document.createElement('div');
+    div.style.color = color;
+    div.textContent = msg;
+    chat.appendChild(div);
+    chat.scrollTop = chat.scrollHeight;
+}
+
+// ==================== GAME LOOP ====================
+function gameLoop() {
+    if (!isPlaying) return;
+    
+    const delta = clock.getDelta();
+    gameTime += delta;
+    document.getElementById('timer').textContent = formatTime(gameTime);
+    
+    updatePlayer(delta);
+    updateAI(delta);
+    updateCollectibles();
+    updateCheckpoints();
+    updateObstacles();
+    updatePredators();
+    updateLeaderboard();
+    updateMinimap();
+    
+    // Animate clouds
+    clouds.forEach(cloud => {
+        cloud.position.x += 0.05;
+        if (cloud.position.x > CONFIG.worldSize) cloud.position.x = -CONFIG.worldSize;
+    });
+    
+    renderer.render(scene, camera);
+    requestAnimationFrame(gameLoop);
+}
+
+function menuAnimation() {
+    if (isPlaying) return;
+    
+    camera.position.set(
+        Math.sin(Date.now() * 0.0002) * 80,
+        40,
+        Math.cos(Date.now() * 0.0002) * 80
+    );
+    camera.lookAt(0, 20, 0);
+    
+    renderer.render(scene, camera);
+    requestAnimationFrame(menuAnimation);
+}
+
+// ==================== GAME START/STOP ====================
+function startGame() {
+    document.getElementById('playerSetup').classList.add('hidden');
+    document.getElementById('mainMenu').classList.add('hidden');
+    ['hud', 'controls', 'backBtn', 'minimap', 'chat', 'leaderboard'].forEach(id => {
+        document.getElementById(id).classList.remove('hidden');
+    });
+    
+    // Create player
+    playerBird = createBird(playerColor);
+    playerBird.position.set(0, 30, 0);
+    playerBird.add(createNameTag(playerName));
+    scene.add(playerBird);
+    
+    playerVelocity.set(0, 0, 0);
+    score = 0;
+    gameTime = 0;
+    
+    createCollectibles();
+    createAIBirds();
+    
+    if (currentMode === 'racing') {
+        createCheckpoints();
+        document.getElementById('modeInfo').innerHTML = '🏁 Racing Mode';
+        addChat('🏁 Race started! Fly through all checkpoints!', '#00ff00');
+    } else if (currentMode === 'survival') {
+        createObstacles();
+        createPredators();
+        document.getElementById('modeInfo').innerHTML = '⚡ Survival Mode';
+        addChat('⚡ Survive! Avoid obstacles and predators!', '#ff6b6b');
+    } else {
+        document.getElementById('modeInfo').innerHTML = '🌲 Free Fly Mode';
+        addChat('🌲 Free Fly mode! Explore and collect gems!', '#4ecdc4');
+    }
+    
+    addChat(`${playerName} joined the game!`, '#4ecdc4');
+    
+    isPlaying = true;
+    gameLoop();
+}
+
+function backToMenu() {
+    isPlaying = false;
+    
+    if (playerBird) scene.remove(playerBird);
+    aiBirds.forEach(ai => scene.remove(ai.mesh));
+    collectibles.forEach(c => scene.remove(c.mesh));
+    checkpoints.forEach(c => scene.remove(c.mesh));
+    obstacles.forEach(o => scene.remove(o.mesh));
+    predators.forEach(p => scene.remove(p.mesh));
+    
+    aiBirds = [];
+    collectibles = [];
+    checkpoints = [];
+    obstacles = [];
+    predators = [];
+    
+    document.getElementById('mainMenu').classList.remove('hidden');
+    ['hud', 'controls', 'backBtn', 'minimap', 'chat', 'leaderboard'].forEach(id => {
+        document.getElementById(id).classList.add('hidden');
+    });
+    document.getElementById('chatMessages').innerHTML = '';
+    
+    menuAnimation();
+}
+
+// ==================== EVENT LISTENERS ====================
+function setupEventListeners() {
+    document.addEventListener('keydown', e => {
+        keys[e.code] = true;
+        if (e.code === 'Enter' && isPlaying) {
+            const input = document.getElementById('chatInput');
+            if (document.activeElement === input) {
+                if (input.value.trim()) {
+                    addChat(`${playerName}: ${input.value}`, '#fff');
+                    input.value = '';
+                }
+                input.blur();
+            } else {
+                input.focus();
+            }
+            e.preventDefault();
+        }
+    });
+    
+    document.addEventListener('keyup', e => keys[e.code] = false);
+    
+    window.addEventListener('resize', () => {
+        camera.aspect = window.innerWidth / window.innerHeight;
+        camera.updateProjectionMatrix();
+        renderer.setSize(window.innerWidth, window.innerHeight);
+    });
+    
+    // Menu buttons
+    document.getElementById('freeFlyBtn').onclick = () => {
+        currentMode = 'freefly';
+        document.getElementById('playerSetup').classList.remove('hidden');
+    };
+    document.getElementById('racingBtn').onclick = () => {
+        currentMode = 'racing';
+        document.getElementById('playerSetup').classList.remove('hidden');
+    };
+    document.getElementById('survivalBtn').onclick = () => {
+        currentMode = 'survival';
+        document.getElementById('playerSetup').classList.remove('hidden');
+    };
+    
+    document.getElementById('startBtn').onclick = () => {
+        playerName = document.getElementById('playerName').value.trim() || 'Player';
+        startGame();
+    };
+    
+    document.getElementById('backBtn').onclick = backToMenu;
+    
+    // Bird color selection
+    document.querySelectorAll('.birdColor').forEach(el => {
+        el.onclick = function() {
+            document.querySelectorAll('.birdColor').forEach(e => e.classList.remove('selected'));
+            this.classList.add('selected');
+            playerColor = this.dataset.color;
+        };
+    });
+}
+
+// ==================== START ====================
+init();
+</script>
+</body>
+</html>
