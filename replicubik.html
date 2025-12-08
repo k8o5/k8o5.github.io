@@ -1,0 +1,989 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>replicubik - Programming Puzzle Game</title>
+    <style>
+        * {
+            margin: 0;
+            padding: 0;
+            box-sizing: border-box;
+        }
+
+        body {
+            font-family: 'Segoe UI', Tahoma, Geneva, Verdana, sans-serif;
+            background: linear-gradient(135deg, #1a1a2e 0%, #16213e 50%, #0f3460 100%);
+            min-height: 100vh;
+            color: #fff;
+            overflow-x: hidden;
+        }
+
+        .container {
+            max-width: 1400px;
+            margin: 0 auto;
+            padding: 20px;
+        }
+
+        header {
+            text-align: center;
+            padding: 20px 0;
+            border-bottom: 2px solid rgba(255,255,255,0.1);
+            margin-bottom: 20px;
+        }
+
+        h1 {
+            font-size: 2.5rem;
+            background: linear-gradient(90deg, #00d9ff, #00ff88);
+            -webkit-background-clip: text;
+            -webkit-text-fill-color: transparent;
+            background-clip: text;
+            margin-bottom: 10px;
+        }
+
+        .level-info {
+            display: flex;
+            justify-content: center;
+            gap: 20px;
+            align-items: center;
+            flex-wrap: wrap;
+        }
+
+        .level-badge {
+            background: linear-gradient(135deg, #667eea 0%, #764ba2 100%);
+            padding: 8px 20px;
+            border-radius: 20px;
+            font-weight: bold;
+        }
+
+        .level-nav {
+            display: flex;
+            gap: 10px;
+        }
+
+        .nav-btn {
+            background: rgba(255,255,255,0.1);
+            border: 1px solid rgba(255,255,255,0.2);
+            color: #fff;
+            padding: 8px 15px;
+            border-radius: 8px;
+            cursor: pointer;
+            transition: all 0.3s;
+        }
+
+        .nav-btn:hover:not(:disabled) {
+            background: rgba(255,255,255,0.2);
+            transform: translateY(-2px);
+        }
+
+        .nav-btn:disabled {
+            opacity: 0.5;
+            cursor: not-allowed;
+        }
+
+        .main-content {
+            display: grid;
+            grid-template-columns: 1fr 1fr;
+            gap: 20px;
+        }
+
+        @media (max-width: 900px) {
+            .main-content {
+                grid-template-columns: 1fr;
+            }
+        }
+
+        .panel {
+            background: rgba(255,255,255,0.05);
+            border-radius: 15px;
+            padding: 20px;
+            border: 1px solid rgba(255,255,255,0.1);
+        }
+
+        .panel-header {
+            display: flex;
+            justify-content: space-between;
+            align-items: center;
+            margin-bottom: 15px;
+            padding-bottom: 10px;
+            border-bottom: 1px solid rgba(255,255,255,0.1);
+        }
+
+        .panel-title {
+            font-size: 1.2rem;
+            color: #00d9ff;
+        }
+
+        .code-editor {
+            width: 100%;
+            height: 300px;
+            background: #0d1117;
+            border: 1px solid #30363d;
+            border-radius: 10px;
+            padding: 15px;
+            font-family: 'Fira Code', 'Consolas', monospace;
+            font-size: 14px;
+            color: #c9d1d9;
+            resize: vertical;
+            line-height: 1.6;
+            tab-size: 2;
+        }
+
+        .code-editor:focus {
+            outline: none;
+            border-color: #58a6ff;
+            box-shadow: 0 0 0 3px rgba(88,166,255,0.3);
+        }
+
+        .controls {
+            display: flex;
+            gap: 10px;
+            margin-top: 15px;
+            flex-wrap: wrap;
+        }
+
+        .btn {
+            padding: 12px 25px;
+            border: none;
+            border-radius: 10px;
+            font-size: 1rem;
+            font-weight: bold;
+            cursor: pointer;
+            transition: all 0.3s;
+            display: flex;
+            align-items: center;
+            gap: 8px;
+        }
+
+        .btn-run {
+            background: linear-gradient(135deg, #00d9ff 0%, #00ff88 100%);
+            color: #000;
+        }
+
+        .btn-run:hover {
+            transform: translateY(-2px);
+            box-shadow: 0 5px 20px rgba(0,217,255,0.4);
+        }
+
+        .btn-reset {
+            background: rgba(255,255,255,0.1);
+            color: #fff;
+            border: 1px solid rgba(255,255,255,0.2);
+        }
+
+        .btn-reset:hover {
+            background: rgba(255,255,255,0.2);
+        }
+
+        .btn-hint {
+            background: linear-gradient(135deg, #f093fb 0%, #f5576c 100%);
+            color: #fff;
+        }
+
+        .canvas-container {
+            display: flex;
+            gap: 20px;
+            justify-content: center;
+            flex-wrap: wrap;
+        }
+
+        .canvas-wrapper {
+            text-align: center;
+        }
+
+        .canvas-label {
+            margin-bottom: 10px;
+            font-size: 0.9rem;
+            color: rgba(255,255,255,0.7);
+        }
+
+        canvas {
+            background: linear-gradient(180deg, #1a1a2e 0%, #0d0d1a 100%);
+            border-radius: 10px;
+            border: 2px solid rgba(255,255,255,0.1);
+        }
+
+        .status-bar {
+            margin-top: 15px;
+            padding: 15px;
+            border-radius: 10px;
+            text-align: center;
+            font-weight: bold;
+        }
+
+        .status-success {
+            background: linear-gradient(135deg, rgba(0,255,136,0.2) 0%, rgba(0,217,255,0.2) 100%);
+            border: 1px solid #00ff88;
+            color: #00ff88;
+        }
+
+        .status-error {
+            background: rgba(255,82,82,0.2);
+            border: 1px solid #ff5252;
+            color: #ff5252;
+        }
+
+        .status-info {
+            background: rgba(255,255,255,0.1);
+            border: 1px solid rgba(255,255,255,0.2);
+            color: rgba(255,255,255,0.8);
+        }
+
+        .objective {
+            background: rgba(0,217,255,0.1);
+            border: 1px solid rgba(0,217,255,0.3);
+            border-radius: 10px;
+            padding: 15px;
+            margin-bottom: 15px;
+        }
+
+        .objective h3 {
+            color: #00d9ff;
+            margin-bottom: 8px;
+            font-size: 1rem;
+        }
+
+        .objective p {
+            color: rgba(255,255,255,0.8);
+            font-size: 0.95rem;
+            line-height: 1.5;
+        }
+
+        .api-reference {
+            background: rgba(255,255,255,0.05);
+            border-radius: 10px;
+            padding: 15px;
+            margin-top: 15px;
+            font-size: 0.85rem;
+        }
+
+        .api-reference h4 {
+            color: #00ff88;
+            margin-bottom: 10px;
+        }
+
+        .api-reference code {
+            background: rgba(0,0,0,0.3);
+            padding: 2px 6px;
+            border-radius: 4px;
+            font-family: 'Fira Code', monospace;
+            color: #ffd700;
+        }
+
+        .api-reference ul {
+            list-style: none;
+            margin-top: 8px;
+        }
+
+        .api-reference li {
+            padding: 5px 0;
+            color: rgba(255,255,255,0.7);
+        }
+
+        .hint-box {
+            background: rgba(240,147,251,0.1);
+            border: 1px solid rgba(240,147,251,0.3);
+            border-radius: 10px;
+            padding: 15px;
+            margin-top: 15px;
+            display: none;
+        }
+
+        .hint-box.visible {
+            display: block;
+        }
+
+        .hint-box h4 {
+            color: #f093fb;
+            margin-bottom: 8px;
+        }
+
+        .block-count {
+            font-size: 0.9rem;
+            color: rgba(255,255,255,0.6);
+        }
+
+        .celebration {
+            position: fixed;
+            top: 0;
+            left: 0;
+            width: 100%;
+            height: 100%;
+            pointer-events: none;
+            z-index: 1000;
+        }
+
+        .confetti {
+            position: absolute;
+            width: 10px;
+            height: 10px;
+            animation: fall 3s linear forwards;
+        }
+
+        @keyframes fall {
+            to {
+                transform: translateY(100vh) rotate(720deg);
+                opacity: 0;
+            }
+        }
+
+        .rotate-controls {
+            display: flex;
+            gap: 5px;
+            margin-top: 10px;
+            justify-content: center;
+        }
+
+        .rotate-btn {
+            background: rgba(255,255,255,0.1);
+            border: 1px solid rgba(255,255,255,0.2);
+            color: #fff;
+            width: 35px;
+            height: 35px;
+            border-radius: 8px;
+            cursor: pointer;
+            font-size: 1.2rem;
+            transition: all 0.3s;
+        }
+
+        .rotate-btn:hover {
+            background: rgba(255,255,255,0.2);
+        }
+
+        .footer {
+            text-align: center;
+            padding: 20px;
+            margin-top: 30px;
+            color: rgba(255,255,255,0.5);
+            font-size: 0.9rem;
+        }
+    </style>
+</head>
+<body>
+    <div class="container">
+        <header>
+            <h1>🧊 replicubik</h1>
+            <p style="color: rgba(255,255,255,0.7); margin-bottom: 15px;">Write code to build 3D voxel shapes</p>
+            <div class="level-info">
+                <span class="level-badge" id="levelBadge">Level 1</span>
+                <div class="level-nav">
+                    <button class="nav-btn" id="prevBtn" onclick="changeLevel(-1)">◀ Prev</button>
+                    <button class="nav-btn" id="nextBtn" onclick="changeLevel(1)">Next ▶</button>
+                </div>
+            </div>
+        </header>
+
+        <div class="main-content">
+            <div class="panel">
+                <div class="panel-header">
+                    <span class="panel-title">📝 Code Editor</span>
+                    <span class="block-count" id="blockCount">Blocks: 0</span>
+                </div>
+                
+                <div class="objective" id="objective">
+                    <h3>🎯 Objective</h3>
+                    <p id="objectiveText">Loading...</p>
+                </div>
+
+                <textarea class="code-editor" id="codeEditor" spellcheck="false">// Write your code here
+</textarea>
+
+                <div class="controls">
+                    <button class="btn btn-run" onclick="runCode()">▶ Run Code</button>
+                    <button class="btn btn-reset" onclick="resetCode()">↺ Reset</button>
+                    <button class="btn btn-hint" onclick="toggleHint()">💡 Hint</button>
+                </div>
+
+                <div class="hint-box" id="hintBox">
+                    <h4>💡 Hint</h4>
+                    <p id="hintText"></p>
+                </div>
+
+                <div class="api-reference">
+                    <h4>📚 API Reference</h4>
+                    <ul>
+                        <li><code>placeBlock(x, y, z)</code> - Place a cyan block</li>
+                        <li><code>placeBlock(x, y, z, color)</code> - Place colored block</li>
+                        <li><code>size</code> - Grid size for current level</li>
+                        <li>Colors: "red", "green", "blue", "yellow", "purple", "orange", "cyan", "pink"</li>
+                    </ul>
+                </div>
+            </div>
+
+            <div class="panel">
+                <div class="panel-header">
+                    <span class="panel-title">🖼️ Visualization</span>
+                </div>
+                
+                <div class="canvas-container">
+                    <div class="canvas-wrapper">
+                        <div class="canvas-label">Your Build</div>
+                        <canvas id="userCanvas" width="280" height="280"></canvas>
+                        <div class="rotate-controls">
+                            <button class="rotate-btn" onclick="rotateView('user', -1)">↺</button>
+                            <button class="rotate-btn" onclick="rotateView('user', 1)">↻</button>
+                        </div>
+                    </div>
+                    <div class="canvas-wrapper">
+                        <div class="canvas-label">Target Shape</div>
+                        <canvas id="targetCanvas" width="280" height="280"></canvas>
+                        <div class="rotate-controls">
+                            <button class="rotate-btn" onclick="rotateView('target', -1)">↺</button>
+                            <button class="rotate-btn" onclick="rotateView('target', 1)">↻</button>
+                        </div>
+                    </div>
+                </div>
+
+                <div class="status-bar status-info" id="statusBar">
+                    Write code and click "Run Code" to build your shape!
+                </div>
+            </div>
+        </div>
+
+        <div class="footer">
+            Use loops and math to replicate the target shapes. Good luck! 🚀
+        </div>
+    </div>
+
+    <div class="celebration" id="celebration"></div>
+
+    <script>
+        // Game State
+        let currentLevel = 0;
+        let userBlocks = [];
+        let targetBlocks = [];
+        let userRotation = 0;
+        let targetRotation = 0;
+        let levelsCompleted = new Set();
+
+        // Color Palette
+        const colors = {
+            cyan: { top: '#00ffff', left: '#00cccc', right: '#009999' },
+            red: { top: '#ff6b6b', left: '#cc5555', right: '#994444' },
+            green: { top: '#51cf66', left: '#40a652', right: '#2d7a3a' },
+            blue: { top: '#339af0', left: '#297bc0', right: '#1e5c90' },
+            yellow: { top: '#ffd43b', left: '#ccaa2f', right: '#998023' },
+            purple: { top: '#cc5de8', left: '#a34aba', right: '#7a388c' },
+            orange: { top: '#ff922b', left: '#cc7522', right: '#995819' },
+            pink: { top: '#f783ac', left: '#c5698a', right: '#944f68' },
+            white: { top: '#ffffff', left: '#cccccc', right: '#999999' },
+            gray: { top: '#868e96', left: '#6b7178', right: '#50555a' }
+        };
+
+        // Levels Definition
+        const levels = [
+            {
+                name: "Single Block",
+                objective: "Place a single block at the origin (0, 0, 0)",
+                size: 3,
+                hint: "Just call placeBlock(0, 0, 0) to place one block!",
+                starterCode: `// Place a single block at origin\nplaceBlock(0, 0, 0);`,
+                targetCode: () => {
+                    placeBlockTarget(0, 0, 0, 'cyan');
+                }
+            },
+            {
+                name: "Horizontal Line",
+                objective: "Create a line of 3 blocks along the X-axis (y=0, z=0)",
+                size: 4,
+                hint: "Use a for loop: for(let x = 0; x < 3; x++) { ... }",
+                starterCode: `// Create a line of 3 blocks\nfor (let x = 0; x < 3; x++) {\n  placeBlock(x, 0, 0);\n}`,
+                targetCode: () => {
+                    for(let x = 0; x < 3; x++) placeBlockTarget(x, 0, 0, 'cyan');
+                }
+            },
+            {
+                name: "Flat Square",
+                objective: "Create a 3x3 flat square on the ground (y=0)",
+                size: 4,
+                hint: "Use two nested for loops for x and z coordinates",
+                starterCode: `// Create a 3x3 floor\nfor (let x = 0; x < 3; x++) {\n  for (let z = 0; z < 3; z++) {\n    placeBlock(x, 0, z);\n  }\n}`,
+                targetCode: () => {
+                    for(let x = 0; x < 3; x++) {
+                        for(let z = 0; z < 3; z++) {
+                            placeBlockTarget(x, 0, z, 'cyan');
+                        }
+                    }
+                }
+            },
+            {
+                name: "Tower",
+                objective: "Build a tower of 4 blocks going up (at x=0, z=0)",
+                size: 5,
+                hint: "Loop through the y coordinate from 0 to 3",
+                starterCode: `// Build a tower\nfor (let y = 0; y < 4; y++) {\n  placeBlock(0, y, 0);\n}`,
+                targetCode: () => {
+                    for(let y = 0; y < 4; y++) placeBlockTarget(0, y, 0, 'cyan');
+                }
+            },
+            {
+                name: "Stairs",
+                objective: "Create a staircase going up diagonally",
+                size: 5,
+                hint: "Each step has x = y. Use one loop where both increase together",
+                starterCode: `// Build stairs\nfor (let i = 0; i < 4; i++) {\n  placeBlock(i, i, 0);\n}`,
+                targetCode: () => {
+                    for(let i = 0; i < 4; i++) placeBlockTarget(i, i, 0, 'cyan');
+                }
+            },
+            {
+                name: "L-Shape",
+                objective: "Create an L-shaped structure on the ground",
+                size: 4,
+                hint: "Place blocks along x-axis, then along z-axis from corner",
+                starterCode: `// Create an L-shape\n// Horizontal part\nfor (let x = 0; x < 3; x++) {\n  placeBlock(x, 0, 0);\n}\n// Vertical part\nfor (let z = 1; z < 3; z++) {\n  placeBlock(0, 0, z);\n}`,
+                targetCode: () => {
+                    for(let x = 0; x < 3; x++) placeBlockTarget(x, 0, 0, 'cyan');
+                    for(let z = 1; z < 3; z++) placeBlockTarget(0, 0, z, 'cyan');
+                }
+            },
+            {
+                name: "Cube Frame",
+                objective: "Build just the edges of a 3x3x3 cube (hollow)",
+                size: 4,
+                hint: "Place blocks only when at least two coordinates are at min (0) or max (2)",
+                starterCode: `// Build cube edges\nfor (let x = 0; x < 3; x++) {\n  for (let y = 0; y < 3; y++) {\n    for (let z = 0; z < 3; z++) {\n      // Check if on edge\n      let onEdge = \n        (x === 0 || x === 2 ? 1 : 0) +\n        (y === 0 || y === 2 ? 1 : 0) +\n        (z === 0 || z === 2 ? 1 : 0);\n      if (onEdge >= 2) {\n        placeBlock(x, y, z);\n      }\n    }\n  }\n}`,
+                targetCode: () => {
+                    for(let x = 0; x < 3; x++) {
+                        for(let y = 0; y < 3; y++) {
+                            for(let z = 0; z < 3; z++) {
+                                let edges = (x === 0 || x === 2 ? 1 : 0) +
+                                           (y === 0 || y === 2 ? 1 : 0) +
+                                           (z === 0 || z === 2 ? 1 : 0);
+                                if(edges >= 2) placeBlockTarget(x, y, z, 'cyan');
+                            }
+                        }
+                    }
+                }
+            },
+            {
+                name: "Pyramid",
+                objective: "Build a step pyramid (3 layers, each smaller than the one below)",
+                size: 5,
+                hint: "For each layer y, the blocks range from y to (size-1-y)",
+                starterCode: `// Build a pyramid\nlet s = 3; // base size\nfor (let y = 0; y < 2; y++) {\n  for (let x = y; x < s - y; x++) {\n    for (let z = y; z < s - y; z++) {\n      placeBlock(x, y, z);\n    }\n  }\n}`,
+                targetCode: () => {
+                    let s = 3;
+                    for(let y = 0; y < 2; y++) {
+                        for(let x = y; x < s - y; x++) {
+                            for(let z = y; z < s - y; z++) {
+                                placeBlockTarget(x, y, z, 'cyan');
+                            }
+                        }
+                    }
+                }
+            },
+            {
+                name: "Colored Layers",
+                objective: "Build a 3x3x3 cube with different colored layers (red, green, blue from bottom)",
+                size: 4,
+                hint: "Use an array of colors and index by y coordinate",
+                starterCode: `// Colored layers\nlet layerColors = ["red", "green", "blue"];\n\nfor (let y = 0; y < 3; y++) {\n  for (let x = 0; x < 3; x++) {\n    for (let z = 0; z < 3; z++) {\n      placeBlock(x, y, z, layerColors[y]);\n    }\n  }\n}`,
+                targetCode: () => {
+                    let layerColors = ['red', 'green', 'blue'];
+                    for(let y = 0; y < 3; y++) {
+                        for(let x = 0; x < 3; x++) {
+                            for(let z = 0; z < 3; z++) {
+                                placeBlockTarget(x, y, z, layerColors[y]);
+                            }
+                        }
+                    }
+                }
+            },
+            {
+                name: "Checkerboard",
+                objective: "Create a 4x4 checkerboard pattern with cyan and purple blocks",
+                size: 5,
+                hint: "Use (x + z) % 2 to alternate colors",
+                starterCode: `// Checkerboard pattern\nfor (let x = 0; x < 4; x++) {\n  for (let z = 0; z < 4; z++) {\n    let color = (x + z) % 2 === 0 ? "cyan" : "purple";\n    placeBlock(x, 0, z, color);\n  }\n}`,
+                targetCode: () => {
+                    for(let x = 0; x < 4; x++) {
+                        for(let z = 0; z < 4; z++) {
+                            let color = (x + z) % 2 === 0 ? 'cyan' : 'purple';
+                            placeBlockTarget(x, 0, z, color);
+                        }
+                    }
+                }
+            },
+            {
+                name: "Cross",
+                objective: "Build a 3D cross shape (plus sign in all 3 dimensions)",
+                size: 5,
+                hint: "Place blocks when x=1, y=1, or z=1 (but only in center range)",
+                starterCode: `// 3D Cross\nlet center = 1;\nlet range = 3;\n\nfor (let i = 0; i < range; i++) {\n  placeBlock(i, center, center);      // X-axis\n  placeBlock(center, i, center);      // Y-axis\n  placeBlock(center, center, i);      // Z-axis\n}`,
+                targetCode: () => {
+                    let center = 1;
+                    for(let i = 0; i < 3; i++) {
+                        placeBlockTarget(i, center, center, 'cyan');
+                        placeBlockTarget(center, i, center, 'cyan');
+                        placeBlockTarget(center, center, i, 'cyan');
+                    }
+                }
+            },
+            {
+                name: "Spiral Tower",
+                objective: "Build a spiral staircase going around and up",
+                size: 5,
+                hint: "Use modular arithmetic to position blocks in a circular pattern as y increases",
+                starterCode: `// Spiral tower\nlet positions = [\n  [0, 0], [1, 0], [2, 0], [2, 1],\n  [2, 2], [1, 2], [0, 2], [0, 1]\n];\n\nfor (let y = 0; y < 8; y++) {\n  let pos = positions[y % 8];\n  placeBlock(pos[0], y, pos[1]);\n}`,
+                targetCode: () => {
+                    let positions = [
+                        [0, 0], [1, 0], [2, 0], [2, 1],
+                        [2, 2], [1, 2], [0, 2], [0, 1]
+                    ];
+                    for(let y = 0; y < 8; y++) {
+                        let pos = positions[y % 8];
+                        placeBlockTarget(pos[0], y, pos[1], 'cyan');
+                    }
+                }
+            },
+            {
+                name: "Rainbow Bridge",
+                objective: "Build an arch bridge with rainbow colors",
+                size: 6,
+                hint: "Create an arc using Math.abs to make a symmetric shape",
+                starterCode: `// Rainbow bridge\nlet colors = ["red", "orange", "yellow", "green", "blue", "purple"];\n\nfor (let x = 0; x < 6; x++) {\n  // Calculate arc height\n  let y = 3 - Math.abs(x - 2.5);\n  y = Math.round(y);\n  placeBlock(x, y, 0, colors[x]);\n  placeBlock(x, y, 1, colors[x]);\n}`,
+                targetCode: () => {
+                    let cols = ['red', 'orange', 'yellow', 'green', 'blue', 'purple'];
+                    for(let x = 0; x < 6; x++) {
+                        let y = Math.round(3 - Math.abs(x - 2.5));
+                        placeBlockTarget(x, y, 0, cols[x]);
+                        placeBlockTarget(x, y, 1, cols[x]);
+                    }
+                }
+            },
+            {
+                name: "Diamond",
+                objective: "Create a 3D diamond shape (octahedron)",
+                size: 6,
+                hint: "Place blocks where |x-2| + |y-2| + |z-2| <= 2",
+                starterCode: `// 3D Diamond\nlet center = 2;\nlet radius = 2;\n\nfor (let x = 0; x < 5; x++) {\n  for (let y = 0; y < 5; y++) {\n    for (let z = 0; z < 5; z++) {\n      let dist = Math.abs(x - center) + \n                 Math.abs(y - center) + \n                 Math.abs(z - center);\n      if (dist <= radius) {\n        placeBlock(x, y, z);\n      }\n    }\n  }\n}`,
+                targetCode: () => {
+                    let center = 2;
+                    let radius = 2;
+                    for(let x = 0; x < 5; x++) {
+                        for(let y = 0; y < 5; y++) {
+                            for(let z = 0; z < 5; z++) {
+                                let dist = Math.abs(x - center) + 
+                                          Math.abs(y - center) + 
+                                          Math.abs(z - center);
+                                if(dist <= radius) {
+                                    placeBlockTarget(x, y, z, 'cyan');
+                                }
+                            }
+                        }
+                    }
+                }
+            },
+            {
+                name: "Castle Tower",
+                objective: "Build a tower with battlements on top",
+                size: 6,
+                hint: "Hollow cylinder base + alternating blocks on top edge",
+                starterCode: `// Castle tower\n// Base walls\nfor (let y = 0; y < 4; y++) {\n  for (let x = 0; x < 4; x++) {\n    for (let z = 0; z < 4; z++) {\n      // Only walls (hollow)\n      if (x === 0 || x === 3 || z === 0 || z === 3) {\n        placeBlock(x, y, z, "gray");\n      }\n    }\n  }\n}\n\n// Battlements\nfor (let x = 0; x < 4; x++) {\n  for (let z = 0; z < 4; z++) {\n    if ((x === 0 || x === 3 || z === 0 || z === 3) &&\n        (x + z) % 2 === 0) {\n      placeBlock(x, 4, z, "gray");\n    }\n  }\n}`,
+                targetCode: () => {
+                    for(let y = 0; y < 4; y++) {
+                        for(let x = 0; x < 4; x++) {
+                            for(let z = 0; z < 4; z++) {
+                                if(x === 0 || x === 3 || z === 0 || z === 3) {
+                                    placeBlockTarget(x, y, z, 'gray');
+                                }
+                            }
+                        }
+                    }
+                    for(let x = 0; x < 4; x++) {
+                        for(let z = 0; z < 4; z++) {
+                            if((x === 0 || x === 3 || z === 0 || z === 3) &&
+                               (x + z) % 2 === 0) {
+                                placeBlockTarget(x, 4, z, 'gray');
+                            }
+                        }
+                    }
+                }
+            }
+        ];
+
+        // Rendering Functions
+        function drawCube(ctx, screenX, screenY, size, color, rotation = 0) {
+            const colorObj = colors[color] || colors.cyan;
+            const w = size;
+            const h = size / 2;
+            
+            // Top face
+            ctx.fillStyle = colorObj.top;
+            ctx.beginPath();
+            ctx.moveTo(screenX, screenY - h);
+            ctx.lineTo(screenX + w, screenY);
+            ctx.lineTo(screenX, screenY + h);
+            ctx.lineTo(screenX - w, screenY);
+            ctx.closePath();
+            ctx.fill();
+            ctx.strokeStyle = 'rgba(0,0,0,0.3)';
+            ctx.stroke();
+
+            // Left face
+            ctx.fillStyle = colorObj.left;
+            ctx.beginPath();
+            ctx.moveTo(screenX - w, screenY);
+            ctx.lineTo(screenX, screenY + h);
+            ctx.lineTo(screenX, screenY + h + size);
+            ctx.lineTo(screenX - w, screenY + size);
+            ctx.closePath();
+            ctx.fill();
+            ctx.stroke();
+
+            // Right face
+            ctx.fillStyle = colorObj.right;
+            ctx.beginPath();
+            ctx.moveTo(screenX + w, screenY);
+            ctx.lineTo(screenX, screenY + h);
+            ctx.lineTo(screenX, screenY + h + size);
+            ctx.lineTo(screenX + w, screenY + size);
+            ctx.closePath();
+            ctx.fill();
+            ctx.stroke();
+        }
+
+        function worldToScreen(x, y, z, rotation, canvasWidth, canvasHeight, scale) {
+            // Apply rotation
+            const angle = rotation * Math.PI / 2;
+            const cos = Math.cos(angle);
+            const sin = Math.sin(angle);
+            const rx = x * cos - z * sin;
+            const rz = x * sin + z * cos;
+            
+            // Isometric projection
+            const screenX = canvasWidth / 2 + (rx - rz) * scale;
+            const screenY = canvasHeight / 2 + (rx + rz) * scale / 2 - y * scale;
+            
+            return { x: screenX, y: screenY, depth: rx + rz - y };
+        }
+
+        function renderBlocks(canvas, blocks, rotation) {
+            const ctx = canvas.getContext('2d');
+            const width = canvas.width;
+            const height = canvas.height;
+            
+            ctx.clearRect(0, 0, width, height);
+            
+            // Draw grid floor
+            ctx.strokeStyle = 'rgba(255,255,255,0.1)';
+            ctx.lineWidth = 1;
+            const gridSize = 5;
+            const scale = 25;
+            
+            for(let i = -gridSize; i <= gridSize; i++) {
+                const start = worldToScreen(i, 0, -gridSize, rotation, width, height, scale);
+                const end = worldToScreen(i, 0, gridSize, rotation, width, height, scale);
+                ctx.beginPath();
+                ctx.moveTo(start.x, start.y);
+                ctx.lineTo(end.x, end.y);
+                ctx.stroke();
+                
+                const start2 = worldToScreen(-gridSize, 0, i, rotation, width, height, scale);
+                const end2 = worldToScreen(gridSize, 0, i, rotation, width, height, scale);
+                ctx.beginPath();
+                ctx.moveTo(start2.x, start2.y);
+                ctx.lineTo(end2.x, end2.y);
+                ctx.stroke();
+            }
+            
+            if(blocks.length === 0) return;
+            
+            // Sort blocks for proper depth rendering
+            const sortedBlocks = blocks.map(block => {
+                const screen = worldToScreen(block.x, block.y, block.z, rotation, width, height, scale);
+                return { ...block, screenX: screen.x, screenY: screen.y, depth: screen.depth };
+            }).sort((a, b) => a.depth - b.depth);
+            
+            // Draw blocks
+            sortedBlocks.forEach(block => {
+                drawCube(ctx, block.screenX, block.screenY, scale, block.color, rotation);
+            });
+        }
+
+        // Block Placement Functions
+        let tempBlocks = [];
+        let isTargetMode = false;
+
+        function placeBlock(x, y, z, color = 'cyan') {
+            x = Math.floor(x);
+            y = Math.floor(y);
+            z = Math.floor(z);
+            if(!colors[color]) color = 'cyan';
+            tempBlocks.push({ x, y, z, color });
+        }
+
+        function placeBlockTarget(x, y, z, color = 'cyan') {
+            targetBlocks.push({ x, y, z, color });
+        }
+
+        // Game Logic
+        function runCode() {
+            const code = document.getElementById('codeEditor').value;
+            tempBlocks = [];
+            
+            try {
+                // Create sandbox with placeBlock function
+                const sandbox = {
+                    placeBlock: placeBlock,
+                    size: levels[currentLevel].size,
+                    Math: Math,
+                    console: { log: () => {} }
+                };
+                
+                const sandboxedCode = `
+                    with(sandbox) {
+                        ${code}
+                    }
+                `;
+                
+                new Function('sandbox', sandboxedCode)(sandbox);
+                
+                userBlocks = [...tempBlocks];
+                document.getElementById('blockCount').textContent = `Blocks: ${userBlocks.length}`;
+                
+                renderBlocks(document.getElementById('userCanvas'), userBlocks, userRotation);
+                
+                checkSolution();
+                
+            } catch(error) {
+                showStatus(`Error: ${error.message}`, 'error');
+                userBlocks = [];
+                renderBlocks(document.getElementById('userCanvas'), userBlocks, userRotation);
+            }
+        }
+
+        function checkSolution() {
+            if(userBlocks.length === 0) {
+                showStatus('No blocks placed. Write code to place blocks!', 'info');
+                return;
+            }
+            
+            // Normalize blocks for comparison
+            const normalize = blocks => {
+                return blocks.map(b => `${b.x},${b.y},${b.z},${b.color}`).sort().join('|');
+            };
+            
+            const userNorm = normalize(userBlocks);
+            const targetNorm = normalize(targetBlocks);
+            
+            if(userNorm === targetNorm) {
+                showStatus('🎉 Perfect! You replicated the shape!', 'success');
+                levelsCompleted.add(currentLevel);
+                celebrate();
+            } else {
+                const userSet = new Set(userBlocks.map(b => `${b.x},${b.y},${b.z},${b.color}`));
+                const targetSet = new Set(targetBlocks.map(b => `${b.x},${b.y},${b.z},${b.color}`));
+                
+                let correct = 0;
+                userSet.forEach(b => { if(targetSet.has(b)) correct++; });
+                
+                const accuracy = Math.round((correct / targetSet.size) * 100);
+                showStatus(`${accuracy}% match. Keep trying! (${correct}/${targetSet.size} blocks correct)`, 'info');
+            }
+        }
+
+        function showStatus(message, type) {
+            const statusBar = document.getElementById('statusBar');
+            statusBar.textContent = message;
+            statusBar.className = `status-bar status-${type}`;
+        }
+
+        function celebrate() {
+            const celebration = document.getElementById('celebration');
+            celebration.innerHTML = '';
+            
+            const colors = ['#ff0', '#f0f', '#0ff', '#f00', '#0f0', '#00f', '#ff8800'];
+            
+            for(let i = 0; i < 50; i++) {
+                const confetti = document.createElement('div');
+                confetti.className = 'confetti';
+                confetti.style.left = Math.random() * 100 + '%';
+                confetti.style.top = '-20px';
+                confetti.style.background = colors[Math.floor(Math.random() * colors.length)];
+                confetti.style.animationDelay = Math.random() * 2 + 's';
+                confetti.style.transform = `rotate(${Math.random() * 360}deg)`;
+                celebration.appendChild(confetti);
+            }
+            
+            setTimeout(() => {
+                celebration.innerHTML = '';
+            }, 5000);
+        }
+
+        function loadLevel(index) {
+            currentLevel = index;
+            const level = levels[index];
+            
+            document.getElementById('levelBadge').textContent = `Level ${index + 1}: ${level.name}`;
+            document.getElementById('objectiveText').textContent = level.objective;
+            document.getElementById('codeEditor').value = level.starterCode;
+            document.getElementById('hintText').textContent = level.hint;
+            document.getElementById('hintBox').classList.remove('visible');
+            
+            // Generate target
+            targetBlocks = [];
+            level.targetCode();
+            
+            // Reset user blocks
+            userBlocks = [];
+            document.getElementById('blockCount').textContent = 'Blocks: 0';
+            
+            // Render
+            renderBlocks(document.getElementById('userCanvas'), userBlocks, userRotation);
+            renderBlocks(document.getElementById('targetCanvas'), targetBlocks, targetRotation);
+            
+            showStatus('Write code and click "Run Code" to build your shape!', 'info');
+            
+            // Update nav buttons
+            document.getElementById('prevBtn').disabled = index === 0;
+            document.getElementById('nextBtn').disabled = index === levels.length - 1;
+        }
+
+        function changeLevel(delta) {
+            const newLevel = currentLevel + delta;
+            if(newLevel >= 0 && newLevel < levels.length) {
+                loadLevel(newLevel);
+            }
+        }
+
+        function resetCode() {
+            document.getElementById('codeEditor').value = levels[currentLevel].starterCode;
+            userBlocks = [];
+            document.getElementById('blockCount').textContent = 'Blocks: 0';
+            renderBlocks(document.getElementById('userCanvas'), userBlocks, userRotation);
+            showStatus('Code reset to starter template.', 'info');
+        }
+
+        function toggleHint() {
+            const hintBox = document.getElementById('hintBox');
+            hintBox.classList.toggle('visible');
+        }
+
+        function rotateView(canvas, direction) {
+            if(canvas === 'user') {
+                userRotation = (userRotation + direction + 4) % 4;
+                renderBlocks(document.getElementById('userCanvas'), userBlocks, userRotation);
+            } else {
+                targetRotation = (targetRotation + direction + 4) % 4;
+                renderBlocks(document.getElementById('targetCanvas'), targetBlocks, targetRotation);
+            }
+        }
+
+        // Tab key handling in textarea
+        document.getElementById('codeEditor').addEventListener('keydown', function(e) {
+            if(e.key === 'Tab') {
+                e.preventDefault();
+                const start = this.selectionStart;
+                const end = this.selectionEnd;
+                this.value = this.value.substring(0, start) + '  ' + this.value.substring(end);
+                this.selectionStart = this.selectionEnd = start + 2;
+            }
+        });
+
+        // Initialize
+        loadLevel(0);
+    </script>
+</body>
+</html>
