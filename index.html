@@ -1081,6 +1081,8 @@ body.aqua-theme .context-menu-separator {
                 <option value="p5js">p5.js</option>
                 <option value="threejs">Three.js</option>
                 <option value="babylonjs">Babylon.js</option>
+                <option value="ascii">ASCII Art</option>
+                <option value="asciigif">ASCII GIF</option>
             </select>
             <label for="vibe_promptInput">Describe your vibe:</label>
             <textarea id="vibe_promptInput" rows="3" placeholder="e.g., a smiling sun, a field of generative flowers, a rotating 3D cube"></textarea>
@@ -1607,6 +1609,13 @@ body.aqua-theme .context-menu-separator {
     const DEFAULT_VIBE_P5JS_INSTRUCTION = `Generate a complete, self-contained HTML page with p5.js code to create a visual based on: "{USER_PROMPT}". The HTML must include the p5.js library from a CDN. The p5.js sketch should be contained within a <script> tag. The canvas should be dynamically sized to fit its container. Output ONLY the raw HTML code.`;
     const DEFAULT_VIBE_THREEJS_INSTRUCTION = `Generate a complete, self-contained HTML page with Three.js code to create a 3D scene based on: "{USER_PROMPT}". The HTML must include the Three.js library from a CDN. The Three.js code should be contained within a <script type="module"> tag. The renderer should be dynamically sized to fit its container, and there should be a basic animation loop. Output ONLY the raw HTML code.`;
     const DEFAULT_VIBE_BABYLONJS_INSTRUCTION = `Generate a complete, self-contained HTML page with Babylon.js code to create a 3D scene based on: "{USER_PROMPT}". The HTML must include the Babylon.js library from a CDN. The Babylon.js code should be contained within a <script> tag. The engine and scene should be set up to render on a canvas that dynamically sizes to fit its container. Output ONLY the raw HTML code.`;
+    const DEFAULT_VIBE_ASCII_INSTRUCTION = `Generate ASCII art for: "{USER_PROMPT}". Respond ONLY with the raw ASCII art text, wrapped in a single Markdown code block. No explanations.`;
+    const DEFAULT_VIBE_ASCIIGIF_INSTRUCTION = `Generate an animated ASCII art (ASCII GIF) for: "{USER_PROMPT}".
+1.  Create 5-10 distinct frames.
+2.  Each frame MUST be separated by the exact delimiter "---FRAME---" on its own line.
+3.  Keep frame dimensions consistent.
+4.  The animation should loop smoothly.
+5.  Respond ONLY with the raw ASCII frames and their delimiters. No explanations, intro, outro, or markdown.`;
     const DEFAULT_GAMEGEN_PLAN_INSTRUCTION = `Based on the user's game idea: "{USER_GAME_IDEA}", create a concise game plan. The plan must include: 1. A brief (1-2 sentences) description of the core game mechanic. 2. A list of 3 to 5 essential SVG assets. For each, provide a short, clear description, a boolean "animated" flag, and a unique, URL-safe "filename" ending in .svg. 3. A list of 2 to 3 essential sound effects. For each, provide a short, clear description and a unique, URL-safe "filename" ending in .js. Format the output as a JSON object with three keys: "game_mechanic" (string), "svg_assets" (array of objects), and "sound_effects" (array of objects). Example JSON: { "game_mechanic": "Top-down shooter...", "svg_assets": [{"description": "player ship, blue", "animated": false, "filename": "player.svg"}, {"description": "enemy UFO, rotates slowly", "animated": true, "filename": "enemy.svg"}], "sound_effects": [{"description": "laser shoot sound", "filename": "shoot.js"}, {"description": "explosion fx", "filename": "explosion.js"}] }. Output ONLY the JSON object.`;
     const DEFAULT_GAMEGEN_FINAL_INSTRUCTION = `Generate a COMPLETE, SINGLE-FILE, RUNNABLE HTML/JavaScript game. User's idea: "{USER_GAME_IDEA}". Game Plan: {GAME_PLAN_JSON}. All assets will be provided in a relative './assets/' directory. You MUST load them from there. The asset filenames are: {ASSET_FILENAMES_JSON}. IMPORTANT: For SVGs, use an asynchronous loading mechanism. 1. Create Image objects for each SVG asset using its path (e.g., 'assets/player.svg'). 2. Use onload/onerror handlers. 3. Only start the game loop AFTER all images are loaded. 4. For sound effects, the assets are JavaScript files. You must fetch each JS file (e.g., fetch('assets/shoot.js')), get its text content, and then use 'new Function('audioContext', 'activeSources', THE_FETCHED_CODE)' to create the playable sound function. Manage loading these sound functions asynchronously as well. The game should not start until all assets (SVGs and sounds) are loaded. Output ONLY the single HTML file string. Use pure JS/Canvas or CDN libraries. Include game loop, rendering, input. Self-contained. No markdown/explanations outside HTML. Make game playable, fit description/plan, using all provided assets and triggering sound effects.`;
     const DEFAULT_GAMEGEN_DEBUG_INSTRUCTION = `The HTML/JS game code (original idea: "{USER_GAME_IDEA}") produced error(s) and/or the user has provided hints: "{ERRORS_AND_HINTS}". Analyze the code, errors, and hints. Provide a corrected version of the full HTML/JS game code. Focus on fixing specified issues while preserving the game's original intent. Pay close attention to asynchronous asset loading from the './assets/' folder. Output ONLY the corrected, complete HTML/JS code, starting with <!DOCTYPE html> or <html> and ending with </html>. No explanations or markdown. Problematic code:\n\`\`\`html\n{PROBLEM_CODE}\n\`\`\``;
@@ -5306,6 +5315,7 @@ Output ONLY the raw HTML code, starting with <!DOCTYPE html> and ending with </h
 
     let vibe_currentContent = null;
     let vibe_currentContentType = 'svg'; // svg, p5js, threejs, babylonjs
+    let vibe_asciiGifInterval = null;
     const vibeStatusUpdater = (msg) => { if(vibe_errorDisplay) vibe_errorDisplay.textContent = `Status: ${msg}`; if(vibe_loadingIndicator && msg.toLowerCase().includes("loading")) vibe_loadingIndicator.style.display = 'block'; else if(vibe_loadingIndicator) vibe_loadingIndicator.style.display = 'none';};
     function initVibeCreatorApp() {
         vibe_genAI_internal_model = null; // Gemini specific
@@ -5358,6 +5368,10 @@ Output ONLY the raw HTML code, starting with <!DOCTYPE html> and ending with </h
     }
 
     async function vibe_handleGenerate() {
+        if (vibe_asciiGifInterval) {
+            clearInterval(vibe_asciiGifInterval);
+            vibe_asciiGifInterval = null;
+        }
         const keyAvailable = (selectedApiProvider === 'gemini' && window.GLOBAL_GEMINI_API_KEY) ||
                              (selectedApiProvider === 'groq' && window.GLOBAL_GROQ_API_KEY) ||
                              (selectedApiProvider === 'openrouter' && window.GLOBAL_OPENROUTER_API_KEY) ||
@@ -5399,6 +5413,12 @@ Output ONLY the raw HTML code, starting with <!DOCTYPE html> and ending with </h
                 break;
             case 'babylonjs':
                 instruction = DEFAULT_VIBE_BABYLONJS_INSTRUCTION;
+                break;
+            case 'ascii':
+                instruction = DEFAULT_VIBE_ASCII_INSTRUCTION;
+                break;
+            case 'asciigif':
+                instruction = DEFAULT_VIBE_ASCIIGIF_INSTRUCTION;
                 break;
             case 'svg':
             default:
@@ -5443,6 +5463,40 @@ Output ONLY the raw HTML code, starting with <!DOCTYPE html> and ending with </h
                 } else {
                     throw new Error("No valid SVG found in AI response.");
                 }
+            } else if (creatorType === 'ascii' || creatorType === 'asciigif') {
+                 const pre = document.createElement('pre');
+                pre.style.fontFamily = "'Courier New', Courier, monospace";
+                pre.style.fontSize = '10px';
+                pre.style.whiteSpace = 'pre';
+                pre.style.margin = '0';
+                pre.style.overflow = 'auto';
+                pre.style.width = '100%';
+                pre.style.height = '100%';
+
+                if (creatorType === 'asciigif') {
+                    const frames = vibe_currentContent.split('---FRAME---').filter(f => f.trim().length > 0);
+                    if (frames.length > 1) {
+                        let currentFrame = 0;
+                        vibe_asciiGifInterval = setInterval(() => {
+                            pre.textContent = frames[currentFrame];
+                            currentFrame = (currentFrame + 1) % frames.length;
+                        }, 150);
+                        pre.textContent = frames[0];
+                    } else {
+                        pre.textContent = vibe_currentContent; // Fallback for failed animation
+                    }
+                } else {
+                    let cleanedText = vibe_currentContent;
+                    if (cleanedText.startsWith("```")) {
+                        cleanedText = cleanedText.substring(cleanedText.indexOf('\n') + 1);
+                    }
+                    if (cleanedText.endsWith("```")) {
+                        cleanedText = cleanedText.substring(0, cleanedText.lastIndexOf("```"));
+                    }
+                    pre.textContent = cleanedText;
+                }
+                vibe_container.innerHTML = '';
+                vibe_container.appendChild(pre);
             } else {
                 // For p5.js, three.js, babylon.js, we expect full HTML
                 if (vibe_currentContent.toLowerCase().includes('<html')) {
