@@ -3,50 +3,465 @@
 <head>
     <meta charset="UTF-8">
     <meta name="viewport" content="width=device-width, initial-scale=1.0">
-    <title>k8o5</title>
-</head>
-<body>
-    <h1>k8o5</h1>
-    <ul id="fileList"></ul>
-    <script>
-        async function fetchRepoContents(owner, repo, path = '') {
-            const url = `https://api.github.com/repos/${owner}/${repo}/contents/${path}`;
-            const response = await fetch(url);
-            const data = await response.json();
-            return data;
+    <title>INDEX</title>
+    <style>
+        @import url('https://fonts.googleapis.com/css2?family=Space+Mono:wght@400;700&display=swap');
+
+        * {
+            margin: 0;
+            padding: 0;
+            box-sizing: border-box;
         }
 
-        async function listHtmlFiles() {
-            const hostname = window.location.hostname;
-            if (!hostname.endsWith('.github.io')) {
-                console.error('This script is designed for GitHub Pages.');
+        :root {
+            --bg: #0a0a0a;
+            --fg: #ffffff;
+            --accent: #ff3e00;
+            --border: #333;
+        }
+
+        body {
+            background: var(--bg);
+            color: var(--fg);
+            font-family: 'Space Mono', monospace;
+            min-height: 100vh;
+            cursor: crosshair;
+            overflow-x: hidden;
+        }
+
+        /* Noise overlay */
+        body::before {
+            content: '';
+            position: fixed;
+            top: 0;
+            left: 0;
+            width: 100%;
+            height: 100%;
+            background-image: url("data:image/svg+xml,%3Csvg viewBox='0 0 256 256' xmlns='http://www.w3.org/2000/svg'%3E%3Cfilter id='noise'%3E%3CfeTurbulence type='fractalNoise' baseFrequency='0.9' numOctaves='4' stitchTiles='stitch'/%3E%3C/filter%3E%3Crect width='100%25' height='100%25' filter='url(%23noise)'/%3E%3C/svg%3E");
+            opacity: 0.03;
+            pointer-events: none;
+            z-index: 9999;
+        }
+
+        .container {
+            max-width: 1400px;
+            margin: 0 auto;
+            padding: 2rem;
+        }
+
+        header {
+            border-bottom: 4px solid var(--fg);
+            padding-bottom: 2rem;
+            margin-bottom: 4rem;
+            position: relative;
+        }
+
+        h1 {
+            font-size: clamp(4rem, 15vw, 12rem);
+            font-weight: 700;
+            letter-spacing: -0.05em;
+            line-height: 0.85;
+            text-transform: uppercase;
+        }
+
+        h1 span {
+            display: block;
+            font-size: 0.15em;
+            letter-spacing: 0.3em;
+            color: var(--accent);
+            margin-bottom: 1rem;
+        }
+
+        .meta {
+            display: flex;
+            justify-content: space-between;
+            align-items: flex-end;
+            margin-top: 2rem;
+            font-size: 0.75rem;
+            text-transform: uppercase;
+            letter-spacing: 0.1em;
+            color: #666;
+        }
+
+        .count {
+            font-size: 3rem;
+            font-weight: 700;
+            color: var(--fg);
+        }
+
+        .grid {
+            display: grid;
+            grid-template-columns: repeat(auto-fill, minmax(350px, 1fr));
+            gap: 2px;
+            background: var(--border);
+            border: 2px solid var(--fg);
+        }
+
+        .file-card {
+            background: var(--bg);
+            padding: 2rem;
+            position: relative;
+            transition: all 0.1s ease;
+            display: flex;
+            flex-direction: column;
+            min-height: 200px;
+        }
+
+        .file-card::before {
+            content: '';
+            position: absolute;
+            top: 0;
+            left: 0;
+            width: 100%;
+            height: 4px;
+            background: var(--accent);
+            transform: scaleX(0);
+            transform-origin: left;
+            transition: transform 0.3s ease;
+        }
+
+        .file-card:hover::before {
+            transform: scaleX(1);
+        }
+
+        .file-card:hover {
+            background: #111;
+        }
+
+        .file-number {
+            font-size: 0.7rem;
+            color: #444;
+            margin-bottom: 1rem;
+        }
+
+        .file-name {
+            font-size: 1.5rem;
+            font-weight: 700;
+            text-transform: uppercase;
+            letter-spacing: -0.02em;
+            word-break: break-word;
+            flex-grow: 1;
+            display: flex;
+            align-items: center;
+        }
+
+        .file-link {
+            color: var(--fg);
+            text-decoration: none;
+            display: block;
+            height: 100%;
+        }
+
+        .file-link:hover .file-name {
+            color: var(--accent);
+        }
+
+        .file-ext {
+            font-size: 0.75rem;
+            color: var(--accent);
+            margin-top: auto;
+            padding-top: 1rem;
+            border-top: 1px solid var(--border);
+        }
+
+        .arrow {
+            position: absolute;
+            bottom: 2rem;
+            right: 2rem;
+            font-size: 2rem;
+            opacity: 0;
+            transform: translate(-10px, 10px);
+            transition: all 0.2s ease;
+        }
+
+        .file-card:hover .arrow {
+            opacity: 1;
+            transform: translate(0, 0);
+        }
+
+        .loading {
+            text-align: center;
+            padding: 4rem;
+            font-size: 1.5rem;
+            text-transform: uppercase;
+            letter-spacing: 0.2em;
+            animation: pulse 1s ease infinite;
+        }
+
+        @keyframes pulse {
+            0%, 100% { opacity: 1; }
+            50% { opacity: 0.3; }
+        }
+
+        .error {
+            background: var(--accent);
+            color: var(--bg);
+            padding: 2rem;
+            font-weight: 700;
+            text-transform: uppercase;
+        }
+
+        .config-notice {
+            background: #1a1a1a;
+            border: 2px dashed var(--border);
+            padding: 2rem;
+            margin-bottom: 2rem;
+            font-size: 0.8rem;
+        }
+
+        .config-notice code {
+            background: var(--bg);
+            padding: 0.2em 0.5em;
+            color: var(--accent);
+        }
+
+        footer {
+            margin-top: 4rem;
+            padding-top: 2rem;
+            border-top: 1px solid var(--border);
+            display: flex;
+            justify-content: space-between;
+            font-size: 0.7rem;
+            text-transform: uppercase;
+            letter-spacing: 0.1em;
+            color: #444;
+        }
+
+        .status-dot {
+            display: inline-block;
+            width: 8px;
+            height: 8px;
+            background: var(--accent);
+            border-radius: 50%;
+            margin-right: 0.5rem;
+            animation: blink 2s ease infinite;
+        }
+
+        @keyframes blink {
+            0%, 90%, 100% { opacity: 1; }
+            95% { opacity: 0; }
+        }
+
+        /* Scrollbar */
+        ::-webkit-scrollbar {
+            width: 8px;
+        }
+        ::-webkit-scrollbar-track {
+            background: var(--bg);
+        }
+        ::-webkit-scrollbar-thumb {
+            background: var(--border);
+        }
+        ::-webkit-scrollbar-thumb:hover {
+            background: var(--fg);
+        }
+
+        @media (max-width: 768px) {
+            .container {
+                padding: 1rem;
+            }
+            .grid {
+                grid-template-columns: 1fr;
+            }
+            .meta {
+                flex-direction: column;
+                align-items: flex-start;
+                gap: 1rem;
+            }
+        }
+    </style>
+</head>
+<body>
+    <div class="container">
+        <header>
+            <h1>
+                <span>Repository</span>
+                HTML FILES
+            </h1>
+            <div class="meta">
+                <div>
+                    <span class="status-dot"></span>
+                    <span id="repo-name">DETECTING REPO...</span>
+                </div>
+                <div>
+                    <span class="count" id="file-count">—</span>
+                    <span>FILES</span>
+                </div>
+            </div>
+        </header>
+
+        <main>
+            <div id="config-area"></div>
+            <div id="files-grid" class="grid">
+                <div class="loading">SCANNING REPOSITORY...</div>
+            </div>
+        </main>
+
+        <footer>
+            <div>BRUTALIST INDEX</div>
+            <div id="timestamp"></div>
+        </footer>
+    </div>
+
+    <script>
+        // ═══════════════════════════════════════════════════════════════
+        // CONFIGURATION - Edit these values for your repository
+        // ═══════════════════════════════════════════════════════════════
+        
+        const CONFIG = {
+            // Leave empty to auto-detect from GitHub Pages URL
+            // Or manually set: { owner: 'username', repo: 'repo-name' }
+            manual: null,
+            
+            // Folder to scan (empty string for root, or 'folder/subfolder')
+            path: '',
+            
+            // Files to exclude from the list
+            exclude: ['index.html'],
+            
+            // Include files from subdirectories
+            recursive: true
+        };
+
+        // ═══════════════════════════════════════════════════════════════
+
+        class RepoScanner {
+            constructor() {
+                this.owner = null;
+                this.repo = null;
+                this.htmlFiles = [];
+            }
+
+            detectRepo() {
+                // Check manual config first
+                if (CONFIG.manual) {
+                    this.owner = CONFIG.manual.owner;
+                    this.repo = CONFIG.manual.repo;
+                    return true;
+                }
+
+                const url = window.location.href;
+                
+                // GitHub Pages: username.github.io/repo-name
+                const pagesMatch = url.match(/([^\/]+)\.github\.io\/([^\/]+)/);
+                if (pagesMatch) {
+                    this.owner = pagesMatch[1];
+                    this.repo = pagesMatch[2];
+                    return true;
+                }
+
+                // GitHub Pages: username.github.io (repo is username.github.io)
+                const userPagesMatch = url.match(/([^\/]+)\.github\.io\/?$/);
+                if (userPagesMatch) {
+                    this.owner = userPagesMatch[1];
+                    this.repo = `${userPagesMatch[1]}.github.io`;
+                    return true;
+                }
+
+                return false;
+            }
+
+            async fetchContents(path = '') {
+                const apiUrl = `https://api.github.com/repos/${this.owner}/${this.repo}/contents/${path}`;
+                const response = await fetch(apiUrl);
+                
+                if (!response.ok) {
+                    throw new Error(`GitHub API error: ${response.status}`);
+                }
+                
+                return response.json();
+            }
+
+            async scanDirectory(path = CONFIG.path) {
+                const contents = await this.fetchContents(path);
+                
+                for (const item of contents) {
+                    if (item.type === 'file' && item.name.endsWith('.html')) {
+                        if (!CONFIG.exclude.includes(item.name)) {
+                            this.htmlFiles.push({
+                                name: item.name,
+                                path: item.path,
+                                url: item.html_url,
+                                downloadUrl: item.download_url,
+                                size: item.size
+                            });
+                        }
+                    } else if (item.type === 'dir' && CONFIG.recursive) {
+                        await this.scanDirectory(item.path);
+                    }
+                }
+            }
+
+            getPageUrl(file) {
+                // Convert to GitHub Pages URL
+                const basePath = window.location.pathname.replace(/\/[^\/]*$/, '');
+                return `${window.location.origin}${basePath}/${file.path}`;
+            }
+        }
+
+        // ═══════════════════════════════════════════════════════════════
+
+        async function init() {
+            const scanner = new RepoScanner();
+            const grid = document.getElementById('files-grid');
+            const repoNameEl = document.getElementById('repo-name');
+            const fileCountEl = document.getElementById('file-count');
+            const configArea = document.getElementById('config-area');
+            const timestampEl = document.getElementById('timestamp');
+
+            // Set timestamp
+            timestampEl.textContent = new Date().toISOString();
+
+            // Detect repository
+            if (!scanner.detectRepo()) {
+                configArea.innerHTML = `
+                    <div class="config-notice">
+                        <strong>⚠ MANUAL CONFIGURATION REQUIRED</strong><br><br>
+                        Could not auto-detect repository. Edit the <code>CONFIG.manual</code> 
+                        object in this file:<br><br>
+                        <code>manual: { owner: 'your-username', repo: 'your-repo-name' }</code>
+                    </div>
+                `;
+                grid.innerHTML = '<div class="error">REPO NOT DETECTED</div>';
                 return;
             }
 
-            const owner = hostname.split('.')[0];
-            let repo;
-            const pathname = window.location.pathname.replace(/^\/|\/$/g, '');
-            if (pathname === '') {
-                repo = `${owner}.github.io`;
-            } else {
-                repo = pathname.split('/')[0];
-            }
+            repoNameEl.textContent = `${scanner.owner}/${scanner.repo}`;
 
-            const ul = document.getElementById('fileList');
-            const files = await fetchRepoContents(owner, repo);
-            files.forEach(item => {
-                if (item.type === 'file' && item.name.endsWith('.html') && item.name !== 'index.html') {
-                    const li = document.createElement('li');
-                    const a = document.createElement('a');
-                    a.href = item.name;
-                    a.textContent = item.name;
-                    li.appendChild(a);
-                    ul.appendChild(li);
+            try {
+                await scanner.scanDirectory();
+                
+                if (scanner.htmlFiles.length === 0) {
+                    grid.innerHTML = '<div class="loading" style="animation:none">NO HTML FILES FOUND</div>';
+                    fileCountEl.textContent = '0';
+                    return;
                 }
-            });
+
+                fileCountEl.textContent = scanner.htmlFiles.length.toString().padStart(2, '0');
+
+                grid.innerHTML = scanner.htmlFiles.map((file, index) => `
+                    <article class="file-card">
+                        <a href="${scanner.getPageUrl(file)}" class="file-link">
+                            <div class="file-number">${(index + 1).toString().padStart(3, '0')}</div>
+                            <div class="file-name">${file.name.replace('.html', '')}</div>
+                            <div class="file-ext">.HTML — ${file.path}</div>
+                            <div class="arrow">→</div>
+                        </a>
+                    </article>
+                `).join('');
+
+            } catch (error) {
+                console.error(error);
+                grid.innerHTML = `
+                    <div class="error">
+                        ERROR: ${error.message}<br><br>
+                        If this is a private repo, the GitHub API cannot access it without authentication.
+                    </div>
+                `;
+            }
         }
 
-        listHtmlFiles();
+        init();
     </script>
 </body>
 </html>
