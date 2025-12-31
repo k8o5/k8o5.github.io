@@ -1,0 +1,422 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>OmniZip | AAA Archive Generator</title>
+    
+    <!-- Tailwind CSS (Styling) -->
+    <script src="https://cdn.tailwindcss.com"></script>
+    
+    <!-- FontAwesome (Icons) -->
+    <link rel="stylesheet" href="https://cdnjs.cloudflare.com/ajax/libs/font-awesome/6.4.0/css/all.min.css">
+    
+    <!-- Google Fonts -->
+    <link href="https://fonts.googleapis.com/css2?family=Inter:wght@300;400;600;700&display=swap" rel="stylesheet">
+
+    <!-- Libraries: JSZip and FileSaver -->
+    <script src="https://cdnjs.cloudflare.com/ajax/libs/jszip/3.10.1/jszip.min.js"></script>
+    <script src="https://cdnjs.cloudflare.com/ajax/libs/FileSaver.js/2.0.5/FileSaver.min.js"></script>
+
+    <script>
+        tailwind.config = {
+            theme: {
+                extend: {
+                    fontFamily: { sans: ['Inter', 'sans-serif'] },
+                    colors: {
+                        brand: {
+                            500: '#6366f1', // Indigo
+                            600: '#4f46e5',
+                            900: '#1e1b4b',
+                        },
+                        dark: {
+                            bg: '#0f172a',
+                            card: '#1e293b',
+                            hover: '#334155'
+                        }
+                    },
+                    animation: {
+                        'pulse-fast': 'pulse 1.5s cubic-bezier(0.4, 0, 0.6, 1) infinite',
+                    }
+                }
+            }
+        }
+    </script>
+
+    <style>
+        body {
+            background-color: #0f172a;
+            background-image: radial-gradient(at 0% 0%, hsla(253,16%,7%,1) 0, transparent 50%), radial-gradient(at 50% 0%, hsla(225,39%,30%,1) 0, transparent 50%), radial-gradient(at 100% 0%, hsla(339,49%,30%,1) 0, transparent 50%);
+            min-height: 100vh;
+            color: white;
+        }
+        
+        /* Custom Scrollbar */
+        ::-webkit-scrollbar { width: 8px; }
+        ::-webkit-scrollbar-track { background: #1e293b; }
+        ::-webkit-scrollbar-thumb { background: #475569; border-radius: 4px; }
+        ::-webkit-scrollbar-thumb:hover { background: #6366f1; }
+
+        .glass-panel {
+            background: rgba(30, 41, 59, 0.7);
+            backdrop-filter: blur(12px);
+            -webkit-backdrop-filter: blur(12px);
+            border: 1px solid rgba(255, 255, 255, 0.1);
+        }
+
+        .drop-zone-active {
+            border-color: #6366f1 !important;
+            background-color: rgba(99, 102, 241, 0.1) !important;
+            transform: scale(1.01);
+        }
+    </style>
+</head>
+<body class="flex items-center justify-center p-4">
+
+    <div class="glass-panel w-full max-w-2xl rounded-2xl shadow-2xl overflow-hidden flex flex-col relative">
+        
+        <!-- Header -->
+        <div class="p-6 border-b border-gray-700 flex justify-between items-center bg-gray-900/50">
+            <div>
+                <h1 class="text-2xl font-bold bg-clip-text text-transparent bg-gradient-to-r from-indigo-400 to-cyan-400">
+                    <i class="fa-solid fa-file-zipper mr-2 text-indigo-400"></i>OmniZip
+                </h1>
+                <p class="text-gray-400 text-xs mt-1 tracking-wide uppercase">Client-Side Archiver</p>
+            </div>
+            <div class="text-right">
+                <span id="total-size" class="text-xs font-mono text-gray-400 bg-gray-800 px-2 py-1 rounded">0 KB</span>
+            </div>
+        </div>
+
+        <!-- Main Content -->
+        <div class="p-6 space-y-6">
+            
+            <!-- Settings Row -->
+            <div class="grid grid-cols-1 md:grid-cols-3 gap-4">
+                <div class="md:col-span-2">
+                    <label class="block text-xs font-semibold text-gray-400 mb-1 uppercase">Output Filename</label>
+                    <div class="relative">
+                        <input type="text" id="zip-filename" value="archive" 
+                            class="w-full bg-gray-800 border border-gray-600 rounded-lg py-2 px-3 text-sm focus:outline-none focus:border-brand-500 focus:ring-1 focus:ring-brand-500 transition-all text-white placeholder-gray-500">
+                        <span class="absolute right-3 top-2 text-gray-500 text-sm">.zip</span>
+                    </div>
+                </div>
+                <div>
+                    <label class="block text-xs font-semibold text-gray-400 mb-1 uppercase">Compression</label>
+                    <select id="compression-level" class="w-full bg-gray-800 border border-gray-600 rounded-lg py-2 px-3 text-sm focus:outline-none focus:border-brand-500 text-white">
+                        <option value="STORE">No Compression (Fast)</option>
+                        <option value="DEFLATE" selected>Standard (Deflate)</option>
+                    </select>
+                </div>
+            </div>
+
+            <!-- Drop Zone -->
+            <div id="drop-zone" 
+                class="border-2 border-dashed border-gray-600 rounded-xl p-10 flex flex-col items-center justify-center text-center cursor-pointer transition-all duration-200 group hover:border-gray-500 hover:bg-gray-800/30 relative">
+                
+                <input type="file" id="file-input" multiple class="hidden">
+                
+                <div class="w-16 h-16 bg-gray-700/50 rounded-full flex items-center justify-center mb-4 group-hover:scale-110 transition-transform">
+                    <i class="fa-solid fa-cloud-arrow-up text-2xl text-indigo-400"></i>
+                </div>
+                <h3 class="text-lg font-semibold text-gray-200">Drag & Drop files here</h3>
+                <p class="text-sm text-gray-400 mt-2">or click to browse local storage</p>
+            </div>
+
+            <!-- File List (Hidden when empty) -->
+            <div id="file-list-container" class="hidden">
+                <div class="flex justify-between items-end mb-2">
+                    <label class="text-xs font-semibold text-gray-400 uppercase">Queue (<span id="file-count">0</span>)</label>
+                    <button id="clear-all" class="text-xs text-red-400 hover:text-red-300 transition-colors">Clear All</button>
+                </div>
+                <div class="bg-gray-900/50 rounded-lg border border-gray-700 max-h-48 overflow-y-auto" id="file-list">
+                    <!-- JS will populate this -->
+                </div>
+            </div>
+
+            <!-- Progress Bar (Hidden initially) -->
+            <div id="progress-container" class="hidden">
+                <div class="flex justify-between text-xs mb-1">
+                    <span id="progress-text" class="text-brand-400 font-semibold">Processing...</span>
+                    <span id="progress-percent" class="text-white">0%</span>
+                </div>
+                <div class="w-full bg-gray-700 rounded-full h-2.5 overflow-hidden">
+                    <div id="progress-bar" class="bg-gradient-to-r from-brand-600 to-cyan-500 h-2.5 rounded-full" style="width: 0%"></div>
+                </div>
+            </div>
+
+        </div>
+
+        <!-- Footer / Action -->
+        <div class="p-6 bg-gray-900/80 border-t border-gray-700 flex flex-col sm:flex-row gap-4">
+            <button id="generate-btn" disabled 
+                class="w-full py-3 px-4 bg-gradient-to-r from-brand-600 to-brand-500 hover:from-brand-500 hover:to-brand-400 text-white font-bold rounded-lg shadow-lg shadow-indigo-500/20 transform transition hover:-translate-y-0.5 disabled:opacity-50 disabled:cursor-not-allowed disabled:shadow-none flex items-center justify-center gap-2">
+                <i class="fa-solid fa-bolt"></i> Generate .ZIP
+            </button>
+        </div>
+    </div>
+
+    <!-- Toast Notification Container -->
+    <div id="toast-container" class="fixed bottom-5 right-5 space-y-3 z-50"></div>
+
+    <script>
+        // --- Logic ---
+        const dropZone = document.getElementById('drop-zone');
+        const fileInput = document.getElementById('file-input');
+        const fileListEl = document.getElementById('file-list');
+        const fileListContainer = document.getElementById('file-list-container');
+        const generateBtn = document.getElementById('generate-btn');
+        const totalSizeEl = document.getElementById('total-size');
+        const fileCountEl = document.getElementById('file-count');
+        const clearAllBtn = document.getElementById('clear-all');
+        const progressContainer = document.getElementById('progress-container');
+        const progressBar = document.getElementById('progress-bar');
+        const progressText = document.getElementById('progress-text');
+        const progressPercent = document.getElementById('progress-percent');
+        const compressionSelect = document.getElementById('compression-level');
+        const filenameInput = document.getElementById('zip-filename');
+
+        // Store files
+        let filesQueue = [];
+
+        // --- Utils ---
+        function formatBytes(bytes, decimals = 2) {
+            if (!+bytes) return '0 Bytes';
+            const k = 1024;
+            const dm = decimals < 0 ? 0 : decimals;
+            const sizes = ['Bytes', 'KB', 'MB', 'GB', 'TB'];
+            const i = Math.floor(Math.log(bytes) / Math.log(k));
+            return `${parseFloat((bytes / Math.pow(k, i)).toFixed(dm))} ${sizes[i]}`;
+        }
+
+        function showToast(message, type = 'success') {
+            const container = document.getElementById('toast-container');
+            const toast = document.createElement('div');
+            const colors = type === 'success' ? 'border-green-500 text-green-400' : 'border-red-500 text-red-400';
+            const icon = type === 'success' ? 'fa-circle-check' : 'fa-circle-exclamation';
+            
+            toast.className = `glass-panel border-l-4 ${colors} p-4 rounded shadow-lg flex items-center gap-3 min-w-[300px] animate-[slideIn_0.3s_ease-out]`;
+            toast.innerHTML = `<i class="fa-solid ${icon}"></i> <span class="text-sm text-gray-100">${message}</span>`;
+            
+            container.appendChild(toast);
+            setTimeout(() => {
+                toast.style.opacity = '0';
+                setTimeout(() => toast.remove(), 300);
+            }, 3000);
+        }
+
+        // --- Render UI ---
+        function updateUI() {
+            fileListEl.innerHTML = '';
+            let totalSize = 0;
+
+            if (filesQueue.length > 0) {
+                fileListContainer.classList.remove('hidden');
+                generateBtn.disabled = false;
+                generateBtn.classList.add('animate-pulse-fast');
+                
+                // Sort by name
+                filesQueue.sort((a, b) => a.path.localeCompare(b.path));
+
+                filesQueue.forEach((fileObj, index) => {
+                    totalSize += fileObj.file.size;
+                    
+                    const row = document.createElement('div');
+                    row.className = 'flex items-center justify-between p-3 border-b border-gray-700/50 hover:bg-white/5 transition-colors group';
+                    
+                    // Icon determination
+                    let iconClass = 'fa-file';
+                    if(fileObj.file.type.includes('image')) iconClass = 'fa-file-image';
+                    else if(fileObj.file.type.includes('pdf')) iconClass = 'fa-file-pdf';
+                    else if(fileObj.file.type.includes('video')) iconClass = 'fa-file-video';
+                    else if(fileObj.file.type.includes('code') || fileObj.name.endsWith('.js') || fileObj.name.endsWith('.html')) iconClass = 'fa-file-code';
+
+                    row.innerHTML = `
+                        <div class="flex items-center gap-3 overflow-hidden">
+                            <div class="w-8 h-8 rounded bg-gray-700 flex items-center justify-center text-gray-400">
+                                <i class="fa-solid ${iconClass}"></i>
+                            </div>
+                            <div class="flex flex-col overflow-hidden">
+                                <span class="text-sm font-medium text-gray-200 truncate" title="${fileObj.path}">${fileObj.path}</span>
+                                <span class="text-xs text-gray-500 font-mono">${formatBytes(fileObj.file.size)}</span>
+                            </div>
+                        </div>
+                        <button onclick="removeFile(${index})" class="text-gray-500 hover:text-red-400 p-2 transition-colors">
+                            <i class="fa-solid fa-trash"></i>
+                        </button>
+                    `;
+                    fileListEl.appendChild(row);
+                });
+            } else {
+                fileListContainer.classList.add('hidden');
+                generateBtn.disabled = true;
+                generateBtn.classList.remove('animate-pulse-fast');
+            }
+
+            totalSizeEl.innerText = formatBytes(totalSize);
+            fileCountEl.innerText = filesQueue.length;
+        }
+
+        window.removeFile = (index) => {
+            filesQueue.splice(index, 1);
+            updateUI();
+        };
+
+        clearAllBtn.addEventListener('click', () => {
+            filesQueue = [];
+            updateUI();
+        });
+
+        // --- File Handling ---
+        // Helper to handle standard files
+        function addFiles(fileList) {
+            for (let i = 0; i < fileList.length; i++) {
+                const f = fileList[i];
+                // Check if already exists
+                if(!filesQueue.some(x => x.path === f.name && x.file.size === f.size)) {
+                    filesQueue.push({
+                        file: f,
+                        name: f.name,
+                        path: f.name // Flat structure for simple input
+                    });
+                }
+            }
+            updateUI();
+        }
+
+        // Advanced Drag and Drop (handles folders via webkitGetAsEntry)
+        async function handleDroppedItems(items) {
+            const queue = [];
+            
+            async function traverse(entry, path = "") {
+                if (entry.isFile) {
+                    const file = await new Promise((resolve) => entry.file(resolve));
+                    queue.push({
+                        file: file,
+                        name: file.name,
+                        path: path + file.name
+                    });
+                } else if (entry.isDirectory) {
+                    const dirReader = entry.createReader();
+                    const entries = await new Promise((resolve) => {
+                        let allEntries = [];
+                        function read() {
+                            dirReader.readEntries((result) => {
+                                if (result.length === 0) resolve(allEntries);
+                                else {
+                                    allEntries = allEntries.concat(result);
+                                    read();
+                                }
+                            });
+                        }
+                        read();
+                    });
+                    
+                    for (const child of entries) {
+                        await traverse(child, path + entry.name + "/");
+                    }
+                }
+            }
+
+            for (let i = 0; i < items.length; i++) {
+                const item = items[i];
+                if (item.webkitGetAsEntry) {
+                    const entry = item.webkitGetAsEntry();
+                    if (entry) await traverse(entry);
+                } else if (item.kind === 'file') {
+                    const file = item.getAsFile();
+                    if(file) queue.push({ file: file, name: file.name, path: file.name });
+                }
+            }
+
+            // Deduplicate and push
+            queue.forEach(qItem => {
+                if(!filesQueue.some(x => x.path === qItem.path)) {
+                    filesQueue.push(qItem);
+                }
+            });
+            updateUI();
+        }
+
+        // --- Events ---
+        dropZone.addEventListener('click', () => fileInput.click());
+        
+        fileInput.addEventListener('change', (e) => {
+            addFiles(e.target.files);
+            fileInput.value = ''; // Reset
+        });
+
+        // Drag events
+        ['dragenter', 'dragover', 'dragleave', 'drop'].forEach(eventName => {
+            dropZone.addEventListener(eventName, preventDefaults, false);
+        });
+        function preventDefaults(e) {
+            e.preventDefault();
+            e.stopPropagation();
+        }
+
+        dropZone.addEventListener('dragenter', () => dropZone.classList.add('drop-zone-active'));
+        dropZone.addEventListener('dragover', () => dropZone.classList.add('drop-zone-active'));
+        dropZone.addEventListener('dragleave', () => dropZone.classList.remove('drop-zone-active'));
+        dropZone.addEventListener('drop', (e) => {
+            dropZone.classList.remove('drop-zone-active');
+            if (e.dataTransfer.items) {
+                handleDroppedItems(e.dataTransfer.items);
+            } else {
+                addFiles(e.dataTransfer.files);
+            }
+        });
+
+        // --- Generator Logic ---
+        generateBtn.addEventListener('click', () => {
+            if (filesQueue.length === 0) return;
+
+            const zip = new JSZip();
+            const compressType = compressionSelect.value;
+            const compressionOptions = compressType === 'DEFLATE' 
+                ? { compression: "DEFLATE", compressionOptions: { level: 6 } } 
+                : {}; // Store (No compression)
+
+            // Add files to zip
+            filesQueue.forEach(item => {
+                zip.file(item.path, item.file, compressionOptions);
+            });
+
+            // UI State change
+            generateBtn.disabled = true;
+            generateBtn.innerHTML = '<i class="fa-solid fa-spinner fa-spin"></i> Compressing...';
+            progressContainer.classList.remove('hidden');
+
+            // Generate
+            zip.generateAsync({ 
+                type: "blob", 
+                ...compressionOptions
+            }, (metadata) => {
+                // Progress callback
+                const percent = metadata.percent.toFixed(0);
+                progressBar.style.width = percent + "%";
+                progressPercent.innerText = percent + "%";
+                progressText.innerText = `Processing: ${metadata.currentFile || 'Finalizing...'}`;
+            }).then((content) => {
+                // Success
+                const name = filenameInput.value.trim() || 'archive';
+                saveAs(content, `${name}.zip`);
+                
+                showToast(`Successfully zipped ${filesQueue.length} files!`);
+                
+                // Reset UI
+                generateBtn.disabled = false;
+                generateBtn.innerHTML = '<i class="fa-solid fa-bolt"></i> Generate .ZIP';
+                progressContainer.classList.add('hidden');
+                progressBar.style.width = "0%";
+            }).catch((err) => {
+                console.error(err);
+                showToast("Error generating zip", "error");
+                generateBtn.disabled = false;
+                generateBtn.innerHTML = '<i class="fa-solid fa-bolt"></i> Generate .ZIP';
+            });
+        });
+
+    </script>
+</body>
+</html>
