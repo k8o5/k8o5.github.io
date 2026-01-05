@@ -984,7 +984,7 @@
                     <div style="font-size:11px;color:var(--gray);line-height:2;">
                         <div><span style="color:var(--white)">/</span> Focus search</div>
                         <div><span style="color:var(--white)">ESC</span> Go home</div>
-                        <div><span style="color:var(--white)">!HELP</span> Manual</div>
+                        <div><span style="color:var(--white)">$XXX</span> Stock ticker</div>
                         <div><span style="color:var(--white)">$SOL:CA</span> Chain lookup</div>
                     </div>
                 </div>
@@ -1413,7 +1413,7 @@
 
             const html = `
                 <div class="help-container">
-                    <div class="help-header-main">SYSTEM MANUAL</div>
+                    <div class="help-header-main">SYSTEM MANUAL // V1.0</div>
                     <div class="help-grid">
                         <div class="help-section">
                             <div class="help-section-title">CORE SEARCH</div>
@@ -1471,7 +1471,9 @@
         }
 
         async function search(query) {
-            // Remove the explicit close line
+            // REMOVED THE LINE THAT CLOSED THE AUTOCOMPLETE DROPDOWN HERE
+            // $('autocomplete-list').classList.remove('show'); 
+            
             if (!query.trim()) return fullReset();
 
             if (query === '!h' || query === '!help') {
@@ -1919,7 +1921,7 @@
                 }
 
                 list.innerHTML = titles.map((t, i) => `
-                    <div class="ac-item" onclick="searchFor('${esc(t)}'); document.getElementById('autocomplete-list').classList.remove('show');">
+                    <div class="ac-item" onclick="selectAutocomplete('${t.replace(/'/g, "\\'")}')">
                         <span>${esc(t)}</span>
                         ${descs[i] ? `<span class="ac-desc">${esc(descs[i]).substring(0, 30)}${descs[i].length>30?'...':''}</span>` : ''}
                     </div>
@@ -1929,6 +1931,12 @@
             } catch (err) {
                 list.classList.remove('show');
             }
+        }
+
+        function selectAutocomplete(val) {
+            searchInput.value = val;
+            $('autocomplete-list').classList.remove('show');
+            search(val);
         }
 
         function setupListeners() {
@@ -1945,25 +1953,26 @@
             });
 
             searchInput.addEventListener('keydown', e => { 
+                if (e.key === 'Tab') {
+                    const list = $('autocomplete-list');
+                    if (list.classList.contains('show')) {
+                        e.preventDefault(); // Stop focus change
+                        const first = list.querySelector('.ac-item span');
+                        if(first) {
+                            searchInput.value = first.innerText;
+                            // Set cursor to end of text
+                            // searchInput.setSelectionRange(searchInput.value.length, searchInput.value.length);
+                        }
+                    }
+                    return; // Stop other processing for Tab
+                }
+
                 if (e.key === 'Enter') { 
                     clearTimeout(debounce); 
                     $('autocomplete-list').classList.remove('show');
                     search(searchInput.value); 
                 } 
                 if (e.key === 'Escape') fullReset(); 
-                
-                if (e.key === 'Tab') {
-                    const list = $('autocomplete-list');
-                    if (list.classList.contains('show')) {
-                        e.preventDefault();
-                        const first = list.querySelector('.ac-item span');
-                        if(first) {
-                            searchInput.value = first.innerText;
-                            // Set cursor to end of text
-                            searchInput.setSelectionRange(searchInput.value.length, searchInput.value.length);
-                        }
-                    }
-                }
             });
 
             // Close autocomplete when clicking outside
@@ -1976,35 +1985,20 @@
             document.addEventListener('keydown', e => { if (e.key === '/' && document.activeElement !== searchInput && document.activeElement.tagName !== 'INPUT') { e.preventDefault(); searchInput.focus(); } if (e.key === 'Escape') fullReset(); });
             $('clear-btn').onclick = fullReset;
             $('voice-btn').onclick = voiceSearch;
+            
+            // LEFT ARROW SEARCH BUTTON FIX
             $('search-btn').onclick = () => {
                 $('autocomplete-list').classList.remove('show');
                 search(searchInput.value);
             };
+
             $('watchlist-input').addEventListener('keydown', e => { if (e.key === 'Enter') addToWatchlist(); });
-            
-            const menuBtn = $('menu-btn');
-            const appMenu = $('app-menu');
-            menuBtn.onclick = (e) => { e.stopPropagation(); appMenu.classList.toggle('show'); };
-            document.addEventListener('click', (e) => { if (!menuBtn.contains(e.target) && !appMenu.contains(e.target)) appMenu.classList.remove('show'); });
+            const menuBtn = $('menu-btn'); const appMenu = $('app-menu'); menuBtn.onclick = (e) => { e.stopPropagation(); appMenu.classList.toggle('show'); }; document.addEventListener('click', (e) => { if (!menuBtn.contains(e.target) && !appMenu.contains(e.target)) appMenu.classList.remove('show'); });
         }
 
-        function voiceSearch() {
-            if (!('webkitSpeechRecognition' in window || 'SpeechRecognition' in window)) { toast('VOICE NOT SUPPORTED'); return; }
-            const SR = window.SpeechRecognition || window.webkitSpeechRecognition;
-            const r = new SR(); r.lang = 'en-US';
-            const btn = $('voice-btn');
-            btn.style.color = '#ff0000';
-            
-            r.onresult = e => { 
-                searchInput.value = e.results[0][0].transcript; 
-                search(searchInput.value); 
-            };
-            r.onend = () => { btn.style.color = ''; };
-            r.start();
-        }
-
+        // ... (voiceSearch, insertBang, esc, decodeHTML, highlight, fmt, timeAgo, copy, toast, searchFor, init - Keep exact same) ...
+        function voiceSearch() { if (!('webkitSpeechRecognition' in window || 'SpeechRecognition' in window)) { toast('VOICE NOT SUPPORTED'); return; } const SR = window.SpeechRecognition || window.webkitSpeechRecognition; const r = new SR(); r.lang = 'en-US'; const btn = $('voice-btn'); btn.style.color = '#ff0000'; r.onresult = e => { searchInput.value = e.results[0][0].transcript; search(searchInput.value); }; r.onend = () => { btn.style.color = ''; }; r.start(); }
         function insertBang(bang) { searchInput.value = bang + ' '; searchInput.focus(); }
-
         function esc(s) { if (!s) return ''; return String(s).replace(/[&<>"']/g, m => ({'&':'&amp;','<':'&lt;','>':'&gt;','"':'&quot;',"'":'&#39;'})[m]); }
         function decodeHTML(s) { const t = document.createElement('textarea'); t.innerHTML = s; return t.value; }
         function highlight(text, query) { if (!query) return text; const words = query.split(/\s+/).filter(w => w.length > 2); let result = text; words.forEach(w => { result = result.replace(new RegExp(`(${w.replace(/[.*+?^${}()|[\]\\]/g, '\\$&')})`, 'gi'), '<mark>$1</mark>'); }); return result; }
