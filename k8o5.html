@@ -3,6 +3,7 @@
 <head>
     <meta charset="UTF-8">
     <meta name="viewport" content="width=1280">
+    <meta name="referrer" content="no-referrer">
     <title>k8o5</title>
     <link rel="icon" href="data:image/svg+xml,<svg xmlns=%22http://www.w3.org/2000/svg%22 viewBox=%220 0 100 100%22><rect width=%22100%22 height=%22100%22 fill=%22black%22/><text x=%2250%22 y=%2250%22 fill=%22white%22 font-family=%22monospace%22 font-size=%2280%22 text-anchor=%22middle%22 dy=%22.35em%22>%3E</text></svg>">
     <style>
@@ -312,24 +313,6 @@
             transition: all 0.1s;
         }
         .bang:hover { background: var(--white); color: var(--black); }
-
-        .calc-display { background: var(--dark); padding: 15px; margin-bottom: 15px; border: 1px solid var(--border-thin); }
-        .calc-expr { font-size: 12px; color: var(--gray); min-height: 16px; }
-        .calc-result { font-size: 28px; font-weight: 700; }
-        .calc-grid { display: grid; grid-template-columns: repeat(4, 1fr); gap: 4px; }
-        .calc-btn {
-            padding: 12px;
-            border: 1px solid var(--border-thin);
-            background: transparent;
-            color: var(--white);
-            font-family: inherit;
-            font-size: 14px;
-            font-weight: 600;
-            cursor: pointer;
-            transition: all 0.1s;
-        }
-        .calc-btn:hover { background: var(--white); color: var(--black); }
-        .calc-btn.op { background: var(--dark); }
 
         .clocks-grid { display: grid; grid-template-columns: repeat(2, 1fr); gap: 10px; }
         .clock { padding: 12px; border: 1px solid var(--border-thin); text-align: center; }
@@ -836,7 +819,6 @@
                     <div class="menu-dropdown" id="app-menu">
                         <div class="menu-item" onclick="openWidget('widget-sources')">SOURCES & BOOKS</div>
                         <div class="menu-item" onclick="openWidget('widget-history')">HISTORY</div>
-                        <div class="menu-item" onclick="openWidget('widget-calc')">CALCULATOR</div>
                         <div class="menu-item" onclick="openWidget('widget-clocks')">WORLD TIME</div>
                         <div class="menu-item" onclick="openWidget('widget-watchlist')">WATCHLIST</div>
                         <div class="menu-item" onclick="openWidget('widget-keyboard')">SHORTCUTS</div>
@@ -920,41 +902,6 @@
                 </div>
             </div>
 
-            <div class="widget" id="widget-calc">
-                <div class="widget-header" onclick="toggleWidget('widget-calc')">
-                    <span class="widget-title">CALCULATOR</span>
-                    <span class="widget-toggle">+</span>
-                </div>
-                <div class="widget-body">
-                    <div class="calc-display">
-                        <div class="calc-expr" id="calc-expr"></div>
-                        <div class="calc-result" id="calc-result">0</div>
-                    </div>
-                    <div class="calc-grid">
-                        <button class="calc-btn" data-v="C">C</button>
-                        <button class="calc-btn" data-v="(">(</button>
-                        <button class="calc-btn" data-v=")">)</button>
-                        <button class="calc-btn op" data-v="/">÷</button>
-                        <button class="calc-btn" data-v="7">7</button>
-                        <button class="calc-btn" data-v="8">8</button>
-                        <button class="calc-btn" data-v="9">9</button>
-                        <button class="calc-btn op" data-v="*">×</button>
-                        <button class="calc-btn" data-v="4">4</button>
-                        <button class="calc-btn" data-v="5">5</button>
-                        <button class="calc-btn" data-v="6">6</button>
-                        <button class="calc-btn op" data-v="-">−</button>
-                        <button class="calc-btn" data-v="1">1</button>
-                        <button class="calc-btn" data-v="2">2</button>
-                        <button class="calc-btn" data-v="3">3</button>
-                        <button class="calc-btn op" data-v="+">+</button>
-                        <button class="calc-btn" data-v="0">0</button>
-                        <button class="calc-btn" data-v=".">.</button>
-                        <button class="calc-btn" data-v="^">^</button>
-                        <button class="calc-btn op" data-v="=">=</button>
-                    </div>
-                </div>
-            </div>
-
             <div class="widget" id="widget-clocks">
                 <div class="widget-header" onclick="toggleWidget('widget-clocks')">
                     <span class="widget-title">WORLD TIME</span>
@@ -1005,7 +952,7 @@
 
     <div class="toast-container" id="toast-container"></div>
 
-    <script>
+    <script data-cfasync="false">
         const SOURCES = {
             news: { name: 'AGGREGATE NEWS', enabled: true, bang: '!n', count: 0,
                 fetch: async (q) => {
@@ -1237,8 +1184,6 @@
             bookResults: [],
             history: JSON.parse(localStorage.getItem('sh') || '[]'),
             watchlist: JSON.parse(localStorage.getItem('sw') || '["TSLA","AAPL","BTC","ETH","NVDA"]'),
-            calcExpr: '',
-            calcResult: '0',
             hasSearched: false
         };
 
@@ -1256,7 +1201,6 @@
             renderHistory();
             updateClocks();
             setInterval(updateClocks, 1000);
-            setupCalc();
             setupListeners();
 
             const path = window.location.pathname.substring(1); 
@@ -1386,8 +1330,6 @@
             state.results = [];
             state.bookResults = [];
             state.hasSearched = false;
-            state.calcExpr = '';
-            state.calcResult = '0';
             searchInput.value = '';
             heroEl.classList.remove('compact');
             mainEl.style.display = 'none';
@@ -1489,6 +1431,20 @@
                 statsBar.classList.add('visible');
             }
 
+            if (query.startsWith('=')) {
+                // Clear any previous results
+                state.results = [];
+                state.bookResults = [];
+                $('slot-dict').innerHTML = '';
+                $('slot-wiki').innerHTML = '';
+                $('slot-main').innerHTML = '';
+                $('results-label').textContent = 'CALCULATOR';
+                $('results-info').textContent = 'LOCAL';
+                
+                showCalcResult(query.slice(1));
+                return;
+            }
+
             if (query.toLowerCase() === '$k8o5') {
                 showDexWidget('sol', '3FkfFXtMDVkKJ6SAouMSK4qYFmErYxSnAUx6vP52pump', '$k8o5');
                 addHistory(query);
@@ -1508,11 +1464,6 @@
             if (stockMatch) {
                 showStockWidget(stockMatch[1].toUpperCase());
                 addHistory(query);
-                return;
-            }
-
-            if (query.startsWith('=')) {
-                showCalcResult(query.slice(1));
                 return;
             }
 
@@ -1860,21 +1811,6 @@
                 const result = Function('"use strict";return (' + expr.replace(/\^/g, '**') + ')')();
                 $('slot-main').innerHTML = `<div class="instant-box"><div class="instant-label">CALCULATOR</div><div class="instant-title" style="font-variant-numeric:tabular-nums">${esc(expr)} = ${result}</div></div>`;
             } catch { toast('INVALID EXPRESSION'); }
-        }
-
-        function setupCalc() {
-            document.querySelectorAll('.calc-btn').forEach(btn => {
-                btn.onclick = () => {
-                    const v = btn.dataset.v;
-                    if (v === 'C') { state.calcExpr = ''; state.calcResult = '0'; }
-                    else if (v === '=') {
-                        try { state.calcResult = Function('"use strict";return (' + state.calcExpr.replace(/\^/g, '**') + ')')(); }
-                        catch { state.calcResult = 'ERR'; }
-                    } else { state.calcExpr += v; }
-                    $('calc-expr').textContent = state.calcExpr;
-                    $('calc-result').textContent = state.calcResult;
-                };
-            });
         }
 
         function addHistory(q) {
