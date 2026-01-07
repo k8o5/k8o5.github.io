@@ -428,6 +428,60 @@
             cursor: pointer;
         }
 
+        /* --- TABS SYSTEM STYLES --- */
+        .tabs-container {
+            display: flex;
+            border-bottom: var(--border-thin);
+            background: var(--black);
+            overflow-x: auto;
+        }
+        .tab-item {
+            display: flex;
+            align-items: center;
+            padding: 15px 20px;
+            border-right: 1px solid var(--border-thin);
+            cursor: pointer;
+            font-size: 10px;
+            text-transform: uppercase;
+            letter-spacing: 2px;
+            color: var(--gray);
+            transition: all 0.1s;
+            user-select: none;
+            min-width: 120px;
+            justify-content: space-between;
+            gap: 10px;
+        }
+        .tab-item:hover { background: var(--dark); }
+        .tab-item.active { background: var(--white); color: var(--black); }
+        .tab-title { white-space: nowrap; overflow: hidden; text-overflow: ellipsis; max-width: 100px; }
+        .tab-close { font-size: 14px; cursor: pointer; opacity: 0.5; }
+        .tab-close:hover { opacity: 1; color: var(--red); }
+        .new-tab-btn {
+            padding: 15px;
+            cursor: pointer;
+            color: var(--gray);
+            border-right: 1px solid var(--border-thin);
+            display: flex; align-items: center; justify-content: center;
+        }
+        .new-tab-btn:hover { background: var(--white); color: var(--black); }
+
+        /* --- BOOKMARKS STYLES --- */
+        .bookmark-item {
+            padding: 10px 12px;
+            border: 1px solid var(--border-thin);
+            display: flex;
+            justify-content: space-between;
+            align-items: center;
+            font-size: 11px;
+            cursor: pointer;
+            transition: all 0.1s;
+            margin-bottom: 4px;
+        }
+        .bookmark-item:hover { border-color: var(--white); }
+        .bookmark-item .remove-btn { opacity: 0; background: none; border: none; color: #666; cursor: pointer; font-size: 14px; padding: 0 5px; }
+        .bookmark-item:hover .remove-btn { opacity: 1; }
+        .bookmark-item .remove-btn:hover { color: #ff4444; }
+
         .results-section { min-height: 400px; }
         .results-header {
             display: flex;
@@ -974,6 +1028,7 @@
                         <div class="menu-item" onclick="openWidget('widget-history')">HISTORY</div>
                         <div class="menu-item" onclick="openWidget('widget-clocks')">WORLD TIME</div>
                         <div class="menu-item" onclick="openWidget('widget-watchlist')">WATCHLIST</div>
+                        <div class="menu-item" onclick="openWidget('widget-bookmarks')">BOOKMARKS</div>
                         <div class="menu-item" onclick="openWidget('widget-keyboard')">SHORTCUTS</div>
                         <div class="menu-item" onclick="openWidget('widget-settings')">SETTINGS</div>
                     </div>
@@ -1020,6 +1075,21 @@
                 </div>
             </div>
 
+            <!-- NEW BOOKMARKS WIDGET -->
+            <div class="widget" id="widget-bookmarks">
+                <div class="widget-header" onclick="toggleWidget('widget-bookmarks')">
+                    <span class="widget-title">BOOKMARKS</span>
+                    <span class="widget-toggle">+</span>
+                </div>
+                <div class="widget-body">
+                    <div id="bookmark-items"></div>
+                    <div class="watchlist-add">
+                        <input type="text" id="bookmark-input" placeholder="ADD URL..." onkeydown="if(event.key==='Enter')addBookmark()">
+                        <button onclick="addBookmark()">+</button>
+                    </div>
+                </div>
+            </div>
+
             <div class="widget" id="widget-clocks">
                 <div class="widget-header" onclick="toggleWidget('widget-clocks')">
                     <span class="widget-title" id="txt-world-time">WORLD TIME</span>
@@ -1057,6 +1127,9 @@
         </aside>
 
         <section class="results-section">
+            <!-- NEW TABS BAR -->
+            <div class="tabs-container" id="tabs-bar"></div>
+
             <div class="results-header">
                 <span id="results-label">READY</span>
                 <span id="results-info"></span>
@@ -1494,10 +1567,14 @@
             bookResults: [],
             history: JSON.parse(localStorage.getItem('sh') || '[]'),
             watchlist: JSON.parse(localStorage.getItem('sw') || '["TSLA","AAPL","BTC","ETH","NVDA"]'),
+            bookmarks: JSON.parse(localStorage.getItem('bk') || '[]'),
             autoTranslate: localStorage.getItem('autoTranslate') !== 'false',
             nsfw: localStorage.getItem('nsfw') === 'true', // Default to False
             uiLang: localStorage.getItem('uiLang') || 'en', 
-            hasSearched: false
+            hasSearched: false,
+            // MULTI-TABS STATE
+            tabs: [{ id: 0, query: '', label: 'NEW TAB', results: [], bookResults: [], hasSearched: false }],
+            activeTabId: 0
         };
 
         const $ = id => document.getElementById(id);
@@ -1506,10 +1583,6 @@
         const heroEl = $('hero');
         const mainEl = $('main-content');
         const statsBar = $('stats-bar');
-
-        function toggleLangMenu() {
-            // Deprecated with new select menu
-        }
 
         function setUILanguage(code) {
             if (!UI_STRINGS[code]) return;
@@ -1572,6 +1645,112 @@
             for (const k in SOURCES) settings.sources[k] = SOURCES[k].enabled;
             for (const k in BOOK_SOURCES) settings.books[k] = BOOK_SOURCES[k].enabled;
             localStorage.setItem('k8o5_sources', JSON.stringify(settings));
+        }
+
+        /* --- BOOKMARKS LOGIC --- */
+        function renderBookmarks() {
+            $('bookmark-items').innerHTML = state.bookmarks.map(b => `
+                <div class="bookmark-item" onclick="window.open('${esc(b.url)}', '_blank')">
+                    <span>${esc(b.title)}</span>
+                    <button class="remove-btn" onclick="event.stopPropagation();removeBookmark('${esc(b.url)}')">
+                        <svg viewBox="0 0 24 24" class="icon-sm" fill="none" stroke="currentColor" stroke-width="2"><path d="M19 6.41L17.59 5 12 10.59 6.41 5 5 6.41 10.59 12 5 17.59 6.41 19 12 13.41 17.59 19 19 17.59 13.41 12z"/></svg>
+                    </button>
+                </div>
+            `).join('');
+        }
+
+        function addBookmark() {
+            const input = $('bookmark-input');
+            const url = input.value.trim();
+            if (!url) return;
+            
+            // Simple title extraction
+            let title = url.replace(/^(?:https?:\/\/)?(?:www\.)?/i, "").split('/')[0];
+            if(title.length > 20) title = title.substring(0, 20) + '...';
+            
+            let finalUrl = url;
+            if(!finalUrl.startsWith('http')) finalUrl = 'https://' + finalUrl;
+
+            state.bookmarks.push({ title: title.toUpperCase(), url: finalUrl });
+            localStorage.setItem('bk', JSON.stringify(state.bookmarks));
+            renderBookmarks();
+            input.value = '';
+            toast('BOOKMARK ADDED');
+        }
+
+        function removeBookmark(url) {
+            state.bookmarks = state.bookmarks.filter(b => b.url !== url);
+            localStorage.setItem('bk', JSON.stringify(state.bookmarks));
+            renderBookmarks();
+            toast('BOOKMARK REMOVED');
+        }
+
+        /* --- TABS LOGIC --- */
+        function renderTabs() {
+            const container = $('tabs-bar');
+            let html = state.tabs.map((t, idx) => `
+                <div class="tab-item ${state.activeTabId === idx ? 'active' : ''}" onclick="switchTab(${idx})">
+                    <span class="tab-title">${t.query || 'NEW TAB'}</span>
+                    ${state.tabs.length > 1 ? `<span class="tab-close" onclick="event.stopPropagation();closeTab(${idx})">×</span>` : ''}
+                </div>
+            `).join('');
+            html += `<div class="new-tab-btn" onclick="addNewTab()">+</div>`;
+            container.innerHTML = html;
+        }
+
+        function addNewTab() {
+            const newId = state.tabs.length;
+            state.tabs.push({ id: newId, query: '', label: 'NEW TAB', results: [], bookResults: [], hasSearched: false });
+            switchTab(newId);
+        }
+
+        function closeTab(idx) {
+            if (state.tabs.length <= 1) return; // Don't close last tab
+            state.tabs.splice(idx, 1);
+            // Re-index
+            state.tabs.forEach((t, i) => t.id = i);
+            
+            if (state.activeTabId >= state.tabs.length) {
+                state.activeTabId = state.tabs.length - 1;
+            }
+            switchTab(state.activeTabId);
+        }
+
+        function switchTab(idx) {
+            state.activeTabId = idx;
+            const current = state.tabs[idx];
+            
+            // Restore state
+            state.query = current.query;
+            state.results = current.results || [];
+            state.bookResults = current.bookResults || [];
+            state.hasSearched = current.hasSearched;
+            
+            searchInput.value = current.query;
+            
+            renderTabs();
+            
+            if (!current.hasSearched) {
+                heroEl.classList.remove('compact');
+                mainEl.style.display = 'none';
+                statsBar.classList.remove('visible');
+                $('slot-dict').innerHTML = '';
+                $('slot-wiki').innerHTML = '';
+                $('slot-main').innerHTML = '';
+            } else {
+                heroEl.classList.add('compact');
+                mainEl.style.display = 'grid';
+                statsBar.classList.add('visible');
+                // Re-render results for this tab
+                if (current.results.length > 0 || current.bookResults.length > 0) {
+                    renderResults();
+                } else {
+                    // Check if it was a widget state (like stock or help), if so we'd need to re-trigger it. 
+                    // For simplicity in this implementation, if no results list, we search again or show empty.
+                    if(state.query) search(state.query);
+                    else renderResults();
+                }
+            }
         }
 
         /* --- AAA TRANSLATION LOGIC --- */
@@ -1681,8 +1860,10 @@
             buildLangMenu();
             setUILanguage(state.uiLang);
             renderSources();
+            renderBookmarks();
             renderWatchlist();
             renderHistory();
+            renderTabs();
             updateClocks();
             setInterval(updateClocks, 1000);
             setupListeners();
@@ -1846,11 +2027,22 @@
         }
 
         function fullReset() {
+            // ONLY RESET CURRENT TAB
+            const currentTab = state.tabs[state.activeTabId];
+            currentTab.query = '';
+            currentTab.results = [];
+            currentTab.bookResults = [];
+            currentTab.hasSearched = false;
+            
             state.query = '';
             state.results = [];
             state.bookResults = [];
             state.hasSearched = false;
+            
             searchInput.value = '';
+            
+            renderTabs();
+            
             heroEl.classList.remove('compact');
             mainEl.style.display = 'none';
             statsBar.classList.remove('visible');
@@ -1889,6 +2081,7 @@
                                 <div class="help-row"><span class="help-cmd">!r query</span><span class="help-desc">Reddit Threads</span></div>
                                 <div class="help-row"><span class="help-cmd">!pg query</span><span class="help-desc">Gutenberg Books</span></div>
                                 <div class="help-row"><span class="help-cmd">!t text</span><span class="help-desc">Translate Text</span></div>
+                                <div class="help-row"><span class="help-cmd">!b query</span><span class="help-desc">Book Sources</span></div>
                             </div>
                         </div>
 
@@ -2098,6 +2291,11 @@
                 }
             }
 
+            // UPDATE CURRENT TAB STATE
+            state.tabs[state.activeTabId].query = query;
+            state.tabs[state.activeTabId].hasSearched = true;
+            renderTabs();
+
             state.query = searchQuery;
             if(query.trim()) addHistory(query);
 
@@ -2155,6 +2353,10 @@
             state.results = sourceResults.flat();
             state.bookResults = bookResults.flat();
             
+            // SAVE RESULTS TO TAB
+            state.tabs[state.activeTabId].results = state.results;
+            state.tabs[state.activeTabId].bookResults = state.bookResults;
+
             const elapsed = Math.round(performance.now() - start);
             const totalResults = state.results.length + state.bookResults.length;
             const totalSources = enabledSources.length + enabledBooks.length;
@@ -2554,7 +2756,10 @@
                 if (!searchInput.contains(e.target) && !$('autocomplete-list').contains(e.target)) {
                     $('autocomplete-list').classList.remove('show');
                 }
-                // Removed lang-menu click handler as it is replaced by native select
+                const langMenu = $('lang-menu');
+                if (langMenu && !langMenu.contains(e.target)) {
+                    langMenu.classList.remove('open');
+                }
             });
 
             document.addEventListener('keydown', e => { if (e.key === '/' && document.activeElement !== searchInput && document.activeElement.tagName !== 'INPUT') { e.preventDefault(); searchInput.focus(); } if (e.key === 'Escape') fullReset(); });
