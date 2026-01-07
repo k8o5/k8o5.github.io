@@ -434,11 +434,11 @@
             border-bottom: var(--border-thin);
             background: var(--black);
             overflow-x: auto;
+            align-items: stretch;
         }
         .tab-item {
             display: flex;
             align-items: center;
-            padding: 15px 20px;
             border-right: 1px solid var(--border-thin);
             cursor: pointer;
             font-size: 10px;
@@ -448,22 +448,56 @@
             transition: all 0.1s;
             user-select: none;
             min-width: 120px;
-            justify-content: space-between;
-            gap: 10px;
+            flex: 1;
+            max-width: 250px;
+            position: relative;
+            background: var(--black);
         }
         .tab-item:hover { background: var(--dark); }
         .tab-item.active { background: var(--white); color: var(--black); }
-        .tab-title { white-space: nowrap; overflow: hidden; text-overflow: ellipsis; max-width: 100px; }
-        .tab-close { font-size: 14px; cursor: pointer; opacity: 0.5; }
+        .tab-item.active .tab-input { color: var(--black); }
+        
+        .tab-input {
+            background: transparent;
+            border: none;
+            color: inherit;
+            font-family: inherit;
+            font-size: 10px;
+            text-transform: uppercase;
+            letter-spacing: 2px;
+            width: 100%;
+            padding: 15px 30px 15px 15px;
+            outline: none;
+            cursor: pointer;
+            font-weight: 700;
+        }
+        .tab-input:focus { cursor: text; }
+
+        .tab-close { 
+            position: absolute;
+            right: 8px;
+            top: 50%;
+            transform: translateY(-50%);
+            font-size: 14px; 
+            cursor: pointer; 
+            opacity: 0.5; 
+            padding: 5px;
+        }
         .tab-close:hover { opacity: 1; color: var(--red); }
+        
         .new-tab-btn {
-            padding: 15px;
+            padding: 0 20px;
             cursor: pointer;
             color: var(--gray);
             border-right: 1px solid var(--border-thin);
             display: flex; align-items: center; justify-content: center;
+            font-size: 18px;
+            min-width: 50px;
         }
         .new-tab-btn:hover { background: var(--white); color: var(--black); }
+        
+        /* Dragging Styles */
+        .tab-item.dragging { opacity: 0.5; background: var(--dark); }
 
         /* --- BOOKMARKS STYLES --- */
         .bookmark-item {
@@ -954,8 +988,10 @@
         .v-switch::after {
             content: '';
             position: absolute;
-            top: 2px; left: 2px;
-            width: 16px; height: 16px;
+            top: 2px;
+            left: 2px;
+            width: 16px;
+            height: 16px;
             background: var(--white);
             transition: transform 0.2s cubic-bezier(0.68, -0.55, 0.27, 1.55);
         }
@@ -1573,7 +1609,7 @@
             uiLang: localStorage.getItem('uiLang') || 'en', 
             hasSearched: false,
             // MULTI-TABS STATE
-            tabs: [{ id: 0, query: '', label: 'NEW TAB', results: [], bookResults: [], hasSearched: false }],
+            tabs: JSON.parse(localStorage.getItem('tabs') || '[{"id":0,"query":"","label":"NEW TAB","results":[],"bookResults":[],"hasSearched":false}]'),
             activeTabId: 0
         };
 
@@ -1686,11 +1722,23 @@
         }
 
         /* --- TABS LOGIC --- */
+        function saveTabs() {
+            localStorage.setItem('tabs', JSON.stringify(state.tabs));
+        }
+
         function renderTabs() {
             const container = $('tabs-bar');
             let html = state.tabs.map((t, idx) => `
-                <div class="tab-item ${state.activeTabId === idx ? 'active' : ''}" onclick="switchTab(${idx})">
-                    <span class="tab-title">${t.query || 'NEW TAB'}</span>
+                <div class="tab-item ${state.activeTabId === idx ? 'active' : ''}" 
+                     draggable="true" 
+                     onclick="switchTab(${idx})"
+                     ondragstart="handleDragStart(event, ${idx})"
+                     ondragover="handleDragOver(event)"
+                     ondrop="handleDrop(event, ${idx})">
+                    <input type="text" class="tab-input" value="${esc(t.query || 'NEW TAB')}" 
+                           onkeydown="if(event.key==='Enter') { search(this.value); this.blur(); }"
+                           oninput="updateTabQuery(${idx}, this.value)"
+                           onclick="event.stopPropagation(); this.focus();">
                     ${state.tabs.length > 1 ? `<span class="tab-close" onclick="event.stopPropagation();closeTab(${idx})">×</span>` : ''}
                 </div>
             `).join('');
@@ -1698,9 +1746,61 @@
             container.innerHTML = html;
         }
 
+        function updateTabQuery(idx, val) {
+            state.tabs[idx].query = val;
+            if(idx === state.activeTabId) {
+                searchInput.value = val;
+            }
+            saveTabs();
+        }
+
+        // Drag and Drop Handlers
+        let draggedTabIdx = null;
+
+        function handleDragStart(e, idx) {
+            draggedTabIdx = idx;
+            e.target.classList.add('dragging');
+            e.dataTransfer.effectAllowed = 'move';
+        }
+
+        function handleDragOver(e) {
+            e.preventDefault();
+            e.dataTransfer.dropEffect = 'move';
+        }
+
+        function handleDrop(e, targetIdx) {
+            e.preventDefault();
+            if (draggedTabIdx === null || draggedTabIdx === targetIdx) return;
+
+            // Reorder array
+            const item = state.tabs.splice(draggedTabIdx, 1)[0];
+            state.tabs.splice(targetIdx, 0, item);
+            
+            // Update IDs
+            state.tabs.forEach((t, i) => t.id = i);
+            
+            // Update active tab ID if needed
+            if (state.activeTabId === draggedTabIdx) {
+                state.activeTabId = targetIdx;
+            } else if (state.activeTabId === targetIdx) {
+                // If we dropped onto the active tab, active tab shifts
+                state.activeTabId = draggedTabIdx; 
+            } else {
+                // Complex shift logic, simpler to just find the active tab by object ref if we had IDs, 
+                // but here we just reset to target for simplicity or keep index if outside range
+                // Let's just switch to the dropped tab to be safe and intuitive
+                state.activeTabId = targetIdx;
+            }
+
+            saveTabs();
+            renderTabs();
+            switchTab(state.activeTabId); // Refresh view
+        }
+
         function addNewTab() {
             const newId = state.tabs.length;
             state.tabs.push({ id: newId, query: '', label: 'NEW TAB', results: [], bookResults: [], hasSearched: false });
+            saveTabs();
             switchTab(newId);
         }
 
@@ -1713,6 +1813,7 @@
             if (state.activeTabId >= state.tabs.length) {
                 state.activeTabId = state.tabs.length - 1;
             }
+            saveTabs();
             switchTab(state.activeTabId);
         }
 
@@ -1864,6 +1965,12 @@
             renderWatchlist();
             renderHistory();
             renderTabs();
+            
+            // Restore active tab if it has content
+            if(state.tabs[state.activeTabId].hasSearched) {
+                switchTab(state.activeTabId);
+            }
+
             updateClocks();
             setInterval(updateClocks, 1000);
             setupListeners();
@@ -2033,6 +2140,7 @@
             currentTab.results = [];
             currentTab.bookResults = [];
             currentTab.hasSearched = false;
+            saveTabs();
             
             state.query = '';
             state.results = [];
@@ -2294,6 +2402,7 @@
             // UPDATE CURRENT TAB STATE
             state.tabs[state.activeTabId].query = query;
             state.tabs[state.activeTabId].hasSearched = true;
+            saveTabs();
             renderTabs();
 
             state.query = searchQuery;
@@ -2356,6 +2465,7 @@
             // SAVE RESULTS TO TAB
             state.tabs[state.activeTabId].results = state.results;
             state.tabs[state.activeTabId].bookResults = state.bookResults;
+            saveTabs();
 
             const elapsed = Math.round(performance.now() - start);
             const totalResults = state.results.length + state.bookResults.length;
