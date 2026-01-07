@@ -448,6 +448,7 @@
         .results-header {
             display: flex;
             justify-content: space-between;
+            align-items: center;
             padding: 15px 25px;
             border-bottom: var(--border-thin);
             font-size: 10px;
@@ -456,6 +457,19 @@
             color: var(--gray);
         }
         .results-container { display: flex; flex-direction: column; }
+        
+        .header-btn {
+            background: transparent;
+            border: 1px solid var(--border-thin);
+            color: var(--gray);
+            padding: 5px 10px;
+            font-family: inherit;
+            font-size: 9px;
+            letter-spacing: 1px;
+            cursor: pointer;
+            transition: all 0.1s;
+        }
+        .header-btn:hover { background: var(--white); color: var(--black); border-color: var(--white); }
 
         .image-grid {
             display: grid;
@@ -1092,8 +1106,11 @@
 
         <section class="results-section">
             <div class="results-header">
-                <span id="results-label">READY</span>
-                <span id="results-info"></span>
+                <div>
+                    <span id="results-label">READY</span>
+                    <span id="results-info"></span>
+                </div>
+                <button class="header-btn" onclick="bookmarkCurrentQuery()">+ BOOKMARK SEARCH</button>
             </div>
             <div class="results-container" id="results">
                 <div id="slot-dict"></div>
@@ -1617,23 +1634,41 @@
             `).join('');
         }
 
-        function addBookmark() {
-            const input = $('bookmark-input');
-            const url = input.value.trim();
-            if (!url) return;
-            
-            // Simple title extraction
-            let title = url.replace(/^(?:https?:\/\/)?(?:www\.)?/i, "").split('/')[0];
-            if(title.length > 20) title = title.substring(0, 20) + '...';
-            
-            let finalUrl = url;
-            if(!finalUrl.startsWith('http')) finalUrl = 'https://' + finalUrl;
+        function addBookmark(titleArg, urlArg) {
+            let title, url;
 
-            state.bookmarks.push({ title: title.toUpperCase(), url: finalUrl });
+            if (titleArg && urlArg) {
+                title = titleArg;
+                url = urlArg;
+            } else {
+                const input = $('bookmark-input');
+                url = input.value.trim();
+                if (!url) return;
+                
+                // Simple title extraction
+                title = url.replace(/^(?:https?:\/\/)?(?:www\.)?/i, "").split('/')[0];
+                if(title.length > 20) title = title.substring(0, 20) + '...';
+                
+                if(!url.startsWith('http')) url = 'https://' + url;
+                input.value = '';
+            }
+
+            // Check duplicates
+            if(state.bookmarks.some(b => b.url === url)) {
+                toast('ALREADY BOOKMARKED');
+                return;
+            }
+
+            state.bookmarks.push({ title: title.toUpperCase(), url: url });
             localStorage.setItem('bk', JSON.stringify(state.bookmarks));
             renderBookmarks();
-            input.value = '';
             toast('BOOKMARK ADDED');
+        }
+
+        function bookmarkCurrentQuery() {
+            if(!state.query) return;
+            const url = `?q=${encodeURIComponent(state.query)}`;
+            addBookmark(state.query.toUpperCase(), url);
         }
 
         function removeBookmark(url) {
@@ -2393,6 +2428,9 @@
                         <button class="btn-action" style="background:none;border:none;color:inherit;cursor:pointer;display:flex;gap:5px;align-items:center;" onclick="readText('${esc(data.content.replace(/'/g, "\\'").replace(/\n/g, " "))}')">
                             <svg viewBox="0 0 24 24" class="icon-sm" fill="none" stroke="currentColor" stroke-width="2"><path d="M3 9v6h4l5 5V4L7 9H3zm13.5 3c0-1.77-1.02-3.29-2.5-4.03v8.05c1.48-.73 2.5-2.25 2.5-4.02zM14 3.23v2.06c2.89.86 5 3.54 5 6.71s-2.11 5.85-5 6.71v2.06c4.01-.91 7-4.49 7-8.77s-2.99-7.86-7-8.77z"/></svg> LISTEN
                         </button>
+                        <button class="btn-action" style="background:none;border:none;color:inherit;cursor:pointer;display:flex;gap:5px;align-items:center;" onclick="addBookmark('${esc(data.title)}', '${esc(data.url || window.location.href)}')">
+                            <svg viewBox="0 0 24 24" class="icon-sm" fill="none" stroke="currentColor" stroke-width="2"><path d="M19 21l-7-5-7 5V5a2 2 0 0 1 2-2h10a2 2 0 0 1 2 2z"/></svg> SAVE
+                        </button>
                         ${data.url ? `<a href="${data.url}" target="_blank">WIKI <svg viewBox="0 0 24 24" class="icon-sm" style="display:inline-block;vertical-align:text-top" fill="none" stroke="currentColor" stroke-width="2"><path d="M19 19H5V5h7V3H5c-1.11 0-2 .9-2 2v14c0 1.1.89 2 2 2h14c1.1 0 2-.9 2-2v-7h-2v7zM14 3v2h3.59l-9.83 9.83 1.41 1.41L19 6.41V10h2V3h-7z"/></svg></a>` : ''}
                     </div>
                 </div>
@@ -2456,6 +2494,9 @@
                                 <button class="book-action" onclick="window.open('${esc(book.url)}','_blank')">DETAILS</button>
                                 <button class="book-action" onclick="copy('${esc(book.url)}')">
                                     <svg viewBox="0 0 24 24" class="icon-sm" fill="none" stroke="currentColor" stroke-width="2"><path d="M16 1H4c-1.1 0-2 .9-2 2v14h2V3h12V1zm3 4H8c-1.1 0-2 .9-2 2v14c0 1.1.9 2 2 2h11c1.1 0 2-.9 2-2V7c0-1.1-.9-2-2-2zm0 16H8V7h11v14z"/></svg> COPY
+                                </button>
+                                <button class="book-action" onclick="addBookmark('${esc(book.title)}', '${esc(book.url)}')">
+                                    <svg viewBox="0 0 24 24" class="icon-sm" fill="none" stroke="currentColor" stroke-width="2"><path d="M19 21l-7-5-7 5V5a2 2 0 0 1 2-2h10a2 2 0 0 1 2 2z"/></svg> SAVE
                                 </button>
                             </div>
                         </div>
