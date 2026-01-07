@@ -1,3 +1,13 @@
+Here is the full, uncommented code. I have integrated the **WebLLM** library using dynamic imports.
+
+**Changes made:**
+1.  **Dynamic Model Loading:** The dropdown menu in the results header now automatically pulls the complete list of available models (Llama 3, Phi 3, Gemma, Mistral, Qwen, etc.) from the `web-llm` configuration.
+2.  **GPU Check:** Added a check for WebGPU support to handle the error shown in your screenshot gracefully within the UI.
+3.  **Streaming UI:** Added a dedicated brutalist-style interface for the AI response, including a download progress bar for the model weights.
+
+**Note:** This requires a browser with WebGPU enabled (Chrome 113+, Edge, or others with specific flags). If your hardware does not support WebGPU (as suggested by your screenshot), the AI widget will display a specific error message when you try to use it.
+
+```html
 <!DOCTYPE html>
 <html lang="en">
 <head>
@@ -427,7 +437,6 @@
             cursor: pointer;
         }
 
-        /* --- BOOKMARKS STYLES --- */
         .bookmark-item {
             padding: 10px 12px;
             border: 1px solid var(--border-thin);
@@ -455,6 +464,8 @@
             text-transform: uppercase;
             letter-spacing: 2px;
             color: var(--gray);
+            flex-wrap: wrap;
+            gap: 10px;
         }
         .results-container { display: flex; flex-direction: column; }
         
@@ -468,6 +479,9 @@
             letter-spacing: 1px;
             cursor: pointer;
             transition: all 0.1s;
+            display: flex;
+            align-items: center;
+            gap: 5px;
         }
         .header-btn:hover { background: var(--white); color: var(--black); border-color: var(--white); }
 
@@ -643,7 +657,6 @@
         .stock-btn:hover { background: var(--white); color: var(--black); border-color: var(--white); }
         .tradingview-widget-container { height: 600px; width: 100%; border-bottom: var(--border-thin); }
 
-        /* AAA TRANSLATION WIDGET STYLES */
         .trans-widget { background: var(--dark); border-bottom: var(--border); }
         .trans-header { display: flex; align-items: center; justify-content: space-between; border-bottom: var(--border-thin); padding: 15px 25px; background: var(--black); }
         .trans-controls { display: flex; align-items: center; gap: 15px; flex: 1; }
@@ -898,7 +911,6 @@
         }
         .theme-btn:hover { border-color: var(--white); color: var(--white); }
 
-        /* --- RESTORED TOGGLE STYLES --- */
         .v-toggle-container {
             padding: 20px 25px;
             border-bottom: var(--border-thin);
@@ -945,7 +957,6 @@
             background: var(--black);
         }
 
-        /* NEW SETTINGS WIDGET SELECT STYLE */
         .settings-select {
             width: 100%;
             appearance: none; 
@@ -969,7 +980,6 @@
         ::-webkit-scrollbar-thumb { background: #222; }
         ::-webkit-scrollbar-thumb:hover { background: #444; }
 
-        /* --- LIGHTBOX STYLES --- */
         .lightbox {
             display: none;
             position: fixed;
@@ -1009,6 +1019,65 @@
             line-height: 1;
         }
         .lightbox-close:hover { color: var(--red); }
+
+        .ai-box {
+            border-bottom: var(--border);
+            padding: 40px;
+            background: var(--dark);
+            border-top: var(--border-thin);
+        }
+        .ai-label {
+            font-size: 9px;
+            text-transform: uppercase;
+            letter-spacing: 3px;
+            color: var(--highlight);
+            margin-bottom: 20px;
+            display: flex;
+            align-items: center;
+            gap: 10px;
+        }
+        .ai-content {
+            font-size: 14px;
+            line-height: 1.8;
+            color: var(--white);
+            max-width: 750px;
+            white-space: pre-wrap;
+        }
+        .ai-loading-bar {
+            height: 4px;
+            background: var(--border-thin);
+            margin: 20px 0;
+            width: 100%;
+            position: relative;
+        }
+        .ai-loading-progress {
+            height: 100%;
+            background: var(--highlight);
+            width: 0%;
+            transition: width 0.2s;
+        }
+        .ai-controls {
+            display: flex;
+            align-items: center;
+            gap: 10px;
+            flex-wrap: wrap;
+        }
+        .ai-select {
+            appearance: none; 
+            background: transparent;
+            color: var(--gray);
+            border: 1px solid var(--border-thin);
+            padding: 5px 10px;
+            font-family: inherit;
+            font-size: 9px;
+            text-transform: uppercase;
+            letter-spacing: 1px;
+            cursor: pointer;
+            outline: none;
+            max-width: 200px;
+        }
+        .ai-select:hover { border-color: var(--white); color: var(--white); }
+        .ai-select option { background: var(--black); color: var(--white); }
 
     </style>
 </head>
@@ -1150,9 +1219,16 @@
                     <span id="results-label">READY</span>
                     <span id="results-info"></span>
                 </div>
-                <button class="header-btn" onclick="bookmarkCurrentQuery()">+ BOOKMARK SEARCH</button>
+                <div class="ai-controls">
+                    <select id="ai-model-select" class="ai-select">
+                        <option value="">LOADING MODELS...</option>
+                    </select>
+                    <button class="header-btn" onclick="askAI()">+ ASK AI</button>
+                    <button class="header-btn" onclick="bookmarkCurrentQuery()">+ BOOKMARK</button>
+                </div>
             </div>
             <div class="results-container" id="results">
+                <div id="slot-ai"></div>
                 <div id="slot-dict"></div>
                 <div id="slot-wiki"></div>
                 <div id="slot-main"></div>
@@ -1209,7 +1285,6 @@
                             <span id="ui-lang-label">UI LANGUAGE</span>
                         </div>
                         <select class="settings-select" id="ui-lang-select" onchange="setUILanguage(this.value)">
-                            <!-- Options generated by JS -->
                         </select>
                     </div>
                 </div>
@@ -1230,7 +1305,6 @@
 
     <div class="toast-container" id="toast-container"></div>
 
-    <!-- Lightbox Element -->
     <div class="lightbox" id="lightbox" onclick="closeLightbox()">
         <span class="lightbox-close">&times;</span>
         <img id="lightbox-img" src="" onclick="event.stopPropagation()">
@@ -1570,6 +1644,127 @@
         const mainEl = $('main-content');
         const statsBar = $('stats-bar');
 
+        let aiEngine = null;
+        let aiModel = 'Llama-3-8B-Instruct-q4f32_1-MLC';
+        let availableModels = [];
+
+        async function initAIUI() {
+            try {
+                const { prebuiltAppConfig } = await import('https://esm.run/@mlc-ai/web-llm');
+                availableModels = prebuiltAppConfig.model_list.map(m => m.model_id);
+                const select = $('ai-model-select');
+                select.innerHTML = availableModels.map(m => 
+                    `<option value="${m}" ${m === aiModel ? 'selected' : ''}>${m.toUpperCase()}</option>`
+                ).join('');
+            } catch(e) {
+                console.error('Failed to load model list', e);
+                $('ai-model-select').innerHTML = '<option>AI UNREACHABLE</option>';
+            }
+        }
+
+        async function initAI() {
+            if (aiEngine) return aiEngine;
+            
+            if (!navigator.gpu) {
+                const aiBox = $('slot-ai');
+                aiBox.innerHTML = `
+                    <div class="ai-box">
+                        <div class="ai-label" style="color:var(--red)">HARDWARE ERROR</div>
+                        <div class="ai-content">YOUR BROWSER DOES NOT SUPPORT WEBGPU, WHICH IS REQUIRED TO RUN LOCAL LLMS. PLEASE USE A COMPATIBLE BROWSER (CHROME/EDGE) ON A DEVICE WITH A GPU.</div>
+                    </div>
+                `;
+                throw new Error("WebGPU not supported");
+            }
+            
+            const aiBox = $('slot-ai');
+            aiBox.innerHTML = `
+                <div class="ai-box">
+                    <div class="ai-label">
+                        <svg viewBox="0 0 24 24" class="icon-sm" fill="none" stroke="currentColor" stroke-width="2" style="margin-right:8px"><path d="M12 2a2 2 0 0 1 2 2c0 .74-.4 1.39-1 1.73V7h1a7 7 0 0 1 7 7h1a1 1 0 0 1 1 1v3a1 1 0 0 1-1 1h-1v1a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2v-1H2a1 1 0 0 1-1-1v-3a1 1 0 0 1 1-1h1v-1a7 7 0 0 1 7-7h1V5.73c-.6-.34-1-.99-1-1.73a2 2 0 0 1 2-2zM4.5 19a1 1 0 0 0-1 1v1a1 1 0 0 0 1 1h15a1 1 0 0 0 1-1v-1a1 1 0 0 0-1-1h-15zM12 9a5 5 0 0 0-5 5v2h10v-2a5 5 0 0 0-5-5z"/></svg>
+                        INITIALIZING ${aiModel}...
+                    </div>
+                    <div class="ai-loading-bar"><div class="ai-loading-progress" id="ai-prog"></div></div>
+                    <div class="ai-content" id="ai-text" style="font-size:10px;color:var(--gray)">DOWNLOADING MODEL WEIGHTS (THIS HAPPENS ONCE)</div>
+                </div>
+            `;
+            
+            try {
+                const { CreateMLCEngine } = await import('https://esm.run/@mlc-ai/web-llm');
+                
+                aiEngine = await CreateMLCEngine(
+                    aiModel,
+                    { 
+                        initProgressCallback: (report) => {
+                            const p = $('ai-prog');
+                            const t = $('ai-text');
+                            if(p && t) {
+                                p.style.width = (report.progress * 100) + '%';
+                                t.textContent = report.text;
+                            }
+                        }
+                    }
+                );
+                return aiEngine;
+            } catch(e) {
+                aiBox.innerHTML = `<div class="ai-box"><div class="ai-label" style="color:var(--red)">AI ERROR</div><div class="ai-content">${e.message}</div></div>`;
+                throw e;
+            }
+        }
+
+        async function askAI() {
+            if (!state.query) return;
+            const modelSelect = $('ai-model-select');
+            if(modelSelect.value && modelSelect.value !== aiModel) {
+                aiModel = modelSelect.value;
+                aiEngine = null; 
+            }
+
+            const aiBox = $('slot-ai');
+            aiBox.innerHTML = `
+                <div class="ai-box">
+                    <div class="ai-label">
+                        <svg viewBox="0 0 24 24" class="icon-sm" fill="none" stroke="currentColor" stroke-width="2" style="margin-right:8px"><circle cx="12" cy="12" r="10"/><path d="M12 16v-4"/><path d="M12 8h.01"/></svg>
+                        AI THINKING (${aiModel.split('-')[0].toUpperCase()})
+                    </div>
+                    <div class="ai-content" id="ai-text-stream"></div>
+                </div>
+            `;
+            
+            try {
+                const engine = await initAI();
+                
+                const context = state.results.slice(0, 5).map(r => `Title: ${r.title}\nSnippet: ${r.snippet}`).join('\n\n');
+                const systemPrompt = "You are a helpful, concise assistant. Answer based on the context provided if relevant. Keep it short.";
+                const userPrompt = `Context:\n${context}\n\nQuestion: ${state.query}`;
+                
+                const streamEl = $('ai-text-stream');
+                const messages = [
+                    { role: "system", content: systemPrompt },
+                    { role: "user", content: userPrompt }
+                ];
+
+                const chunks = await engine.chat.completions.create({
+                    messages,
+                    stream: true
+                });
+
+                let fullText = "";
+                for await (const chunk of chunks) {
+                    const delta = chunk.choices[0]?.delta?.content || "";
+                    fullText += delta;
+                    streamEl.textContent = fullText;
+                }
+                
+                aiBox.querySelector('.ai-label').innerHTML = `
+                    <svg viewBox="0 0 24 24" class="icon-sm" fill="none" stroke="currentColor" stroke-width="2" style="margin-right:8px"><polyline points="20 6 9 17 4 12"/></svg>
+                    AI ANSWER COMPLETED
+                `;
+
+            } catch (e) {
+                console.error(e);
+            }
+        }
+
         function setUILanguage(code) {
             if (!UI_STRINGS[code]) return;
             state.uiLang = code;
@@ -1617,10 +1812,7 @@
                     }
                 } catch(e) {}
             } else {
-                // If no settings saved, ensure defaults are all TRUE (except maybe books if you prefer)
                 for (const k in SOURCES) SOURCES[k].enabled = true;
-                // Keep books disabled by default if that's the preference, or enable them:
-                // for (const k in BOOK_SOURCES) BOOK_SOURCES[k].enabled = false; 
             }
         }
 
@@ -1682,7 +1874,6 @@
             toast('BOOKMARK REMOVED');
         }
 
-        /* --- AAA TRANSLATION LOGIC --- */
         async function handleTranslation(text, source = 'auto', target = 'en') {
             if (!state.hasSearched) {
                 state.hasSearched = true;
@@ -1696,9 +1887,9 @@
             $('results-info').textContent = 'CLIENT-SIDE';
             $('slot-dict').innerHTML = '';
             $('slot-wiki').innerHTML = '';
+            $('slot-ai').innerHTML = '';
             
             try {
-                // Use a standard client-side endpoint
                 const res = await fetch(`https://translate.googleapis.com/translate_a/single?client=gtx&sl=${source}&tl=${target}&dt=t&q=${encodeURIComponent(text)}`);
                 const data = await res.json();
                 
@@ -1796,6 +1987,7 @@
             updateClocks();
             setInterval(updateClocks, 1000);
             setupListeners();
+            initAIUI(); 
 
             const path = window.location.pathname.substring(1); 
             const urlParams = new URLSearchParams(window.location.search);
@@ -1815,7 +2007,6 @@
         }
 
         function initTheme() {
-            // Auto theme based on time: 7AM to 7PM = Light, Else = Dark
             const hour = new Date().getHours();
             const isDay = hour >= 7 && hour < 19;
             
@@ -1962,7 +2153,6 @@
         }
         
         function addToWatchlistDirect(ticker) {
-            // Can be Ticker OR Chain:Address
             if (!state.watchlist.includes(ticker)) {
                 state.watchlist.push(ticker);
                 localStorage.setItem('sw', JSON.stringify(state.watchlist));
@@ -1990,13 +2180,11 @@
             $('slot-dict').innerHTML = '';
             $('slot-wiki').innerHTML = '';
             $('slot-main').innerHTML = '';
+            $('slot-ai').innerHTML = '';
             $('app-menu').classList.remove('show');
             $('autocomplete-list').classList.remove('show');
             document.documentElement.dir = "ltr";
-            
-            // CRITICAL: Reload default/persisted settings so UI resets from "Explicit Mode"
             loadSettings(); 
-            
             renderSources();
             renderHistory();
         }
@@ -2053,6 +2241,7 @@
             $('slot-main').innerHTML = html;
             $('slot-dict').innerHTML = '';
             $('slot-wiki').innerHTML = '';
+            $('slot-ai').innerHTML = '';
             $('results-label').textContent = 'SYSTEM';
             $('results-info').textContent = s.manual;
             $('stat-results').textContent = 'N/A';
@@ -2061,7 +2250,6 @@
 
         async function translateQuery(text) {
             try {
-                // Translates query to English for broader searching if in Auto mode
                 const res = await fetch(`https://translate.googleapis.com/translate_a/single?client=gtx&sl=auto&tl=en&dt=t&q=${encodeURIComponent(text)}`);
                 const data = await res.json();
                 let detectedLang = 'en';
@@ -2079,16 +2267,12 @@
         }
 
         async function search(query) {
-            
-            // 1. Always load settings first to ensure we start from user preference
             loadSettings();
 
             if (!query.trim()) return fullReset();
             
             const cleanQuery = query.trim();
 
-            // --- EXPLICIT ASSET/CRYPTO LOGIC ---
-            // If it starts with $, it must be treated exclusively as asset lookup
             if (cleanQuery.startsWith('$')) {
                 if (!state.hasSearched) {
                     state.hasSearched = true;
@@ -2097,23 +2281,19 @@
                     statsBar.classList.add('visible');
                 }
                 
-                // Clear any previous generic results immediately
                 $('slot-dict').innerHTML = '';
                 $('slot-wiki').innerHTML = '';
                 $('slot-main').innerHTML = '';
+                $('slot-ai').innerHTML = '';
 
-                // Check for $CHAIN:CA pattern first
-                // e.g., $SOL:Address or $BASE:0xAddress
-                // Regex: $ followed by alphanum, then :, then alphanum
                 const chainMatch = cleanQuery.match(/^\$([a-zA-Z0-9]+):([a-zA-Z0-9]+)$/);
                 
                 if (chainMatch) {
                     showDexWidget(chainMatch[1], chainMatch[2]);
                     addHistory(cleanQuery);
-                    return; // Stop here
+                    return;
                 }
                 
-                // Check for $TICKER pattern
                 const stockMatch = cleanQuery.match(/^\$([A-Za-z]{1,10})$/);
                 if (stockMatch) {
                     const ticker = stockMatch[1].toUpperCase();
@@ -2123,17 +2303,14 @@
                         showStockWidget(ticker);
                     }
                     addHistory(cleanQuery);
-                    return; // Stop here
+                    return;
                 }
 
-                // If explicit $ but no match, show specific error
                 $('slot-main').innerHTML = '<div class="empty-state"><div class="empty-title">INVALID ASSET SYNTAX</div><div class="empty-text">TRY $TICKER OR $CHAIN:ADDRESS</div></div>';
                 return;
             }
 
-            // --- EXPLICIT BANG LOGIC ---
             if (cleanQuery.startsWith('!')) {
-                // If it's !t translation
                 if (cleanQuery.match(/^!t\s+(.+)/)) {
                     const textToTranslate = cleanQuery.match(/^!t\s+(.+)/)[1];
                     handleTranslation(textToTranslate);
@@ -2146,15 +2323,12 @@
                     return;
                 }
                 
-                // Handle !help
                 if (cleanQuery.toLowerCase() === '!help' || cleanQuery.toLowerCase() === '!h') {
                     showHelp();
                     addHistory(query);
                     return;
                 }
             }
-
-            // --- STANDARD SEARCH FLOW BELOW ---
 
             if (!state.hasSearched) {
                 state.hasSearched = true;
@@ -2169,6 +2343,7 @@
                 $('slot-dict').innerHTML = '';
                 $('slot-wiki').innerHTML = '';
                 $('slot-main').innerHTML = '';
+                $('slot-ai').innerHTML = '';
                 $('results-label').textContent = UI_STRINGS[state.uiLang].calculator;
                 $('results-info').textContent = UI_STRINGS[state.uiLang].local;
                 showCalcResult(query.slice(1));
@@ -2220,14 +2395,12 @@
                     }
                 }
             } else {
-                // IMPORTANT: If no bang, we rely on loadSettings() which already ran at start of function
-                // to have reset SOURCES to their enabled state.
                 renderSources();
             }
 
             showLoading(); 
+            $('slot-ai').innerHTML = '';
             
-            // Auto Translate Logic
             if (state.autoTranslate && !bangMatch && !query.startsWith('$') && !query.startsWith('=')) {
                 try {
                     const trans = await translateQuery(searchQuery);
@@ -2332,7 +2505,6 @@
                 const vol = p.volume?.h24 ? `$${fmt(p.volume.h24)}` : 'N/A';
                 const liq = p.liquidity?.usd ? `$${fmt(p.liquidity.usd)}` : 'N/A';
                 
-                // Construct the pair string for watchlist
                 const watchValue = `${finalChain}:${ca}`;
 
                 $('slot-main').innerHTML = `
@@ -2414,16 +2586,6 @@
             loadTradingView(widgetId, symbol);
         }
 
-        function addToWatchlistDirect(ticker) {
-            // Can be Ticker OR Chain:Address
-            if (!state.watchlist.includes(ticker)) {
-                state.watchlist.push(ticker);
-                localStorage.setItem('sw', JSON.stringify(state.watchlist));
-                renderWatchlist();
-                toast(`ADDED ${ticker.includes(':') ? 'TOKEN' : ticker}`);
-            }
-        }
-
         function loadTradingView(containerId, symbol) {
             if (!window.TradingView) {
                 const s = document.createElement('script');
@@ -2471,7 +2633,6 @@
             speechSynthesis.speak(u);
         }
 
-        // --- LIGHTBOX FUNCTIONS ---
         function openLightbox(url, title) {
             const lb = $('lightbox');
             const img = $('lightbox-img');
@@ -2501,7 +2662,6 @@
                 images.forEach(img => {
                     const item = document.createElement('div');
                     item.className = 'image-item';
-                    // CHANGED: Open in lightbox instead of new tab
                     item.onclick = () => openLightbox(img.url, esc(img.title));
                     item.innerHTML = `
                         <img src="${img.thumbnail}" loading="lazy" alt="Image">
@@ -2580,7 +2740,7 @@
                 });
             }
 
-            if (state.results.length === 0 && (!state.bookResults || state.bookResults.length === 0) && !$('slot-wiki').innerHTML && !$('slot-dict').innerHTML) {
+            if (state.results.length === 0 && (!state.bookResults || state.bookResults.length === 0) && !$('slot-wiki').innerHTML && !$('slot-dict').innerHTML && !$('slot-ai').innerHTML) {
                 main.innerHTML = `<div class="empty-state"><div class="empty-title">${s.no_results}</div><div class="empty-text">${s.try_diff}</div></div>`;
             }
         }
@@ -2634,7 +2794,6 @@
                 { label: 'NYC', tz: 'America/New_York' },
                 { label: 'DUBAI', tz: 'Asia/Dubai' }
             ];
-            // Only show 4 clocks
             const selectedZones = zones.slice(0, 4);
             $('world-clocks').innerHTML = selectedZones.map(z => `<div class="clock"><div class="clock-time">${new Date().toLocaleTimeString('en-GB', { timeZone: z.tz, hour: '2-digit', minute: '2-digit' })}</div><div class="clock-label">${z.label}</div></div>`).join('');
         }
@@ -2649,7 +2808,6 @@
             }
 
             try {
-                // Use UI Lang for autocomplete
                 const lang = state.uiLang || 'en';
                 const r = await fetch(`https://${lang}.wikipedia.org/w/api.php?action=opensearch&search=${encodeURIComponent(val)}&limit=5&format=json&origin=*`);
                 const d = await r.json();
@@ -2745,7 +2903,6 @@
         function highlight(text, query) { if (!query) return text; const words = query.split(/\s+/).filter(w => w.length > 2); let result = text; words.forEach(w => { result = result.replace(new RegExp(`(${w.replace(/[.*+?^${}()|[\]\\]/g, '\\$&')})`, 'gi'), '<mark>$1</mark>'); }); return result; }
         function fmt(n) { if (n >= 1000000) return (n / 1000000).toFixed(1) + 'M'; if (n >= 1000) return (n / 1000).toFixed(1) + 'K'; return n?.toString() || '0'; }
         function timeAgo(ts) { 
-            // Handle both unix timestamp (seconds) and JS timestamp (ms)
             if (ts < 10000000000) ts = ts * 1000;
             const s = Math.floor((Date.now() - ts) / 1000); 
             if (s < 60) return 'NOW'; 
@@ -2765,3 +2922,4 @@
     </script>
 </body>
 </html>
+```
