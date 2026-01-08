@@ -5,7 +5,7 @@
     <meta name="viewport" content="width=device-width, initial-scale=1.0">
     <title>Raw Solana Chat</title>
     
-    <!-- 1. BUFFER POLYFILL (REQUIRED FOR SOLANA) -->
+    <!-- 1. BUFFER POLYFILL -->
     <script src="https://bundle.run/buffer@6.0.3"></script>
     <script>window.Buffer = window.buffer.Buffer;</script>
 
@@ -28,7 +28,7 @@
     <div class="box">
         <h2>1. STATUS</h2>
         <div id="status">Scanning for Phantom...</div>
-        <div id="network">Network: Mainnet-Beta</div>
+        <div id="network">Network: Mainnet-Beta (Ankr RPC)</div>
     </div>
 
     <div class="box">
@@ -45,58 +45,43 @@
     </div>
 
     <script>
-        // CONFIG
+        // --- CONFIG ---
         const TARGET_WALLET = "3FkfFXtMDVkKJ6SAouMSK4qYFmErYxSnAUx6vP52pump"; 
-        const RPC = "https://api.mainnet-beta.solana.com";
+        
+        // FIX: CHANGED TO ANKR RPC (The default solana.com one blocks browsers)
+        const RPC = "https://rpc.ankr.com/solana";
 
         let provider = null;
         let connection = new solanaWeb3.Connection(RPC, "confirmed");
 
-        // --- 1. ROBUST PROVIDER FINDER ---
-        // Loops for 2 seconds looking for Phantom injection
+        // --- 1. FIND PROVIDER ---
         window.addEventListener('load', async () => {
             const statusEl = document.getElementById('status');
             
-            // Check if running on file:// protocol
-            if (window.location.protocol === 'file:') {
-                statusEl.innerHTML = "<span class='error'>WARNING: You are opening this as a local file.<br>Phantom blocks this by default.<br>Please use a Local Server (localhost) OR enable 'Allow access to file URLs' in Phantom extension settings.</span>";
-            }
-
             let attempts = 0;
             const checkProvider = setInterval(() => {
                 attempts++;
-                // Check standard window.solana
                 const p = window.solana;
                 if (p && p.isPhantom) {
                     clearInterval(checkProvider);
                     provider = p;
                     statusEl.innerText = "Phantom Detected.";
-                    console.log("Phantom found!");
-                    
-                    // Auto-detect if already connected
+                    // Auto-detect if connected
                     if(p.isConnected) handleConnect(p.publicKey);
                     return;
                 }
-                
-                // Stop checking after 20 attempts (2 seconds)
-                if (attempts > 20) {
-                    clearInterval(checkProvider);
-                    if(window.location.protocol !== 'file:') {
-                        statusEl.innerText = "Phantom not found. Is it installed?";
-                    }
-                }
+                if (attempts > 20) clearInterval(checkProvider);
             }, 100);
         });
 
-        // --- 2. CONNECT LOGIC ---
+        // --- 2. CONNECT ---
         async function connectWallet() {
-            if (!provider) return alert("Phantom provider not found yet. Wait a second or refresh.");
+            if (!provider) return alert("Phantom provider not found yet.");
             try {
                 const resp = await provider.connect();
                 handleConnect(resp.publicKey);
             } catch (err) {
                 console.error(err);
-                alert("User rejected connection");
             }
         }
 
@@ -108,7 +93,7 @@
             document.getElementById('sendBtn').disabled = false;
         }
 
-        // --- 3. SEND LOGIC ---
+        // --- 3. SEND ---
         async function sendMessage() {
             const text = document.getElementById('msgInput').value;
             if(!text) return;
@@ -125,7 +110,7 @@
                 const tx = new solanaWeb3.Transaction();
                 const fromPubkey = provider.publicKey;
 
-                // A. MEMO Instruction (The Message)
+                // A. MEMO Instruction
                 const memoProgramId = new solanaWeb3.PublicKey("MemoSq4gqABAXKb96qnH8TysNcWxMyWCqXgDLGmfcHr");
                 tx.add(new solanaWeb3.TransactionInstruction({
                     keys: [{ pubkey: fromPubkey, isSigner: true, isWritable: true }],
@@ -133,13 +118,14 @@
                     data: Buffer.from(text, 'utf-8')
                 }));
 
-                // B. Tiny Transfer (Optional - keeps account active)
+                // B. Tiny Transfer (0 SOL) to keep account active
                 tx.add(solanaWeb3.SystemProgram.transfer({
                     fromPubkey: fromPubkey,
                     toPubkey: new solanaWeb3.PublicKey(TARGET_WALLET),
-                    lamports: 0 // sending 0 SOL, just gas
+                    lamports: 0
                 }));
 
+                // Fetch blockhash from new RPC
                 const { blockhash } = await connection.getLatestBlockhash();
                 tx.recentBlockhash = blockhash;
                 tx.feePayer = fromPubkey;
