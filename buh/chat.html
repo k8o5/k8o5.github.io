@@ -1,3 +1,10 @@
+The error `403: API key is not allowed` confirms that **Ankr** (the previous RPC) now blocks public browser requests without a paid account.
+
+I have switched the RPC to **PublicNode**, which is currently the most reliable open endpoint for Solana Mainnet that doesn't require an API key and allows browser access (CORS friendly).
+
+Save this as `index.html`. It should work immediately.
+
+```html
 <!DOCTYPE html>
 <html lang="en">
 <head>
@@ -5,7 +12,7 @@
     <meta name="viewport" content="width=device-width, initial-scale=1.0">
     <title>Raw Solana Chat</title>
     
-    <!-- 1. BUFFER POLYFILL -->
+    <!-- 1. BUFFER POLYFILL (Required for Solana) -->
     <script src="https://bundle.run/buffer@6.0.3"></script>
     <script>window.Buffer = window.buffer.Buffer;</script>
 
@@ -13,14 +20,27 @@
     <script src="https://unpkg.com/@solana/web3.js@1.87.6/lib/index.iife.min.js"></script>
 
     <style>
-        body { background: #000; color: #0f0; font-family: monospace; padding: 20px; }
-        .box { border: 1px solid #333; padding: 20px; margin-bottom: 20px; }
-        button { background: #0f0; color: #000; border: none; padding: 10px 20px; font-weight: bold; cursor: pointer; }
+        body { background: #050505; color: #00ff41; font-family: 'Courier New', monospace; padding: 20px; }
+        .box { border: 1px solid #333; padding: 20px; margin-bottom: 20px; background: #000; }
+        h2 { margin-top: 0; font-size: 14px; border-bottom: 1px solid #333; padding-bottom: 10px; color: #fff; }
+        
+        button { 
+            background: #00ff41; color: #000; border: none; padding: 10px 20px; 
+            font-weight: bold; cursor: pointer; font-family: inherit; text-transform: uppercase;
+        }
         button:disabled { background: #333; color: #666; cursor: not-allowed; }
-        input { background: #111; border: 1px solid #333; color: #fff; padding: 10px; width: 300px; }
-        .log { color: #666; font-size: 12px; margin-top: 5px; }
-        .error { color: #f00; font-weight: bold; }
-        .success { color: #0f0; font-weight: bold; }
+        button:hover:not(:disabled) { background: #fff; }
+
+        input { 
+            background: #111; border: 1px solid #333; color: #fff; padding: 10px; 
+            width: 100%; box-sizing: border-box; font-family: inherit; margin-bottom: 10px;
+        }
+        input:focus { outline: none; border-color: #00ff41; }
+
+        .log { color: #888; font-size: 12px; margin-top: 10px; line-height: 1.4; word-wrap: break-word; }
+        .success { color: #00ff41; }
+        .error { color: #ff0055; }
+        a { color: #fff; text-decoration: underline; }
     </style>
 </head>
 <body>
@@ -28,7 +48,7 @@
     <div class="box">
         <h2>1. STATUS</h2>
         <div id="status">Scanning for Phantom...</div>
-        <div id="network">Network: Mainnet-Beta (Ankr RPC)</div>
+        <div id="rpcStatus" style="font-size:10px; color:#666; margin-top:5px">RPC: PublicNode.com (Open)</div>
     </div>
 
     <div class="box">
@@ -39,44 +59,43 @@
 
     <div class="box">
         <h2>3. CHAT (ON-CHAIN)</h2>
-        <input type="text" id="msgInput" placeholder="Type message..." disabled>
+        <input type="text" id="msgInput" placeholder="Type message (will remain on-chain forever)..." disabled>
         <button id="sendBtn" onclick="sendMessage()" disabled>SEND MESSAGE</button>
-        <div id="txLog" class="log" style="margin-top:20px;"></div>
+        <div id="txLog" class="log"></div>
     </div>
 
     <script>
         // --- CONFIG ---
         const TARGET_WALLET = "3FkfFXtMDVkKJ6SAouMSK4qYFmErYxSnAUx6vP52pump"; 
         
-        // FIX: CHANGED TO ANKR RPC (The default solana.com one blocks browsers)
-        const RPC = "https://rpc.ankr.com/solana";
+        // FIX: Using PublicNode.com which allows public browser requests (CORS friendly)
+        const RPC_URL = "https://solana-rpc.publicnode.com";
 
         let provider = null;
-        let connection = new solanaWeb3.Connection(RPC, "confirmed");
+        let connection = new solanaWeb3.Connection(RPC_URL, "confirmed");
 
-        // --- 1. FIND PROVIDER ---
-        window.addEventListener('load', async () => {
+        // --- 1. FIND PROVIDER (Phantom) ---
+        window.addEventListener('load', () => {
             const statusEl = document.getElementById('status');
-            
             let attempts = 0;
-            const checkProvider = setInterval(() => {
+            const check = setInterval(() => {
                 attempts++;
                 const p = window.solana;
                 if (p && p.isPhantom) {
-                    clearInterval(checkProvider);
+                    clearInterval(check);
                     provider = p;
-                    statusEl.innerText = "Phantom Detected.";
-                    // Auto-detect if connected
-                    if(p.isConnected) handleConnect(p.publicKey);
-                    return;
+                    statusEl.innerHTML = "<span class='success'>Phantom Detected.</span>";
+                    if (p.isConnected) handleConnect(p.publicKey);
+                } else if (attempts > 10) {
+                    clearInterval(check);
+                    statusEl.innerHTML = "Phantom not found. <a href='https://phantom.app' target='_blank'>Install it</a>";
                 }
-                if (attempts > 20) clearInterval(checkProvider);
-            }, 100);
+            }, 500);
         });
 
         // --- 2. CONNECT ---
         async function connectWallet() {
-            if (!provider) return alert("Phantom provider not found yet.");
+            if (!provider) return alert("Phantom not found!");
             try {
                 const resp = await provider.connect();
                 handleConnect(resp.publicKey);
@@ -93,53 +112,53 @@
             document.getElementById('sendBtn').disabled = false;
         }
 
-        // --- 3. SEND ---
+        // --- 3. SEND MESSAGE ---
         async function sendMessage() {
-            const text = document.getElementById('msgInput').value;
+            const text = document.getElementById('msgInput').value.trim();
             if(!text) return;
-            if(!provider || !provider.publicKey) return alert("Connect wallet first");
 
             const btn = document.getElementById('sendBtn');
             const log = document.getElementById('txLog');
             
             btn.disabled = true;
             btn.innerText = "SIGNING...";
-            log.innerHTML = "Building transaction...";
+            log.innerHTML = "Creating transaction...";
 
             try {
                 const tx = new solanaWeb3.Transaction();
-                const fromPubkey = provider.publicKey;
+                const pubKey = provider.publicKey;
 
-                // A. MEMO Instruction
-                const memoProgramId = new solanaWeb3.PublicKey("MemoSq4gqABAXKb96qnH8TysNcWxMyWCqXgDLGmfcHr");
+                // 1. Add MEMO (The Message)
+                // Program ID: MemoSq4gqABAXKb96qnH8TysNcWxMyWCqXgDLGmfcHr
                 tx.add(new solanaWeb3.TransactionInstruction({
-                    keys: [{ pubkey: fromPubkey, isSigner: true, isWritable: true }],
-                    programId: memoProgramId,
+                    keys: [{ pubkey: pubKey, isSigner: true, isWritable: true }],
+                    programId: new solanaWeb3.PublicKey("MemoSq4gqABAXKb96qnH8TysNcWxMyWCqXgDLGmfcHr"),
                     data: Buffer.from(text, 'utf-8')
                 }));
 
-                // B. Tiny Transfer (0 SOL) to keep account active
+                // 2. Add Transfer (0 SOL) - Required to hit the network cleanly
                 tx.add(solanaWeb3.SystemProgram.transfer({
-                    fromPubkey: fromPubkey,
+                    fromPubkey: pubKey,
                     toPubkey: new solanaWeb3.PublicKey(TARGET_WALLET),
                     lamports: 0
                 }));
 
-                // Fetch blockhash from new RPC
+                // 3. Get Blockhash from PublicNode
                 const { blockhash } = await connection.getLatestBlockhash();
                 tx.recentBlockhash = blockhash;
-                tx.feePayer = fromPubkey;
+                tx.feePayer = pubKey;
 
+                // 4. Sign & Send
                 const { signature } = await provider.signAndSendTransaction(tx);
                 
-                log.innerHTML = `<span class="success">Message Sent!</span><br>Sig: ${signature.slice(0,16)}...<br><a href="https://solscan.io/tx/${signature}" target="_blank" style="color:#fff">View on Solscan</a>`;
+                log.innerHTML = `<span class="success">MESSAGE SENT!</span><br>TX: <a href="https://solscan.io/tx/${signature}" target="_blank">${signature.slice(0,20)}...</a>`;
                 document.getElementById('msgInput').value = "";
                 btn.innerText = "SEND MESSAGE";
                 btn.disabled = false;
 
             } catch (err) {
-                console.error(err);
-                log.innerHTML = `<span class="error">Failed: ${err.message}</span>`;
+                console.error("TX Fail:", err);
+                log.innerHTML = `<span class="error">FAILED: ${err.message}</span>`;
                 btn.innerText = "SEND MESSAGE";
                 btn.disabled = false;
             }
@@ -147,3 +166,4 @@
     </script>
 </body>
 </html>
+```
