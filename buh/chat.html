@@ -3,7 +3,7 @@
 <head>
     <meta charset="UTF-8">
     <meta name="viewport" content="width=device-width, initial-scale=1.0">
-    <title>Solana On-Chain Chat (Read & Write)</title>
+    <title>Multi-Wallet Solana Chat</title>
     
     <!-- 1. REQUIRED LIBRARIES -->
     <script src="https://bundle.run/buffer@6.0.3"></script>
@@ -12,35 +12,62 @@
 
     <style>
         body { background: #050505; color: #00ff41; font-family: 'Courier New', monospace; padding: 20px; max-width: 800px; margin: 0 auto; }
-        .box { border: 1px solid #333; padding: 20px; margin-bottom: 20px; background: #000; }
-        h2 { margin-top: 0; font-size: 14px; border-bottom: 1px solid #333; padding-bottom: 10px; color: #fff; display: flex; justify-content: space-between; }
+        .box { border: 1px solid #333; padding: 20px; margin-bottom: 20px; background: #000; position: relative; }
+        h2 { margin-top: 0; font-size: 14px; border-bottom: 1px solid #333; padding-bottom: 10px; color: #fff; display: flex; justify-content: space-between; align-items: center; }
         
-        /* CHAT HISTORY STYLES */
+        /* CHAT HISTORY */
         #chatBox { 
             height: 400px; overflow-y: auto; border: 1px solid #222; padding: 10px; 
-            background: #0a0a0a; display: flex; flex-direction: column-reverse; /* Newest at bottom visually if we prepend, or column if append */
+            background: #0a0a0a; display: flex; flex-direction: column-reverse; 
         }
         .msg-row { margin-bottom: 12px; border-bottom: 1px solid #111; padding-bottom: 8px; }
         .msg-meta { font-size: 10px; color: #666; margin-bottom: 4px; }
         .msg-text { color: #fff; font-size: 14px; word-wrap: break-word; }
         .loading { text-align: center; color: #888; padding: 20px; }
 
-        /* INPUT STYLES */
+        /* INPUTS & BUTTONS */
         input { background: #111; border: 1px solid #333; color: #fff; padding: 10px; width: 70%; }
         button { background: #00ff41; color: #000; border: none; padding: 10px 20px; font-weight: bold; cursor: pointer; width: 28%; }
-        button:disabled { background: #333; color: #666; }
-        
+        button:disabled { background: #333; color: #666; cursor: not-allowed; }
         .refresh-btn { background: transparent; border: 1px solid #333; color: #888; width: auto; font-size: 10px; padding: 2px 10px; }
         .refresh-btn:hover { border-color: #fff; color: #fff; }
+
+        /* MODAL (Wallet Selector) */
+        #walletModal {
+            display: none; position: fixed; top: 0; left: 0; width: 100%; height: 100%;
+            background: rgba(0,0,0,0.85); z-index: 1000; justify-content: center; align-items: center;
+        }
+        .modal-content {
+            background: #000; border: 1px solid #00ff41; padding: 20px; width: 300px; text-align: center;
+            box-shadow: 0 0 20px rgba(0, 255, 65, 0.2);
+        }
+        .wallet-option {
+            display: block; width: 100%; padding: 15px; margin-bottom: 10px;
+            background: #111; border: 1px solid #333; color: #fff; cursor: pointer; font-family: inherit;
+        }
+        .wallet-option:hover { background: #222; border-color: #00ff41; }
+        .wallet-option img { width: 20px; vertical-align: middle; margin-right: 10px; }
+        .close-modal { margin-top: 10px; color: #666; cursor: pointer; text-decoration: underline; font-size: 12px; }
     </style>
 </head>
 <body>
 
+    <!-- WALLET SELECTOR MODAL -->
+    <div id="walletModal">
+        <div class="modal-content">
+            <h3 style="color:#fff; margin-top:0">SELECT WALLET</h3>
+            <div id="walletList">
+                <!-- Wallets injected here -->
+            </div>
+            <div class="close-modal" onclick="closeModal()">Close</div>
+        </div>
+    </div>
+
     <!-- 1. CONNECT -->
     <div class="box">
         <h2>
-            STATUS: <span id="status">Checking...</span>
-            <button class="refresh-btn" onclick="connectWallet()">CONNECT WALLET</button>
+            STATUS: <span id="status">Scanning...</span>
+            <button class="refresh-btn" id="connectMainBtn" onclick="openWalletModal()">CONNECT WALLET</button>
         </h2>
         <div id="walletAddr" style="font-size:12px; color:#666">Not Connected</div>
     </div>
@@ -68,90 +95,138 @@
     <script>
         // --- CONFIG ---
         const TARGET_WALLET = "3FkfFXtMDVkKJ6SAouMSK4qYFmErYxSnAUx6vP52pump"; 
-        const RPC_URL = "https://solana-rpc.publicnode.com"; // Open Public RPC
+        const RPC_URL = "https://solana-rpc.publicnode.com";
 
-        let provider = null;
+        let provider = null; // The active wallet provider
         let connection = new solanaWeb3.Connection(RPC_URL, "confirmed");
 
         // --- INIT ---
         window.onload = () => {
-            // 1. Look for Phantom
-            setTimeout(() => {
-                if (window.solana && window.solana.isPhantom) {
-                    provider = window.solana;
-                    document.getElementById('status').innerText = "Phantom Detected";
-                    document.getElementById('status').style.color = "#00ff41";
-                    if(provider.isConnected) handleConnect(provider.publicKey);
-                } else {
-                    document.getElementById('status').innerText = "Phantom Not Found";
-                    document.getElementById('status').style.color = "red";
-                }
-            }, 500);
-
-            // 2. Fetch History Immediately
+            detectWallets();
             fetchMessages();
         };
 
-        // --- READ MESSAGES (THE NEW PART) ---
+        // --- WALLET DETECTION LOGIC ---
+        function detectWallets() {
+            const status = document.getElementById('status');
+            const wallets = [];
+
+            // 1. Phantom
+            if (window.solana && window.solana.isPhantom) wallets.push('Phantom');
+            // 2. Solflare
+            if (window.solflare) wallets.push('Solflare');
+            // 3. Backpack
+            if (window.backpack) wallets.push('Backpack');
+            // 4. Brave / Trust / Gloom (Standard Injection)
+            if (window.solana && !window.solana.isPhantom) wallets.push('Standard/Brave');
+
+            if (wallets.length > 0) {
+                status.innerText = wallets.join(", ") + " Detected";
+                status.style.color = "#00ff41";
+            } else {
+                status.innerText = "No Wallets Found";
+                status.style.color = "red";
+            }
+        }
+
+        // --- UI LOGIC ---
+        function openWalletModal() {
+            const list = document.getElementById('walletList');
+            list.innerHTML = ''; // Clear
+
+            // Add Buttons based on what exists
+            if (window.solana && window.solana.isPhantom) createWalletBtn('Phantom', () => selectWallet(window.solana));
+            if (window.solflare) createWalletBtn('Solflare', () => selectWallet(window.solflare));
+            if (window.backpack) createWalletBtn('Backpack', () => selectWallet(window.backpack));
+            
+            // Catch-all
+            if (window.solana && !window.solana.isPhantom) {
+                createWalletBtn('Other (Brave/Trust)', () => selectWallet(window.solana));
+            }
+
+            if (list.innerHTML === '') {
+                list.innerHTML = "<div style='color:#666; padding:10px'>No Solana wallets found.<br>Please install Phantom, Solflare, or Backpack.</div>";
+            }
+
+            document.getElementById('walletModal').style.display = 'flex';
+        }
+
+        function createWalletBtn(name, onClick) {
+            const btn = document.createElement('button');
+            btn.className = 'wallet-option';
+            btn.innerText = name;
+            btn.onclick = onClick;
+            document.getElementById('walletList').appendChild(btn);
+        }
+
+        function closeModal() {
+            document.getElementById('walletModal').style.display = 'none';
+        }
+
+        async function selectWallet(selectedProvider) {
+            provider = selectedProvider;
+            closeModal();
+            try {
+                const resp = await provider.connect();
+                // Solflare returns an object, Phantom might behave differently, standardizing:
+                const pubKey = resp.publicKey || provider.publicKey;
+                handleConnect(pubKey);
+            } catch (err) {
+                console.error("Connection cancelled", err);
+            }
+        }
+
+        function handleConnect(pk) {
+            if(!pk) return;
+            document.getElementById('walletAddr').innerText = pk.toString();
+            document.getElementById('connectMainBtn').innerText = "CONNECTED";
+            document.getElementById('connectMainBtn').disabled = true;
+            document.getElementById('msgInput').disabled = false;
+            document.getElementById('sendBtn').disabled = false;
+        }
+
+        // --- CHAT READ LOGIC ---
         async function fetchMessages() {
             const chatBox = document.getElementById('chatBox');
             chatBox.innerHTML = '<div class="loading">Scanning Blockchain...</div>';
 
             try {
                 const pubKey = new solanaWeb3.PublicKey(TARGET_WALLET);
-                
-                // 1. Get last 15 signatures for the chat wallet
-                // Note: limit is low to prevent rate limiting on public RPCs
-                const signatures = await connection.getSignaturesForAddress(pubKey, { limit: 15 });
+                const signatures = await connection.getSignaturesForAddress(pubKey, { limit: 20 });
 
                 if (signatures.length === 0) {
                     chatBox.innerHTML = '<div class="loading">No messages found.</div>';
                     return;
                 }
 
-                chatBox.innerHTML = ''; // Clear loading
+                chatBox.innerHTML = ''; 
 
-                // 2. Fetch details for each transaction to find the Memo
-                // We do this concurrently (Promise.all) but be careful with public RPC limits
                 const txs = await Promise.all(signatures.map(async (sigInfo) => {
                     try {
-                        const tx = await connection.getParsedTransaction(sigInfo.signature, {
-                            maxSupportedTransactionVersion: 0
-                        });
+                        const tx = await connection.getParsedTransaction(sigInfo.signature, { maxSupportedTransactionVersion: 0 });
                         return { tx, sig: sigInfo.signature, time: sigInfo.blockTime };
-                    } catch (e) {
-                        return null; 
-                    }
+                    } catch (e) { return null; }
                 }));
 
-                // 3. Parse and Display
                 txs.filter(t => t).forEach(item => {
+                    if(!item.tx || !item.tx.meta) return;
                     const logs = item.tx.meta.logMessages || [];
                     const sender = item.tx.transaction.message.accountKeys[0].pubkey.toString();
                     
-                    // Look for Memo in logs
-                    let memoText = null;
-                    
-                    // Pattern 1: Program log: Memo (len X): "TEXT"
                     const memoRegex = /Program log: Memo \(len \d+\): "(.*)"/;
+                    let memoText = null;
                     
                     for (const log of logs) {
                         const match = log.match(memoRegex);
-                        if (match) {
-                            memoText = match[1];
-                            break;
-                        }
+                        if (match) { memoText = match[1]; break; }
                     }
 
-                    // If we found a memo, display it
-                    if (memoText) {
-                        addMessageToUI(sender, memoText, item.sig, item.time);
-                    }
+                    if (memoText) addMessageToUI(sender, memoText, item.sig, item.time);
                 });
 
             } catch (err) {
                 console.error(err);
-                chatBox.innerHTML = '<div class="loading" style="color:red">Error loading messages. Rate limit? Try Refresh.</div>';
+                chatBox.innerHTML = '<div class="loading" style="color:red">Load Error. Try Refresh.</div>';
             }
         }
 
@@ -159,7 +234,6 @@
             const box = document.getElementById('chatBox');
             const row = document.createElement('div');
             row.className = 'msg-row';
-            
             const date = new Date(timestamp * 1000).toLocaleTimeString();
             const shortAddr = sender.slice(0,4) + '...' + sender.slice(-4);
 
@@ -173,25 +247,12 @@
             box.appendChild(row);
         }
 
-        // --- WRITE MESSAGES (EXISTING) ---
-        async function connectWallet() {
-            if(!provider) return alert("Install Phantom!");
-            try {
-                const resp = await provider.connect();
-                handleConnect(resp.publicKey);
-            } catch(e) { console.error(e); }
-        }
-
-        function handleConnect(pk) {
-            document.getElementById('walletAddr').innerText = pk.toString();
-            document.getElementById('msgInput').disabled = false;
-            document.getElementById('sendBtn').disabled = false;
-        }
-
+        // --- CHAT WRITE LOGIC ---
         async function sendMessage() {
             const text = document.getElementById('msgInput').value;
             if(!text) return;
-            
+            if(!provider) return alert("Select a wallet first!");
+
             const btn = document.getElementById('sendBtn');
             const log = document.getElementById('txLog');
             btn.disabled = true;
@@ -199,16 +260,16 @@
 
             try {
                 const tx = new solanaWeb3.Transaction();
-                const from = provider.publicKey;
+                const from = provider.publicKey || (await provider.connect()).publicKey;
 
-                // 1. Memo Instruction
+                // 1. Memo
                 tx.add(new solanaWeb3.TransactionInstruction({
                     keys: [{ pubkey: from, isSigner: true, isWritable: true }],
                     programId: new solanaWeb3.PublicKey("MemoSq4gqABAXKb96qnH8TysNcWxMyWCqXgDLGmfcHr"),
                     data: Buffer.from(text, 'utf-8')
                 }));
 
-                // 2. Transfer 0 SOL (Required for signature visibility on target)
+                // 2. Transfer 0 SOL
                 tx.add(solanaWeb3.SystemProgram.transfer({
                     fromPubkey: from,
                     toPubkey: new solanaWeb3.PublicKey(TARGET_WALLET),
@@ -221,15 +282,14 @@
 
                 const { signature } = await provider.signAndSendTransaction(tx);
                 
-                log.innerText = "Sent! waiting for confirmation...";
+                log.innerHTML = `<span style="color:#00ff41">Sent! Waiting...</span>`;
                 
-                // Wait 2s then refresh
                 setTimeout(() => {
                     document.getElementById('msgInput').value = "";
                     btn.innerText = "SEND";
                     btn.disabled = false;
                     log.innerHTML = `<a href="https://solscan.io/tx/${signature}" target="_blank" style="color:#00ff41">Success! View TX</a>`;
-                    fetchMessages(); // Auto refresh chat
+                    fetchMessages();
                 }, 2000);
 
             } catch(err) {
