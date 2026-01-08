@@ -3,160 +3,246 @@
 <head>
     <meta charset="UTF-8">
     <meta name="viewport" content="width=device-width, initial-scale=1.0">
-    <title>Raw Solana Chat</title>
+    <title>Solana On-Chain Chat (Read & Write)</title>
     
-    <!-- 1. BUFFER POLYFILL (Required for Solana) -->
+    <!-- 1. REQUIRED LIBRARIES -->
     <script src="https://bundle.run/buffer@6.0.3"></script>
     <script>window.Buffer = window.buffer.Buffer;</script>
-
-    <!-- 2. SOLANA WEB3.JS -->
     <script src="https://unpkg.com/@solana/web3.js@1.87.6/lib/index.iife.min.js"></script>
 
     <style>
-        body { background: #050505; color: #00ff41; font-family: 'Courier New', monospace; padding: 20px; }
+        body { background: #050505; color: #00ff41; font-family: 'Courier New', monospace; padding: 20px; max-width: 800px; margin: 0 auto; }
         .box { border: 1px solid #333; padding: 20px; margin-bottom: 20px; background: #000; }
-        h2 { margin-top: 0; font-size: 14px; border-bottom: 1px solid #333; padding-bottom: 10px; color: #fff; }
+        h2 { margin-top: 0; font-size: 14px; border-bottom: 1px solid #333; padding-bottom: 10px; color: #fff; display: flex; justify-content: space-between; }
         
-        button { 
-            background: #00ff41; color: #000; border: none; padding: 10px 20px; 
-            font-weight: bold; cursor: pointer; font-family: inherit; text-transform: uppercase;
+        /* CHAT HISTORY STYLES */
+        #chatBox { 
+            height: 400px; overflow-y: auto; border: 1px solid #222; padding: 10px; 
+            background: #0a0a0a; display: flex; flex-direction: column-reverse; /* Newest at bottom visually if we prepend, or column if append */
         }
-        button:disabled { background: #333; color: #666; cursor: not-allowed; }
-        button:hover:not(:disabled) { background: #fff; }
+        .msg-row { margin-bottom: 12px; border-bottom: 1px solid #111; padding-bottom: 8px; }
+        .msg-meta { font-size: 10px; color: #666; margin-bottom: 4px; }
+        .msg-text { color: #fff; font-size: 14px; word-wrap: break-word; }
+        .loading { text-align: center; color: #888; padding: 20px; }
 
-        input { 
-            background: #111; border: 1px solid #333; color: #fff; padding: 10px; 
-            width: 100%; box-sizing: border-box; font-family: inherit; margin-bottom: 10px;
-        }
-        input:focus { outline: none; border-color: #00ff41; }
-
-        .log { color: #888; font-size: 12px; margin-top: 10px; line-height: 1.4; word-wrap: break-word; }
-        .success { color: #00ff41; }
-        .error { color: #ff0055; }
-        a { color: #fff; text-decoration: underline; }
+        /* INPUT STYLES */
+        input { background: #111; border: 1px solid #333; color: #fff; padding: 10px; width: 70%; }
+        button { background: #00ff41; color: #000; border: none; padding: 10px 20px; font-weight: bold; cursor: pointer; width: 28%; }
+        button:disabled { background: #333; color: #666; }
+        
+        .refresh-btn { background: transparent; border: 1px solid #333; color: #888; width: auto; font-size: 10px; padding: 2px 10px; }
+        .refresh-btn:hover { border-color: #fff; color: #fff; }
     </style>
 </head>
 <body>
 
+    <!-- 1. CONNECT -->
     <div class="box">
-        <h2>1. STATUS</h2>
-        <div id="status">Scanning for Phantom...</div>
-        <div id="rpcStatus" style="font-size:10px; color:#666; margin-top:5px">RPC: PublicNode.com (Open)</div>
+        <h2>
+            STATUS: <span id="status">Checking...</span>
+            <button class="refresh-btn" onclick="connectWallet()">CONNECT WALLET</button>
+        </h2>
+        <div id="walletAddr" style="font-size:12px; color:#666">Not Connected</div>
     </div>
 
+    <!-- 2. CHAT HISTORY -->
     <div class="box">
-        <h2>2. CONNECT</h2>
-        <button id="connectBtn" onclick="connectWallet()">CONNECT WALLET</button>
-        <div id="walletAddr" class="log">Not Connected</div>
+        <h2>
+            LIVE CHAT ($k8o5)
+            <button class="refresh-btn" onclick="fetchMessages()">REFRESH</button>
+        </h2>
+        <div id="chatBox">
+            <div class="loading">Loading blockchain history...</div>
+        </div>
     </div>
 
+    <!-- 3. SEND INPUT -->
     <div class="box">
-        <h2>3. CHAT (ON-CHAIN)</h2>
-        <input type="text" id="msgInput" placeholder="Type message (will remain on-chain forever)..." disabled>
-        <button id="sendBtn" onclick="sendMessage()" disabled>SEND MESSAGE</button>
-        <div id="txLog" class="log"></div>
+        <div style="display:flex; justify-content:space-between;">
+            <input type="text" id="msgInput" placeholder="Write a message on-chain..." disabled>
+            <button id="sendBtn" onclick="sendMessage()" disabled>SEND</button>
+        </div>
+        <div id="txLog" style="font-size:10px; margin-top:10px; color:#888;"></div>
     </div>
 
     <script>
         // --- CONFIG ---
         const TARGET_WALLET = "3FkfFXtMDVkKJ6SAouMSK4qYFmErYxSnAUx6vP52pump"; 
-        
-        // FIX: Using PublicNode.com which allows public browser requests (CORS friendly)
-        const RPC_URL = "https://solana-rpc.publicnode.com";
+        const RPC_URL = "https://solana-rpc.publicnode.com"; // Open Public RPC
 
         let provider = null;
         let connection = new solanaWeb3.Connection(RPC_URL, "confirmed");
 
-        // --- 1. FIND PROVIDER (Phantom) ---
-        window.addEventListener('load', () => {
-            const statusEl = document.getElementById('status');
-            let attempts = 0;
-            const check = setInterval(() => {
-                attempts++;
-                const p = window.solana;
-                if (p && p.isPhantom) {
-                    clearInterval(check);
-                    provider = p;
-                    statusEl.innerHTML = "<span class='success'>Phantom Detected.</span>";
-                    if (p.isConnected) handleConnect(p.publicKey);
-                } else if (attempts > 10) {
-                    clearInterval(check);
-                    statusEl.innerHTML = "Phantom not found. <a href='https://phantom.app' target='_blank'>Install it</a>";
+        // --- INIT ---
+        window.onload = () => {
+            // 1. Look for Phantom
+            setTimeout(() => {
+                if (window.solana && window.solana.isPhantom) {
+                    provider = window.solana;
+                    document.getElementById('status').innerText = "Phantom Detected";
+                    document.getElementById('status').style.color = "#00ff41";
+                    if(provider.isConnected) handleConnect(provider.publicKey);
+                } else {
+                    document.getElementById('status').innerText = "Phantom Not Found";
+                    document.getElementById('status').style.color = "red";
                 }
             }, 500);
-        });
 
-        // --- 2. CONNECT ---
-        async function connectWallet() {
-            if (!provider) return alert("Phantom not found!");
+            // 2. Fetch History Immediately
+            fetchMessages();
+        };
+
+        // --- READ MESSAGES (THE NEW PART) ---
+        async function fetchMessages() {
+            const chatBox = document.getElementById('chatBox');
+            chatBox.innerHTML = '<div class="loading">Scanning Blockchain...</div>';
+
             try {
-                const resp = await provider.connect();
-                handleConnect(resp.publicKey);
+                const pubKey = new solanaWeb3.PublicKey(TARGET_WALLET);
+                
+                // 1. Get last 15 signatures for the chat wallet
+                // Note: limit is low to prevent rate limiting on public RPCs
+                const signatures = await connection.getSignaturesForAddress(pubKey, { limit: 15 });
+
+                if (signatures.length === 0) {
+                    chatBox.innerHTML = '<div class="loading">No messages found.</div>';
+                    return;
+                }
+
+                chatBox.innerHTML = ''; // Clear loading
+
+                // 2. Fetch details for each transaction to find the Memo
+                // We do this concurrently (Promise.all) but be careful with public RPC limits
+                const txs = await Promise.all(signatures.map(async (sigInfo) => {
+                    try {
+                        const tx = await connection.getParsedTransaction(sigInfo.signature, {
+                            maxSupportedTransactionVersion: 0
+                        });
+                        return { tx, sig: sigInfo.signature, time: sigInfo.blockTime };
+                    } catch (e) {
+                        return null; 
+                    }
+                }));
+
+                // 3. Parse and Display
+                txs.filter(t => t).forEach(item => {
+                    const logs = item.tx.meta.logMessages || [];
+                    const sender = item.tx.transaction.message.accountKeys[0].pubkey.toString();
+                    
+                    // Look for Memo in logs
+                    let memoText = null;
+                    
+                    // Pattern 1: Program log: Memo (len X): "TEXT"
+                    const memoRegex = /Program log: Memo \(len \d+\): "(.*)"/;
+                    
+                    for (const log of logs) {
+                        const match = log.match(memoRegex);
+                        if (match) {
+                            memoText = match[1];
+                            break;
+                        }
+                    }
+
+                    // If we found a memo, display it
+                    if (memoText) {
+                        addMessageToUI(sender, memoText, item.sig, item.time);
+                    }
+                });
+
             } catch (err) {
                 console.error(err);
+                chatBox.innerHTML = '<div class="loading" style="color:red">Error loading messages. Rate limit? Try Refresh.</div>';
             }
         }
 
-        function handleConnect(pubKey) {
-            document.getElementById('walletAddr').innerText = "Wallet: " + pubKey.toString();
-            document.getElementById('connectBtn').innerText = "CONNECTED";
-            document.getElementById('connectBtn').disabled = true;
+        function addMessageToUI(sender, text, sig, timestamp) {
+            const box = document.getElementById('chatBox');
+            const row = document.createElement('div');
+            row.className = 'msg-row';
+            
+            const date = new Date(timestamp * 1000).toLocaleTimeString();
+            const shortAddr = sender.slice(0,4) + '...' + sender.slice(-4);
+
+            row.innerHTML = `
+                <div class="msg-meta">
+                    <span style="color:#00ff41; font-weight:bold;">${shortAddr}</span> • ${date} • 
+                    <a href="https://solscan.io/tx/${sig}" target="_blank" style="color:#666; text-decoration:none;">TX</a>
+                </div>
+                <div class="msg-text">${escapeHtml(text)}</div>
+            `;
+            box.appendChild(row);
+        }
+
+        // --- WRITE MESSAGES (EXISTING) ---
+        async function connectWallet() {
+            if(!provider) return alert("Install Phantom!");
+            try {
+                const resp = await provider.connect();
+                handleConnect(resp.publicKey);
+            } catch(e) { console.error(e); }
+        }
+
+        function handleConnect(pk) {
+            document.getElementById('walletAddr').innerText = pk.toString();
             document.getElementById('msgInput').disabled = false;
             document.getElementById('sendBtn').disabled = false;
         }
 
-        // --- 3. SEND MESSAGE ---
         async function sendMessage() {
-            const text = document.getElementById('msgInput').value.trim();
+            const text = document.getElementById('msgInput').value;
             if(!text) return;
-
+            
             const btn = document.getElementById('sendBtn');
             const log = document.getElementById('txLog');
-            
             btn.disabled = true;
-            btn.innerText = "SIGNING...";
-            log.innerHTML = "Creating transaction...";
+            btn.innerText = "SENDING...";
 
             try {
                 const tx = new solanaWeb3.Transaction();
-                const pubKey = provider.publicKey;
+                const from = provider.publicKey;
 
-                // 1. Add MEMO (The Message)
-                // Program ID: MemoSq4gqABAXKb96qnH8TysNcWxMyWCqXgDLGmfcHr
+                // 1. Memo Instruction
                 tx.add(new solanaWeb3.TransactionInstruction({
-                    keys: [{ pubkey: pubKey, isSigner: true, isWritable: true }],
+                    keys: [{ pubkey: from, isSigner: true, isWritable: true }],
                     programId: new solanaWeb3.PublicKey("MemoSq4gqABAXKb96qnH8TysNcWxMyWCqXgDLGmfcHr"),
                     data: Buffer.from(text, 'utf-8')
                 }));
 
-                // 2. Add Transfer (0 SOL) - Required to hit the network cleanly
+                // 2. Transfer 0 SOL (Required for signature visibility on target)
                 tx.add(solanaWeb3.SystemProgram.transfer({
-                    fromPubkey: pubKey,
+                    fromPubkey: from,
                     toPubkey: new solanaWeb3.PublicKey(TARGET_WALLET),
                     lamports: 0
                 }));
 
-                // 3. Get Blockhash from PublicNode
                 const { blockhash } = await connection.getLatestBlockhash();
                 tx.recentBlockhash = blockhash;
-                tx.feePayer = pubKey;
+                tx.feePayer = from;
 
-                // 4. Sign & Send
                 const { signature } = await provider.signAndSendTransaction(tx);
                 
-                log.innerHTML = `<span class="success">MESSAGE SENT!</span><br>TX: <a href="https://solscan.io/tx/${signature}" target="_blank">${signature.slice(0,20)}...</a>`;
-                document.getElementById('msgInput').value = "";
-                btn.innerText = "SEND MESSAGE";
-                btn.disabled = false;
+                log.innerText = "Sent! waiting for confirmation...";
+                
+                // Wait 2s then refresh
+                setTimeout(() => {
+                    document.getElementById('msgInput').value = "";
+                    btn.innerText = "SEND";
+                    btn.disabled = false;
+                    log.innerHTML = `<a href="https://solscan.io/tx/${signature}" target="_blank" style="color:#00ff41">Success! View TX</a>`;
+                    fetchMessages(); // Auto refresh chat
+                }, 2000);
 
-            } catch (err) {
-                console.error("TX Fail:", err);
-                log.innerHTML = `<span class="error">FAILED: ${err.message}</span>`;
-                btn.innerText = "SEND MESSAGE";
+            } catch(err) {
+                console.error(err);
+                log.innerText = "Error: " + err.message;
                 btn.disabled = false;
+                btn.innerText = "SEND";
             }
+        }
+
+        function escapeHtml(text) {
+            return text.replace(/&/g, "&amp;").replace(/</g, "&lt;").replace(/>/g, "&gt;").replace(/"/g, "&quot;").replace(/'/g, "&#039;");
         }
     </script>
 </body>
 </html>
-`
