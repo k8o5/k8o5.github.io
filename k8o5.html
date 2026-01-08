@@ -433,7 +433,6 @@
             cursor: pointer;
         }
 
-        /* --- BOOKMARKS STYLES --- */
         .bookmark-item {
             padding: 10px 12px;
             border: 1px solid var(--border-thin);
@@ -2075,20 +2074,22 @@
 
         function renderWatchlist() {
             $('watchlist-items').innerHTML = state.watchlist.map(t => {
-                let display = t;
-                let subtext = STOCK_EXCHANGES[t] || 'NASDAQ';
-                let isPair = t.includes(':');
+                if(!t) return '';
+                const str = String(t);
+                let display = str;
+                let subtext = STOCK_EXCHANGES[str] || 'NASDAQ';
+                let isPair = str.includes(':');
                 if (isPair) {
-                    const parts = t.split(':');
+                    const parts = str.split(':');
                     display = `${parts[0]}:${parts[1].substring(0,4)}...`;
                     subtext = 'CRYPTO PAIR';
                 }
 
                 return `
-                <div class="watchlist-item" onclick="searchFor('$${t}')">
+                <div class="watchlist-item" onclick="searchFor('$${str}')">
                     <span>${display}</span>
                     <span style="color:var(--gray)">${subtext}</span>
-                    <button class="remove-btn" onclick="event.stopPropagation();removeFromWatchlist('${t}')">
+                    <button class="remove-btn" onclick="event.stopPropagation();removeFromWatchlist('${str}')">
                         <svg viewBox="0 0 24 24" class="icon-sm" fill="none" stroke="currentColor" stroke-width="2"><path d="M19 6.41L17.59 5 12 10.59 6.41 5 5 6.41 10.59 12 5 17.59 6.41 19 12 13.41 17.59 19 19 17.59 13.41 12z"/></svg>
                     </button>
                 </div>
@@ -2896,6 +2897,7 @@
                 document.getElementById('chat-status-text').innerText = pk.slice(0,4) + '...' + pk.slice(-4);
                 document.getElementById('chat-input').disabled = false;
                 document.getElementById('chat-send-btn').disabled = false;
+                document.querySelector('.chat-connect-btn').innerText = "CONNECTED";
                 
                 await checkK8o5Balance(pk);
                 toast("WALLET CONNECTED");
@@ -2904,7 +2906,6 @@
 
         async function checkK8o5Balance(pk) {
             try {
-                // Check if user holds the specific $k8o5 token
                 const accounts = await chatConnection.getParsedTokenAccountsByOwner(
                     new solanaWeb3.PublicKey(pk),
                     { mint: new solanaWeb3.PublicKey(K8O5_MINT) }
@@ -2915,23 +2916,16 @@
                     balance = accounts.value[0].account.data.parsed.info.tokenAmount.uiAmount;
                 }
 
-                // Determine Badge
                 userBadge = "";
                 const statusEl = document.getElementById('chat-status-text');
                 
-                // Clear old badges
                 const oldBadge = statusEl.querySelector('.badge');
                 if(oldBadge) oldBadge.remove();
 
-                if (balance >= 1000000) {
-                    userBadge = `<span class="badge badge-god">[GOD]</span>`;
-                } else if (balance >= 100000) {
-                    userBadge = `<span class="badge badge-whale">[WHALE]</span>`;
-                } else if (balance >= 1000) {
-                    userBadge = `<span class="badge badge-dolphin">[DOLPHIN]</span>`;
-                } else if (balance > 0) {
-                    userBadge = `<span class="badge badge-shrimp">[SHRIMP]</span>`;
-                }
+                if (balance >= 1000000) userBadge = `<span class="badge badge-god">[GOD]</span>`;
+                else if (balance >= 100000) userBadge = `<span class="badge badge-whale">[WHALE]</span>`;
+                else if (balance >= 1000) userBadge = `<span class="badge badge-dolphin">[DOLPHIN]</span>`;
+                else if (balance > 0) userBadge = `<span class="badge badge-shrimp">[SHRIMP]</span>`;
 
                 if(userBadge) statusEl.innerHTML += " " + userBadge;
 
@@ -2964,7 +2958,6 @@
                     const logs = item.tx.meta.logMessages || [];
                     const sender = item.tx.transaction.message.accountKeys[0].pubkey.toString();
                     
-                    // Regex for Memo
                     const memoRegex = /Program log: Memo \(len \d+\): "(.*)"/;
                     let memoText = null;
                     
@@ -2981,10 +2974,6 @@
                         const shortSender = sender.slice(0,4) + '..';
                         const isMe = chatProvider && chatProvider.publicKey.toString() === sender;
                         const senderColor = isMe ? 'var(--highlight)' : 'var(--gray)';
-
-                        // Note: Showing badge for *every* historical message requires fetching balance for every sender, 
-                        // which would kill the RPC limit. We only show the badge for the current user in the header 
-                        // and standard formatting for history to keep it fast/clean.
                         
                         div.innerHTML = `
                             <div class="chat-meta">
@@ -3014,14 +3003,12 @@
                 const tx = new solanaWeb3.Transaction();
                 const from = chatProvider.publicKey;
 
-                // 1. Memo
                 tx.add(new solanaWeb3.TransactionInstruction({
                     keys: [{ pubkey: from, isSigner: true, isWritable: true }],
                     programId: new solanaWeb3.PublicKey("MemoSq4gqABAXKb96qnH8TysNcWxMyWCqXgDLGmfcHr"),
                     data: Buffer.from(text, 'utf-8')
                 }));
 
-                // 2. Transfer (Gas/Target)
                 tx.add(solanaWeb3.SystemProgram.transfer({
                     fromPubkey: from,
                     toPubkey: new solanaWeb3.PublicKey(CHAT_ROOM),
