@@ -14,9 +14,9 @@
     </script>
     <script src="https://unpkg.com/@solana/web3.js@1.87.6/lib/index.iife.min.js"></script>
     
-    <!-- WEBLLM IMPORTS -->
+    <!-- WEBLLM IMPORTS (Fixed Version 0.2.60 for stability) -->
     <script type="module">
-        import * as webllm from "https://esm.run/@mlc-ai/web-llm";
+        import * as webllm from "https://esm.run/@mlc-ai/web-llm@0.2.60";
         window.webllm = webllm;
         window.dispatchEvent(new Event('webllm-ready'));
     </script>
@@ -2267,6 +2267,23 @@
             const responseText = $('ai-response-text');
             const statusLabel = $('ai-loading-status');
 
+            // --- DIAGNOSTIC CHECKS ---
+            if (!navigator.gpu) {
+                progressRow.style.display = 'none';
+                responseText.style.display = 'block';
+                responseText.innerHTML = `<span style="color:var(--red)">ERROR: WEBGPU NOT DETECTED.<br>Please use Chrome v113+, Edge, or enable WebGPU flags.</span>`;
+                statusLabel.textContent = 'UNSUPPORTED';
+                return;
+            }
+
+            if (window.location.protocol === 'file:') {
+                progressRow.style.display = 'none';
+                responseText.style.display = 'block';
+                responseText.innerHTML = `<span style="color:var(--red)">ERROR: LOCAL FILE RESTRICTION.<br>Browsers block AI engines on file:// protocol for security.<br><br>FIX: Use a local server (e.g. VS Code 'Live Server' extension) or 'python -m http.server'.</span>`;
+                statusLabel.textContent = 'SECURITY BLOCK';
+                return;
+            }
+
             try {
                 // Init Engine if not ready
                 if (!aiState.engine) {
@@ -2320,7 +2337,7 @@
                 console.error(err);
                 responseText.style.display = 'block';
                 progressRow.style.display = 'none';
-                responseText.innerHTML = `<span style="color:var(--red)">ERROR: ${err.message || "WebGPU Not Supported or Out of Memory"}</span>`;
+                responseText.innerHTML = `<span style="color:var(--red)">ERROR: ${err.message || "Unknown Engine Error. Check Console."}</span>`;
                 statusLabel.textContent = 'FAILED';
             }
         }
@@ -2861,12 +2878,7 @@
                 
                 // Do we want to run regular search results below? 
                 // Let's run regular search too for context, but strip !ai
-                // Or just stop here. Let's run search for context if prompt exists.
-                if(match && match[1]) {
-                    // fall through to search but strip !ai
-                    // Actually, let's just return to keep focus on AI for explicit command
-                    return; 
-                }
+                // Actually, let's just return to keep focus on AI for explicit command
                 return;
             }
             
