@@ -153,7 +153,7 @@
             
             <!-- AUTH PANEL (LOGGED OUT) -->
             <div id="authPanel">
-                <textarea id="privKey" rows="3" placeholder="PASTE PRIVATE KEY ARRAY [...]"></textarea>
+                <textarea id="privKey" rows="3" placeholder="PASTE KEY (JSON ARRAY OR PHANTOM BASE58)"></textarea>
                 <div style="display:grid; grid-template-columns: 1fr 1fr; gap:10px;">
                     <button class="btn-gen" onclick="generateWallet()">GENERATE</button>
                     <button class="btn-login" onclick="loginWallet()">LOGIN</button>
@@ -255,6 +255,22 @@
         if(!connection) log('CRITICAL: BROWSER BLOCKING RPC. TRY VPN OR DIFFERENT BROWSER.', 'err');
     };
 
+    // --- BASE58 DECODER (STANDALONE) ---
+    const B58_ALPHABET = "123456789ABCDEFGHJKLMNPQRSTUVWXYZabcdefghijkmnopqrstuvwxyz";
+    function from_b58(S) {
+        var d=[],b=[],i,j,c,n;
+        for(i in S){
+            j=0,c=B58_ALPHABET.indexOf(S[i]);
+            if(c<0)return undefined;
+            c||b.length^i?i:b.push(0);
+            while(j in d||c){
+                n=d[j]; n=n?n*58+c:c; c=n>>8; d[j]=n%256; j++;
+            }
+        }
+        while(j--)b.push(d[j]);
+        return new Uint8Array(b);
+    }
+
     // --- STATE ---
     let state = {
         running: false,
@@ -273,11 +289,20 @@
     }
 
     function loginWallet() {
-        try {
-            const raw = document.getElementById('privKey').value.trim();
-            if(!raw) return log('ENTER PRIVATE KEY', 'err');
+        const raw = document.getElementById('privKey').value.trim();
+        if(!raw) return log('ENTER PRIVATE KEY', 'err');
 
-            const secret = Uint8Array.from(JSON.parse(raw));
+        try {
+            let secret;
+            if(raw.startsWith('[') && raw.endsWith(']')) {
+                // JSON Format
+                secret = Uint8Array.from(JSON.parse(raw));
+            } else {
+                // Base58 Format (Phantom)
+                secret = from_b58(raw);
+                if(!secret) throw new Error("Invalid Base58");
+            }
+
             state.keypair = solanaWeb3.Keypair.fromSecretKey(secret);
             state.wallet = state.keypair.publicKey.toBase58();
             
@@ -298,24 +323,18 @@
             log('LOGIN SUCCESSFUL.', 'sys');
 
         } catch(e) {
-            log('LOGIN FAILED: INVALID KEY FORMAT', 'err');
+            log('LOGIN FAILED: KEY FORMAT NOT RECOGNIZED', 'err');
         }
     }
 
     function logoutWallet() {
-        // Stop Bot
         if(state.running) toggleAI();
-
-        // Clear State
         state.wallet = null;
         state.keypair = null;
         state.balance = 0;
-
-        // Switch UI
         document.getElementById('walletPanel').classList.add('hidden');
         document.getElementById('authPanel').classList.remove('hidden');
-        document.getElementById('privKey').value = ""; // Clear input for security
-
+        document.getElementById('privKey').value = ""; 
         log('LOGGED OUT. SESSION WIPED.', 'sys');
     }
 
@@ -338,7 +357,6 @@
 
     // --- AI LOOP ---
     async function toggleAI() {
-        // Toggle Logic
         const btn = document.getElementById('startBtn');
         if(state.running) {
             state.running = false;
@@ -349,13 +367,11 @@
             return;
         }
 
-        // Checks
         if(!state.wallet) return log('LOGIN REQUIRED', 'err');
         const ca = document.getElementById('tokenCA').value;
         const apiKey = document.getElementById('apiKey').value;
         if(!ca || !apiKey) return log('MISSING CONFIG DATA', 'err');
 
-        // Start
         state.running = true;
         btn.innerText = "STOP AGENT";
         btn.classList.add('ai-btn');
@@ -446,7 +462,7 @@
 
         const json = await res.json();
         const content = json.choices[0].message.content;
-        const match = content.match(/\{[\s\S]*\}/); // Extract JSON
+        const match = content.match(/\{[\s\S]*\}/); 
         return JSON.parse(match[0]);
     }
 
@@ -456,7 +472,6 @@
 
         if(action === 'HOLD') return;
 
-        // BUY LOGIC
         if(action === 'BUY' && !state.holdingToken) {
             log('OPENING REQUIRED TRADE...', 'trade');
             const amount = parseFloat(document.getElementById('capital').value);
@@ -470,7 +485,6 @@
             }
         }
 
-        // SELL LOGIC
         if(action === 'SELL' && state.holdingToken) {
             log('CLOSING TRADE...', 'trade');
             const accounts = await connection.getParsedTokenAccountsByOwner(state.keypair.publicKey, { mint: new solanaWeb3.PublicKey(pair.baseToken.address) });
@@ -485,7 +499,7 @@
                     refreshBalance();
                 }
             } else {
-                state.holdingToken = false; // Reset if no tokens found
+                state.holdingToken = false;
             }
         }
     }
