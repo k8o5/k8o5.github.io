@@ -3,7 +3,7 @@
 <head>
     <meta charset="UTF-8">
     <meta name="viewport" content="width=device-width, initial-scale=1.0">
-    <title>ΩMEGA</title>
+    <title>ΩMEGA // AI TRADER</title>
     
     <link rel="icon" href="data:image/svg+xml,<svg xmlns=%22http://www.w3.org/2000/svg%22 viewBox=%220 0 100 100%22><rect width=%22100%22 height=%22100%22 fill=%22black%22/><text y=%22.9em%22 x=%2250%22 text-anchor=%22middle%22 font-size=%2290%22 fill=%22%2300ff41%22>Ω</text></svg>">
 
@@ -76,14 +76,6 @@
             padding: 0 10px; cursor: pointer; font-weight: bold; font-size: 12px;
         }
 
-        .copy-btn {
-            position: absolute; right: 0; top: 0;
-            background: #333; color: #fff; border: none;
-            padding: 5px 10px; cursor: pointer; font-size: 10px;
-            border-left: 1px solid #555; border-bottom: 1px solid #555;
-        }
-        .copy-btn:hover { background: var(--fg); color: var(--bg); }
-
         .helper-link { font-size: 10px; display: block; margin-bottom: 15px; text-align: right; }
 
         /* BUTTONS */
@@ -95,8 +87,14 @@
         }
         button:hover { background: var(--fg); color: var(--bg); }
         
-        button.btn-gen { border-color: var(--accent); color: var(--accent); margin-bottom: 10px; }
+        button.btn-gen { border-color: var(--accent); color: var(--accent); }
         button.btn-gen:hover { background: var(--accent); color: #000; }
+        
+        button.btn-login { border-color: #fff; color: #fff; background: #222; }
+        button.btn-login:hover { background: #fff; color: #000; }
+
+        button.btn-logout { border-color: var(--danger); color: var(--danger); margin-top: 20px; }
+        button.btn-logout:hover { background: var(--danger); color: #fff; }
 
         button.ai-btn { border-color: var(--ai); color: var(--ai); }
         button.ai-btn:hover { background: var(--ai); color: #000; box-shadow: 0 0 20px var(--ai); }
@@ -120,6 +118,8 @@
         .ai-pulse { width: 10px; height: 10px; background: #333; display: inline-block; margin-left: 10px; }
         .thinking { background: var(--ai); animation: pulse 0.2s infinite; }
         @keyframes pulse { 0% { opacity: 0.2; } 50% { opacity: 1; } 100% { opacity: 0.2; } }
+        
+        .hidden { display: none; }
     </style>
 </head>
 <body>
@@ -149,19 +149,27 @@
             <input type="text" id="modelId" value="xiaomi/mimo-v2-flash:free">
             <a href="https://openrouter.ai/models" target="_blank" class="helper-link">BROWSE MODELS LIST -></a>
             
-            <label>WALLET</label>
-            <button class="btn-gen" onclick="generateWallet()">GENERATE NEW WALLET</button>
+            <label>WALLET ACCESS</label>
             
-            <div class="input-group">
-                <textarea id="privKey" rows="3" placeholder="[PRIVATE KEY ARRAY]" onchange="importWallet()"></textarea>
-                <button class="copy-btn" onclick="copyPrivateKey()">COPY</button>
+            <!-- AUTH PANEL (LOGGED OUT) -->
+            <div id="authPanel">
+                <textarea id="privKey" rows="3" placeholder="PASTE PRIVATE KEY ARRAY [...]"></textarea>
+                <div style="display:grid; grid-template-columns: 1fr 1fr; gap:10px;">
+                    <button class="btn-gen" onclick="generateWallet()">GENERATE</button>
+                    <button class="btn-login" onclick="loginWallet()">LOGIN</button>
+                </div>
             </div>
-            
-            <div id="walletDisplay" style="display:none; border: 1px solid var(--accent); padding: 10px; margin-top: 10px;">
-                <div id="qrcode"></div>
-                <div id="pubKey" style="font-size: 10px; margin: 5px 0; word-break:break-all;">...</div>
-                <div class="big-num"><span id="balance">0.00</span> SOL</div>
-                <button onclick="refreshBalance()" style="font-size:10px; padding:5px;">REFRESH</button>
+
+            <!-- WALLET PANEL (LOGGED IN) -->
+            <div id="walletPanel" class="hidden">
+                <div style="border: 1px solid var(--accent); padding: 10px;">
+                    <div style="text-align:center; color: var(--accent); margin-bottom:5px;">AUTHENTICATED</div>
+                    <div id="qrcode"></div>
+                    <div id="pubKey" style="font-size: 10px; margin: 5px 0; word-break:break-all; text-align:center;">...</div>
+                    <div class="big-num" style="text-align:center;"><span id="balance">0.00</span> SOL</div>
+                    <button onclick="refreshBalance()" style="font-size:10px; padding:5px;">REFRESH</button>
+                </div>
+                <button class="btn-logout" onclick="logoutWallet()">LOGOUT</button>
             </div>
         </div>
 
@@ -214,13 +222,12 @@
 </div>
 
 <script>
-    // --- AUTO CONNECTION ---
+    // --- RPC LIST ---
     const RPC_NODES = [
+        'https://mainnet.helius-rpc.com/?api-key=15858025-06c8-4e3e-90f0-322122606320', 
+        'https://solana-mainnet.g.alchemy.com/v2/demo', 
         'https://api.mainnet-beta.solana.com',
-        'https://rpc.ankr.com/solana',
         'https://solana-rpc.publicnode.com',
-        'https://mainnet.helius-rpc.com/?api-key=15858025-06c8-4e3e-90f0-322122606320',
-        'https://solana.public-rpc.com'
     ];
     
     let connection = null;
@@ -229,6 +236,9 @@
         log('AUTO-CONNECTING TO SERVER...', 'sys');
         for (let rpc of RPC_NODES) {
             try {
+                // Pre-check fetch
+                await fetch(rpc, { method: 'POST', body: JSON.stringify({jsonrpc:"2.0",id:1,method:"getHealth"}), headers: {"Content-Type": "application/json"} });
+                
                 const conn = new solanaWeb3.Connection(rpc, 'confirmed');
                 await conn.getLatestBlockhash();
                 connection = conn;
@@ -242,7 +252,7 @@
                 console.log(`Failed ${rpc}`);
             }
         }
-        if(!connection) log('CRITICAL: NO SERVER CONNECTION', 'err');
+        if(!connection) log('CRITICAL: BROWSER BLOCKING RPC. TRY VPN OR DIFFERENT BROWSER.', 'err');
     };
 
     // --- STATE ---
@@ -255,25 +265,28 @@
         entryPrice: 0,
     };
     
-    // --- WALLET ---
+    // --- AUTHENTICATION ---
     function generateWallet() {
         const kp = solanaWeb3.Keypair.generate();
         document.getElementById('privKey').value = JSON.stringify(Array.from(kp.secretKey));
-        importWallet();
-        log('NEW WALLET GENERATED. SAVE KEY!', 'sys');
+        log('NEW KEY GENERATED. CLICK LOGIN TO ACCESS.', 'sys');
     }
 
-    function importWallet() {
+    function loginWallet() {
         try {
             const raw = document.getElementById('privKey').value.trim();
+            if(!raw) return log('ENTER PRIVATE KEY', 'err');
+
             const secret = Uint8Array.from(JSON.parse(raw));
             state.keypair = solanaWeb3.Keypair.fromSecretKey(secret);
             state.wallet = state.keypair.publicKey.toBase58();
             
-            document.getElementById('walletDisplay').style.display = 'block';
+            // Switch UI
+            document.getElementById('authPanel').classList.add('hidden');
+            document.getElementById('walletPanel').classList.remove('hidden');
             document.getElementById('pubKey').innerText = state.wallet;
             
-            // QR Code
+            // QR
             document.getElementById('qrcode').innerHTML = "";
             new QRCode(document.getElementById("qrcode"), {
                 text: state.wallet,
@@ -282,17 +295,28 @@
             });
 
             refreshBalance();
+            log('LOGIN SUCCESSFUL.', 'sys');
+
         } catch(e) {
-            log('INVALID KEY FORMAT', 'err');
+            log('LOGIN FAILED: INVALID KEY FORMAT', 'err');
         }
     }
 
-    function copyPrivateKey() {
-        const key = document.getElementById('privKey');
-        if(!key.value) return log('NOTHING TO COPY', 'err');
-        key.select();
-        navigator.clipboard.writeText(key.value);
-        log('PRIVATE KEY COPIED TO CLIPBOARD', 'sys');
+    function logoutWallet() {
+        // Stop Bot
+        if(state.running) toggleAI();
+
+        // Clear State
+        state.wallet = null;
+        state.keypair = null;
+        state.balance = 0;
+
+        // Switch UI
+        document.getElementById('walletPanel').classList.add('hidden');
+        document.getElementById('authPanel').classList.remove('hidden');
+        document.getElementById('privKey').value = ""; // Clear input for security
+
+        log('LOGGED OUT. SESSION WIPED.', 'sys');
     }
 
     async function refreshBalance() {
@@ -314,26 +338,27 @@
 
     // --- AI LOOP ---
     async function toggleAI() {
+        // Toggle Logic
+        const btn = document.getElementById('startBtn');
         if(state.running) {
             state.running = false;
-            document.getElementById('startBtn').innerText = "INITIALIZE AGENT";
-            document.getElementById('startBtn').classList.remove('ai-btn');
+            btn.innerText = "INITIALIZE AGENT";
+            btn.classList.remove('ai-btn');
             document.getElementById('sysStatus').innerText = "OFFLINE";
             log('AGENT STOPPED', 'sys');
             return;
         }
 
+        // Checks
+        if(!state.wallet) return log('LOGIN REQUIRED', 'err');
         const ca = document.getElementById('tokenCA').value;
         const apiKey = document.getElementById('apiKey').value;
-        
-        if(!state.wallet || !ca || !apiKey) {
-            log('MISSING CONFIG DATA', 'err');
-            return;
-        }
+        if(!ca || !apiKey) return log('MISSING CONFIG DATA', 'err');
 
+        // Start
         state.running = true;
-        document.getElementById('startBtn').innerText = "STOP AGENT";
-        document.getElementById('startBtn').classList.add('ai-btn');
+        btn.innerText = "STOP AGENT";
+        btn.classList.add('ai-btn');
         document.getElementById('sysStatus').innerText = "ONLINE";
         document.getElementById('sysStatus').style.color = "var(--ai)";
         
@@ -373,7 +398,7 @@
         }
 
         document.getElementById('aiBrain').classList.remove('thinking');
-        if(state.running) setTimeout(runAiCycle, 3000); // 3s Interval
+        if(state.running) setTimeout(runAiCycle, 3000); 
     }
 
     async function consultOracle(pair, currentPrice) {
@@ -411,8 +436,7 @@
             method: 'POST',
             headers: {
                 'Authorization': `Bearer ${apiKey}`,
-                'Content-Type': 'application/json',
-                'HTTP-Referer': window.location.href
+                'Content-Type': 'application/json'
             },
             body: JSON.stringify({
                 model: modelId,
@@ -430,7 +454,7 @@
         const action = decision.action.toUpperCase();
         log(`AI: [${action}] ${decision.reason}`, 'ai');
 
-        if(action === 'HOLD') return; // Valid action, just does nothing but talk
+        if(action === 'HOLD') return;
 
         // BUY LOGIC
         if(action === 'BUY' && !state.holdingToken) {
@@ -472,7 +496,12 @@
             const output = type === 'buy' ? tokenMint : 'So11111111111111111111111111111111111111112';
             const amtParam = type === 'buy' ? Math.floor(amount * 1e9) : amount;
 
-            const quote = await (await fetch(`https://quote-api.jup.ag/v6/quote?inputMint=${input}&outputMint=${output}&amount=${amtParam}&slippageBps=100`)).json();
+            const quoteUrl = `https://quote-api.jup.ag/v6/quote?inputMint=${input}&outputMint=${output}&amount=${amtParam}&slippageBps=100`;
+            const quoteRes = await fetch(quoteUrl);
+            
+            if (!quoteRes.ok) throw new Error("JUP API BLOCKED");
+            
+            const quote = await quoteRes.json();
             if(quote.error) throw new Error(quote.error);
 
             const swap = await (await fetch('https://quote-api.jup.ag/v6/swap', {
