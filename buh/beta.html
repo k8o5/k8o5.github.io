@@ -3,354 +3,508 @@
 <head>
     <meta charset="UTF-8">
     <meta name="viewport" content="width=device-width, initial-scale=1.0">
-    <title>SOL-DEGEN-TERMINAL</title>
+    <title>ΩMEGA</title>
     
-    <!-- Green Dot Favicon -->
-    <link rel="icon" href="data:image/svg+xml,<svg xmlns=%22http://www.w3.org/2000/svg%22 viewBox=%220 0 100 100%22><circle cx=%2250%22 cy=%2250%22 r=%2250%22 fill=%22%2300FF00%22/></svg>">
+    <link rel="icon" href="data:image/svg+xml,<svg xmlns=%22http://www.w3.org/2000/svg%22 viewBox=%220 0 100 100%22><rect width=%22100%22 height=%22100%22 fill=%22black%22/><text y=%22.9em%22 x=%2250%22 text-anchor=%22middle%22 font-size=%2290%22 fill=%22%2300ff41%22>Ω</text></svg>">
 
-    <!-- Solana Libs -->
+    <!-- LIBS -->
     <script src="https://unpkg.com/@solana/web3.js@latest/lib/index.iife.min.js"></script>
+    <script src="https://cdnjs.cloudflare.com/ajax/libs/qrcodejs/1.0.0/qrcode.min.js"></script>
 
     <style>
+        * { margin: 0; padding: 0; box-sizing: border-box; }
         :root {
-            --primary: #00FF00;
-            --bg: #000000;
-            --panel: #0a0a0a;
-            --border: #003300;
-            --text-dim: #666;
-            --error: #ff3333;
+            --bg: #050505;
+            --fg: #e0e0e0;
+            --accent: #00ff41;
+            --danger: #ff003c;
+            --ai: #00ffff;
+            --border: 3px solid var(--fg);
         }
-
         body {
-            background-color: var(--bg);
-            color: var(--primary);
-            font-family: 'Courier New', Courier, monospace;
-            margin: 0;
+            background: var(--bg); color: var(--fg);
+            font-family: 'Courier New', monospace;
+            font-weight: bold; text-transform: uppercase;
+            overflow-x: hidden;
+            letter-spacing: -0.5px;
+        }
+        .container { max-width: 1400px; margin: 0 auto; padding: 20px; }
+        
+        a { color: var(--accent); text-decoration: none; border-bottom: 1px solid var(--accent); transition: 0.2s; }
+        a:hover { background: var(--accent); color: #000; }
+
+        /* HEADER */
+        header { 
+            border-bottom: var(--border); padding-bottom: 20px; margin-bottom: 30px; 
+            display: flex; justify-content: space-between; align-items: flex-end;
+        }
+        h1 { font-size: 4rem; line-height: 0.8; }
+        h1 span { color: var(--ai); }
+        .server-status { font-size: 12px; color: #666; margin-top: 5px; }
+        .connected { color: var(--accent); }
+
+        .grid { display: grid; grid-template-columns: 1fr 1fr 1fr; gap: 20px; }
+        
+        /* PANELS */
+        .panel {
+            border: var(--border);
+            background: #000;
             padding: 20px;
-            font-size: 13px;
-            display: flex;
-            justify-content: center;
+            position: relative;
+            box-shadow: 8px 8px 0 #222;
+        }
+        .panel-title {
+            background: var(--fg); color: var(--bg);
+            padding: 5px 10px; display: inline-block;
+            margin-bottom: 20px; font-size: 14px;
         }
 
-        .container {
-            width: 100%;
-            max-width: 850px;
-            border: 1px solid var(--primary);
-            background: #020202;
-            padding: 2px;
+        /* INPUTS */
+        input, textarea {
+            width: 100%; background: #111; border: 1px solid #333;
+            color: var(--fg); font-family: inherit; font-size: 14px; 
+            padding: 10px; margin-bottom: 5px; resize: vertical;
         }
+        input:focus, textarea:focus { outline: none; border-color: var(--ai); background: #000; }
+        label { font-size: 10px; color: #666; display: block; margin-top: 15px; margin-bottom: 5px; }
 
-        .header {
-            background: #001100;
-            padding: 15px;
-            border-bottom: 1px solid var(--primary);
-            display: flex;
-            justify-content: space-between;
-            align-items: center;
-        }
-
-        h1 { margin: 0; font-size: 16px; text-transform: uppercase; letter-spacing: 2px; }
+        .input-group { position: relative; }
         
-        .section { padding: 15px; border-bottom: 1px solid var(--border); }
-
-        .label { 
-            display: block; 
-            margin-bottom: 5px; 
-            color: var(--text-dim); 
-            font-size: 11px; 
-            text-transform: uppercase;
+        .max-btn {
+            position: absolute; right: 0; top: 0; bottom: 5px;
+            background: var(--accent); color: #000; border: none;
+            padding: 0 10px; cursor: pointer; font-weight: bold; font-size: 12px;
         }
 
-        a { color: var(--primary); text-decoration: none; border-bottom: 1px dotted var(--primary); }
-        a:hover { background: var(--primary); color: #000; }
-
-        input, textarea, select {
-            width: 100%;
-            background: #000;
-            border: 1px solid var(--border);
-            color: #fff;
-            padding: 10px;
-            box-sizing: border-box;
-            font-family: inherit;
-            margin-bottom: 10px;
+        .copy-btn {
+            position: absolute; right: 0; top: 0;
+            background: #333; color: #fff; border: none;
+            padding: 5px 10px; cursor: pointer; font-size: 10px;
+            border-left: 1px solid #555; border-bottom: 1px solid #555;
         }
+        .copy-btn:hover { background: var(--fg); color: var(--bg); }
 
-        input:focus { outline: none; border-color: var(--primary); }
+        .helper-link { font-size: 10px; display: block; margin-bottom: 15px; text-align: right; }
 
-        .row { display: flex; gap: 15px; }
-        .col { flex: 1; }
-
+        /* BUTTONS */
         button {
-            width: 100%;
-            padding: 15px;
-            background: #000;
-            color: var(--primary);
-            border: 1px solid var(--primary);
-            cursor: pointer;
-            font-weight: bold;
-            text-transform: uppercase;
-            transition: 0.2s;
+            width: 100%; padding: 15px; background: transparent;
+            border: var(--border); color: var(--fg);
+            font-family: inherit; font-size: 16px; font-weight: 900;
+            cursor: pointer; transition: 0.1s; margin-top: 10px;
         }
-
-        button:hover { background: var(--primary); color: #000; }
+        button:hover { background: var(--fg); color: var(--bg); }
         
-        .btn-stop { border-color: var(--error); color: var(--error); }
-        .btn-stop:hover { background: var(--error); color: #000; }
+        button.btn-gen { border-color: var(--accent); color: var(--accent); margin-bottom: 10px; }
+        button.btn-gen:hover { background: var(--accent); color: #000; }
 
-        .btn-save { padding: 5px 10px; width: auto; font-size: 10px; float: right; margin-top: -25px; }
-
+        button.ai-btn { border-color: var(--ai); color: var(--ai); }
+        button.ai-btn:hover { background: var(--ai); color: #000; box-shadow: 0 0 20px var(--ai); }
+        
+        /* LOGS */
         .terminal {
-            height: 350px;
-            overflow-y: auto;
-            background: #000;
-            padding: 10px;
-            border-top: 1px solid var(--primary);
-            font-size: 12px;
-            line-height: 1.5;
+            height: 500px; overflow-y: auto;
+            border: 1px solid #333; padding: 10px;
+            font-size: 11px; background: #000;
         }
+        .log-entry { margin-bottom: 5px; border-left: 2px solid #333; padding-left: 8px; word-break: break-all; }
+        .log.ai { border-color: var(--ai); color: var(--ai); }
+        .log.trade { border-color: var(--accent); color: var(--accent); }
+        .log.err { border-color: var(--danger); color: var(--danger); }
 
-        .log-time { color: #444; margin-right: 8px; }
-        .log-ok { color: var(--primary); }
-        .log-err { color: var(--error); }
-        .log-sys { color: #888; }
+        /* QR & STATS */
+        #qrcode { background: #fff; padding: 5px; width: fit-content; margin: 10px auto; border: 2px solid var(--accent); }
+        .big-num { font-size: 24px; color: var(--accent); }
+        .stat-row { display: flex; justify-content: space-between; margin-bottom: 10px; border-bottom: 1px dashed #333; }
         
-        /* Scrollbar */
-        ::-webkit-scrollbar { width: 6px; }
-        ::-webkit-scrollbar-thumb { background: var(--primary); }
-        ::-webkit-scrollbar-track { background: #000; }
+        .ai-pulse { width: 10px; height: 10px; background: #333; display: inline-block; margin-left: 10px; }
+        .thinking { background: var(--ai); animation: pulse 0.2s infinite; }
+        @keyframes pulse { 0% { opacity: 0.2; } 50% { opacity: 1; } 100% { opacity: 0.2; } }
     </style>
 </head>
 <body>
 
 <div class="container">
-    <div class="header">
-        <h1>SOL // DEGEN // TERMINAL</h1>
-        <div id="status-indicator" style="font-size:10px; color:#666;">SYSTEM IDLE</div>
-    </div>
+    <header>
+        <div>
+            <h1>ΩMEGA<br><span>AI AGENT</span></h1>
+            <div class="server-status" id="rpcStatus">CONNECTING TO NETWORK...</div>
+        </div>
+        <div style="text-align: right;">
+            <div>SYSTEM: <span id="sysStatus">OFFLINE</span></div>
+            <div style="font-size: 10px; color: #666;">MANDATORY EXPOSURE PROTOCOL</div>
+        </div>
+    </header>
 
-    <!-- CONFIGURATION -->
-    <div class="section">
-        <button class="btn-save" onclick="saveConfig()">[SAVE CONFIG]</button>
-        
-        <div class="label">RPC ENDPOINT (DEFAULT: ANKR PUBLIC)</div>
-        <input type="text" id="cfg-rpc" value="https://rpc.ankr.com/solana">
-
-        <div class="row">
-            <div class="col">
-                <div class="label">OPENROUTER KEY (<a href="https://openrouter.ai/keys" target="_blank">GET KEY</a>)</div>
-                <input type="password" id="cfg-key" placeholder="sk-or-...">
+    <div class="grid">
+        <!-- SETUP -->
+        <div class="panel">
+            <div class="panel-title">1. CONFIGURATION</div>
+            
+            <label>OPENROUTER API KEY</label>
+            <input type="password" id="apiKey" placeholder="sk-or-v1-...">
+            <a href="https://openrouter.ai/keys" target="_blank" class="helper-link">GET KEY -></a>
+            
+            <label>AI MODEL</label>
+            <input type="text" id="modelId" value="xiaomi/mimo-v2-flash:free">
+            <a href="https://openrouter.ai/models" target="_blank" class="helper-link">BROWSE MODELS LIST -></a>
+            
+            <label>WALLET</label>
+            <button class="btn-gen" onclick="generateWallet()">GENERATE NEW WALLET</button>
+            
+            <div class="input-group">
+                <textarea id="privKey" rows="3" placeholder="[PRIVATE KEY ARRAY]" onchange="importWallet()"></textarea>
+                <button class="copy-btn" onclick="copyPrivateKey()">COPY</button>
             </div>
-            <div class="col">
-                <div class="label">MODEL ID (<a href="https://openrouter.ai/models" target="_blank">LIST MODELS</a>)</div>
-                <input type="text" id="cfg-model" value="meta-llama/llama-3-8b-instruct:free">
+            
+            <div id="walletDisplay" style="display:none; border: 1px solid var(--accent); padding: 10px; margin-top: 10px;">
+                <div id="qrcode"></div>
+                <div id="pubKey" style="font-size: 10px; margin: 5px 0; word-break:break-all;">...</div>
+                <div class="big-num"><span id="balance">0.00</span> SOL</div>
+                <button onclick="refreshBalance()" style="font-size:10px; padding:5px;">REFRESH</button>
             </div>
         </div>
-    </div>
 
-    <!-- WALLET -->
-    <div class="section">
-        <div class="row">
-            <div class="col">
-                <button onclick="connectWallet()" id="btn-connect">INITIALIZE UPLINK</button>
+        <!-- TRADING -->
+        <div class="panel">
+            <div class="panel-title">2. TRADING TARGET</div>
+            
+            <label>TOKEN ADDRESS (CA)</label>
+            <input type="text" id="tokenCA" placeholder="Ex: So111...">
+            <div class="helper-link"><a href="https://k8o5.com" target="_blank">FIND TOKENS ON K8O5.COM -></a></div>
+            
+            <label>TRADE AMOUNT (SOL)</label>
+            <div class="input-group">
+                <input type="number" id="capital" value="0.1" step="0.01">
+                <button class="max-btn" onclick="setMaxSol()">MAX</button>
             </div>
-            <div class="col" style="display:flex; align-items:center; justify-content:flex-end;">
-                <div id="wallet-display" style="text-align:right; color:#444;">NO CONNECTION</div>
+            
+            <div style="margin-top: 30px;">
+                <button class="ai-btn" id="startBtn" onclick="toggleAI()">INITIALIZE AGENT</button>
+            </div>
+
+            <div style="margin-top: 20px; border: 1px dashed var(--ai); padding: 10px;">
+                <label>LIVE STATUS</label>
+                <div class="stat-row">
+                    <span>STATE:</span>
+                    <span id="agentState" style="color: var(--ai)">LIQUID (SOL)</span>
+                </div>
+                <div class="stat-row">
+                    <span>ENTRY:</span>
+                    <span id="entryPrice">---</span>
+                </div>
+                <div class="stat-row">
+                    <span>PNL:</span>
+                    <span id="pnl">0.00%</span>
+                </div>
             </div>
         </div>
-    </div>
 
-    <!-- STRATEGY -->
-    <div class="section">
-        <div class="label">TARGET CONTRACT ADDRESS (CA)</div>
-        <input type="text" id="strat-token" placeholder="3Fkf..." value="3FkfFXtMDVkKJ6SAouMSK4qYFmErYxSnAUx6vP52pump">
-
-        <div class="label">STRATEGY CONTEXT (THE BRAIN)</div>
-        <textarea id="strat-context" rows="2" placeholder="Tell the AI what to look for. e.g. 'Chart looks like a cup and handle. Volume spiking.'"></textarea>
-    </div>
-
-    <!-- EXECUTION -->
-    <div class="section">
-        <div class="row">
-            <button onclick="startLoop()">ENGAGE AUTO-PILOT</button>
-            <button onclick="stopLoop()" class="btn-stop">ABORT SEQUENCE</button>
+        <!-- LOGS -->
+        <div class="panel">
+            <div class="panel-title">
+                3. NEURAL LOG
+                <div class="ai-pulse" id="aiBrain"></div>
+            </div>
+            <div class="terminal" id="console">
+                <div class="log-entry">> SYSTEM INITIALIZED</div>
+            </div>
         </div>
-    </div>
-
-    <!-- LOGS -->
-    <div class="terminal" id="console">
-        <div><span class="log-time">[SYSTEM]</span> Terminal loaded.</div>
-        <div><span class="log-time">[SYSTEM]</span> Waiting for configuration...</div>
     </div>
 </div>
 
 <script>
-    // --- STATE ---
-    let walletAddr = null;
+    // --- AUTO CONNECTION ---
+    const RPC_NODES = [
+        'https://api.mainnet-beta.solana.com',
+        'https://rpc.ankr.com/solana',
+        'https://solana-rpc.publicnode.com',
+        'https://mainnet.helius-rpc.com/?api-key=15858025-06c8-4e3e-90f0-322122606320',
+        'https://solana.public-rpc.com'
+    ];
+    
     let connection = null;
-    let loopId = null;
-    const terminal = document.getElementById('console');
 
-    // --- INIT ---
-    window.onload = () => {
-        // Load saved settings
-        if(localStorage.getItem('sol_rpc')) document.getElementById('cfg-rpc').value = localStorage.getItem('sol_rpc');
-        if(localStorage.getItem('sol_key')) document.getElementById('cfg-key').value = localStorage.getItem('sol_key');
-        if(localStorage.getItem('sol_model')) document.getElementById('cfg-model').value = localStorage.getItem('sol_model');
-        if(localStorage.getItem('sol_token')) document.getElementById('strat-token').value = localStorage.getItem('sol_token');
-        log("Config restored from memory.", "sys");
+    window.onload = async () => {
+        log('AUTO-CONNECTING TO SERVER...', 'sys');
+        for (let rpc of RPC_NODES) {
+            try {
+                const conn = new solanaWeb3.Connection(rpc, 'confirmed');
+                await conn.getLatestBlockhash();
+                connection = conn;
+                
+                const el = document.getElementById('rpcStatus');
+                el.innerText = `CONNECTED: ${new URL(rpc).hostname}`;
+                el.classList.add('connected');
+                log(`SERVER CONNECTED: ${new URL(rpc).hostname}`, 'sys');
+                break;
+            } catch (e) {
+                console.log(`Failed ${rpc}`);
+            }
+        }
+        if(!connection) log('CRITICAL: NO SERVER CONNECTION', 'err');
     };
 
-    function saveConfig() {
-        localStorage.setItem('sol_rpc', document.getElementById('cfg-rpc').value);
-        localStorage.setItem('sol_key', document.getElementById('cfg-key').value);
-        localStorage.setItem('sol_model', document.getElementById('cfg-model').value);
-        localStorage.setItem('sol_token', document.getElementById('strat-token').value);
-        log("Configuration saved.", "ok");
-    }
-
-    // --- LOGGING ---
-    function log(msg, type="sys") {
-        const div = document.createElement('div');
-        const time = new Date().toLocaleTimeString('en-US', {hour12:false});
-        div.innerHTML = `<span class="log-time">[${time}]</span> <span class="log-${type}">${msg}</span>`;
-        terminal.appendChild(div);
-        terminal.scrollTop = terminal.scrollHeight;
-    }
-
+    // --- STATE ---
+    let state = {
+        running: false,
+        wallet: null,
+        keypair: null,
+        balance: 0,
+        holdingToken: false,
+        entryPrice: 0,
+    };
+    
     // --- WALLET ---
-    async function connectWallet() {
-        if (!window.phantom?.solana) return log("Phantom wallet not found.", "err");
-        
+    function generateWallet() {
+        const kp = solanaWeb3.Keypair.generate();
+        document.getElementById('privKey').value = JSON.stringify(Array.from(kp.secretKey));
+        importWallet();
+        log('NEW WALLET GENERATED. SAVE KEY!', 'sys');
+    }
+
+    function importWallet() {
         try {
-            const provider = window.phantom.solana;
-            const resp = await provider.connect();
-            walletAddr = resp.publicKey.toString();
+            const raw = document.getElementById('privKey').value.trim();
+            const secret = Uint8Array.from(JSON.parse(raw));
+            state.keypair = solanaWeb3.Keypair.fromSecretKey(secret);
+            state.wallet = state.keypair.publicKey.toBase58();
             
-            document.getElementById('wallet-display').innerHTML = `<span style="color:#0f0">CONNECTED: ${walletAddr.slice(0,6)}...</span>`;
-            document.getElementById('btn-connect').style.display = 'none';
-            log("Uplink established.", "ok");
+            document.getElementById('walletDisplay').style.display = 'block';
+            document.getElementById('pubKey').innerText = state.wallet;
+            
+            // QR Code
+            document.getElementById('qrcode').innerHTML = "";
+            new QRCode(document.getElementById("qrcode"), {
+                text: state.wallet,
+                width: 100, height: 100,
+                colorDark : "#000000", colorLight : "#ffffff"
+            });
 
-            const rpc = document.getElementById('cfg-rpc').value;
-            connection = new solanaWeb3.Connection(rpc, 'confirmed');
-
-        } catch (err) {
-            log("Connection failed: " + err.message, "err");
+            refreshBalance();
+        } catch(e) {
+            log('INVALID KEY FORMAT', 'err');
         }
     }
 
-    // --- BOT LOGIC ---
-    function startLoop() {
-        if(!walletAddr) return log("Connect wallet first.", "err");
-        if(loopId) return;
-
-        log(">>> AUTO-PILOT ENGAGED", "ok");
-        document.getElementById('status-indicator').innerText = "SYSTEM ACTIVE";
-        document.getElementById('status-indicator').style.color = "#0f0";
-        
-        runCycle();
-        loopId = setInterval(runCycle, 30000); // 30s Loop
+    function copyPrivateKey() {
+        const key = document.getElementById('privKey');
+        if(!key.value) return log('NOTHING TO COPY', 'err');
+        key.select();
+        navigator.clipboard.writeText(key.value);
+        log('PRIVATE KEY COPIED TO CLIPBOARD', 'sys');
     }
 
-    function stopLoop() {
-        if(loopId) {
-            clearInterval(loopId);
-            loopId = null;
-            log(">>> SEQUENCE ABORTED", "err");
-            document.getElementById('status-indicator').innerText = "SYSTEM HALTED";
-            document.getElementById('status-indicator').style.color = "#ff3333";
+    async function refreshBalance() {
+        if(!state.wallet || !connection) return;
+        try {
+            const bal = await connection.getBalance(state.keypair.publicKey);
+            state.balance = bal / 1e9;
+            document.getElementById('balance').innerText = state.balance.toFixed(4);
+        } catch(e) { log('BALANCE ERROR', 'err'); }
+    }
+
+    function setMaxSol() {
+        if(state.balance > 0.01) {
+            document.getElementById('capital').value = (state.balance - 0.005).toFixed(4);
+        } else {
+            log('INSUFFICIENT FUNDS FOR MAX', 'err');
         }
     }
 
-    async function runCycle() {
-        const apiKey = document.getElementById('cfg-key').value;
-        const model = document.getElementById('cfg-model').value;
-        const token = document.getElementById('strat-token').value;
-        const context = document.getElementById('strat-context').value;
-
-        if(!apiKey || !token) {
-            log("Missing API Key or Target Token.", "err");
-            stopLoop();
+    // --- AI LOOP ---
+    async function toggleAI() {
+        if(state.running) {
+            state.running = false;
+            document.getElementById('startBtn').innerText = "INITIALIZE AGENT";
+            document.getElementById('startBtn').classList.remove('ai-btn');
+            document.getElementById('sysStatus').innerText = "OFFLINE";
+            log('AGENT STOPPED', 'sys');
             return;
         }
 
-        log(`Scanning ${token.slice(0,6)}...`, "sys");
+        const ca = document.getElementById('tokenCA').value;
+        const apiKey = document.getElementById('apiKey').value;
+        
+        if(!state.wallet || !ca || !apiKey) {
+            log('MISSING CONFIG DATA', 'err');
+            return;
+        }
 
-        // THE "LOBOTOMIZED" PROMPT (FORCED TO ACCEPT NEW TOKENS)
-        const systemPrompt = `
-        You are a Solana Degen Bot.
-        Rules:
-        1. You do NOT care if the token is new or unknown.
-        2. Trust the user's Context implicitly.
-        3. If Context says "Bullish" or "Moon", you BUY.
-        4. Output JSON ONLY: {"decision":"BUY"|"SELL"|"HOLD", "confidence":90, "reason":"short text"}
-        `;
+        state.running = true;
+        document.getElementById('startBtn').innerText = "STOP AGENT";
+        document.getElementById('startBtn').classList.add('ai-btn');
+        document.getElementById('sysStatus').innerText = "ONLINE";
+        document.getElementById('sysStatus').style.color = "var(--ai)";
+        
+        log(`FETCHING TOKEN INFO...`, 'sys');
+        runAiCycle();
+    }
 
-        const userPrompt = `Token: ${token}. Context: ${context}. Time: ${new Date().toISOString()}. Should we ape?`;
-
+    async function runAiCycle() {
+        if(!state.running) return;
+        document.getElementById('aiBrain').classList.add('thinking');
+        
         try {
-            const req = await fetch("https://openrouter.ai/api/v1/chat/completions", {
-                method: "POST",
-                headers: { 
-                    "Authorization": `Bearer ${apiKey}`, 
-                    "Content-Type": "application/json",
-                    "HTTP-Referer": window.location.href,
-                    "X-Title": "SolBot"
-                },
-                body: JSON.stringify({
-                    model: model,
-                    messages: [
-                        {role: "system", content: systemPrompt},
-                        {role: "user", content: userPrompt}
-                    ]
-                })
-            });
-
-            if(!req.ok) throw new Error("API Error");
-            const data = await req.json();
+            // 1. FETCH FULL DATA
+            const ca = document.getElementById('tokenCA').value;
+            const res = await fetch(`https://api.dexscreener.com/latest/dex/tokens/${ca}`);
+            const data = await res.json();
             
-            // Clean Markdown
-            let content = data.choices[0].message.content.replace(/```json/g,'').replace(/```/g,'').trim();
-            let ai = JSON.parse(content);
+            if(!data.pairs || !data.pairs[0]) throw new Error("TOKEN DATA NOT FOUND");
+            const pair = data.pairs[0];
+            const price = parseFloat(pair.priceUsd);
 
-            // Fix Decimals
-            if(ai.confidence <= 1) ai.confidence *= 100;
-
-            log(`AI: ${ai.decision} (${ai.confidence}%)`, ai.decision==="BUY"?"ok":"sys");
-            log(`MSG: ${ai.reason}`, "sys");
-
-            if(ai.decision === "BUY" && ai.confidence > 75) {
-                log(">>> BUY SIGNAL TRIGGERED", "ok");
-                
-                // 1. OPEN JUPITER SWAP (Most reliable for new/pump tokens)
-                window.open(`https://jup.ag/swap/SOL-${token}`, '_blank');
-                log("Opening Jupiter Swap Interface...", "sys");
-                
-                // 2. TRIGGER SIGNATURE (Optional proof of life)
-                await triggerSign(); 
+            // Update UI
+            if(state.holdingToken) {
+                const pnl = ((price - state.entryPrice) / state.entryPrice) * 100;
+                document.getElementById('pnl').innerText = pnl.toFixed(2) + "%";
+                document.getElementById('pnl').style.color = pnl >= 0 ? 'var(--accent)' : 'var(--danger)';
             }
 
-        } catch(err) {
-            log("Brain Error: " + err.message, "err");
+            // 2. ASK AI
+            const decision = await consultOracle(pair, price);
+            
+            // 3. EXECUTE
+            await executeDecision(decision, pair);
+
+        } catch(e) {
+            log(`LOOP ERROR: ${e.message}`, 'err');
+        }
+
+        document.getElementById('aiBrain').classList.remove('thinking');
+        if(state.running) setTimeout(runAiCycle, 3000); // 3s Interval
+    }
+
+    async function consultOracle(pair, currentPrice) {
+        const apiKey = document.getElementById('apiKey').value;
+        const modelId = document.getElementById('modelId').value;
+        
+        const context = {
+            user_status: state.holdingToken ? "HOLDING_TOKEN" : "LIQUID_SOL (NO TRADES OPEN)",
+            entry_price: state.entryPrice,
+            current_price: currentPrice,
+            token_info: {
+                name: pair.baseToken.name,
+                liquidity: pair.liquidity?.usd,
+                mcap: pair.marketCap
+            },
+            metrics: {
+                m5: pair.priceChange.m5,
+                h1: pair.priceChange.h1,
+                vol: pair.volume.h24
+            }
+        };
+
+        const prompt = `
+            ACT AS A TRADING AI. SYSTEM RULE: MUST MAINTAIN MINIMUM 1 OPEN TRADE.
+            DATA: ${JSON.stringify(context)}
+            
+            LOGIC RULES:
+            1. IF STATUS IS "LIQUID_SOL": YOU MUST "BUY". WE NEED A TRADE OPEN. DO NOT HOLD CASH.
+            2. IF STATUS IS "HOLDING_TOKEN": YOU CAN "HOLD" (KEEP TRADE OPEN) OR "SELL" (TAKE PROFIT/LOSS).
+            
+            RETURN JSON ONLY: { "action": "BUY" | "SELL" | "HOLD", "reason": "full reasoning string" }
+        `;
+
+        const res = await fetch('https://openrouter.ai/api/v1/chat/completions', {
+            method: 'POST',
+            headers: {
+                'Authorization': `Bearer ${apiKey}`,
+                'Content-Type': 'application/json',
+                'HTTP-Referer': window.location.href
+            },
+            body: JSON.stringify({
+                model: modelId,
+                messages: [{ role: "user", content: prompt }]
+            })
+        });
+
+        const json = await res.json();
+        const content = json.choices[0].message.content;
+        const match = content.match(/\{[\s\S]*\}/); // Extract JSON
+        return JSON.parse(match[0]);
+    }
+
+    async function executeDecision(decision, pair) {
+        const action = decision.action.toUpperCase();
+        log(`AI: [${action}] ${decision.reason}`, 'ai');
+
+        if(action === 'HOLD') return; // Valid action, just does nothing but talk
+
+        // BUY LOGIC
+        if(action === 'BUY' && !state.holdingToken) {
+            log('OPENING REQUIRED TRADE...', 'trade');
+            const amount = parseFloat(document.getElementById('capital').value);
+            const tx = await jupiterSwap('buy', amount, pair.baseToken.address);
+            if(tx) {
+                state.holdingToken = true;
+                state.entryPrice = parseFloat(pair.priceUsd);
+                document.getElementById('agentState').innerText = "HOLDING";
+                document.getElementById('agentState').style.color = "var(--accent)";
+                document.getElementById('entryPrice').innerText = "$" + state.entryPrice;
+            }
+        }
+
+        // SELL LOGIC
+        if(action === 'SELL' && state.holdingToken) {
+            log('CLOSING TRADE...', 'trade');
+            const accounts = await connection.getParsedTokenAccountsByOwner(state.keypair.publicKey, { mint: new solanaWeb3.PublicKey(pair.baseToken.address) });
+            if(accounts.value.length > 0) {
+                const qty = accounts.value[0].account.data.parsed.info.tokenAmount.amount;
+                const tx = await jupiterSwap('sell', qty, pair.baseToken.address);
+                if(tx) {
+                    state.holdingToken = false;
+                    state.entryPrice = 0;
+                    document.getElementById('agentState').innerText = "LIQUID (SOL)";
+                    document.getElementById('agentState').style.color = "var(--ai)";
+                    refreshBalance();
+                }
+            } else {
+                state.holdingToken = false; // Reset if no tokens found
+            }
         }
     }
 
-    async function triggerSign() {
+    async function jupiterSwap(type, amount, tokenMint) {
         try {
-            const tx = new solanaWeb3.Transaction().add(
-                solanaWeb3.SystemProgram.transfer({
-                    fromPubkey: new solanaWeb3.PublicKey(walletAddr),
-                    toPubkey: new solanaWeb3.PublicKey(walletAddr),
-                    lamports: 1000 // Dummy tx
+            const input = type === 'buy' ? 'So11111111111111111111111111111111111111112' : tokenMint;
+            const output = type === 'buy' ? tokenMint : 'So11111111111111111111111111111111111111112';
+            const amtParam = type === 'buy' ? Math.floor(amount * 1e9) : amount;
+
+            const quote = await (await fetch(`https://quote-api.jup.ag/v6/quote?inputMint=${input}&outputMint=${output}&amount=${amtParam}&slippageBps=100`)).json();
+            if(quote.error) throw new Error(quote.error);
+
+            const swap = await (await fetch('https://quote-api.jup.ag/v6/swap', {
+                method: 'POST',
+                headers: {'Content-Type': 'application/json'},
+                body: JSON.stringify({
+                    quoteResponse: quote,
+                    userPublicKey: state.wallet,
+                    wrapAndUnwrapSol: true
                 })
-            );
-            const { blockhash } = await connection.getLatestBlockhash();
-            tx.recentBlockhash = blockhash;
-            tx.feePayer = new solanaWeb3.PublicKey(walletAddr);
-            await window.phantom.solana.signAndSendTransaction(tx);
+            })).json();
+
+            const tx = solanaWeb3.VersionedTransaction.deserialize(Uint8Array.from(atob(swap.swapTransaction), c => c.charCodeAt(0)));
+            tx.sign([state.keypair]);
+            const txid = await connection.sendTransaction(tx);
+            log(`TX SUCCESS: ${txid.slice(0,8)}...`, 'trade');
+            return true;
         } catch(e) {
-            // Ignore cancel errors
+            log(`SWAP FAILED: ${e.message}`, 'err');
+            return false;
         }
     }
+
+    function log(msg, type='sys') {
+        const div = document.createElement('div');
+        div.className = `log-entry ${type}`;
+        div.innerText = `> ${msg}`;
+        const con = document.getElementById('console');
+        con.appendChild(div);
+        con.scrollTop = con.scrollHeight;
+    }
 </script>
+
 </body>
 </html>
