@@ -1,0 +1,201 @@
+<!DOCTYPE html>
+<html lang="de">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>GIF Komprimierer (< 4MB)</title>
+    <style>
+        body { font-family: sans-serif; max-width: 800px; margin: 2rem auto; padding: 0 1rem; line-height: 1.6; background: #f4f4f9; }
+        .container { background: white; padding: 2rem; border-radius: 8px; box-shadow: 0 2px 10px rgba(0,0,0,0.1); }
+        h1 { margin-top: 0; color: #333; }
+        .controls { margin: 20px 0; border: 2px dashed #ccc; padding: 20px; text-align: center; border-radius: 4px; }
+        #status { margin-top: 10px; font-weight: bold; color: #555; }
+        #progress-container { width: 100%; background: #eee; height: 20px; border-radius: 10px; margin-top: 10px; display: none; overflow: hidden; }
+        #progress-bar { height: 100%; background: #4caf50; width: 0%; transition: width 0.2s; }
+        .result-area { margin-top: 20px; text-align: center; }
+        img { max-width: 100%; height: auto; border: 1px solid #ddd; margin-top: 10px; }
+        button { background: #007bff; color: white; border: none; padding: 10px 20px; border-radius: 4px; cursor: pointer; font-size: 1rem; margin-top: 10px; }
+        button:disabled { background: #ccc; cursor: not-allowed; }
+        .hidden { display: none; }
+        .warning { background: #fff3cd; color: #856404; padding: 10px; border-radius: 4px; font-size: 0.9rem; margin-bottom: 15px; }
+    </style>
+</head>
+<body>
+
+<div class="container">
+    <h1>GIF Komprimierer (Ziel: < 4MB)</h1>
+    
+    <div class="warning">
+        <strong>Hinweis:</strong> Die GIF-Verarbeitung findet lokal in deinem Browser statt. 
+        Bei sehr großen Dateien kann dies einige Sekunden dauern. 
+        Falls es nicht startet, nutze bitte Firefox oder starte einen lokalen Webserver (wegen Browser-Sicherheitsrichtlinien für Web Worker).
+    </div>
+
+    <div class="controls">
+        <input type="file" id="fileInput" accept="image/gif">
+        <br>
+        <div id="fileInfo" style="margin-top:10px; font-size: 0.9em;"></div>
+    </div>
+
+    <div id="progress-container">
+        <div id="progress-bar"></div>
+    </div>
+    <div id="status"></div>
+
+    <div class="result-area" id="resultArea" style="display:none;">
+        <h3>Ergebnis:</h3>
+        <p id="resultInfo"></p>
+        <a id="downloadLink" href="#" download="compressed.gif">
+            <button>⬇️ Herunterladen</button>
+        </a>
+        <br><br>
+        <img id="outputImage" alt="Verarbeitetes GIF">
+    </div>
+
+    <!-- Verstecktes Element für den Parser -->
+    <div class="hidden">
+        <img id="sourceGif" src="#">
+    </div>
+</div>
+
+<!-- Bibliotheken laden -->
+<!-- LibGif zum Parsen des GIFs -->
+<script src="https://cdn.jsdelivr.net/gh/buzzfeed/libgif-js@master/libgif.js"></script>
+<!-- Gif.js zum Erstellen des neuen GIFs -->
+<script src="https://cdnjs.cloudflare.com/ajax/libs/gif.js/0.2.0/gif.js"></script>
+
+<script>
+    const fileInput = document.getElementById('fileInput');
+    const statusDiv = document.getElementById('status');
+    const progressBar = document.getElementById('progress-bar');
+    const progressContainer = document.getElementById('progress-container');
+    const outputImage = document.getElementById('outputImage');
+    const resultArea = document.getElementById('resultArea');
+    const fileInfo = document.getElementById('fileInfo');
+    const downloadLink = document.getElementById('downloadLink');
+    const resultInfo = document.getElementById('resultInfo');
+    
+    // Maximale Zielgröße in Bytes (4 MB)
+    const MAX_SIZE = 4 * 1024 * 1024; 
+
+    fileInput.addEventListener('change', function(e) {
+        const file = e.target.files[0];
+        if (!file) return;
+
+        // Reset UI
+        resultArea.style.display = 'none';
+        progressBar.style.width = '0%';
+        progressContainer.style.display = 'none';
+        
+        const sizeMB = (file.size / (1024*1024)).toFixed(2);
+        fileInfo.textContent = `Originalgröße: ${sizeMB} MB`;
+
+        if (file.size <= MAX_SIZE) {
+            statusDiv.textContent = "Die Datei ist bereits kleiner als 4 MB.";
+            // Trotzdem anzeigen
+            const url = URL.createObjectURL(file);
+            showResult(url, file.size);
+            return;
+        }
+
+        processGif(file);
+    });
+
+    function processGif(file) {
+        statusDiv.textContent = "Lade und analysiere GIF...";
+        progressContainer.style.display = 'block';
+
+        // Berechnung des Skalierungsfaktors
+        // Wir nutzen die Wurzel des Verhältnisses, da sich die Fläche quadratisch verhält.
+        // Faktor 0.9 als Sicherheitspuffer.
+        const ratio = MAX_SIZE / file.size;
+        let scale = Math.sqrt(ratio) * 0.90; 
+        
+        // Nicht zu klein werden lassen (Minimum 10% der Größe)
+        if (scale < 0.1) scale = 0.1;
+
+        console.log(`Zielgröße < 4MB. Original: ${file.size}. Skalierungsfaktor: ${scale.toFixed(2)}`);
+
+        // Image Element für den Parser vorbereiten
+        const imgElement = document.getElementById('sourceGif');
+        imgElement.src = URL.createObjectURL(file);
+
+        // SuperGif (libgif) initialisieren
+        const superGif = new SuperGif({ gif: imgElement } );
+
+        superGif.load(function() {
+            statusDiv.textContent = `Extrahiere Frames (${superGif.get_length()} Frames)...`;
+            
+            // Konfiguration für den Encoder (gif.js)
+            const encoder = new GIF({
+                workers: 2,
+                quality: 10, // 1 = beste, 20 = schnellste. 10 ist ein guter Kompromiss.
+                width: Math.floor(imgElement.width * scale),
+                height: Math.floor(imgElement.height * scale),
+                workerScript: 'https://cdnjs.cloudflare.com/ajax/libs/gif.js/0.2.0/gif.worker.js'
+            });
+
+            const canvas = document.createElement('canvas');
+            const ctx = canvas.getContext('2d');
+            canvas.width = Math.floor(imgElement.width * scale);
+            canvas.height = Math.floor(imgElement.height * scale);
+
+            const len = superGif.get_length();
+            
+            // Über alle Frames iterieren
+            for (let i = 0; i < len; i++) {
+                superGif.move_to(i);
+                
+                // Original Frame-Canvas holen
+                const frameCanvas = superGif.get_canvas();
+                
+                // Auf den verkleinerten Canvas zeichnen
+                ctx.clearRect(0, 0, canvas.width, canvas.height);
+                ctx.drawImage(frameCanvas, 0, 0, canvas.width, canvas.height);
+                
+                // Frame zum Encoder hinzufügen
+                // Delay kommt aus libgif in 1/100 sek, gif.js erwartet ms
+                // superGif delay ist manchmal ungenau, wir nehmen den Wert direkt
+                // Zugriff auf interne Daten von libgif ist etwas hacky aber nötig
+                const delay = superGif.get_frames()[i].delay * 10; 
+                encoder.addFrame(ctx, {copy: true, delay: delay});
+            }
+
+            statusDiv.textContent = "Rendere neues GIF (das kann dauern)...";
+            
+            encoder.on('progress', function(p) {
+                const percent = Math.round(p * 100);
+                progressBar.style.width = percent + '%';
+                statusDiv.textContent = `Rendere: ${percent}%`;
+            });
+
+            encoder.on('finished', function(blob) {
+                statusDiv.textContent = "Fertig!";
+                const newUrl = URL.createObjectURL(blob);
+                showResult(newUrl, blob.size);
+            });
+
+            try {
+                encoder.render();
+            } catch (err) {
+                console.error(err);
+                statusDiv.textContent = "Fehler beim Rendern. Bitte versuche es in Firefox oder über einen lokalen Server.";
+            }
+        });
+    }
+
+    function showResult(url, size) {
+        outputImage.src = url;
+        downloadLink.href = url;
+        const sizeMB = (size / (1024 * 1024)).toFixed(2);
+        
+        let color = "green";
+        if (size > MAX_SIZE) color = "red";
+
+        resultInfo.innerHTML = `Neue Größe: <strong style="color:${color}">${sizeMB} MB</strong>`;
+        resultArea.style.display = 'block';
+    }
+</script>
+
+</body>
+</html>
