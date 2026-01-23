@@ -1,0 +1,566 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Lumina | Professional Web Video Editor</title>
+    <script src="https://cdn.tailwindcss.com"></script>
+    <link href="https://fonts.googleapis.com/css2?family=Inter:wght@300;400;500;600;700&display=swap" rel="stylesheet">
+    <link rel="stylesheet" href="https://cdnjs.cloudflare.com/ajax/libs/font-awesome/6.4.0/css/all.min.css">
+    
+    <style>
+        body { font-family: 'Inter', sans-serif; background-color: #09090b; color: #e4e4e7; overflow: hidden; }
+        
+        /* Custom Scrollbar */
+        ::-webkit-scrollbar { width: 6px; height: 6px; }
+        ::-webkit-scrollbar-track { background: #18181b; }
+        ::-webkit-scrollbar-thumb { background: #3f3f46; border-radius: 3px; }
+        ::-webkit-scrollbar-thumb:hover { background: #52525b; }
+
+        /* Range Slider Styling */
+        input[type=range] {
+            -webkit-appearance: none; background: transparent; cursor: pointer;
+        }
+        input[type=range]::-webkit-slider-thumb {
+            -webkit-appearance: none; height: 16px; width: 16px; border-radius: 50%;
+            background: #3b82f6; margin-top: -6px; box-shadow: 0 0 10px rgba(59,130,246,0.5);
+        }
+        input[type=range]::-webkit-slider-runnable-track {
+            width: 100%; height: 4px; background: #27272a; border-radius: 2px;
+        }
+
+        /* Canvas Container */
+        .canvas-container {
+            background-image: 
+                linear-gradient(45deg, #18181b 25%, transparent 25%), 
+                linear-gradient(-45deg, #18181b 25%, transparent 25%), 
+                linear-gradient(45deg, transparent 75%, #18181b 75%), 
+                linear-gradient(-45deg, transparent 75%, #18181b 75%);
+            background-size: 20px 20px;
+            background-position: 0 0, 0 10px, 10px -10px, -10px 0px;
+        }
+
+        /* Loading Spinner */
+        .loader { border: 3px solid #27272a; border-top: 3px solid #3b82f6; border-radius: 50%; width: 24px; height: 24px; animation: spin 1s linear infinite; }
+        @keyframes spin { 0% { transform: rotate(0deg); } 100% { transform: rotate(360deg); } }
+    </style>
+</head>
+<body class="flex flex-col h-screen text-sm select-none">
+
+    <!-- HEADER -->
+    <header class="h-14 bg-zinc-950 border-b border-zinc-800 flex items-center justify-between px-6 z-20">
+        <div class="flex items-center gap-3">
+            <div class="w-8 h-8 bg-blue-600 rounded-lg flex items-center justify-center font-bold text-white">L</div>
+            <span class="font-semibold text-lg tracking-tight">Lumina Studio</span>
+        </div>
+        
+        <div class="flex items-center gap-4">
+            <span id="statusText" class="text-zinc-500 text-xs">Ready</span>
+            <button id="exportBtn" class="bg-blue-600 hover:bg-blue-500 text-white px-4 py-1.5 rounded-md font-medium transition-all flex items-center gap-2 opacity-50 cursor-not-allowed" disabled>
+                <i class="fa-solid fa-download"></i> Export Video
+            </button>
+        </div>
+    </header>
+
+    <!-- MAIN WORKSPACE -->
+    <div class="flex-1 flex overflow-hidden">
+        
+        <!-- SIDEBAR (TOOLS) -->
+        <aside class="w-72 bg-zinc-900 border-r border-zinc-800 flex flex-col z-10">
+            <div class="p-4 border-b border-zinc-800">
+                <h3 class="text-zinc-400 font-medium mb-4 text-xs uppercase tracking-wider">Project Assets</h3>
+                <label class="flex flex-col items-center justify-center w-full h-32 border-2 border-zinc-700 border-dashed rounded-lg cursor-pointer hover:bg-zinc-800 hover:border-blue-500 transition-all group">
+                    <div class="flex flex-col items-center justify-center pt-5 pb-6">
+                        <i class="fa-solid fa-cloud-arrow-up text-2xl text-zinc-500 group-hover:text-blue-500 mb-2 transition-colors"></i>
+                        <p class="text-xs text-zinc-400">Click or drag video</p>
+                    </div>
+                    <input id="fileInput" type="file" class="hidden" accept="video/*" />
+                </label>
+            </div>
+
+            <div class="flex-1 overflow-y-auto p-4">
+                <h3 class="text-zinc-400 font-medium mb-4 text-xs uppercase tracking-wider">Adjustments</h3>
+                
+                <div class="space-y-6">
+                    <!-- Filter: Brightness -->
+                    <div class="space-y-2">
+                        <div class="flex justify-between text-xs">
+                            <span class="text-zinc-300">Brightness</span>
+                            <span id="val-brightness" class="text-zinc-500">100%</span>
+                        </div>
+                        <input type="range" id="filter-brightness" min="0" max="200" value="100" class="w-full h-1 bg-zinc-700 rounded-lg appearance-none cursor-pointer">
+                    </div>
+
+                    <!-- Filter: Contrast -->
+                    <div class="space-y-2">
+                        <div class="flex justify-between text-xs">
+                            <span class="text-zinc-300">Contrast</span>
+                            <span id="val-contrast" class="text-zinc-500">100%</span>
+                        </div>
+                        <input type="range" id="filter-contrast" min="0" max="200" value="100" class="w-full h-1 bg-zinc-700 rounded-lg appearance-none cursor-pointer">
+                    </div>
+
+                    <!-- Filter: Saturation -->
+                    <div class="space-y-2">
+                        <div class="flex justify-between text-xs">
+                            <span class="text-zinc-300">Saturation</span>
+                            <span id="val-saturate" class="text-zinc-500">100%</span>
+                        </div>
+                        <input type="range" id="filter-saturate" min="0" max="200" value="100" class="w-full h-1 bg-zinc-700 rounded-lg appearance-none cursor-pointer">
+                    </div>
+                    
+                    <!-- Filter: Hue Rotate -->
+                    <div class="space-y-2">
+                        <div class="flex justify-between text-xs">
+                            <span class="text-zinc-300">Hue</span>
+                            <span id="val-hue" class="text-zinc-500">0deg</span>
+                        </div>
+                        <input type="range" id="filter-hue" min="0" max="360" value="0" class="w-full h-1 bg-zinc-700 rounded-lg appearance-none cursor-pointer">
+                    </div>
+                    
+                    <!-- Filter: Blur -->
+                    <div class="space-y-2">
+                        <div class="flex justify-between text-xs">
+                            <span class="text-zinc-300">Blur</span>
+                            <span id="val-blur" class="text-zinc-500">0px</span>
+                        </div>
+                        <input type="range" id="filter-blur" min="0" max="20" value="0" step="0.5" class="w-full h-1 bg-zinc-700 rounded-lg appearance-none cursor-pointer">
+                    </div>
+
+                    <button id="resetFilters" class="w-full py-2 text-xs text-zinc-400 hover:text-white border border-zinc-700 hover:border-zinc-500 rounded transition-colors">
+                        Reset Adjustments
+                    </button>
+                </div>
+            </div>
+        </aside>
+
+        <!-- PREVIEW AREA -->
+        <main class="flex-1 bg-black flex flex-col relative">
+            <div class="flex-1 canvas-container flex items-center justify-center relative overflow-hidden">
+                <div id="placeholder" class="text-zinc-600 flex flex-col items-center">
+                    <i class="fa-solid fa-film text-4xl mb-3"></i>
+                    <span>No Video Loaded</span>
+                </div>
+                <!-- The Canvas is the Display -->
+                <canvas id="editorCanvas" class="max-w-full max-h-full shadow-2xl hidden"></canvas>
+                <!-- Hidden Source Video -->
+                <video id="sourceVideo" class="hidden" playsinline crossOrigin="anonymous"></video>
+            </div>
+
+            <!-- PLAYER CONTROLS -->
+            <div class="h-14 bg-zinc-900 border-t border-zinc-800 flex items-center justify-center gap-6 px-4">
+                <button id="skipBack" class="text-zinc-400 hover:text-white"><i class="fa-solid fa-backward-step"></i></button>
+                <button id="playPause" class="w-10 h-10 bg-white text-black rounded-full flex items-center justify-center hover:scale-105 transition-transform">
+                    <i class="fa-solid fa-play ml-1"></i>
+                </button>
+                <button id="skipFwd" class="text-zinc-400 hover:text-white"><i class="fa-solid fa-forward-step"></i></button>
+                
+                <div class="absolute right-6 text-xs text-zinc-400 font-mono">
+                    <span id="currentTime">00:00</span> / <span id="totalTime">00:00</span>
+                </div>
+            </div>
+        </main>
+    </div>
+
+    <!-- TIMELINE (FOOTER) -->
+    <footer class="h-40 bg-zinc-950 border-t border-zinc-800 p-4 flex flex-col relative">
+        <div class="flex justify-between items-center mb-2">
+            <span class="text-xs text-zinc-500 font-bold uppercase">Timeline</span>
+            <span class="text-xs text-blue-500" id="trimInfo">Full Duration</span>
+        </div>
+        
+        <div class="relative flex-1 bg-zinc-900 rounded-md border border-zinc-800 overflow-hidden flex items-center px-4" id="timelineContainer">
+            <!-- Timeline Visual Track -->
+            <div class="w-full h-12 bg-zinc-800 rounded relative group">
+                <!-- Progress Bar -->
+                <div id="progressBar" class="absolute top-0 left-0 h-full bg-blue-500/20 w-0 pointer-events-none"></div>
+                <!-- Playhead -->
+                <div id="playhead" class="absolute top-0 left-0 w-0.5 h-full bg-red-500 z-20 pointer-events-none transform -translate-x-1/2">
+                    <div class="w-3 h-3 bg-red-500 absolute -top-1 -left-[5px] rotate-45"></div>
+                </div>
+
+                <!-- Range Sliders for Trimming -->
+                <input type="range" id="trimStart" min="0" max="100" value="0" step="0.1" 
+                    class="absolute top-0 w-full h-full opacity-0 z-10 cursor-col-resize hover:opacity-100" 
+                    style="pointer-events: all; appearance: none; background: transparent;">
+                
+                <input type="range" id="trimEnd" min="0" max="100" value="100" step="0.1" 
+                    class="absolute top-0 w-full h-full opacity-0 z-10 cursor-col-resize hover:opacity-100" 
+                    style="pointer-events: all; appearance: none; background: transparent;">
+                
+                <!-- Visual Trim Indicators (Calculated via JS) -->
+                <div id="trimOverlayLeft" class="absolute top-0 left-0 h-full bg-black/70 border-r-2 border-yellow-500 pointer-events-none w-0"></div>
+                <div id="trimOverlayRight" class="absolute top-0 right-0 h-full bg-black/70 border-l-2 border-yellow-500 pointer-events-none w-0"></div>
+            </div>
+        </div>
+        <div class="text-[10px] text-zinc-600 mt-2 text-center">Drag yellow handles to trim video start/end. Press Space to Play/Pause.</div>
+    </footer>
+
+    <!-- JS LOGIC -->
+    <script>
+        // --- State Management ---
+        const state = {
+            isPlaying: false,
+            videoLoaded: false,
+            duration: 0,
+            currentTime: 0,
+            trimStart: 0, // In seconds
+            trimEnd: 0,   // In seconds
+            filters: {
+                brightness: 100,
+                contrast: 100,
+                saturate: 100,
+                hue: 0,
+                blur: 0
+            }
+        };
+
+        // --- DOM Elements ---
+        const els = {
+            fileInput: document.getElementById('fileInput'),
+            video: document.getElementById('sourceVideo'),
+            canvas: document.getElementById('editorCanvas'),
+            placeholder: document.getElementById('placeholder'),
+            playPauseBtn: document.getElementById('playPause'),
+            playIcon: document.querySelector('#playPause i'),
+            progressBar: document.getElementById('progressBar'),
+            playhead: document.getElementById('playhead'),
+            timeDisplay: { current: document.getElementById('currentTime'), total: document.getElementById('totalTime') },
+            trimInputs: { start: document.getElementById('trimStart'), end: document.getElementById('trimEnd') },
+            trimOverlays: { left: document.getElementById('trimOverlayLeft'), right: document.getElementById('trimOverlayRight') },
+            filters: {
+                brightness: document.getElementById('filter-brightness'),
+                contrast: document.getElementById('filter-contrast'),
+                saturate: document.getElementById('filter-saturate'),
+                hue: document.getElementById('filter-hue'),
+                blur: document.getElementById('filter-blur')
+            },
+            valDisplay: {
+                brightness: document.getElementById('val-brightness'),
+                contrast: document.getElementById('val-contrast'),
+                saturate: document.getElementById('val-saturate'),
+                hue: document.getElementById('val-hue'),
+                blur: document.getElementById('val-blur')
+            },
+            exportBtn: document.getElementById('exportBtn'),
+            statusText: document.getElementById('statusText')
+        };
+
+        const ctx = els.canvas.getContext('2d', { willReadFrequently: true });
+        let animationFrame;
+
+        // --- Event Listeners ---
+        
+        // File Upload
+        els.fileInput.addEventListener('change', handleFileUpload);
+        
+        // Drag and Drop support
+        document.body.addEventListener('dragover', e => e.preventDefault());
+        document.body.addEventListener('drop', e => {
+            e.preventDefault();
+            if(e.dataTransfer.files[0] && e.dataTransfer.files[0].type.startsWith('video/')) {
+                els.fileInput.files = e.dataTransfer.files;
+                handleFileUpload({ target: els.fileInput });
+            }
+        });
+
+        // Controls
+        els.playPauseBtn.addEventListener('click', togglePlay);
+        document.getElementById('skipBack').addEventListener('click', () => seekRelative(-5));
+        document.getElementById('skipFwd').addEventListener('click', () => seekRelative(5));
+        
+        // Keyboard Shortcuts
+        document.addEventListener('keydown', (e) => {
+            if (e.code === 'Space' && state.videoLoaded) {
+                e.preventDefault();
+                togglePlay();
+            }
+        });
+
+        // Filters
+        Object.keys(els.filters).forEach(key => {
+            els.filters[key].addEventListener('input', (e) => {
+                state.filters[key] = parseFloat(e.target.value);
+                updateFilterDisplay(key);
+                drawFrame(); // Redraw immediately on pause
+            });
+        });
+
+        document.getElementById('resetFilters').addEventListener('click', () => {
+            state.filters = { brightness: 100, contrast: 100, saturate: 100, hue: 0, blur: 0 };
+            Object.keys(els.filters).forEach(key => {
+                els.filters[key].value = state.filters[key];
+                updateFilterDisplay(key);
+            });
+            drawFrame();
+        });
+
+        // Trim Logic
+        els.trimInputs.start.addEventListener('input', updateTrim);
+        els.trimInputs.end.addEventListener('input', updateTrim);
+        
+        // Export
+        els.exportBtn.addEventListener('click', exportVideo);
+
+        // --- Core Functions ---
+
+        function handleFileUpload(e) {
+            const file = e.target.files[0];
+            if (!file) return;
+
+            const url = URL.createObjectURL(file);
+            els.video.src = url;
+            
+            els.statusText.innerText = "Loading video...";
+            
+            els.video.onloadedmetadata = () => {
+                state.videoLoaded = true;
+                state.duration = els.video.duration;
+                state.trimStart = 0;
+                state.trimEnd = state.duration;
+                
+                // UI Updates
+                els.placeholder.classList.add('hidden');
+                els.canvas.classList.remove('hidden');
+                els.exportBtn.disabled = false;
+                els.exportBtn.classList.remove('opacity-50', 'cursor-not-allowed');
+                
+                // Set Canvas Size to match Video resolution
+                els.canvas.width = els.video.videoWidth;
+                els.canvas.height = els.video.videoHeight;
+                
+                // Reset Sliders
+                els.trimInputs.start.max = state.duration;
+                els.trimInputs.end.max = state.duration;
+                els.trimInputs.end.value = state.duration;
+                
+                els.timeDisplay.total.innerText = formatTime(state.duration);
+                updateTrim();
+                
+                drawFrame();
+                els.statusText.innerText = `Ready (${els.video.videoWidth}x${els.video.videoHeight})`;
+            };
+        }
+
+        function togglePlay() {
+            if (!state.videoLoaded) return;
+            
+            if (els.video.paused) {
+                // If we are at the end of the trim, restart
+                if (els.video.currentTime >= state.trimEnd) {
+                    els.video.currentTime = state.trimStart;
+                }
+                els.video.play();
+                state.isPlaying = true;
+                els.playIcon.classList.replace('fa-play', 'fa-pause');
+                renderLoop();
+            } else {
+                els.video.pause();
+                state.isPlaying = false;
+                els.playIcon.classList.replace('fa-pause', 'fa-play');
+                cancelAnimationFrame(animationFrame);
+            }
+        }
+
+        function seekRelative(seconds) {
+            if(!state.videoLoaded) return;
+            let newTime = els.video.currentTime + seconds;
+            newTime = Math.max(state.trimStart, Math.min(newTime, state.trimEnd));
+            els.video.currentTime = newTime;
+            drawFrame();
+            updateTimelineUI();
+        }
+
+        function updateFilterDisplay(key) {
+            let val = state.filters[key];
+            let suffix = '';
+            if (key === 'hue') suffix = 'deg';
+            else if (key === 'blur') suffix = 'px';
+            else suffix = '%';
+            els.valDisplay[key].innerText = val + suffix;
+        }
+
+        // --- The Render Engine ---
+
+        function renderLoop() {
+            if (els.video.paused || els.video.ended) return;
+            
+            // Trim check logic
+            if (els.video.currentTime >= state.trimEnd) {
+                els.video.pause();
+                els.video.currentTime = state.trimEnd;
+                state.isPlaying = false;
+                els.playIcon.classList.replace('fa-pause', 'fa-play');
+                return;
+            }
+
+            drawFrame();
+            updateTimelineUI();
+            animationFrame = requestAnimationFrame(renderLoop);
+        }
+
+        function drawFrame() {
+            // Apply CSS Filters to Context
+            const f = state.filters;
+            ctx.filter = `brightness(${f.brightness}%) contrast(${f.contrast}%) saturate(${f.saturate}%) hue-rotate(${f.hue}deg) blur(${f.blur}px)`;
+            
+            // Draw Video
+            ctx.drawImage(els.video, 0, 0, els.canvas.width, els.canvas.height);
+            
+            // Reset filter for other potential draws (text overlays, etc - not implemented but good practice)
+            ctx.filter = 'none';
+        }
+
+        // --- Timeline & Trim Logic ---
+
+        function updateTimelineUI() {
+            const pct = (els.video.currentTime / state.duration) * 100;
+            els.progressBar.style.width = `${pct}%`;
+            els.playhead.style.left = `${pct}%`;
+            els.timeDisplay.current.innerText = formatTime(els.video.currentTime);
+        }
+
+        function updateTrim() {
+            let start = parseFloat(els.trimInputs.start.value);
+            let end = parseFloat(els.trimInputs.end.value);
+
+            // Prevent crossing
+            if (start >= end - 0.5) {
+                if (document.activeElement === els.trimInputs.start) start = end - 0.5;
+                else end = start + 0.5;
+                els.trimInputs.start.value = start;
+                els.trimInputs.end.value = end;
+            }
+
+            state.trimStart = start;
+            state.trimEnd = end;
+
+            // Update Visual Overlays
+            const leftPct = (start / state.duration) * 100;
+            const rightPct = 100 - ((end / state.duration) * 100);
+
+            els.trimOverlays.left.style.width = `${leftPct}%`;
+            els.trimOverlays.right.style.width = `${rightPct}%`;
+
+            // Snap playhead if out of bounds
+            if (els.video.currentTime < start || els.video.currentTime > end) {
+                els.video.currentTime = start;
+                drawFrame();
+                updateTimelineUI();
+            }
+
+            document.getElementById('trimInfo').innerText = `Duration: ${formatTime(end - start)}`;
+        }
+
+        function formatTime(seconds) {
+            const m = Math.floor(seconds / 60);
+            const s = Math.floor(seconds % 60);
+            return `${m.toString().padStart(2, '0')}:${s.toString().padStart(2, '0')}`;
+        }
+
+        // --- EXPORT FUNCTIONALITY (The AAA Magic) ---
+        // Uses MediaRecorder API to record the Canvas stream in real-time
+        async function exportVideo() {
+            if (!state.videoLoaded) return;
+
+            const btn = els.exportBtn;
+            const originalText = btn.innerHTML;
+            
+            // UI State: Exporting
+            btn.disabled = true;
+            btn.innerHTML = `<div class="loader mr-2 !w-4 !h-4"></div> Rendering...`;
+            els.statusText.innerText = "Rendering video... do not close tab.";
+            
+            // 1. Setup Stream
+            const canvasStream = els.canvas.captureStream(30); // 30 FPS
+            
+            // 2. Audio Handling (Create audio context to capture video audio)
+            const audioCtx = new AudioContext();
+            const dest = audioCtx.createMediaStreamDestination();
+            const source = audioCtx.createMediaElementSource(els.video);
+            source.connect(dest);
+            source.connect(audioCtx.destination); // Keep hearing it while rendering
+            
+            // Combine Video (Canvas) and Audio (Element)
+            const combinedTracks = [
+                ...canvasStream.getVideoTracks(),
+                ...dest.stream.getAudioTracks()
+            ];
+            const combinedStream = new MediaStream(combinedTracks);
+
+            // 3. Setup Recorder
+            const mediaRecorder = new MediaRecorder(combinedStream, {
+                mimeType: 'video/webm;codecs=vp9'
+            });
+
+            const chunks = [];
+            mediaRecorder.ondataavailable = (e) => {
+                if (e.data.size > 0) chunks.push(e.data);
+            };
+
+            mediaRecorder.onstop = () => {
+                // Create Blob and Download
+                const blob = new Blob(chunks, { type: 'video/webm' });
+                const url = URL.createObjectURL(blob);
+                const a = document.createElement('a');
+                a.style.display = 'none';
+                a.href = url;
+                a.download = 'lumina_export.webm';
+                document.body.appendChild(a);
+                a.click();
+                
+                // Cleanup
+                setTimeout(() => {
+                    document.body.removeChild(a);
+                    window.URL.revokeObjectURL(url);
+                }, 100);
+
+                // Reset UI
+                btn.innerHTML = originalText;
+                btn.disabled = false;
+                els.statusText.innerText = "Export Complete!";
+                
+                // Reset Video State
+                els.video.currentTime = state.trimStart;
+                state.isPlaying = false;
+                els.playIcon.classList.replace('fa-pause', 'fa-play');
+                
+                // Disconnect Audio
+                source.disconnect();
+            };
+
+            // 4. Perform the Render (Play the video through)
+            // We have to play the video for the recorder to capture frames
+            els.video.currentTime = state.trimStart;
+            
+            // Start Recording
+            mediaRecorder.start();
+            
+            try {
+               await els.video.play();
+               
+               // Render Loop specifically for export monitoring
+               const checkEnd = () => {
+                   if (els.video.currentTime >= state.trimEnd || els.video.ended) {
+                       mediaRecorder.stop();
+                       els.video.pause();
+                   } else {
+                       drawFrame();
+                       requestAnimationFrame(checkEnd);
+                       // Update progress bar visually
+                       const pct = ((els.video.currentTime - state.trimStart) / (state.trimEnd - state.trimStart)) * 100;
+                       btn.style.background = `linear-gradient(90deg, #2563eb ${pct}%, #1d4ed8 ${pct}%)`;
+                   }
+               };
+               checkEnd();
+               
+            } catch (err) {
+                console.error("Export failed", err);
+                els.statusText.innerText = "Export Error.";
+                btn.disabled = false;
+                btn.innerHTML = originalText;
+            }
+        }
+    </script>
+</body>
+</html>
