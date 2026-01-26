@@ -1,0 +1,220 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>1:1 Image Stretcher</title>
+    <style>
+        :root {
+            --bg-color: #1a1a1a;
+            --text-color: #f0f0f0;
+            --accent: #3b82f6;
+            --accent-hover: #2563eb;
+        }
+
+        body {
+            font-family: system-ui, -apple-system, sans-serif;
+            background-color: var(--bg-color);
+            color: var(--text-color);
+            display: flex;
+            flex-direction: column;
+            align-items: center;
+            justify-content: center;
+            min-height: 100vh;
+            margin: 0;
+            padding: 20px;
+            box-sizing: border-box;
+        }
+
+        .container {
+            text-align: center;
+            width: 100%;
+            max-width: 600px;
+        }
+
+        h1 { margin-bottom: 20px; font-weight: 300; letter-spacing: 1px; }
+
+        /* Controls */
+        .controls {
+            display: flex;
+            gap: 10px;
+            justify-content: center;
+            margin-bottom: 20px;
+            flex-wrap: wrap;
+        }
+
+        /* Custom File Input Styling */
+        input[type="file"] {
+            display: none;
+        }
+
+        .btn {
+            background-color: var(--accent);
+            color: white;
+            padding: 12px 24px;
+            border-radius: 8px;
+            cursor: pointer;
+            font-weight: 600;
+            transition: background 0.2s;
+            border: none;
+            text-decoration: none;
+            display: inline-block;
+            font-size: 1rem;
+        }
+
+        .btn:hover { background-color: var(--accent-hover); }
+        .btn.secondary { background-color: #444; }
+        .btn.secondary:hover { background-color: #555; }
+        
+        .btn:disabled {
+            background-color: #555;
+            cursor: not-allowed;
+            opacity: 0.7;
+        }
+
+        /* Preview Area */
+        .canvas-container {
+            width: 100%;
+            aspect-ratio: 1 / 1;
+            background-image: 
+                linear-gradient(45deg, #222 25%, transparent 25%), 
+                linear-gradient(-45deg, #222 25%, transparent 25%), 
+                linear-gradient(45deg, transparent 75%, #222 75%), 
+                linear-gradient(-45deg, transparent 75%, #222 75%);
+            background-size: 20px 20px;
+            background-position: 0 0, 0 10px, 10px -10px, -10px 0px;
+            border: 2px dashed #444;
+            border-radius: 12px;
+            display: flex;
+            align-items: center;
+            justify-content: center;
+            overflow: hidden;
+            position: relative;
+        }
+
+        canvas {
+            max-width: 100%;
+            max-height: 100%;
+            /* This ensures the visual display is always square even if canvas data is large */
+            width: 100%; 
+            height: 100%;
+            object-fit: fill; /* Crucial for viewing constraint */
+        }
+
+        .placeholder-text {
+            color: #666;
+            position: absolute;
+            pointer-events: none;
+        }
+
+        .hidden { display: none; }
+    </style>
+</head>
+<body>
+
+    <div class="container">
+        <h1>1:1 Image Stretcher</h1>
+
+        <div class="controls">
+            <label for="upload" class="btn">
+                Select Image
+            </label>
+            <input type="file" id="upload" accept="image/*">
+            
+            <button id="downloadBtn" class="btn secondary" disabled>
+                Download Square
+            </button>
+        </div>
+
+        <div class="canvas-container" id="dropZone">
+            <span class="placeholder-text">Preview (1:1)</span>
+            <canvas id="canvas"></canvas>
+        </div>
+        
+        <p style="font-size: 0.8rem; color: #666; margin-top: 15px;">
+            This tool calculates the largest dimension of your image and stretches the other side to match it.
+        </p>
+    </div>
+
+    <script>
+        const uploadInput = document.getElementById('upload');
+        const canvas = document.getElementById('canvas');
+        const ctx = canvas.getContext('2d');
+        const downloadBtn = document.getElementById('downloadBtn');
+        const placeholder = document.querySelector('.placeholder-text');
+        
+        let fileName = 'image.png';
+
+        // Function to handle image processing
+        function processImage(file) {
+            if (!file) return;
+
+            const reader = new FileReader();
+            
+            reader.onload = function(event) {
+                const img = new Image();
+                img.onload = function() {
+                    // 1. Determine the output size
+                    // To prevent pixelation, we use the LARGEST dimension of the original image
+                    // as the size for both width and height of the square.
+                    const size = Math.max(img.width, img.height);
+
+                    // 2. Set canvas resolution to square
+                    canvas.width = size;
+                    canvas.height = size;
+
+                    // 3. Draw the image stretched
+                    // (0, 0, size, size) forces the image to fill the square
+                    ctx.drawImage(img, 0, 0, size, size);
+
+                    // 4. Update UI
+                    downloadBtn.disabled = false;
+                    downloadBtn.classList.remove('secondary');
+                    placeholder.classList.add('hidden');
+                    
+                    // Update filename for download
+                    const originalName = file.name.split('.')[0];
+                    fileName = `${originalName}-1x1.png`;
+                }
+                img.src = event.target.result;
+            }
+            reader.readAsDataURL(file);
+        }
+
+        // Event Listener: File Input
+        uploadInput.addEventListener('change', (e) => {
+            processImage(e.target.files[0]);
+        });
+
+        // Event Listener: Download
+        downloadBtn.addEventListener('click', () => {
+            const link = document.createElement('a');
+            link.download = fileName;
+            // High quality PNG export
+            link.href = canvas.toDataURL('image/png');
+            link.click();
+        });
+
+        // Optional: Drag and Drop Support
+        const dropZone = document.getElementById('dropZone');
+
+        dropZone.addEventListener('dragover', (e) => {
+            e.preventDefault();
+            dropZone.style.borderColor = 'var(--accent)';
+        });
+
+        dropZone.addEventListener('dragleave', (e) => {
+            e.preventDefault();
+            dropZone.style.borderColor = '#444';
+        });
+
+        dropZone.addEventListener('drop', (e) => {
+            e.preventDefault();
+            dropZone.style.borderColor = '#444';
+            if (e.dataTransfer.files && e.dataTransfer.files[0]) {
+                processImage(e.dataTransfer.files[0]);
+            }
+        });
+    </script>
+</body>
+</html>
