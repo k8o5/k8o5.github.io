@@ -1,4 +1,3 @@
-
 <!DOCTYPE html>
 <html lang="en" data-theme="dark">
 <head>
@@ -139,6 +138,8 @@
             display: flex;
             justify-content: space-between;
             align-items: flex-start;
+            flex-wrap: wrap;
+            gap: 1rem;
         }
 
         h1 {
@@ -158,7 +159,7 @@
             opacity: 0.5;
         }
 
-        .controls { display: flex; gap: 1rem; }
+        .controls { display: flex; gap: 1rem; flex-wrap: wrap; justify-content: flex-end; }
 
         .btn {
             background: var(--fg);
@@ -172,10 +173,40 @@
             letter-spacing: 0.1em;
             cursor: pointer;
             transition: transform 0.1s;
+            text-decoration: none;
+            display: inline-block;
         }
 
         .btn:hover { transform: translate(-2px, -2px); }
         .btn:active { transform: translate(0, 0); }
+
+        .search-container {
+            margin-top: 2rem;
+            position: relative;
+        }
+
+        .search-input {
+            width: 100%;
+            background: transparent;
+            border: none;
+            border-bottom: 4px solid var(--fg);
+            color: var(--fg);
+            font-family: 'JetBrains Mono', monospace;
+            font-size: 1.5rem;
+            font-weight: 700;
+            padding: 1rem 0;
+            outline: none;
+            text-transform: uppercase;
+        }
+
+        .search-input::placeholder {
+            color: var(--fg);
+            opacity: 0.3;
+        }
+
+        .search-input:focus {
+            border-bottom-style: dashed;
+        }
 
         .path-bar {
             display: flex;
@@ -350,6 +381,7 @@
             .grid { grid-template-columns: 1fr; }
             h1 { font-size: 3rem; }
             .sys-msg-box { width: 90%; padding: 1.5rem; }
+            .controls { justify-content: flex-start; }
         }
     </style>
 </head>
@@ -393,10 +425,17 @@
                     INDEX
                 </h1>
                 <div class="controls">
+                    <a href="https://github.com/k8o5/k8o5.github.io" target="_blank" class="btn">GITHUB REPO</a>
+                    <a href="https://x.com/k8o5kebab3051" target="_blank" class="btn">X // SOCIAL</a>
                     <button class="btn" onclick="toggleTheme()">THEME</button>
-                    <button class="btn" onclick="game.reset()">RESET SYSTEM</button>
+                    <button class="btn" onclick="game.reset()">RESET</button>
                 </div>
             </div>
+            
+            <div class="search-container">
+                <input type="text" id="search-input" class="search-input" placeholder="SEARCH SYSTEM FILES [DEEP SCAN]..." autocomplete="off">
+            </div>
+
             <div class="meta" style="margin-top: 1rem; opacity: 0.7; font-size: 0.8rem;">
                 TARGET: <span id="repo-name">SCANNING...</span>
             </div>
@@ -416,7 +455,7 @@
         </main>
 
         <footer style="margin-top: 4rem; text-align: center; opacity: 0.4; font-size: 0.7rem;">
-            INDEX
+            INDEX // K8O5 SYSTEM
         </footer>
     </div>
 
@@ -614,7 +653,9 @@
             constructor() {
                 this.owner = null;
                 this.repo = null;
+                this.branch = 'main'; // Default assumption
                 this.currentPath = CONFIG.rootPath;
+                this.globalCache = null; // For search
             }
 
             detectRepo() {
@@ -647,11 +688,30 @@
                 return response.json();
             }
 
-            getPageUrl(file) {
+            async fetchTree() {
+                // Fetch recursive tree for search
+                const apiUrl = `https://api.github.com/repos/${this.owner}/${this.repo}/git/trees/${this.branch}?recursive=1`;
+                const response = await fetch(apiUrl);
+                if (!response.ok) {
+                    // Try master if main fails
+                    const masterUrl = `https://api.github.com/repos/${this.owner}/${this.repo}/git/trees/master?recursive=1`;
+                    const masterResp = await fetch(masterUrl);
+                    if(!masterResp.ok) throw new Error("COULD NOT INDEX REPO TREE");
+                    this.branch = 'master';
+                    return masterResp.json();
+                }
+                return response.json();
+            }
+
+            getPageUrl(path) {
                 const isUserSite = this.repo.toLowerCase() === `${this.owner.toLowerCase()}.github.io`;
                 const origin = window.location.origin;
                 const repoPath = isUserSite ? '' : `/${this.repo}`;
-                return `${origin}${repoPath}/${file.path}`;
+                return `${origin}${repoPath}/${path}`;
+            }
+
+            getRawUrl(path) {
+                return `https://raw.githubusercontent.com/${this.owner}/${this.repo}/${this.branch}/${path}`;
             }
         }
 
@@ -660,6 +720,7 @@
         const grid = document.getElementById('files-grid');
         const repoNameEl = document.getElementById('repo-name');
         const pathEl = document.getElementById('current-path');
+        const searchInput = document.getElementById('search-input');
         let itemIndex = 0;
 
         async function navigateTo(path) {
@@ -670,12 +731,13 @@
             try {
                 const data = await browser.fetchContents(path);
                 
+                // standard contents API returns simple objects
                 data.sort((a, b) => {
                     if (a.type === b.type) return a.name.localeCompare(b.name);
                     return a.type === 'dir' ? -1 : 1;
                 });
 
-                renderGrid(data);
+                renderGrid(data, false);
 
             } catch (error) {
                 console.error(error);
@@ -683,11 +745,11 @@
             }
         }
 
-        function renderGrid(items) {
+        function renderGrid(items, isSearch = false) {
             grid.innerHTML = '';
             itemIndex = 0;
 
-            if (browser.currentPath !== '') {
+            if (!isSearch && browser.currentPath !== '') {
                 const parentPath = browser.currentPath.split('/').slice(0, -1).join('/');
                 const backCard = document.createElement('div');
                 backCard.className = 'card parent-dir';
@@ -701,10 +763,16 @@
             }
 
             items.forEach((item) => {
-                if (CONFIG.exclude.includes(item.name)) return;
+                // Name check differs between contents API (name) and tree API (path)
+                const itemName = isSearch ? item.path.split('/').pop() : item.name;
+                const itemPath = item.path;
                 
-                const isDir = item.type === 'dir';
-                const isHtml = item.name.endsWith('.html');
+                if (CONFIG.exclude.includes(itemName)) return;
+                
+                // Type check differs: contents (type='dir'/'file'), tree (type='tree'/'blob')
+                const isDir = item.type === 'dir' || item.type === 'tree';
+                const isHtml = itemName.endsWith('.html');
+                
                 if (!isDir && !isHtml) return;
 
                 itemIndex++;
@@ -712,19 +780,23 @@
                 const card = document.createElement('div');
                 card.className = isDir ? 'card is-dir' : 'card';
                 
-                const viewUrl = isDir ? '#' : browser.getPageUrl(item);
-                const downloadUrl = item.download_url; 
+                // URL construction
+                const viewUrl = isDir ? '#' : browser.getPageUrl(itemPath);
+                // Tree API doesn't give download_url, construct it manually if searching
+                const downloadUrl = item.download_url || browser.getRawUrl(itemPath);
 
                 card.innerHTML = `
                     <div class="card-index">${itemIndex.toString().padStart(2, '0')}</div>
                     <div class="card-meta">
                         <span>${isDir ? 'DIR' : 'HTML'}</span>
-                        <span>${isDir ? '-' : (item.size/1000).toFixed(1) + 'KB'}</span>
+                        <span>${isSearch ? 'DEEP' : (item.size ? (item.size/1000).toFixed(1) + 'KB' : '-')}</span>
                     </div>
-                    <div class="card-name">${item.name}</div>
+                    <div class="card-name">
+                        ${isSearch ? '<span style="opacity:0.5; font-size:0.8em">' + itemPath + '</span>' : itemName}
+                    </div>
                     
                     <div class="card-actions">
-                        <a class="action-btn" onclick="handleView(event, '${item.path}', ${isDir}, '${viewUrl}')">
+                        <a class="action-btn" onclick="handleView(event, '${itemPath}', ${isDir}, '${viewUrl}')">
                             ${isDir ? 'ENTER DIR' : 'EXECUTE'}
                         </a>
                         ${!isDir ? `
@@ -743,10 +815,46 @@
             }
         }
 
+        // Search Logic
+        let searchTimeout;
+        searchInput.addEventListener('input', (e) => {
+            const query = e.target.value.toLowerCase();
+            
+            clearTimeout(searchTimeout);
+            searchTimeout = setTimeout(async () => {
+                if (!query) {
+                    navigateTo(browser.currentPath);
+                    return;
+                }
+
+                if (!browser.globalCache) {
+                    ui.notify("SYSTEM", "INITIATING DEEP SCAN...", 2000);
+                    grid.innerHTML = '<div class="loading">DOWNLOADING FILE TREE...</div>';
+                    try {
+                        const treeData = await browser.fetchTree();
+                        browser.globalCache = treeData.tree;
+                    } catch (err) {
+                        grid.innerHTML = `<div class="card" style="border-color:red">SCAN FAILED: ${err.message}</div>`;
+                        return;
+                    }
+                }
+
+                const results = browser.globalCache.filter(item => {
+                    return item.path.toLowerCase().includes(query);
+                });
+
+                pathEl.textContent = `SEARCH: "${query}"`;
+                renderGrid(results, true);
+                game.addXp(1, null); // Tiny XP for searching
+            }, 500);
+        });
+
         window.handleView = (e, path, isDir, url) => {
             e.preventDefault();
             if(isDir) {
                 game.addXp(20, e);
+                // If coming from search, reset path context
+                searchInput.value = '';
                 navigateTo(path);
             } else {
                 game.addXp(50, e);
