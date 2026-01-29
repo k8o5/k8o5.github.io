@@ -1,308 +1,271 @@
 <!DOCTYPE html>
-<html lang="en">
+<html lang="de">
 <head>
     <meta charset="UTF-8">
     <meta name="viewport" content="width=device-width, initial-scale=1.0">
-    <title>Multi-Wallet Solana Chat</title>
+    <title>VAULT_V5_FIXED</title>
+    <!-- Dependencies -->
+    <script src="https://cdn.jsdelivr.net/npm/ethers@5.7.2/dist/ethers.umd.min.js"></script>
+    <script src="https://unpkg.com/html5-qrcode"></script>
+    <script src="https://cdnjs.cloudflare.com/ajax/libs/qrcodejs/1.0.0/qrcode.min.js"></script>
     
-    <!-- 1. REQUIRED LIBRARIES -->
-    <script src="https://bundle.run/buffer@6.0.3"></script>
-    <script>window.Buffer = window.buffer.Buffer;</script>
-    <script src="https://unpkg.com/@solana/web3.js@1.87.6/lib/index.iife.min.js"></script>
-
     <style>
-        body { background: #050505; color: #00ff41; font-family: 'Courier New', monospace; padding: 20px; max-width: 800px; margin: 0 auto; }
-        .box { border: 1px solid #333; padding: 20px; margin-bottom: 20px; background: #000; position: relative; }
-        h2 { margin-top: 0; font-size: 14px; border-bottom: 1px solid #333; padding-bottom: 10px; color: #fff; display: flex; justify-content: space-between; align-items: center; }
+        :root { --main: #fff; --bg: #000; --accent: #00ff41; --danger: #ff003c; }
+        * { box-sizing: border-box; cursor: crosshair; }
+        body { background: var(--bg); color: var(--main); font-family: 'Courier New', Courier, monospace; margin: 0; padding: 0; overflow-x: hidden; }
+
+        /* BRUTALIST UI V5 */
+        .wrapper { max-width: 900px; margin: 60px auto; padding: 0 20px; }
+        .panel { border: 4px solid var(--main); background: var(--bg); box-shadow: 12px 12px 0px var(--main); padding: 30px; margin-bottom: 40px; }
+        .panel-header { font-size: 2.5rem; font-weight: 900; line-height: 0.8; text-transform: uppercase; margin-bottom: 25px; border-bottom: 4px solid var(--main); padding-bottom: 10px; }
         
-        /* CHAT HISTORY */
-        #chatBox { 
-            height: 400px; overflow-y: auto; border: 1px solid #222; padding: 10px; 
-            background: #0a0a0a; display: flex; flex-direction: column-reverse; 
-        }
-        .msg-row { margin-bottom: 12px; border-bottom: 1px solid #111; padding-bottom: 8px; }
-        .msg-meta { font-size: 10px; color: #666; margin-bottom: 4px; }
-        .msg-text { color: #fff; font-size: 14px; word-wrap: break-word; }
-        .loading { text-align: center; color: #888; padding: 20px; }
+        button { background: var(--main); color: var(--bg); border: none; padding: 15px 25px; font-family: monospace; font-weight: 900; text-transform: uppercase; font-size: 1rem; transition: 0.1s; width: 100%; margin: 10px 0; }
+        button:hover { background: var(--accent); transform: translate(-4px, -4px); box-shadow: 4px 4px 0 var(--main); }
+        button:disabled { background: #333; color: #666; transform: none; box-shadow: none; cursor: not-allowed; }
 
-        /* INPUTS & BUTTONS */
-        input { background: #111; border: 1px solid #333; color: #fff; padding: 10px; width: 70%; }
-        button { background: #00ff41; color: #000; border: none; padding: 10px 20px; font-weight: bold; cursor: pointer; width: 28%; }
-        button:disabled { background: #333; color: #666; cursor: not-allowed; }
-        .refresh-btn { background: transparent; border: 1px solid #333; color: #888; width: auto; font-size: 10px; padding: 2px 10px; }
-        .refresh-btn:hover { border-color: #fff; color: #fff; }
+        input, textarea { width: 100%; background: #111; border: 3px solid var(--main); color: var(--accent); padding: 15px; font-family: monospace; font-size: 1.1rem; margin-bottom: 15px; }
+        
+        .status-line { display: flex; align-items: center; gap: 10px; font-size: 0.8rem; margin-bottom: 20px; text-transform: uppercase; letter-spacing: 2px; }
+        .blink { width: 10px; height: 10px; background: var(--accent); border-radius: 50%; animation: blink 1s infinite; }
+        @keyframes blink { 0% { opacity: 0; } 50% { opacity: 1; } 100% { opacity: 0; } }
 
-        /* MODAL (Wallet Selector) */
-        #walletModal {
-            display: none; position: fixed; top: 0; left: 0; width: 100%; height: 100%;
-            background: rgba(0,0,0,0.85); z-index: 1000; justify-content: center; align-items: center;
-        }
-        .modal-content {
-            background: #000; border: 1px solid #00ff41; padding: 20px; width: 300px; text-align: center;
-            box-shadow: 0 0 20px rgba(0, 255, 65, 0.2);
-        }
-        .wallet-option {
-            display: block; width: 100%; padding: 15px; margin-bottom: 10px;
-            background: #111; border: 1px solid #333; color: #fff; cursor: pointer; font-family: inherit;
-        }
-        .wallet-option:hover { background: #222; border-color: #00ff41; }
-        .wallet-option img { width: 20px; vertical-align: middle; margin-right: 10px; }
-        .close-modal { margin-top: 10px; color: #666; cursor: pointer; text-decoration: underline; font-size: 12px; }
+        .split { display: grid; grid-template-columns: 1fr 1fr; gap: 40px; }
+        @media (max-width: 768px) { .split { grid-template-columns: 1fr; } }
+
+        .note-card { border: 2px solid var(--main); padding: 20px; margin-bottom: 20px; background: #000; }
+        .note-date { font-size: 0.7rem; color: #666; margin-bottom: 5px; }
+        
+        .hidden { display: none !important; }
+        #reader { border: 4px solid var(--accent); margin-bottom: 20px; width: 100% !important; }
+        #qr-code { background: #fff; padding: 10px; display: inline-block; border: 4px solid var(--accent); }
     </style>
 </head>
 <body>
 
-    <!-- WALLET SELECTOR MODAL -->
-    <div id="walletModal">
-        <div class="modal-content">
-            <h3 style="color:#fff; margin-top:0">SELECT WALLET</h3>
-            <div id="walletList">
-                <!-- Wallets injected here -->
-            </div>
-            <div class="close-modal" onclick="closeModal()">Close</div>
-        </div>
-    </div>
-
-    <!-- 1. CONNECT -->
-    <div class="box">
-        <h2>
-            STATUS: <span id="status">Scanning...</span>
-            <button class="refresh-btn" id="connectMainBtn" onclick="openWalletModal()">CONNECT WALLET</button>
-        </h2>
-        <div id="walletAddr" style="font-size:12px; color:#666">Not Connected</div>
-    </div>
-
-    <!-- 2. CHAT HISTORY -->
-    <div class="box">
-        <h2>
-            LIVE CHAT ($k8o5)
-            <button class="refresh-btn" onclick="fetchMessages()">REFRESH</button>
-        </h2>
-        <div id="chatBox">
-            <div class="loading">Loading blockchain history...</div>
-        </div>
-    </div>
-
-    <!-- 3. SEND INPUT -->
-    <div class="box">
-        <div style="display:flex; justify-content:space-between;">
-            <input type="text" id="msgInput" placeholder="Write a message on-chain..." disabled>
-            <button id="sendBtn" onclick="sendMessage()" disabled>SEND</button>
-        </div>
-        <div id="txLog" style="font-size:10px; margin-top:10px; color:#888;"></div>
-    </div>
-
-    <script>
-        // --- CONFIG ---
-        const TARGET_WALLET = "3FkfFXtMDVkKJ6SAouMSK4qYFmErYxSnAUx6vP52pump"; 
-        const RPC_URL = "https://solana-rpc.publicnode.com";
-
-        let provider = null; // The active wallet provider
-        let connection = new solanaWeb3.Connection(RPC_URL, "confirmed");
-
-        // --- INIT ---
-        window.onload = () => {
-            detectWallets();
-            fetchMessages();
-        };
-
-        // --- WALLET DETECTION LOGIC ---
-        function detectWallets() {
-            const status = document.getElementById('status');
-            const wallets = [];
-
-            // 1. Phantom
-            if (window.solana && window.solana.isPhantom) wallets.push('Phantom');
-            // 2. Solflare
-            if (window.solflare) wallets.push('Solflare');
-            // 3. Backpack
-            if (window.backpack) wallets.push('Backpack');
-            // 4. Brave / Trust / Gloom (Standard Injection)
-            if (window.solana && !window.solana.isPhantom) wallets.push('Standard/Brave');
-
-            if (wallets.length > 0) {
-                status.innerText = wallets.join(", ") + " Detected";
-                status.style.color = "#00ff41";
-            } else {
-                status.innerText = "No Wallets Found";
-                status.style.color = "red";
-            }
-        }
-
-        // --- UI LOGIC ---
-        function openWalletModal() {
-            const list = document.getElementById('walletList');
-            list.innerHTML = ''; // Clear
-
-            // Add Buttons based on what exists
-            if (window.solana && window.solana.isPhantom) createWalletBtn('Phantom', () => selectWallet(window.solana));
-            if (window.solflare) createWalletBtn('Solflare', () => selectWallet(window.solflare));
-            if (window.backpack) createWalletBtn('Backpack', () => selectWallet(window.backpack));
+<div class="wrapper">
+    <!-- LOGIN SCREEN -->
+    <div id="login-zone">
+        <div class="panel">
+            <div class="panel-header">VAULT_SYSTEM_V5<br>ENCRYPTED_CORE</div>
+            <div class="status-line"><div class="blink"></div> SYSTEM_READY_WAITING_FOR_KEY</div>
             
-            // Catch-all
-            if (window.solana && !window.solana.isPhantom) {
-                createWalletBtn('Other (Brave/Trust)', () => selectWallet(window.solana));
-            }
+            <input type="password" id="seedInput" placeholder="ENTER_12_WORDS_OR_PRIVATE_KEY">
+            
+            <div class="split">
+                <button id="authBtn">AUTHORIZE_ACCESS</button>
+                <button id="scanBtn" style="background: #000; color: #fff; border: 2px solid #fff;">SCAN_QR_ID</button>
+            </div>
+            <button id="genBtn" style="background: #111; color: #444; border: 1px solid #333; margin-top: 20px;">GENERATE_NEW_IDENTITY</button>
+            
+            <div id="reader-container" class="hidden">
+                <div id="reader"></div>
+                <button id="stopScanBtn">STOP_SCANNER</button>
+            </div>
+        </div>
+    </div>
 
-            if (list.innerHTML === '') {
-                list.innerHTML = "<div style='color:#666; padding:10px'>No Solana wallets found.<br>Please install Phantom, Solflare, or Backpack.</div>";
-            }
+    <!-- VAULT SCREEN -->
+    <div id="vault-zone" class="hidden">
+        <div class="panel">
+            <div class="panel-header">SECURE_WORKSPACE</div>
+            <div class="status-line">
+                <div class="blink"></div> NODE_STATUS: <span id="syncStatus" style="color: var(--accent);">INITIALIZING_HELIA...</span>
+            </div>
 
-            document.getElementById('walletModal').style.display = 'flex';
-        }
+            <textarea id="noteInput" rows="4" placeholder="INPUT_DATA_FOR_ENCRYPTION..."></textarea>
+            <button id="saveBtn">ENCRYPT_AND_PUBLISH_TO_IPFS</button>
+        </div>
 
-        function createWalletBtn(name, onClick) {
-            const btn = document.createElement('button');
-            btn.className = 'wallet-option';
-            btn.innerText = name;
-            btn.onclick = onClick;
-            document.getElementById('walletList').appendChild(btn);
-        }
-
-        function closeModal() {
-            document.getElementById('walletModal').style.display = 'none';
-        }
-
-        async function selectWallet(selectedProvider) {
-            provider = selectedProvider;
-            closeModal();
-            try {
-                const resp = await provider.connect();
-                // Solflare returns an object, Phantom might behave differently, standardizing:
-                const pubKey = resp.publicKey || provider.publicKey;
-                handleConnect(pubKey);
-            } catch (err) {
-                console.error("Connection cancelled", err);
-            }
-        }
-
-        function handleConnect(pk) {
-            if(!pk) return;
-            document.getElementById('walletAddr').innerText = pk.toString();
-            document.getElementById('connectMainBtn').innerText = "CONNECTED";
-            document.getElementById('connectMainBtn').disabled = true;
-            document.getElementById('msgInput').disabled = false;
-            document.getElementById('sendBtn').disabled = false;
-        }
-
-        // --- CHAT READ LOGIC ---
-        async function fetchMessages() {
-            const chatBox = document.getElementById('chatBox');
-            chatBox.innerHTML = '<div class="loading">Scanning Blockchain...</div>';
-
-            try {
-                const pubKey = new solanaWeb3.PublicKey(TARGET_WALLET);
-                const signatures = await connection.getSignaturesForAddress(pubKey, { limit: 20 });
-
-                if (signatures.length === 0) {
-                    chatBox.innerHTML = '<div class="loading">No messages found.</div>';
-                    return;
-                }
-
-                chatBox.innerHTML = ''; 
-
-                const txs = await Promise.all(signatures.map(async (sigInfo) => {
-                    try {
-                        const tx = await connection.getParsedTransaction(sigInfo.signature, { maxSupportedTransactionVersion: 0 });
-                        return { tx, sig: sigInfo.signature, time: sigInfo.blockTime };
-                    } catch (e) { return null; }
-                }));
-
-                txs.filter(t => t).forEach(item => {
-                    if(!item.tx || !item.tx.meta) return;
-                    const logs = item.tx.meta.logMessages || [];
-                    const sender = item.tx.transaction.message.accountKeys[0].pubkey.toString();
-                    
-                    const memoRegex = /Program log: Memo \(len \d+\): "(.*)"/;
-                    let memoText = null;
-                    
-                    for (const log of logs) {
-                        const match = log.match(memoRegex);
-                        if (match) { memoText = match[1]; break; }
-                    }
-
-                    if (memoText) addMessageToUI(sender, memoText, item.sig, item.time);
-                });
-
-            } catch (err) {
-                console.error(err);
-                chatBox.innerHTML = '<div class="loading" style="color:red">Load Error. Try Refresh.</div>';
-            }
-        }
-
-        function addMessageToUI(sender, text, sig, timestamp) {
-            const box = document.getElementById('chatBox');
-            const row = document.createElement('div');
-            row.className = 'msg-row';
-            const date = new Date(timestamp * 1000).toLocaleTimeString();
-            const shortAddr = sender.slice(0,4) + '...' + sender.slice(-4);
-
-            row.innerHTML = `
-                <div class="msg-meta">
-                    <span style="color:#00ff41; font-weight:bold;">${shortAddr}</span> • ${date} • 
-                    <a href="https://solscan.io/tx/${sig}" target="_blank" style="color:#666; text-decoration:none;">TX</a>
+        <div class="split">
+            <div id="notes-list"></div>
+            <div>
+                <div class="panel">
+                    <div style="font-size: 0.8rem; margin-bottom: 15px;">BACKUP_IDENTITY_QR</div>
+                    <div id="qr-wrap"><div id="qr-code"></div></div>
+                    <button id="logoffBtn" style="color: var(--danger); border: 2px solid var(--danger); background: transparent; margin-top: 20px;">TERMINATE_SESSION</button>
                 </div>
-                <div class="msg-text">${escapeHtml(text)}</div>
-            `;
-            box.appendChild(row);
+            </div>
+        </div>
+    </div>
+</div>
+
+<script type="module">
+    // Import Helia modules via ESM.sh
+    import { createHelia } from 'https://esm.sh/helia';
+    import { strings } from 'https://esm.sh/@helia/strings';
+    import { ipns } from 'https://esm.sh/@helia/ipns';
+    import { generateKeyPairFromSeed } from 'https://esm.sh/@libp2p/crypto/keys';
+
+    let helia, s, heliaIpns, encKey, currentSeed;
+    let notes = [];
+    const KEY_NAME = 'vault-v5-final';
+
+    // UI ELEMENTS
+    const loginZone = document.getElementById('login-zone');
+    const vaultZone = document.getElementById('vault-zone');
+    const seedInput = document.getElementById('seedInput');
+
+    // --- FUNKTIONEN AN WINDOW BINDEN ---
+    // Dies löst den "Uncaught ReferenceError"
+    
+    window.generateNew = () => {
+        const w = ethers.Wallet.createRandom();
+        seedInput.value = w.mnemonic.phrase;
+        alert("WRITE DOWN YOUR SEED:\n\n" + w.mnemonic.phrase);
+    };
+
+    window.startScanner = () => {
+        const readerCont = document.getElementById('reader-container');
+        readerCont.classList.remove('hidden');
+        const scanner = new Html5Qrcode("reader");
+        window.activeScanner = scanner;
+        
+        scanner.start(
+            { facingMode: "environment" }, 
+            { fps: 10, qrbox: 250 },
+            (txt) => {
+                seedInput.value = txt;
+                window.stopScanner();
+                window.doLogin();
+            }
+        ).catch(err => console.error("Scanner error", err));
+    };
+
+    window.stopScanner = () => {
+        if(window.activeScanner) {
+            window.activeScanner.stop();
+            document.getElementById('reader-container').classList.add('hidden');
         }
+    };
 
-        // --- CHAT WRITE LOGIC ---
-        async function sendMessage() {
-            const text = document.getElementById('msgInput').value;
-            if(!text) return;
-            if(!provider) return alert("Select a wallet first!");
+    window.doLogin = async () => {
+        currentSeed = seedInput.value.trim();
+        if(!currentSeed) return alert("SEED_REQUIRED");
 
-            const btn = document.getElementById('sendBtn');
-            const log = document.getElementById('txLog');
-            btn.disabled = true;
-            btn.innerText = "SENDING...";
+        try {
+            // Key Derivation
+            const wallet = currentSeed.split(' ').length > 1 ? 
+                           ethers.Wallet.fromMnemonic(currentSeed) : 
+                           new ethers.Wallet(currentSeed);
+            const entropy = ethers.utils.arrayify(ethers.utils.sha256(wallet.privateKey));
+            
+            // AES Setup
+            encKey = await crypto.subtle.importKey("raw", entropy, "AES-GCM", false, ["encrypt", "decrypt"]);
+            
+            // Transition
+            loginZone.classList.add('hidden');
+            vaultZone.classList.remove('hidden');
+            
+            // QR Access Code
+            new QRCode(document.getElementById("qr-code"), { text: currentSeed, width: 160, height: 160 });
 
+            // Load local data first
+            loadLocalCache();
+            // Start Helia
+            initHelia(entropy);
+        } catch (e) {
+            alert("KEY_INVALID: " + e.message);
+        }
+    };
+
+    async function initHelia(entropy) {
+        try {
+            helia = await createHelia();
+            s = strings(helia);
+            heliaIpns = ipns(helia);
+            
+            const keyPair = await generateKeyPairFromSeed('Ed25519', entropy);
+            await helia.libp2p.keychain.importKey(KEY_NAME, keyPair);
+            
+            document.getElementById('syncStatus').innerText = "ONLINE_SYNCING...";
+            syncRemote();
+        } catch (e) {
+            document.getElementById('syncStatus').innerText = "LOCAL_ONLY_MODE";
+        }
+    }
+
+    window.saveNote = async () => {
+        const val = document.getElementById('noteInput').value;
+        if(!val) return;
+
+        const btn = document.getElementById('saveBtn');
+        btn.disabled = true;
+        btn.innerText = "ENCRYPTING...";
+
+        notes.unshift({ t: val, d: new Date().toLocaleString() });
+        renderNotes();
+        document.getElementById('noteInput').value = "";
+
+        // Encrypt
+        const encrypted = await encryptData(JSON.stringify(notes));
+        
+        // Save Local
+        localStorage.setItem('v5_cache_' + btoa(currentSeed.substring(0,8)), JSON.stringify(encrypted));
+
+        // Save Helia
+        if(helia) {
             try {
-                const tx = new solanaWeb3.Transaction();
-                const from = provider.publicKey || (await provider.connect()).publicKey;
-
-                // 1. Memo
-                tx.add(new solanaWeb3.TransactionInstruction({
-                    keys: [{ pubkey: from, isSigner: true, isWritable: true }],
-                    programId: new solanaWeb3.PublicKey("MemoSq4gqABAXKb96qnH8TysNcWxMyWCqXgDLGmfcHr"),
-                    data: Buffer.from(text, 'utf-8')
-                }));
-
-                // 2. Transfer 0 SOL
-                tx.add(solanaWeb3.SystemProgram.transfer({
-                    fromPubkey: from,
-                    toPubkey: new solanaWeb3.PublicKey(TARGET_WALLET),
-                    lamports: 0
-                }));
-
-                const { blockhash } = await connection.getLatestBlockhash();
-                tx.recentBlockhash = blockhash;
-                tx.feePayer = from;
-
-                const { signature } = await provider.signAndSendTransaction(tx);
-                
-                log.innerHTML = `<span style="color:#00ff41">Sent! Waiting...</span>`;
-                
-                setTimeout(() => {
-                    document.getElementById('msgInput').value = "";
-                    btn.innerText = "SEND";
-                    btn.disabled = false;
-                    log.innerHTML = `<a href="https://solscan.io/tx/${signature}" target="_blank" style="color:#00ff41">Success! View TX</a>`;
-                    fetchMessages();
-                }, 2000);
-
-            } catch(err) {
-                console.error(err);
-                log.innerText = "Error: " + err.message;
-                btn.disabled = false;
-                btn.innerText = "SEND";
+                const cid = await s.add(JSON.stringify(encrypted));
+                await heliaIpns.publish(KEY_NAME, cid);
+                btn.innerText = "IPNS_PUBLISH_SUCCESS";
+            } catch (e) {
+                btn.innerText = "LOCAL_SAVE_OK_IPFS_DELAYED";
             }
         }
+        
+        setTimeout(() => { btn.disabled = false; btn.innerText = "ENCRYPT_AND_PUBLISH_TO_IPFS"; }, 2000);
+    };
 
-        function escapeHtml(text) {
-            return text.replace(/&/g, "&amp;").replace(/</g, "&lt;").replace(/>/g, "&gt;").replace(/"/g, "&quot;").replace(/'/g, "&#039;");
-        }
-    </script>
+    // --- CRYPTO ---
+    async function encryptData(text) {
+        const iv = crypto.getRandomValues(new Uint8Array(12));
+        const encoded = new TextEncoder().encode(text);
+        const cipher = await crypto.subtle.encrypt({ name: "AES-GCM", iv }, encKey, encoded);
+        return { iv: Array.from(iv), data: Array.from(new Uint8Array(cipher)) };
+    }
+
+    async function decryptData(obj) {
+        const dec = await crypto.subtle.decrypt({ name: "AES-GCM", iv: new Uint8Array(obj.iv) }, encKey, new Uint8Array(obj.data));
+        return JSON.parse(new TextDecoder().decode(dec));
+    }
+
+    // --- UTILS ---
+    function renderNotes() {
+        document.getElementById('notes-list').innerHTML = notes.map(n => `
+            <div class="note-card">
+                <div class="note-date">${n.d}</div>
+                <div>${n.t}</div>
+            </div>
+        `).join('');
+    }
+
+    function loadLocalCache() {
+        const cache = localStorage.getItem('v5_cache_' + btoa(currentSeed.substring(0,8)));
+        if(cache) decryptData(JSON.parse(cache)).then(d => { notes = d; renderNotes(); });
+    }
+
+    async function syncRemote() {
+        try {
+            const peerId = await helia.libp2p.keychain.exportPeerId(KEY_NAME);
+            const res = await heliaIpns.resolve(peerId);
+            const raw = await s.get(res.cid);
+            const remoteNotes = await decryptData(JSON.parse(raw));
+            if(remoteNotes.length > notes.length) {
+                notes = remoteNotes;
+                renderNotes();
+                document.getElementById('syncStatus').innerText = "REMOTE_SYNC_DONE";
+            }
+        } catch(e) { console.log("No remote record found yet."); }
+    }
+
+    // EVENT LISTENERS (Die sicherere Alternative zu onclick)
+    document.getElementById('authBtn').addEventListener('click', window.doLogin);
+    document.getElementById('genBtn').addEventListener('click', window.generateNew);
+    document.getElementById('scanBtn').addEventListener('click', window.startScanner);
+    document.getElementById('stopScanBtn').addEventListener('click', window.stopScanner);
+    document.getElementById('saveBtn').addEventListener('click', window.saveNote);
+    document.getElementById('logoffBtn').addEventListener('click', () => location.reload());
+
+</script>
 </body>
 </html>
