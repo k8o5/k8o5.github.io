@@ -224,8 +224,9 @@
             display: flex;
             justify-content: space-between;
         }
-        .ac-item:hover, .ac-item.selected { background: var(--dark); color: var(--white); }
+        .ac-item:hover, .ac-item.selected, .ac-item.active { background: var(--white); color: var(--black); }
         .ac-desc { font-size: 10px; text-transform: uppercase; letter-spacing: 1px; color: var(--gray); }
+        .ac-item.active .ac-desc, .ac-item:hover .ac-desc { color: #000; }
 
         .menu-dropdown {
             display: none;
@@ -774,62 +775,6 @@
             .embedded-news-grid { grid-template-columns: 1fr; }
             .news-block { border-right: none; min-height: auto; }
         }
-        
-        /* INTERNAL BROWSER / READER MODE */
-        .browser-overlay {
-            display: none;
-            position: fixed;
-            top: 0; left: 0;
-            width: 100%; height: 100%;
-            background: var(--black);
-            z-index: 6000;
-            flex-direction: column;
-        }
-        .browser-overlay.active { display: flex; }
-        
-        .browser-header {
-            flex: 0 0 50px;
-            border-bottom: var(--border);
-            display: flex;
-            justify-content: space-between;
-            align-items: center;
-            padding: 0 20px;
-            background: var(--dark);
-        }
-        
-        .browser-title {
-            font-size: 11px;
-            font-weight: 700;
-            text-transform: uppercase;
-            letter-spacing: 1px;
-            white-space: nowrap;
-            overflow: hidden;
-            text-overflow: ellipsis;
-            max-width: 60%;
-        }
-        
-        .browser-controls {
-            display: flex;
-            gap: 10px;
-        }
-        
-        .browser-btn {
-            background: transparent;
-            border: var(--border-thin);
-            color: var(--white);
-            padding: 5px 15px;
-            font-size: 10px;
-            cursor: pointer;
-            text-transform: uppercase;
-        }
-        .browser-btn:hover { background: var(--white); color: var(--black); }
-        
-        .browser-frame {
-            flex: 1;
-            border: none;
-            width: 100%;
-            background: #fff;
-        }
 
         .instant-box {
             border-bottom: var(--border);
@@ -849,7 +794,15 @@
             gap: 10px;
         }
         .instant-title { font-size: 28px; font-weight: 700; letter-spacing: -1px; margin-bottom: 20px; line-height: 1.2; word-break: break-word; overflow-wrap: break-word; }
-        .instant-content { font-size: 14px; line-height: 1.8; color: var(--gray); max-width: 700px; white-space: pre-wrap; word-break: break-word; overflow-wrap: break-word; }
+        .instant-content { 
+            font-size: 14px; 
+            line-height: 1.8; 
+            color: var(--gray); 
+            max-width: 100%; /* CHANGED FROM 700px TO 100% */
+            white-space: pre-wrap; 
+            word-break: break-word; 
+            overflow-wrap: break-word; 
+        }
         .instant-content p { margin-bottom: 12px; }
         .instant-meta {
             margin-top: 25px;
@@ -938,7 +891,6 @@
             align-items: center;
             gap: 8px;
             border: 1px solid var(--white);
-            cursor: pointer;
         }
         .website-btn:hover {
             background: transparent;
@@ -1765,18 +1717,6 @@
         <img id="lightbox-img" src="" onclick="event.stopPropagation()">
         <div class="lightbox-caption" id="lightbox-caption" onclick="event.stopPropagation()"></div>
     </div>
-    
-    <!-- INTERNAL BROWSER OVERLAY -->
-    <div id="internal-browser" class="browser-overlay">
-        <div class="browser-header">
-            <div class="browser-title" id="browser-title-text">LOADING...</div>
-            <div class="browser-controls">
-                <button class="browser-btn" id="browser-open-ext" onclick="">OPEN EXTERNAL</button>
-                <button class="browser-btn" onclick="closeBrowser()">CLOSE</button>
-            </div>
-        </div>
-        <iframe id="browser-frame" class="browser-frame" src=""></iframe>
-    </div>
 
     <!-- MAIN SCRIPT -->
     <script data-cfasync="false">
@@ -1802,6 +1742,7 @@
         ];
         
         let randomTimeZones = [];
+        let currentFocus = -1;
 
         // Pump Socket
         let pumpSocket = null;
@@ -1920,7 +1861,6 @@
                             title: page.title, 
                             content: page.extract, 
                             url: `https://en.wikipedia.org/wiki/${encodeURIComponent(title)}`,
-                            // SMART REDIRECT FOR OFFICIAL SITE
                             website: `https://duckduckgo.com/?q=!ducky+${encodeURIComponent(title)}`,
                             source: `WIKI`,
                             type: 'wiki'
@@ -2184,7 +2124,7 @@
 
         function renderBookmarks() {
             $('bookmark-items').innerHTML = state.bookmarks.map(b => `
-                <div class="bookmark-item" onclick="openInternal('${esc(b.url)}', '${esc(b.title)}')">
+                <div class="bookmark-item" onclick="window.open('${esc(b.url)}', '_blank')">
                     <span>${esc(b.title)}</span>
                     <button class="remove-btn" onclick="event.stopPropagation();removeBookmark('${esc(b.url)}')">
                         <svg viewBox="0 0 24 24" class="icon-sm" fill="none" stroke="currentColor"><path d="M19 6.41L17.59 5 12 10.59 6.41 5 5 6.41 10.59 12 5 17.59 6.41 19 12 13.41 17.59 19 19 17.59 13.41 12z"/></svg>
@@ -2668,6 +2608,8 @@
             $('autocomplete-list').classList.remove('show');
             document.documentElement.dir = "ltr";
             
+            history.pushState(null, '', window.location.pathname);
+
             // Re-bind listeners just in case
             setupChatListeners();
             fetchChatMessages();
@@ -2800,6 +2742,11 @@
             
             const cleanQuery = query.trim();
             
+            // Update URL
+            try {
+                history.pushState(null, '', '?q=' + encodeURIComponent(cleanQuery));
+            } catch(e) {}
+
             // Check for !pump
             if (cleanQuery.toLowerCase().startsWith('!pump')) {
                 if (!state.hasSearched) {
@@ -3082,6 +3029,17 @@
             const start = performance.now();
             let instantData = null;
 
+            if (cleanQuery.toLowerCase() === 'k8o5') {
+                instantData = {
+                    title: 'k8o5 (Universal Search Terminal)',
+                    content: 'k8o5 is a privacy-focused, client-side search dashboard designed for high-density information retrieval.\n\nIt aggregates data from News, Crypto (Solana/DEX), Wikipedia, and GitHub into a single brutalist interface without tracking user data. It features integrated tools like translation, currency conversion, and real-time wallet profiling.',
+                    source: 'SYSTEM IDENTITY',
+                    type: 'wiki', // Uses the wiki layout
+                    url: window.location.href,
+                    website: window.location.href
+                };
+            }
+
             if (SOURCES.dictionary.enabled && !instantData && /^[a-zA-Z]+$/.test(searchQuery)) {
                 try {
                     const r = await fetch(`https://api.dictionaryapi.dev/api/v2/entries/en/${encodeURIComponent(searchQuery)}`);
@@ -3168,7 +3126,7 @@
                     const time = new Date(s.blockTime * 1000).toLocaleString();
                     const status = s.err ? '<span style="color:var(--red)">FAIL</span>' : '<span style="color:var(--highlight)">OK</span>';
                     return `
-                    <div class="tx-row" onclick="openInternal('https://solscan.io/tx/${s.signature}', 'TX: ${s.signature.slice(0,8)}')">
+                    <div class="tx-row" onclick="window.open('https://solscan.io/tx/${s.signature}', '_blank')">
                         <span class="tx-sig">${s.signature.slice(0,8)}...</span>
                         <span>${status}</span>
                         <span>${time}</span>
@@ -3223,8 +3181,8 @@
                                     <div style="font-size:10px;z-index:2;text-transform:uppercase;letter-spacing:2px">Generating Graph</div>
                                 </div>
                                 <div style="display:flex;gap:10px;flex-wrap:wrap">
-                                    <button class="action-pill" onclick="openInternal('${bubbleVisualLink}', 'BUBBLEMAPS')">OPEN BUBBLEMAPS</button>
-                                    <button class="action-pill" onclick="openInternal('https://solscan.io/account/${address}', 'SOLSCAN')">SOLSCAN</button>
+                                    <button class="action-pill" onclick="window.open('${bubbleVisualLink}', '_blank')">OPEN BUBBLEMAPS</button>
+                                    <button class="action-pill" onclick="window.open('https://solscan.io/account/${address}', '_blank')">SOLSCAN</button>
                                 </div>
                             </div>
                         </div>
@@ -3304,7 +3262,7 @@
                                 ${data.mint.substring(0, 4)}...${data.mint.substring(data.mint.length - 4)}
                             </div>
                             <div class="pump-actions">
-                                <button class="pump-btn" onclick="openInternal('${pumpLink}', '$${esc(data.symbol)}')">PUMP.FUN</button>
+                                <button class="pump-btn" onclick="window.open('${pumpLink}', '_blank')">PUMP.FUN</button>
                                 <button class="pump-btn" onclick="searchFor('$sol:${data.mint}')">QUICK VIEW</button>
                             </div>
                         </div>
@@ -3425,7 +3383,7 @@
                                          metaInfo = timeAgo(n.meta.date);
                                      }
                                      return `
-                                    <div class="news-block" onclick="openInternal('${esc(n.url)}', '${esc(n.title)}')">
+                                    <div class="news-block" onclick="window.open('${esc(n.url)}','_blank')">
                                         <div>
                                             <div class="news-block-source">${n.source.toUpperCase()}</div>
                                             <div class="news-block-title">${esc(n.title)}</div>
@@ -3478,9 +3436,9 @@
                                     <svg viewBox="0 0 24 24" class="icon-sm" fill="none" stroke="currentColor"><path d="M16 1H4c-1.1 0-2 .9-2 2v14h2V3h12V1zm3 4H8c-1.1 0-2 .9-2 2v14c0 1.1.9 2 2 2h11c1.1 0 2-.9 2-2V7c0-1.1-.9-2-2-2zm0 16H8V7h11v14z"/></svg>
                                 </div>
                                 <div class="action-pill" onclick="addToWatchlistDirect('${watchValue}', '$${displayLabel}')">+ WATCH</div>
-                                <div class="action-pill" onclick="openInternal('${bubblemapsUrl}','BUBBLEMAPS')">BUBBLEMAPS</div>
-                                <div class="action-pill" onclick="openInternal('https://photon-sol.tinyastro.io/en/lp/${pairAddress}','PHOTON')">PHOTON</div>
-                                <div class="action-pill" onclick="openInternal('https://solscan.io/token/${ca}','SOLSCAN')">SOLSCAN</div>
+                                <div class="action-pill" onclick="window.open('${bubblemapsUrl}','_blank')">BUBBLEMAPS</div>
+                                <div class="action-pill" onclick="window.open('https://photon-sol.tinyastro.io/en/lp/${pairAddress}','_blank')">PHOTON</div>
+                                <div class="action-pill" onclick="window.open('https://solscan.io/token/${ca}','_blank')">SOLSCAN</div>
                             </div>
                         </div>
 
@@ -3552,7 +3510,7 @@
                                      metaInfo = timeAgo(n.meta.date);
                                  }
                                  return `
-                                <div class="news-block" onclick="openInternal('${esc(n.url)}','${esc(n.title)}')">
+                                <div class="news-block" onclick="window.open('${esc(n.url)}','_blank')">
                                     <div>
                                         <div class="news-block-source">${n.source.toUpperCase()}</div>
                                         <div class="news-block-title">${esc(n.title)}</div>
@@ -3571,7 +3529,7 @@
                         <div class="stock-info"><h2>${ticker}</h2><div class="ticker">${symbol}</div></div>
                         <div class="stock-actions-top">
                             <button class="stock-btn" onclick="addToWatchlistDirect('${ticker}', '${ticker}')">+ WATCHLIST</button>
-                            <button class="stock-btn" onclick="openInternal('https://www.tradingview.com/symbols/${symbol}/','TRADINGVIEW')">TRADINGVIEW <svg viewBox="0 0 24 24" class="icon-sm" style="display:inline-block;vertical-align:text-top" fill="none" stroke="currentColor"><path d="M19 19H5V5h7V3H5c-1.11 0-2 .9-2 2v14c0 1.1.89 2 2 2h14c1.1 0 2-.9 2-2v-7h-2v7zM14 3v2h3.59l-9.83 9.83 1.41 1.41L19 6.41V10h2V3h-7z"/></svg></button>
+                            <button class="stock-btn" onclick="window.open('https://www.tradingview.com/symbols/${symbol}/','_blank')">TRADINGVIEW <svg viewBox="0 0 24 24" class="icon-sm" style="display:inline-block;vertical-align:text-top" fill="none" stroke="currentColor"><path d="M19 19H5V5h7V3H5c-1.11 0-2 .9-2 2v14c0 1.1.89 2 2 2h14c1.1 0 2-.9 2-2v-7h-2v7zM14 3v2h3.59l-9.83 9.83 1.41 1.41L19 6.41V10h2V3h-7z"/></svg></button>
                         </div>
                     </div>
                     <div class="tradingview-widget-container" id="${widgetId}"></div>
@@ -3627,46 +3585,21 @@
                         <div class="instant-title">${esc(data.title)}</div>
                         <div class="instant-content">${esc(data.content).split('\n').map(p => `<p>${p}</p>`).join('')}</div>
                         <div class="instant-meta">
-                            ${data.website ? `<button class="website-btn" onclick="openInternal('${esc(data.website)}', '${esc(data.title)}')">
+                            ${data.website ? `<a href="${data.website}" target="_blank" class="website-btn">
                                 <svg viewBox="0 0 24 24" class="icon-sm" fill="none" stroke="currentColor"><path d="M12 2C6.48 2 2 6.48 2 12s4.48 10 10 10 10-4.48 10-10S17.52 2 12 2zm-1 17.93c-3.95-.49-7-3.85-7-7.93 0-.62.08-1.21.21-1.79L9 15v1c0 1.1.9 2 2 2v1.93zm6.9-2.54c-.26-.81-1-1.39-1.9-1.39h-1v-3c0-.55-.45-1-1-1H8v-2h2c.55 0 1-.45 1-1V7h2c1.1 0 2-.9 2-2v-.41c2.93 1.19 5 4.06 5 7.41 0 2.08-.8 3.97-2.1 5.39z"/></svg> 
                                 OFFICIAL WEBSITE
-                            </button>` : ''}
+                            </a>` : ''}
                             <button class="btn-action" style="background:none;border:none;color:inherit;cursor:pointer;display:flex;gap:5px;align-items:center;" onclick="readText('${esc(data.content.replace(/'/g, "\\'").replace(/\n/g, " "))}')">
                                 <svg viewBox="0 0 24 24" class="icon-sm" fill="none" stroke="currentColor"><path d="M3 9v6h4l5 5V4L7 9H3zm13.5 3c0-1.77-1.02-3.29-2.5-4.03v8.05c1.48-.73 2.5-2.25 2.5-4.02zM14 3.23v2.06c2.89.86 5 3.54 5 6.71s-2.11 5.85-5 6.71v2.06c4.01-.91 7-4.49 7-8.77s-2.99-7.86-7-8.77z"/></svg> LISTEN
                             </button>
                             <button class="btn-action" style="background:none;border:none;color:inherit;cursor:pointer;display:flex;gap:5px;align-items:center;" onclick="addBookmark('${esc(data.title)}', '${esc(data.url || window.location.href)}')">
                                 <svg viewBox="0 0 24 24" class="icon-sm" fill="none" stroke="currentColor"><path d="M19 21l-7-5-7 5V5a2 2 0 0 1 2-2h10a2 2 0 0 1 2 2z"/></svg> SAVE
                             </button>
-                            ${data.url ? `<button class="btn-action" onclick="openInternal('${esc(data.url)}', 'WIKI')">WIKI <svg viewBox="0 0 24 24" class="icon-sm" style="display:inline-block;vertical-align:text-top" fill="none" stroke="currentColor"><path d="M19 19H5V5h7V3H5c-1.11 0-2 .9-2 2v14c0 1.1.89 2 2 2h14c1.1 0 2-.9 2-2v-7h-2v7zM14 3v2h3.59l-9.83 9.83 1.41 1.41L19 6.41V10h2V3h-7z"/></svg></button>` : ''}
+                            ${data.url ? `<a href="${data.url}" target="_blank">WIKI <svg viewBox="0 0 24 24" class="icon-sm" style="display:inline-block;vertical-align:text-top" fill="none" stroke="currentColor"><path d="M19 19H5V5h7V3H5c-1.11 0-2 .9-2 2v14c0 1.1.89 2 2 2h14c1.1 0 2-.9 2-2v-7h-2v7zM14 3v2h3.59l-9.83 9.83 1.41 1.41L19 6.41V10h2V3h-7z"/></svg></a>` : ''}
                         </div>
                     </div>
                 </div>
             `;
-        }
-        
-        // INTERNAL BROWSER LOGIC
-        function openInternal(url, title) {
-            const browser = document.getElementById('internal-browser');
-            const frame = document.getElementById('browser-frame');
-            const titleEl = document.getElementById('browser-title-text');
-            const openBtn = document.getElementById('browser-open-ext');
-            
-            if(!url.startsWith('http')) url = 'https://' + url;
-            
-            titleEl.textContent = title || url;
-            frame.src = url;
-            
-            // Allow opening externally if blocked
-            openBtn.onclick = () => window.open(url, '_blank');
-            
-            browser.classList.add('active');
-        }
-        
-        function closeBrowser() {
-            const browser = document.getElementById('internal-browser');
-            const frame = document.getElementById('browser-frame');
-            browser.classList.remove('active');
-            frame.src = ''; // Stop loading
         }
 
         function readText(text) {
@@ -3713,7 +3646,7 @@
                         <div class="result-index">${String(i + 1).padStart(2, '0')}</div>
                         <div class="result-body">
                             <div class="result-source">${r.source.toUpperCase()}</div>
-                            <div class="result-title" onclick="openInternal('${esc(r.url)}','${esc(r.title)}')">${esc(r.title)}</div>
+                            <div class="result-title" onclick="window.open('${esc(r.url)}','_blank')">${esc(r.title)}</div>
                             <div class="result-url">${esc(r.url)}</div>
                             <div class="result-snippet">${highlight(esc(r.snippet), state.query)}</div>
                             ${r.meta ? `<div class="result-meta">
@@ -3751,7 +3684,7 @@
                         </div>
                         <div class="book-info">
                             <div class="book-source">${book.source.toUpperCase()} ${book.type === 'paper' ? '• PAPER' : ''}</div>
-                            <div class="book-title" onclick="openInternal('${esc(book.url)}','${esc(book.title)}')">${esc(book.title)}</div>
+                            <div class="book-title" onclick="window.open('${esc(book.url)}','_blank')">${esc(book.title)}</div>
                             <div class="book-author">by ${esc(book.author)}</div>
                             ${book.snippet ? `<div style="font-size:11px;color:var(--gray);margin-top:5px;">${esc(book.snippet)}...</div>` : ''}
                             <div class="book-meta">
@@ -3759,8 +3692,8 @@
                                 ${book.downloads ? `<span>DL: ${fmt(book.downloads)}</span>` : ''}
                             </div>
                             <div class="book-actions">
-                                ${book.readUrl ? `<button class="book-action primary" onclick="openInternal('${esc(book.readUrl)}','READ')">READ NOW</button>` : ''}
-                                <button class="book-action" onclick="openInternal('${esc(book.url)}','DETAILS')">DETAILS</button>
+                                ${book.readUrl ? `<button class="book-action primary" onclick="window.open('${esc(book.readUrl)}','_blank')">READ NOW</button>` : ''}
+                                <button class="book-action" onclick="window.open('${esc(book.url)}','_blank')">DETAILS</button>
                                 <button class="book-action" onclick="copy('${esc(book.url)}')">
                                     <svg viewBox="0 0 24 24" class="icon-sm" fill="none" stroke="currentColor"><path d="M16 1H4c-1.1 0-2 .9-2 2v14h2V3h12V1zm3 4H8c-1.1 0-2 .9-2 2v14c0 1.1.9 2 2 2h11c1.1 0 2-.9 2-2V7c0-1.1-.9-2-2-2zm0 16H8V7h11v14z"/></svg> COPY
                                 </button>
@@ -3861,14 +3794,61 @@
         }
 
         async function handleAutocomplete(e) {
-            const val = e.target.value.trim();
+            const val = e.target.value; 
             const list = $('autocomplete-list');
-            
-            if (val.length < 2) {
+            currentFocus = -1; 
+
+            if (val.trim().length < 2) {
                 list.classList.remove('show');
                 return;
             }
 
+            // CRYPTO MODE: Check if starts with $
+            if (val.trim().startsWith('$')) {
+                // If user types "$sol:pepe", we parse it for DexScreener search
+                // DexScreener 'search' endpoint handles strings like "pepe" or "sol pepe" well
+                // We strip the leading $ and replace ':' with ' ' to be API friendly
+                const query = val.trim().substring(1).replace(':', ' ');
+                
+                if(query.length < 1) return;
+
+                try {
+                    const r = await fetch(`https://api.dexscreener.com/latest/dex/search?q=${encodeURIComponent(query)}`);
+                    const d = await r.json();
+                    
+                    if (!d.pairs || d.pairs.length === 0) {
+                        list.classList.remove('show');
+                        return;
+                    }
+
+                    // Group/Filter unique symbols to avoid spam
+                    const unique = [];
+                    const seen = new Set();
+                    
+                    d.pairs.forEach(p => {
+                        const key = `${p.baseToken.symbol}-${p.chainId}`;
+                        if(!seen.has(key) && unique.length < 5) {
+                            seen.add(key);
+                            unique.push(p);
+                        }
+                    });
+
+                    list.innerHTML = unique.map((p, i) => {
+                        // If user typed $sol:pepe, they want chain syntax, so we preserve it in the click
+                        const searchVal = `$${p.chainId}:${p.baseToken.address}`;
+                        return `
+                        <div class="ac-item" onclick="selectAutocomplete('${searchVal}')">
+                            <span style="font-weight:700">$${p.baseToken.symbol}</span>
+                            <span class="ac-desc">${p.chainId.toUpperCase()} • $${parseFloat(p.priceUsd).toFixed(4)}</span>
+                            <input type="hidden" value="${searchVal}">
+                        </div>
+                    `}).join('');
+                    list.classList.add('show');
+                } catch(err) { list.classList.remove('show'); }
+                return;
+            }
+
+            // STANDARD WIKIPEDIA MODE
             try {
                 const r = await fetch(`https://en.wikipedia.org/w/api.php?action=opensearch&search=${encodeURIComponent(val)}&limit=5&format=json&origin=*`);
                 const d = await r.json();
@@ -3884,6 +3864,7 @@
                     <div class="ac-item" onclick="selectAutocomplete('${t.replace(/'/g, "\\'")}')">
                         <span>${esc(t)}</span>
                         ${descs[i] ? `<span class="ac-desc">${esc(descs[i]).substring(0, 30)}${descs[i].length>30?'...':''}</span>` : ''}
+                        <input type="hidden" value="${esc(t)}">
                     </div>
                 `).join('');
                 list.classList.add('show');
@@ -3899,33 +3880,75 @@
             search(val);
         }
 
+        function addActive(items) {
+            if (!items) return false;
+            removeActive(items);
+            if (currentFocus >= items.length) currentFocus = 0;
+            if (currentFocus < 0) currentFocus = (items.length - 1);
+            items[currentFocus].classList.add("active");
+            const hiddenVal = items[currentFocus].querySelector('input[type="hidden"]');
+            if(hiddenVal) searchInput.value = hiddenVal.value;
+        }
+
+        function removeActive(items) {
+            for (let i = 0; i < items.length; i++) {
+                items[i].classList.remove("active");
+            }
+        }
+
         function setupListeners() {
             let debounce;
             searchInput.addEventListener('input', e => { 
                 clearTimeout(debounce); 
                 handleAutocomplete(e);
-                debounce = setTimeout(() => search(e.target.value), 400); 
+                // Only auto-search if not typing a crypto query (to prevent jitter)
+                if(!e.target.value.startsWith('$')) {
+                    debounce = setTimeout(() => search(e.target.value), 400); 
+                }
             });
 
             searchInput.addEventListener('keydown', e => { 
-                if (e.key === 'Tab') {
-                    const list = $('autocomplete-list');
-                    if (list.classList.contains('show')) {
-                        e.preventDefault();
-                        const first = list.querySelector('.ac-item span');
-                        if(first) {
-                            searchInput.value = first.innerText;
-                        }
-                    }
+                const list = $('autocomplete-list');
+                let items = list.getElementsByClassName('ac-item');
+
+                if (e.key === 'ArrowDown') {
+                    currentFocus++;
+                    addActive(items);
+                    e.preventDefault(); 
                     return;
                 }
-
+                if (e.key === 'ArrowUp') {
+                    currentFocus--;
+                    addActive(items);
+                    e.preventDefault();
+                    return;
+                }
                 if (e.key === 'Enter') { 
+                    e.preventDefault();
                     clearTimeout(debounce); 
-                    $('autocomplete-list').classList.remove('show');
+
+                    if (currentFocus > -1 && list.classList.contains('show')) {
+                        if (items[currentFocus]) {
+                            items[currentFocus].click();
+                            return; 
+                        }
+                    }
+                    
+                    list.classList.remove('show');
                     search(searchInput.value); 
+                    return;
                 } 
-                if (e.key === 'Escape') fullReset(); 
+                if (e.key === 'Escape') {
+                    list.classList.remove('show');
+                    fullReset(); 
+                }
+                if (e.key === 'Tab') {
+                     if (list.classList.contains('show') && items.length > 0) {
+                        e.preventDefault();
+                        currentFocus = 0; 
+                        items[0].click();
+                    }
+                }
             });
 
             document.addEventListener('click', (e) => {
@@ -3939,8 +3962,6 @@
                 if (e.key === 'Escape') {
                     if($('lightbox').classList.contains('active')) {
                         closeLightbox();
-                    } else if (document.getElementById('internal-browser').classList.contains('active')) {
-                        closeBrowser();
                     } else {
                         fullReset(); 
                     }
