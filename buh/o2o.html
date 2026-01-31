@@ -3,7 +3,16 @@
 <head>
     <meta charset="UTF-8">
     <meta name="viewport" content="width=device-width, initial-scale=1.0">
-    <title>1:1 Image Stretcher</title>
+    
+    <!-- 1. Custom Favicon Art (Blue Square with Arrows) -->
+    <link rel="icon" type="image/svg+xml" href="data:image/svg+xml,<svg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 100 100'><rect x='10' y='10' width='80' height='80' fill='%233b82f6' rx='10'/><path d='M30 50h40m-10-10 10 10-10 10m-20-20-10 10 10 10' stroke='white' stroke-width='8' stroke-linecap='round' stroke-linejoin='round'/></svg>">
+    
+    <title>1:1 Image & GIF Stretcher</title>
+
+    <!-- 2. Libraries for GIF Processing -->
+    <script src="https://cdn.jsdelivr.net/npm/gifuct-js@2.1.2/dist/gifuct-js.min.js"></script>
+    <script src="https://cdnjs.cloudflare.com/ajax/libs/gif.js/0.2.0/gif.js"></script>
+
     <style>
         :root {
             --bg-color: #1a1a1a;
@@ -34,7 +43,6 @@
 
         h1 { margin-bottom: 20px; font-weight: 300; letter-spacing: 1px; }
 
-        /* Controls */
         .controls {
             display: flex;
             gap: 10px;
@@ -43,10 +51,7 @@
             flex-wrap: wrap;
         }
 
-        /* Custom File Input Styling */
-        input[type="file"] {
-            display: none;
-        }
+        input[type="file"] { display: none; }
 
         .btn {
             background-color: var(--accent);
@@ -67,12 +72,12 @@
         .btn.secondary:hover { background-color: #555; }
         
         .btn:disabled {
-            background-color: #555;
+            background-color: #333;
+            color: #666;
             cursor: not-allowed;
             opacity: 0.7;
         }
 
-        /* Preview Area */
         .canvas-container {
             width: 100%;
             aspect-ratio: 1 / 1;
@@ -92,14 +97,18 @@
             position: relative;
         }
 
-        canvas {
+        /* We use an IMG for previewing GIFs (to show animation) and Canvas for statics */
+        #previewImg, #canvas {
             max-width: 100%;
             max-height: 100%;
-            /* This ensures the visual display is always square even if canvas data is large */
             width: 100%; 
             height: 100%;
-            object-fit: fill; /* Crucial for viewing constraint */
+            object-fit: fill; /* Stretches the preview visually */
         }
+
+        /* Hidden by default */
+        #canvas, #previewImg { display: none; }
+        .visible { display: block !important; }
 
         .placeholder-text {
             color: #666;
@@ -108,6 +117,27 @@
         }
 
         .hidden { display: none; }
+
+        /* Loading Spinner */
+        .loader {
+            border: 4px solid #333;
+            border-top: 4px solid var(--accent);
+            border-radius: 50%;
+            width: 40px;
+            height: 40px;
+            animation: spin 1s linear infinite;
+            position: absolute;
+            z-index: 10;
+        }
+
+        .loading-text {
+            margin-top: 15px;
+            font-size: 0.9rem;
+            color: var(--accent);
+            display: none;
+        }
+
+        @keyframes spin { 0% { transform: rotate(0deg); } 100% { transform: rotate(360deg); } }
     </style>
 </head>
 <body>
@@ -116,10 +146,10 @@
         <h1>1:1 Image Stretcher</h1>
 
         <div class="controls">
-            <label for="upload" class="btn">
+            <label for="upload" id="uploadLabel" class="btn">
                 Select Image
             </label>
-            <input type="file" id="upload" accept="image/*">
+            <input type="file" id="upload" accept="image/png, image/jpeg, image/webp, image/gif">
             
             <button id="downloadBtn" class="btn secondary" disabled>
                 Download Square
@@ -128,74 +158,240 @@
 
         <div class="canvas-container" id="dropZone">
             <span class="placeholder-text">Preview (1:1)</span>
+            <div id="loader" class="loader hidden"></div>
+            
+            <!-- Used for Static Images -->
             <canvas id="canvas"></canvas>
+            <!-- Used for GIF Previews -->
+            <img id="previewImg" alt="Preview">
         </div>
         
+        <div id="statusText" class="loading-text">Processing GIF frames...</div>
+
         <p style="font-size: 0.8rem; color: #666; margin-top: 15px;">
-            This tool calculates the largest dimension of your image and stretches the other side to match it.
+            Supports PNG, JPG, and Animated GIFs. <br>Calculates largest dimension and stretches to match.
         </p>
     </div>
 
     <script>
         const uploadInput = document.getElementById('upload');
+        const uploadLabel = document.getElementById('uploadLabel');
         const canvas = document.getElementById('canvas');
         const ctx = canvas.getContext('2d');
+        const previewImg = document.getElementById('previewImg');
         const downloadBtn = document.getElementById('downloadBtn');
         const placeholder = document.querySelector('.placeholder-text');
+        const loader = document.getElementById('loader');
+        const statusText = document.getElementById('statusText');
         
+        let currentFileUrl = null;
+        let finalDownloadUrl = null;
         let fileName = 'image.png';
+        let workerBlobUrl = null;
 
-        // Function to handle image processing
-        function processImage(file) {
+        // Initialize GIF Worker logic (Need to bypass CORS for file:// protocol)
+        // We fetch the worker code from CDN and create a local Blob URL
+        async function initGifWorker() {
+            try {
+                const response = await fetch('https://cdnjs.cloudflare.com/ajax/libs/gif.js/0.2.0/gif.worker.js');
+                const text = await response.text();
+                const blob = new Blob([text], { type: 'application/javascript' });
+                workerBlobUrl = URL.createObjectURL(blob);
+            } catch (e) {
+                console.warn("Could not load GIF worker. Processing might be slow or fail.", e);
+            }
+        }
+        initGifWorker();
+
+        function setLoading(isLoading, text = "") {
+            if (isLoading) {
+                loader.classList.remove('hidden');
+                statusText.style.display = 'block';
+                statusText.textContent = text;
+                placeholder.classList.add('hidden');
+                canvas.classList.remove('visible');
+                previewImg.classList.remove('visible');
+                downloadBtn.disabled = true;
+                uploadLabel.style.pointerEvents = 'none';
+                uploadLabel.style.opacity = '0.5';
+            } else {
+                loader.classList.add('hidden');
+                statusText.style.display = 'none';
+                uploadLabel.style.pointerEvents = 'auto';
+                uploadLabel.style.opacity = '1';
+            }
+        }
+
+        async function processImage(file) {
             if (!file) return;
 
-            const reader = new FileReader();
+            // Reset UI
+            downloadBtn.classList.add('secondary');
+            if (finalDownloadUrl) URL.revokeObjectURL(finalDownloadUrl);
             
+            const fileType = file.type;
+            const originalName = file.name.split('.')[0];
+
+            if (fileType === 'image/gif') {
+                await processGif(file, originalName);
+            } else {
+                processStatic(file, originalName);
+            }
+        }
+
+        // Logic for PNG/JPG/WEBP
+        function processStatic(file, name) {
+            setLoading(true, "Processing Image...");
+            
+            const reader = new FileReader();
             reader.onload = function(event) {
                 const img = new Image();
                 img.onload = function() {
-                    // 1. Determine the output size
-                    // To prevent pixelation, we use the LARGEST dimension of the original image
-                    // as the size for both width and height of the square.
                     const size = Math.max(img.width, img.height);
-
-                    // 2. Set canvas resolution to square
+                    
                     canvas.width = size;
                     canvas.height = size;
-
-                    // 3. Draw the image stretched
-                    // (0, 0, size, size) forces the image to fill the square
+                    ctx.clearRect(0, 0, size, size);
                     ctx.drawImage(img, 0, 0, size, size);
 
-                    // 4. Update UI
+                    // Show Canvas, Hide Img
+                    canvas.classList.add('visible');
+                    previewImg.classList.remove('visible');
+                    
+                    finalDownloadUrl = canvas.toDataURL(file.type);
+                    fileName = `${name}-1x1.png`; // Convert everything else to PNG
+                    
+                    setLoading(false);
                     downloadBtn.disabled = false;
                     downloadBtn.classList.remove('secondary');
-                    placeholder.classList.add('hidden');
-                    
-                    // Update filename for download
-                    const originalName = file.name.split('.')[0];
-                    fileName = `${originalName}-1x1.png`;
                 }
                 img.src = event.target.result;
             }
             reader.readAsDataURL(file);
         }
 
-        // Event Listener: File Input
+        // Logic for Animated GIFs
+        async function processGif(file, name) {
+            setLoading(true, "Parsing GIF frames...");
+            
+            try {
+                // 1. Read file as ArrayBuffer for parsing
+                const buffer = await file.arrayBuffer();
+                
+                // 2. Parse GIF
+                const gifData = window.parseGIF(buffer);
+                const frames = window.decompressFrames(gifData, true);
+
+                if (!frames || frames.length === 0) throw new Error("No frames found");
+
+                // 3. Determine max dimensions from GIF metadata
+                const originalWidth = gifData.lsd.width;
+                const originalHeight = gifData.lsd.height;
+                const size = Math.max(originalWidth, originalHeight);
+
+                // 4. Setup GIF Encoder
+                const gifEncoder = new GIF({
+                    workers: 2,
+                    quality: 10, // 1 (best) to 30 (worst)
+                    width: size,
+                    height: size,
+                    workerScript: workerBlobUrl // Use the local blob URL
+                });
+
+                setLoading(true, `Rendering ${frames.length} frames...`);
+
+                // 5. Create temporary canvases
+                // 'tempCanvas' holds the current frame in original dimensions (accumulating patches)
+                const tempCanvas = document.createElement('canvas');
+                tempCanvas.width = originalWidth;
+                tempCanvas.height = originalHeight;
+                const tempCtx = tempCanvas.getContext('2d');
+                
+                // 'frameCanvas' is the individual frame buffer
+                const patchCanvas = document.createElement('canvas');
+                const patchCtx = patchCanvas.getContext('2d');
+
+                // 'stretchCanvas' is what we feed the encoder
+                const stretchCanvas = document.createElement('canvas');
+                stretchCanvas.width = size;
+                stretchCanvas.height = size;
+                const stretchCtx = stretchCanvas.getContext('2d');
+
+                // Render loop
+                // Note: GIF frames are often "patches" over the previous frame
+                let frameImageData;
+                
+                frames.forEach((frame, index) => {
+                    // Create ImageData from raw frame patch
+                    frameImageData = patchCtx.createImageData(frame.dims.width, frame.dims.height);
+                    frameImageData.data.set(frame.patch);
+                    
+                    patchCanvas.width = frame.dims.width;
+                    patchCanvas.height = frame.dims.height;
+                    patchCtx.putImageData(frameImageData, 0, 0);
+
+                    // Draw patch onto composition canvas at specific offset
+                    // If disposal type needs clearing, handling is complex, 
+                    // but drawing over usually works for standard GIFs.
+                    if (index === 0 || frame.disposalType === 2) {
+                         // 2 = Restore to background (clear for transparent GIFs usually)
+                         // But for stretching, we usually want to keep previous context if it's an overlay
+                         // We'll stick to simple accumulation for now.
+                         // Only clear if it's the first frame
+                         if(index === 0) tempCtx.clearRect(0,0, originalWidth, originalHeight);
+                    }
+                    
+                    tempCtx.drawImage(patchCanvas, frame.dims.left, frame.dims.top);
+
+                    // Now stretch the composition to the square canvas
+                    stretchCtx.clearRect(0, 0, size, size);
+                    stretchCtx.drawImage(tempCanvas, 0, 0, size, size);
+
+                    // Add to encoder
+                    gifEncoder.addFrame(stretchCtx, {
+                        copy: true,
+                        delay: frame.delay
+                    });
+                });
+
+                // 6. Finalize
+                gifEncoder.on('finished', function(blob) {
+                    finalDownloadUrl = URL.createObjectURL(blob);
+                    fileName = `${name}-1x1.gif`;
+                    
+                    // Show Preview (we display the blob directly in an IMG tag)
+                    previewImg.src = finalDownloadUrl;
+                    previewImg.classList.add('visible');
+                    canvas.classList.remove('visible');
+
+                    setLoading(false);
+                    downloadBtn.disabled = false;
+                    downloadBtn.classList.remove('secondary');
+                });
+
+                gifEncoder.render();
+
+            } catch (err) {
+                console.error(err);
+                alert("Error processing GIF. It might be corrupt or too large.");
+                setLoading(false);
+            }
+        }
+
+        // Event Listeners
         uploadInput.addEventListener('change', (e) => {
-            processImage(e.target.files[0]);
+            if(e.target.files[0]) processImage(e.target.files[0]);
         });
 
-        // Event Listener: Download
         downloadBtn.addEventListener('click', () => {
+            if (!finalDownloadUrl) return;
             const link = document.createElement('a');
             link.download = fileName;
-            // High quality PNG export
-            link.href = canvas.toDataURL('image/png');
+            link.href = finalDownloadUrl;
             link.click();
         });
 
-        // Optional: Drag and Drop Support
+        // Drag and Drop
         const dropZone = document.getElementById('dropZone');
 
         dropZone.addEventListener('dragover', (e) => {
