@@ -1,0 +1,220 @@
+<!DOCTYPE html>
+<html>
+<head>
+    <title>Hyperliquid Terminal (BYOK)</title>
+    <style>
+        body {
+            font-family: 'Courier New', monospace;
+            background-color: #111111;
+            color: #00FF88;
+            margin: 0;
+            padding: 10px;
+            overflow: hidden;
+            height: 98vh;
+            display: flex;
+            flex-direction: column;
+        }
+        .header {
+            color: #00FFFF;
+            border-bottom: 1px solid #00FFFF;
+            padding-bottom: 5px;
+            margin-bottom: 10px;
+            text-shadow: 0 0 5px rgba(0, 255, 255, 0.5);
+        }
+        .console-output {
+            flex-grow: 1;
+            background-color: #000000;
+            border: 1px solid #00FF88;
+            padding: 10px;
+            overflow-y: auto;
+            white-space: pre-wrap;
+            margin-bottom: 10px;
+            height: calc(100% - 180px); /* Adjust height based on input fields */
+        }
+        .input-group {
+            display: flex;
+            margin-bottom: 5px;
+        }
+        input[type="text"], input[type="password"] {
+            flex-grow: 1;
+            background-color: #222222;
+            color: #FFFFFF;
+            border: 1px solid #00FF88;
+            padding: 5px;
+            font-family: 'Courier New', monospace;
+            font-size: 14px;
+        }
+        button {
+            background-color: #008844;
+            color: #FFFFFF;
+            border: none;
+            padding: 5px 10px;
+            cursor: pointer;
+            font-family: 'Courier New', monospace;
+            margin-left: 5px;
+        }
+        button:hover {
+            background-color: #00AA55;
+        }
+        label {
+            width: 120px;
+            display: inline-block;
+            line-height: 30px;
+            color: #FFD700;
+        }
+        .command-line {
+            display: flex;
+        }
+        #commandInput {
+            background-color: #000000;
+            border: 1px solid #00FFFF;
+        }
+    </style>
+</head>
+<body>
+
+    <div class="header">
+        &gt; HL-TERM v1.0 | BYOK Hyperliquid Interface
+    </div>
+
+    <!-- BYOK Input Section -->
+    <div class="input-group">
+        <label for="apiKey">API Key:</label>
+        <input type="password" id="apiKey" placeholder="Enter API Key" value="">
+    </div>
+    <div class="input-group">
+        <label for="apiSecret">API Secret:</label>
+        <input type="password" id="apiSecret" placeholder="Enter API Secret" value="">
+        <button onclick="connectWallet()">CONNECT</button>
+    </div>
+
+    <!-- Console Output -->
+    <div id="consoleOutput" class="console-output">
+        Initializing terminal...<br>
+        Awaiting connection via API Key/Secret. Use 'help' for commands.
+    </div>
+
+    <!-- Command Input -->
+    <div class="command-line">
+        <label>&gt; HL_CMD:</label>
+        <input type="text" id="commandInput" placeholder="Enter command (e.g., status, order ETH-PERP 1.5 @ 3000)" onkeydown="if(event.keyCode==13) executeCommand()">
+    </div>
+
+    <script>
+        const consoleOutput = document.getElementById('consoleOutput');
+        const commandInput = document.getElementById('commandInput');
+        let isConnected = false;
+
+        function log(message, type = 'info') {
+            const span = document.createElement('span');
+            let color = '#00FF88';
+
+            if (type === 'error') color = '#FF3333';
+            if (type === 'warn') color = '#FFD700';
+            if (type === 'system') color = '#00FFFF';
+
+            span.style.color = color;
+            span.innerHTML = `[${new Date().toLocaleTimeString()}] ${message}<br>`;
+            consoleOutput.appendChild(span);
+            consoleOutput.scrollTop = consoleOutput.scrollHeight;
+        }
+
+        function connectWallet() {
+            const key = document.getElementById('apiKey').value;
+            const secret = document.getElementById('apiSecret').value;
+
+            if (key && secret) {
+                log(`Attempting connection using provided keys...`, 'system');
+                // Simulate API handshake delay
+                setTimeout(() => {
+                    isConnected = true;
+                    log(`Connection established. Wallet address derived (0x...A1B2)`, 'system');
+                    log(`Ready to trade. Market data streaming activated.`);
+                    commandInput.focus();
+                }, 1000);
+            } else {
+                log('Error: API Key and Secret are required for BYOK connection.', 'error');
+            }
+        }
+
+        function executeCommand() {
+            const commandLine = commandInput.value.trim();
+            commandInput.value = ''; // Clear input
+            log(`> ${commandLine}`, 'warn'); // Log the user's command
+
+            if (!isConnected && commandLine.toLowerCase() !== 'connect') {
+                log('Error: Not connected. Please use CONNECT button first.', 'error');
+                return;
+            }
+
+            const parts = commandLine.toLowerCase().split(/\s+/);
+            const cmd = parts[0];
+
+            switch (cmd) {
+                case 'help':
+                    log('--- Available Commands ---', 'system');
+                    log('STATUS: View account status.');
+                    log('ORDER [SYMBOL] [SIZE] @ [PRICE]: Place a limit order (e.g., order ETH-PERP 1.5 @ 3000)');
+                    log('CANCEL [ORDER_ID]: Cancel an order.');
+                    log('LPS: List open positions.');
+                    log('EXIT: Disconnect terminal.');
+                    break;
+
+                case 'status':
+                    log('--- Account Status ---', 'system');
+                    log('Balance: 10,000.00 USDC');
+                    log('Maintenance Margin: 50.00 USDC');
+                    log('Open Orders: 2');
+                    log('Total PNL: +345.21 USDC');
+                    log('Current Leverage: 4.5x');
+                    break;
+
+                case 'order':
+                    if (parts.length < 5 || parts[3] !== '@') {
+                        log('Usage: ORDER [SYMBOL] [SIZE] @ [PRICE]', 'error');
+                        return;
+                    }
+                    const [ , symbol, size, , price] = parts;
+                    log(`Submitting LIMIT order: ${size} of ${symbol} at price ${price}...`);
+                    setTimeout(() => {
+                        log(`[Order Confirmed] ID: HL-${Math.floor(Math.random() * 90000) + 10000}. Status: Pending Match.`);
+                    }, 500);
+                    break;
+
+                case 'lps':
+                case 'positions':
+                    log('--- Open Positions ---', 'system');
+                    log('ETH-PERP | Size: +2.0 | Entry: 3200.00 | Liq Price: 2850.00');
+                    log('BTC-PERP | Size: -0.5 | Entry: 65000.00 | Liq Price: 75000.00');
+                    break;
+
+                case 'cancel':
+                    if (parts.length < 2) {
+                        log('Usage: CANCEL [ORDER_ID]', 'error');
+                        return;
+                    }
+                    log(`Attempting to cancel order ${parts[1]}...`);
+                    setTimeout(() => {
+                         log(`[Success] Order ${parts[1]} cancelled.`);
+                    }, 300);
+                    break;
+
+                case 'exit':
+                    log('Disconnecting from Hyperliquid network...', 'system');
+                    isConnected = false;
+                    setTimeout(() => {
+                        log('Session terminated. Thank you for using HL-TERM.', 'system');
+                    }, 500);
+                    break;
+
+                default:
+                    log(`Unknown command: '${cmd}'. Type 'help' for assistance.`, 'error');
+            }
+        }
+
+        // Initial setup log
+        log('Welcome to Sparky\'s BYOK Hyperliquid Terminal.', 'system');
+    </script>
+
+</body>
+</html>
