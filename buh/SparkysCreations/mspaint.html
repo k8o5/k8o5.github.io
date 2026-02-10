@@ -1,0 +1,267 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Sparky Paint</title>
+    <style>
+        body {
+            margin: 0;
+            padding: 0;
+            font-family: 'Segoe UI', Tahoma, Geneva, Verdana, sans-serif;
+            background-color: #c0c0c0;
+            display: flex;
+            flex-direction: column;
+            height: 100vh;
+            overflow: hidden;
+            user-select: none;
+        }
+
+        #header {
+            background: linear-gradient(90deg, #000080, #1084d0);
+            color: white;
+            padding: 5px 10px;
+            font-weight: bold;
+            font-size: 14px;
+            display: flex;
+            justify-content: space-between;
+            align-items: center;
+        }
+
+        #toolbar {
+            background-color: #dfdfdf;
+            border-bottom: 2px solid #808080;
+            padding: 10px;
+            display: flex;
+            gap: 15px;
+            align-items: center;
+            box-shadow: inset 1px 1px #ffffff;
+        }
+
+        .tool-group {
+            display: flex;
+            align-items: center;
+            gap: 8px;
+            border-right: 1px solid #808080;
+            padding-right: 15px;
+        }
+
+        .tool-group:last-child {
+            border-right: none;
+        }
+
+        label {
+            font-size: 12px;
+            font-weight: bold;
+        }
+
+        input[type="color"] {
+            width: 30px;
+            height: 30px;
+            border: 1px solid #808080;
+            cursor: pointer;
+            background: none;
+        }
+
+        input[type="range"] {
+            width: 80px;
+        }
+
+        button {
+            padding: 5px 10px;
+            background-color: #dfdfdf;
+            border: 2px solid;
+            border-color: #ffffff #808080 #808080 #ffffff;
+            cursor: pointer;
+            font-size: 12px;
+            outline: none;
+        }
+
+        button:active {
+            border-color: #808080 #ffffff #ffffff #808080;
+        }
+
+        button.active {
+            background-color: #ffffff;
+            border-color: #808080 #ffffff #ffffff #808080;
+        }
+
+        #canvas-container {
+            flex-grow: 1;
+            padding: 20px;
+            display: flex;
+            justify-content: center;
+            align-items: center;
+            overflow: auto;
+            background-color: #808080;
+        }
+
+        canvas {
+            background-color: white;
+            box-shadow: 2px 2px 5px rgba(0,0,0,0.3);
+            cursor: crosshair;
+            image-rendering: pixelated;
+        }
+
+        #status-bar {
+            background-color: #dfdfdf;
+            border-top: 1px solid #808080;
+            padding: 3px 10px;
+            font-size: 12px;
+            display: flex;
+            gap: 20px;
+        }
+    </style>
+</head>
+<body>
+
+    <div id="header">
+        <span>Sparky Paint - [Untitled]</span>
+        <span style="font-size: 10px;">v1.0</span>
+    </div>
+
+    <div id="toolbar">
+        <div class="tool-group">
+            <label>Color:</label>
+            <input type="color" id="colorPicker" value="#000000">
+        </div>
+        
+        <div class="tool-group">
+            <label>Size:</label>
+            <input type="range" id="brushSize" min="1" max="50" value="5">
+            <span id="sizeValue" style="font-size: 12px; width: 20px;">5</span>
+        </div>
+
+        <div class="tool-group">
+            <button id="brushBtn" class="active">Brush</button>
+            <button id="eraserBtn">Eraser</button>
+        </div>
+
+        <div class="tool-group">
+            <button id="clearBtn">Clear Canvas</button>
+            <button id="saveBtn">Save Image</button>
+        </div>
+    </div>
+
+    <div id="canvas-container">
+        <canvas id="paintCanvas"></canvas>
+    </div>
+
+    <div id="status-bar">
+        <span id="coords">0, 0px</span>
+        <span>Ready</span>
+    </div>
+
+    <script>
+        const canvas = document.getElementById('paintCanvas');
+        const ctx = canvas.getContext('2d');
+        const colorPicker = document.getElementById('colorPicker');
+        const brushSize = document.getElementById('brushSize');
+        const sizeValue = document.getElementById('sizeValue');
+        const brushBtn = document.getElementById('brushBtn');
+        const eraserBtn = document.getElementById('eraserBtn');
+        const clearBtn = document.getElementById('clearBtn');
+        const saveBtn = document.getElementById('saveBtn');
+        const coordsDisplay = document.getElementById('coords');
+
+        // Setup Canvas Size
+        function resizeCanvas() {
+            // Set canvas size to a fixed high resolution or relative to container
+            canvas.width = 800;
+            canvas.height = 600;
+            ctx.lineCap = 'round';
+            ctx.lineJoin = 'round';
+            
+            // Fill background with white (otherwise it's transparent)
+            ctx.fillStyle = 'white';
+            ctx.fillRect(0, 0, canvas.width, canvas.height);
+        }
+
+        resizeCanvas();
+
+        let painting = false;
+        let mode = 'brush'; // 'brush' or 'eraser'
+
+        function startPosition(e) {
+            painting = true;
+            draw(e);
+        }
+
+        function finishedPosition() {
+            painting = false;
+            ctx.beginPath();
+        }
+
+        function draw(e) {
+            if (!painting) return;
+
+            // Get correct mouse position relative to canvas
+            const rect = canvas.getBoundingClientRect();
+            const x = (e.clientX || e.touches[0].clientX) - rect.left;
+            const y = (e.clientY || e.touches[0].clientY) - rect.top;
+
+            // Update status bar
+            coordsDisplay.innerText = `${Math.floor(x)}, ${Math.floor(y)}px`;
+
+            ctx.lineWidth = brushSize.value;
+            ctx.strokeStyle = (mode === 'eraser') ? 'white' : colorPicker.value;
+
+            ctx.lineTo(x, y);
+            ctx.stroke();
+            ctx.beginPath();
+            ctx.moveTo(x, y);
+        }
+
+        // Event Listeners
+        canvas.addEventListener('mousedown', startPosition);
+        canvas.addEventListener('mouseup', finishedPosition);
+        canvas.addEventListener('mousemove', draw);
+        canvas.addEventListener('mouseleave', finishedPosition);
+
+        // Touch support
+        canvas.addEventListener('touchstart', (e) => { e.preventDefault(); startPosition(e); });
+        canvas.addEventListener('touchend', finishedPosition);
+        canvas.addEventListener('touchmove', (e) => { e.preventDefault(); draw(e); });
+
+        // Tool Logic
+        brushSize.addEventListener('input', () => {
+            sizeValue.innerText = brushSize.value;
+        });
+
+        brushBtn.addEventListener('click', () => {
+            mode = 'brush';
+            brushBtn.classList.add('active');
+            eraserBtn.classList.remove('active');
+        });
+
+        eraserBtn.addEventListener('click', () => {
+            mode = 'eraser';
+            eraserBtn.classList.add('active');
+            brushBtn.classList.remove('active');
+        });
+
+        clearBtn.addEventListener('click', () => {
+            if(confirm("Clear your masterpiece?")) {
+                ctx.fillStyle = 'white';
+                ctx.fillRect(0, 0, canvas.width, canvas.height);
+            }
+        });
+
+        saveBtn.addEventListener('click', () => {
+            const link = document.createElement('a');
+            link.download = 'sparky-paint-art.png';
+            link.href = canvas.toDataURL();
+            link.click();
+        });
+
+        // Track cursor even when not drawing for status bar
+        canvas.addEventListener('mousemove', (e) => {
+            const rect = canvas.getBoundingClientRect();
+            const x = e.clientX - rect.left;
+            const y = e.clientY - rect.top;
+            coordsDisplay.innerText = `${Math.floor(x)}, ${Math.floor(y)}px`;
+        });
+
+    </script>
+</body>
+</html></html>
