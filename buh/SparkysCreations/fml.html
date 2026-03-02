@@ -1,0 +1,2718 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>PID Control - Mathematical Sandbox</title>
+    <style>
+        @import url('https://fonts.googleapis.com/css2?family=JetBrains+Mono:wght@400;600;700&family=Inter:wght@300;400;500;600;700&family=STIX+Two+Math&display=swap');
+
+        :root {
+            --bg: #0a0a0f;
+            --bg2: #12121a;
+            --bg3: #1a1a24;
+            --accent: #00d4ff;
+            --accent2: #ff6b6b;
+            --accent3: #4ecdc4;
+            --accent4: #ffe66d;
+            --accent5: #95e1d3;
+            --text: #e8e8f0;
+            --text2: #a0a0b0;
+            --grid: rgba(0, 212, 255, 0.08);
+        }
+
+        * {
+            margin: 0;
+            padding: 0;
+            box-sizing: border-box;
+        }
+
+        body {
+            font-family: 'Inter', sans-serif;
+            background: var(--bg);
+            color: var(--text);
+            min-height: 100vh;
+            overflow-x: hidden;
+        }
+
+        /* Math Font */
+        .math {
+            font-family: 'STIX Two Math', 'Times New Roman', serif;
+            font-style: italic;
+        }
+
+        .mono {
+            font-family: 'JetBrains Mono', monospace;
+        }
+
+        /* Header */
+        header {
+            background: linear-gradient(180deg, var(--bg2), transparent);
+            padding: 20px 40px;
+            border-bottom: 1px solid rgba(0, 212, 255, 0.2);
+            position: sticky;
+            top: 0;
+            z-index: 100;
+            backdrop-filter: blur(10px);
+        }
+
+        header h1 {
+            font-size: 1.8em;
+            font-weight: 700;
+            background: linear-gradient(90deg, var(--accent), var(--accent3));
+            -webkit-background-clip: text;
+            -webkit-text-fill-color: transparent;
+        }
+
+        header p {
+            color: var(--text2);
+            font-size: 0.9em;
+            margin-top: 5px;
+        }
+
+        /* Main Layout */
+        .main-container {
+            display: grid;
+            grid-template-columns: 350px 1fr;
+            min-height: calc(100vh - 80px);
+        }
+
+        @media (max-width: 1200px) {
+            .main-container {
+                grid-template-columns: 1fr;
+            }
+        }
+
+        /* Control Panel */
+        .control-panel {
+            background: var(--bg2);
+            border-right: 1px solid rgba(0, 212, 255, 0.1);
+            padding: 20px;
+            overflow-y: auto;
+            max-height: calc(100vh - 80px);
+        }
+
+        .panel-section {
+            background: var(--bg3);
+            border-radius: 12px;
+            padding: 20px;
+            margin-bottom: 15px;
+            border: 1px solid rgba(0, 212, 255, 0.1);
+        }
+
+        .panel-section h3 {
+            font-size: 0.85em;
+            text-transform: uppercase;
+            letter-spacing: 1px;
+            color: var(--accent);
+            margin-bottom: 15px;
+            display: flex;
+            align-items: center;
+            gap: 8px;
+        }
+
+        .param-group {
+            margin-bottom: 20px;
+        }
+
+        .param-label {
+            display: flex;
+            justify-content: space-between;
+            align-items: center;
+            margin-bottom: 8px;
+        }
+
+        .param-name {
+            font-size: 0.95em;
+            display: flex;
+            align-items: center;
+            gap: 8px;
+        }
+
+        .param-name .symbol {
+            font-family: 'STIX Two Math', serif;
+            font-size: 1.2em;
+            color: var(--accent);
+        }
+
+        .param-value {
+            font-family: 'JetBrains Mono', monospace;
+            font-size: 0.9em;
+            background: rgba(0, 212, 255, 0.1);
+            padding: 3px 10px;
+            border-radius: 5px;
+            color: var(--accent);
+            min-width: 70px;
+            text-align: center;
+        }
+
+        input[type="range"] {
+            -webkit-appearance: none;
+            width: 100%;
+            height: 6px;
+            background: rgba(0, 212, 255, 0.15);
+            border-radius: 3px;
+            cursor: pointer;
+        }
+
+        input[type="range"]::-webkit-slider-thumb {
+            -webkit-appearance: none;
+            width: 18px;
+            height: 18px;
+            background: var(--accent);
+            border-radius: 50%;
+            cursor: pointer;
+            box-shadow: 0 0 10px rgba(0, 212, 255, 0.5);
+        }
+
+        .equation-display {
+            background: rgba(0, 0, 0, 0.4);
+            border-radius: 8px;
+            padding: 15px;
+            margin: 10px 0;
+            font-family: 'STIX Two Math', serif;
+            font-size: 1.1em;
+            text-align: center;
+            border: 1px solid rgba(0, 212, 255, 0.1);
+            line-height: 1.8;
+        }
+
+        .equation-display .highlight {
+            color: var(--accent);
+        }
+
+        .equation-display .p-term { color: var(--accent2); }
+        .equation-display .i-term { color: var(--accent3); }
+        .equation-display .d-term { color: var(--accent4); }
+
+        /* Preset Buttons */
+        .preset-grid {
+            display: grid;
+            grid-template-columns: repeat(2, 1fr);
+            gap: 8px;
+            margin-top: 10px;
+        }
+
+        .preset-btn {
+            padding: 8px 12px;
+            background: rgba(0, 212, 255, 0.1);
+            border: 1px solid rgba(0, 212, 255, 0.2);
+            border-radius: 6px;
+            color: var(--text);
+            font-size: 0.8em;
+            cursor: pointer;
+            transition: all 0.2s;
+            font-family: 'Inter', sans-serif;
+        }
+
+        .preset-btn:hover {
+            background: rgba(0, 212, 255, 0.2);
+            border-color: var(--accent);
+        }
+
+        /* Canvas Area */
+        .canvas-area {
+            padding: 20px;
+            overflow-y: auto;
+            max-height: calc(100vh - 80px);
+        }
+
+        .viz-grid {
+            display: grid;
+            grid-template-columns: repeat(auto-fit, minmax(500px, 1fr));
+            gap: 20px;
+        }
+
+        @media (max-width: 600px) {
+            .viz-grid {
+                grid-template-columns: 1fr;
+            }
+        }
+
+        .viz-panel {
+            background: var(--bg2);
+            border-radius: 12px;
+            border: 1px solid rgba(0, 212, 255, 0.1);
+            overflow: hidden;
+        }
+
+        .viz-header {
+            padding: 15px 20px;
+            background: var(--bg3);
+            border-bottom: 1px solid rgba(0, 212, 255, 0.1);
+            display: flex;
+            justify-content: space-between;
+            align-items: center;
+        }
+
+        .viz-title {
+            font-weight: 600;
+            display: flex;
+            align-items: center;
+            gap: 10px;
+        }
+
+        .viz-title .icon {
+            font-size: 1.2em;
+        }
+
+        .viz-subtitle {
+            font-size: 0.75em;
+            color: var(--text2);
+            font-family: 'JetBrains Mono', monospace;
+        }
+
+        .viz-body {
+            padding: 15px;
+        }
+
+        canvas {
+            width: 100%;
+            height: 280px;
+            background: rgba(0, 0, 0, 0.3);
+            border-radius: 8px;
+            display: block;
+        }
+
+        canvas.tall {
+            height: 350px;
+        }
+
+        /* Metrics */
+        .metrics-grid {
+            display: grid;
+            grid-template-columns: repeat(auto-fit, minmax(100px, 1fr));
+            gap: 10px;
+            margin-top: 15px;
+        }
+
+        .metric {
+            background: rgba(0, 0, 0, 0.3);
+            border-radius: 8px;
+            padding: 12px;
+            text-align: center;
+        }
+
+        .metric-value {
+            font-family: 'JetBrains Mono', monospace;
+            font-size: 1.2em;
+            color: var(--accent);
+        }
+
+        .metric-label {
+            font-size: 0.7em;
+            color: var(--text2);
+            text-transform: uppercase;
+            letter-spacing: 0.5px;
+            margin-top: 4px;
+        }
+
+        /* Formula Cards */
+        .formula-card {
+            background: rgba(0, 0, 0, 0.4);
+            border-radius: 10px;
+            padding: 15px;
+            margin: 10px 0;
+            border-left: 3px solid var(--accent);
+        }
+
+        .formula-card.p { border-left-color: var(--accent2); }
+        .formula-card.i { border-left-color: var(--accent3); }
+        .formula-card.d { border-left-color: var(--accent4); }
+
+        .formula-card h4 {
+            font-size: 0.85em;
+            color: var(--text2);
+            margin-bottom: 8px;
+        }
+
+        .formula-card .formula {
+            font-family: 'STIX Two Math', serif;
+            font-size: 1.3em;
+            margin-bottom: 8px;
+        }
+
+        .formula-card .computed {
+            font-family: 'JetBrains Mono', monospace;
+            font-size: 0.9em;
+            color: var(--accent);
+        }
+
+        /* Live Values Panel */
+        .live-values {
+            display: grid;
+            grid-template-columns: repeat(3, 1fr);
+            gap: 10px;
+            margin-top: 15px;
+        }
+
+        .live-val {
+            background: rgba(0, 0, 0, 0.3);
+            border-radius: 8px;
+            padding: 10px;
+            text-align: center;
+        }
+
+        .live-val.p { border-top: 2px solid var(--accent2); }
+        .live-val.i { border-top: 2px solid var(--accent3); }
+        .live-val.d { border-top: 2px solid var(--accent4); }
+
+        .live-val-num {
+            font-family: 'JetBrains Mono', monospace;
+            font-size: 1.1em;
+        }
+
+        .live-val-label {
+            font-size: 0.7em;
+            color: var(--text2);
+            margin-top: 3px;
+        }
+
+        /* Tabs */
+        .tab-bar {
+            display: flex;
+            gap: 5px;
+            margin-bottom: 15px;
+            flex-wrap: wrap;
+        }
+
+        .tab-btn {
+            padding: 8px 16px;
+            background: transparent;
+            border: 1px solid rgba(0, 212, 255, 0.2);
+            border-radius: 20px;
+            color: var(--text2);
+            font-size: 0.85em;
+            cursor: pointer;
+            transition: all 0.2s;
+            font-family: 'Inter', sans-serif;
+        }
+
+        .tab-btn.active {
+            background: var(--accent);
+            color: var(--bg);
+            border-color: var(--accent);
+        }
+
+        .tab-btn:hover:not(.active) {
+            border-color: var(--accent);
+            color: var(--text);
+        }
+
+        /* Transfer Function Display */
+        .tf-display {
+            background: rgba(0, 0, 0, 0.5);
+            border-radius: 10px;
+            padding: 20px;
+            text-align: center;
+            margin: 15px 0;
+        }
+
+        .tf-fraction {
+            display: inline-flex;
+            flex-direction: column;
+            align-items: center;
+            font-family: 'STIX Two Math', serif;
+            font-size: 1.2em;
+        }
+
+        .tf-num, .tf-den {
+            padding: 5px 15px;
+        }
+
+        .tf-line {
+            width: 100%;
+            height: 2px;
+            background: var(--accent);
+        }
+
+        /* Pole Zero Display */
+        .pz-info {
+            display: grid;
+            grid-template-columns: 1fr 1fr;
+            gap: 15px;
+            margin-top: 15px;
+        }
+
+        .pz-box {
+            background: rgba(0, 0, 0, 0.3);
+            border-radius: 8px;
+            padding: 12px;
+        }
+
+        .pz-box h5 {
+            font-size: 0.8em;
+            color: var(--text2);
+            margin-bottom: 8px;
+        }
+
+        .pz-list {
+            font-family: 'JetBrains Mono', monospace;
+            font-size: 0.85em;
+        }
+
+        /* Simulation Controls */
+        .sim-controls {
+            display: flex;
+            gap: 10px;
+            margin-top: 15px;
+            flex-wrap: wrap;
+        }
+
+        .sim-btn {
+            padding: 10px 20px;
+            border: none;
+            border-radius: 8px;
+            font-family: 'Inter', sans-serif;
+            font-weight: 600;
+            cursor: pointer;
+            transition: all 0.2s;
+            display: flex;
+            align-items: center;
+            gap: 6px;
+        }
+
+        .sim-btn.start {
+            background: var(--accent);
+            color: var(--bg);
+        }
+
+        .sim-btn.stop {
+            background: var(--accent2);
+            color: white;
+        }
+
+        .sim-btn.reset {
+            background: rgba(255, 255, 255, 0.1);
+            color: var(--text);
+        }
+
+        .sim-btn:hover {
+            transform: translateY(-2px);
+            box-shadow: 0 5px 20px rgba(0, 0, 0, 0.3);
+        }
+
+        /* Math Derivation */
+        .derivation {
+            background: var(--bg3);
+            border-radius: 10px;
+            padding: 20px;
+            margin: 15px 0;
+        }
+
+        .derivation-step {
+            display: flex;
+            gap: 15px;
+            margin: 10px 0;
+            align-items: flex-start;
+        }
+
+        .step-num {
+            width: 24px;
+            height: 24px;
+            background: var(--accent);
+            color: var(--bg);
+            border-radius: 50%;
+            display: flex;
+            align-items: center;
+            justify-content: center;
+            font-size: 0.8em;
+            font-weight: 700;
+            flex-shrink: 0;
+        }
+
+        .step-content {
+            flex: 1;
+        }
+
+        .step-formula {
+            font-family: 'STIX Two Math', serif;
+            font-size: 1.1em;
+            margin-bottom: 5px;
+        }
+
+        .step-desc {
+            font-size: 0.85em;
+            color: var(--text2);
+        }
+
+        /* Scrollbar */
+        ::-webkit-scrollbar {
+            width: 8px;
+            height: 8px;
+        }
+
+        ::-webkit-scrollbar-track {
+            background: var(--bg);
+        }
+
+        ::-webkit-scrollbar-thumb {
+            background: rgba(0, 212, 255, 0.3);
+            border-radius: 4px;
+        }
+
+        /* Full Width Panels */
+        .full-width {
+            grid-column: 1 / -1;
+        }
+
+        /* Legend */
+        .legend {
+            display: flex;
+            gap: 20px;
+            flex-wrap: wrap;
+            margin-top: 10px;
+            font-size: 0.8em;
+        }
+
+        .legend-item {
+            display: flex;
+            align-items: center;
+            gap: 6px;
+        }
+
+        .legend-color {
+            width: 16px;
+            height: 3px;
+            border-radius: 2px;
+        }
+
+        /* Checkbox */
+        .checkbox-group {
+            display: flex;
+            flex-wrap: wrap;
+            gap: 15px;
+            margin: 10px 0;
+        }
+
+        .checkbox-label {
+            display: flex;
+            align-items: center;
+            gap: 6px;
+            cursor: pointer;
+            font-size: 0.9em;
+        }
+
+        .checkbox-label input {
+            accent-color: var(--accent);
+        }
+
+        /* Animation */
+        @keyframes pulse {
+            0%, 100% { opacity: 1; }
+            50% { opacity: 0.5; }
+        }
+
+        .running-indicator {
+            width: 8px;
+            height: 8px;
+            background: var(--accent3);
+            border-radius: 50%;
+            animation: pulse 1s infinite;
+        }
+
+        /* Tooltip */
+        .tooltip {
+            position: relative;
+        }
+
+        .tooltip::after {
+            content: attr(data-tip);
+            position: absolute;
+            bottom: 100%;
+            left: 50%;
+            transform: translateX(-50%);
+            background: var(--bg3);
+            padding: 5px 10px;
+            border-radius: 5px;
+            font-size: 0.75em;
+            white-space: nowrap;
+            opacity: 0;
+            pointer-events: none;
+            transition: opacity 0.2s;
+            border: 1px solid rgba(0, 212, 255, 0.2);
+        }
+
+        .tooltip:hover::after {
+            opacity: 1;
+        }
+
+        /* Number Input */
+        .number-input {
+            display: flex;
+            align-items: center;
+            gap: 5px;
+        }
+
+        .number-input input[type="number"] {
+            width: 80px;
+            padding: 5px 8px;
+            background: rgba(0, 0, 0, 0.4);
+            border: 1px solid rgba(0, 212, 255, 0.2);
+            border-radius: 5px;
+            color: var(--text);
+            font-family: 'JetBrains Mono', monospace;
+            font-size: 0.9em;
+        }
+
+        .number-input input:focus {
+            outline: none;
+            border-color: var(--accent);
+        }
+
+        /* Response Type Selector */
+        .response-types {
+            display: flex;
+            gap: 8px;
+            flex-wrap: wrap;
+            margin: 10px 0;
+        }
+
+        .response-type {
+            padding: 6px 14px;
+            background: rgba(0, 0, 0, 0.3);
+            border: 1px solid rgba(0, 212, 255, 0.2);
+            border-radius: 15px;
+            font-size: 0.8em;
+            cursor: pointer;
+            transition: all 0.2s;
+        }
+
+        .response-type.active {
+            background: var(--accent);
+            color: var(--bg);
+            border-color: var(--accent);
+        }
+    </style>
+</head>
+<body>
+    <header>
+        <h1>PID Control Mathematical Sandbox</h1>
+        <p>Interactive exploration of Proportional-Integral-Derivative control theory</p>
+    </header>
+
+    <div class="main-container">
+        <!-- Control Panel -->
+        <aside class="control-panel">
+            <!-- PID Gains -->
+            <div class="panel-section">
+                <h3>⚡ PID Controller Gains</h3>
+                
+                <div class="param-group">
+                    <div class="param-label">
+                        <span class="param-name">
+                            <span class="symbol" style="color: var(--accent2);">K<sub>p</sub></span>
+                            Proportional Gain
+                        </span>
+                        <span class="param-value" id="kp-val">2.00</span>
+                    </div>
+                    <input type="range" id="kp-slider" min="0" max="20" step="0.1" value="2">
+                </div>
+
+                <div class="param-group">
+                    <div class="param-label">
+                        <span class="param-name">
+                            <span class="symbol" style="color: var(--accent3);">K<sub>i</sub></span>
+                            Integral Gain
+                        </span>
+                        <span class="param-value" id="ki-val">0.50</span>
+                    </div>
+                    <input type="range" id="ki-slider" min="0" max="10" step="0.05" value="0.5">
+                </div>
+
+                <div class="param-group">
+                    <div class="param-label">
+                        <span class="param-name">
+                            <span class="symbol" style="color: var(--accent4);">K<sub>d</sub></span>
+                            Derivative Gain
+                        </span>
+                        <span class="param-value" id="kd-val">0.30</span>
+                    </div>
+                    <input type="range" id="kd-slider" min="0" max="5" step="0.05" value="0.3">
+                </div>
+
+                <div class="equation-display">
+                    <span class="math">u(t) = </span>
+                    <span class="p-term"><span id="eq-kp">2.00</span>e(t)</span>
+                    <span class="math"> + </span>
+                    <span class="i-term"><span id="eq-ki">0.50</span>∫e(τ)dτ</span>
+                    <span class="math"> + </span>
+                    <span class="d-term"><span id="eq-kd">0.30</span><sup>de</sup>/<sub>dt</sub></span>
+                </div>
+            </div>
+
+            <!-- Process Model -->
+            <div class="panel-section">
+                <h3>🏭 Process Model (First Order + Delay)</h3>
+                
+                <div class="equation-display">
+                    <span class="math">G(s) = </span>
+                    <span class="tf-fraction">
+                        <span><span id="eq-K">1.00</span>·e<sup>−<span id="eq-L">0.0</span>s</sup></span>
+                        <span>────────</span>
+                        <span><span id="eq-tau">1.00</span>s + 1</span>
+                    </span>
+                </div>
+
+                <div class="param-group">
+                    <div class="param-label">
+                        <span class="param-name">
+                            <span class="symbol">K</span>
+                            Process Gain
+                        </span>
+                        <span class="param-value" id="pg-val">1.00</span>
+                    </div>
+                    <input type="range" id="pg-slider" min="0.1" max="5" step="0.1" value="1">
+                </div>
+
+                <div class="param-group">
+                    <div class="param-label">
+                        <span class="param-name">
+                            <span class="symbol">τ</span>
+                            Time Constant (s)
+                        </span>
+                        <span class="param-value" id="tc-val">1.00</span>
+                    </div>
+                    <input type="range" id="tc-slider" min="0.1" max="5" step="0.1" value="1">
+                </div>
+
+                <div class="param-group">
+                    <div class="param-label">
+                        <span class="param-name">
+                            <span class="symbol">L</span>
+                            Dead Time (s)
+                        </span>
+                        <span class="param-value" id="dt-val">0.00</span>
+                    </div>
+                    <input type="range" id="dt-slider" min="0" max="2" step="0.05" value="0">
+                </div>
+            </div>
+
+            <!-- Input Signal -->
+            <div class="panel-section">
+                <h3>📊 Reference Signal r(t)</h3>
+                
+                <div class="response-types" id="input-type">
+                    <div class="response-type active" data-type="step">Step</div>
+                    <div class="response-type" data-type="ramp">Ramp</div>
+                    <div class="response-type" data-type="sine">Sinusoid</div>
+                    <div class="response-type" data-type="square">Square</div>
+                </div>
+
+                <div class="param-group">
+                    <div class="param-label">
+                        <span class="param-name">
+                            <span class="symbol">A</span>
+                            Amplitude
+                        </span>
+                        <span class="param-value" id="amp-val">1.00</span>
+                    </div>
+                    <input type="range" id="amp-slider" min="0.1" max="3" step="0.1" value="1">
+                </div>
+
+                <div class="param-group" id="freq-group" style="display: none;">
+                    <div class="param-label">
+                        <span class="param-name">
+                            <span class="symbol">ω</span>
+                            Frequency (rad/s)
+                        </span>
+                        <span class="param-value" id="freq-val">1.00</span>
+                    </div>
+                    <input type="range" id="freq-slider" min="0.1" max="5" step="0.1" value="1">
+                </div>
+            </div>
+
+            <!-- Presets -->
+            <div class="panel-section">
+                <h3>🎯 Tuning Presets</h3>
+                <div class="preset-grid">
+                    <button class="preset-btn" data-preset="underdamped">Underdamped</button>
+                    <button class="preset-btn" data-preset="critically">Critically Damped</button>
+                    <button class="preset-btn" data-preset="overdamped">Overdamped</button>
+                    <button class="preset-btn" data-preset="unstable">Unstable</button>
+                    <button class="preset-btn" data-preset="ponly">P-Only</button>
+                    <button class="preset-btn" data-preset="pi">PI Controller</button>
+                    <button class="preset-btn" data-preset="pd">PD Controller</button>
+                    <button class="preset-btn" data-preset="zn">Ziegler-Nichols</button>
+                </div>
+            </div>
+
+            <!-- Simulation Controls -->
+            <div class="panel-section">
+                <h3>▶ Simulation</h3>
+                <div class="sim-controls">
+                    <button class="sim-btn start" id="start-btn">▶ Start</button>
+                    <button class="sim-btn stop" id="stop-btn">⏸ Pause</button>
+                    <button class="sim-btn reset" id="reset-btn">↺ Reset</button>
+                </div>
+                <div style="display: flex; align-items: center; gap: 10px; margin-top: 15px;">
+                    <span style="font-size: 0.85em; color: var(--text2);">Status:</span>
+                    <div class="running-indicator" id="status-indicator" style="opacity: 0.3;"></div>
+                    <span style="font-size: 0.85em;" id="status-text">Paused</span>
+                </div>
+
+                <div class="param-group" style="margin-top: 15px;">
+                    <div class="param-label">
+                        <span class="param-name">Simulation Speed</span>
+                        <span class="param-value" id="speed-val">1.0x</span>
+                    </div>
+                    <input type="range" id="speed-slider" min="0.1" max="3" step="0.1" value="1">
+                </div>
+            </div>
+
+            <!-- Display Options -->
+            <div class="panel-section">
+                <h3>👁 Display Options</h3>
+                <div class="checkbox-group">
+                    <label class="checkbox-label">
+                        <input type="checkbox" id="show-setpoint" checked>
+                        Setpoint r(t)
+                    </label>
+                    <label class="checkbox-label">
+                        <input type="checkbox" id="show-output" checked>
+                        Output y(t)
+                    </label>
+                    <label class="checkbox-label">
+                        <input type="checkbox" id="show-error" checked>
+                        Error e(t)
+                    </label>
+                    <label class="checkbox-label">
+                        <input type="checkbox" id="show-control" checked>
+                        Control u(t)
+                    </label>
+                    <label class="checkbox-label">
+                        <input type="checkbox" id="show-components">
+                        P, I, D Components
+                    </label>
+                </div>
+            </div>
+        </aside>
+
+        <!-- Visualization Area -->
+        <main class="canvas-area">
+            <div class="viz-grid">
+                <!-- Time Domain Response -->
+                <div class="viz-panel full-width">
+                    <div class="viz-header">
+                        <div class="viz-title">
+                            <span class="icon">📈</span>
+                            Time Domain Response
+                        </div>
+                        <div class="viz-subtitle">y(t) vs t</div>
+                    </div>
+                    <div class="viz-body">
+                        <canvas id="time-canvas" class="tall"></canvas>
+                        <div class="legend">
+                            <div class="legend-item">
+                                <div class="legend-color" style="background: var(--accent4);"></div>
+                                <span>Setpoint r(t)</span>
+                            </div>
+                            <div class="legend-item">
+                                <div class="legend-color" style="background: var(--accent);"></div>
+                                <span>Output y(t)</span>
+                            </div>
+                            <div class="legend-item">
+                                <div class="legend-color" style="background: var(--accent2);"></div>
+                                <span>Error e(t)</span>
+                            </div>
+                            <div class="legend-item">
+                                <div class="legend-color" style="background: var(--accent5);"></div>
+                                <span>Control u(t)</span>
+                            </div>
+                        </div>
+                        <div class="metrics-grid">
+                            <div class="metric">
+                                <div class="metric-value" id="m-rise">—</div>
+                                <div class="metric-label">Rise Time (s)</div>
+                            </div>
+                            <div class="metric">
+                                <div class="metric-value" id="m-peak">—</div>
+                                <div class="metric-label">Peak Time (s)</div>
+                            </div>
+                            <div class="metric">
+                                <div class="metric-value" id="m-overshoot">—</div>
+                                <div class="metric-label">Overshoot (%)</div>
+                            </div>
+                            <div class="metric">
+                                <div class="metric-value" id="m-settling">—</div>
+                                <div class="metric-label">Settling (2%)</div>
+                            </div>
+                            <div class="metric">
+                                <div class="metric-value" id="m-ss-error">—</div>
+                                <div class="metric-label">SS Error</div>
+                            </div>
+                            <div class="metric">
+                                <div class="metric-value" id="m-iae">—</div>
+                                <div class="metric-label">IAE</div>
+                            </div>
+                        </div>
+                    </div>
+                </div>
+
+                <!-- PID Components -->
+                <div class="viz-panel">
+                    <div class="viz-header">
+                        <div class="viz-title">
+                            <span class="icon">🔧</span>
+                            PID Component Breakdown
+                        </div>
+                        <div class="viz-subtitle">P + I + D = u(t)</div>
+                    </div>
+                    <div class="viz-body">
+                        <canvas id="components-canvas"></canvas>
+                        <div class="live-values">
+                            <div class="live-val p">
+                                <div class="live-val-num" id="live-p">0.000</div>
+                                <div class="live-val-label">P = Kp·e(t)</div>
+                            </div>
+                            <div class="live-val i">
+                                <div class="live-val-num" id="live-i">0.000</div>
+                                <div class="live-val-label">I = Ki·∫e dτ</div>
+                            </div>
+                            <div class="live-val d">
+                                <div class="live-val-num" id="live-d">0.000</div>
+                                <div class="live-val-label">D = Kd·ė(t)</div>
+                            </div>
+                        </div>
+                        <div class="formula-card p">
+                            <h4>Proportional Term</h4>
+                            <div class="formula" style="color: var(--accent2);">P(t) = K<sub>p</sub> · e(t)</div>
+                            <div class="computed">= <span id="comp-p">2.00</span> × <span id="comp-e">0.000</span> = <span id="comp-p-result">0.000</span></div>
+                        </div>
+                        <div class="formula-card i">
+                            <h4>Integral Term</h4>
+                            <div class="formula" style="color: var(--accent3);">I(t) = K<sub>i</sub> · ∫₀ᵗ e(τ) dτ</div>
+                            <div class="computed">= <span id="comp-ki">0.50</span> × <span id="comp-int">0.000</span> = <span id="comp-i-result">0.000</span></div>
+                        </div>
+                        <div class="formula-card d">
+                            <h4>Derivative Term</h4>
+                            <div class="formula" style="color: var(--accent4);">D(t) = K<sub>d</sub> · <sup>de(t)</sup>/<sub>dt</sub></div>
+                            <div class="computed">= <span id="comp-kd">0.30</span> × <span id="comp-deriv">0.000</span> = <span id="comp-d-result">0.000</span></div>
+                        </div>
+                    </div>
+                </div>
+
+                <!-- Error Analysis -->
+                <div class="viz-panel">
+                    <div class="viz-header">
+                        <div class="viz-title">
+                            <span class="icon">📐</span>
+                            Error Analysis
+                        </div>
+                        <div class="viz-subtitle">e(t) = r(t) − y(t)</div>
+                    </div>
+                    <div class="viz-body">
+                        <canvas id="error-canvas"></canvas>
+                        <div class="metrics-grid" style="margin-top: 15px;">
+                            <div class="metric">
+                                <div class="metric-value" id="m-error-now">0.000</div>
+                                <div class="metric-label">Current e(t)</div>
+                            </div>
+                            <div class="metric">
+                                <div class="metric-value" id="m-integral">0.000</div>
+                                <div class="metric-label">∫e(τ)dτ</div>
+                            </div>
+                            <div class="metric">
+                                <div class="metric-value" id="m-derivative">0.000</div>
+                                <div class="metric-label">de/dt</div>
+                            </div>
+                        </div>
+                        <div class="derivation" style="margin-top: 15px;">
+                            <h4 style="color: var(--accent); margin-bottom: 10px;">Mathematical Definition</h4>
+                            <div class="derivation-step">
+                                <div class="step-num">1</div>
+                                <div class="step-content">
+                                    <div class="step-formula">e(t) = r(t) − y(t)</div>
+                                    <div class="step-desc">Error is the difference between reference and output</div>
+                                </div>
+                            </div>
+                            <div class="derivation-step">
+                                <div class="step-num">2</div>
+                                <div class="step-content">
+                                    <div class="step-formula">∫₀ᵗ e(τ)dτ ≈ Σ e[k]·Δt</div>
+                                    <div class="step-desc">Integral: accumulated error (area under curve)</div>
+                                </div>
+                            </div>
+                            <div class="derivation-step">
+                                <div class="step-num">3</div>
+                                <div class="step-content">
+                                    <div class="step-formula"><sup>de</sup>/<sub>dt</sub> ≈ (e[k] − e[k−1])/Δt</div>
+                                    <div class="step-desc">Derivative: rate of error change (slope)</div>
+                                </div>
+                            </div>
+                        </div>
+                    </div>
+                </div>
+
+                <!-- Phase Portrait -->
+                <div class="viz-panel">
+                    <div class="viz-header">
+                        <div class="viz-title">
+                            <span class="icon">🌀</span>
+                            Phase Portrait
+                        </div>
+                        <div class="viz-subtitle">ė(t) vs e(t)</div>
+                    </div>
+                    <div class="viz-body">
+                        <canvas id="phase-canvas"></canvas>
+                        <div class="derivation" style="margin-top: 15px;">
+                            <p style="font-size: 0.85em; color: var(--text2); line-height: 1.6;">
+                                The phase portrait shows the trajectory of the system in the 
+                                <span style="color: var(--accent);">error-derivative plane</span>. 
+                                Stable systems spiral toward the origin (0, 0). 
+                                The shape reveals damping characteristics:
+                            </p>
+                            <ul style="font-size: 0.85em; color: var(--text2); margin-top: 10px; padding-left: 20px;">
+                                <li><strong>Spiral inward:</strong> Stable, underdamped</li>
+                                <li><strong>Direct approach:</strong> Overdamped</li>
+                                <li><strong>Limit cycle:</strong> Marginally stable</li>
+                                <li><strong>Spiral outward:</strong> Unstable</li>
+                            </ul>
+                        </div>
+                    </div>
+                </div>
+
+                <!-- Bode Plot -->
+                <div class="viz-panel">
+                    <div class="viz-header">
+                        <div class="viz-title">
+                            <span class="icon">📊</span>
+                            Bode Plot (Open Loop)
+                        </div>
+                        <div class="viz-subtitle">|G(jω)|, ∠G(jω)</div>
+                    </div>
+                    <div class="viz-body">
+                        <canvas id="bode-canvas" class="tall"></canvas>
+                        <div class="metrics-grid" style="margin-top: 15px;">
+                            <div class="metric">
+                                <div class="metric-value" id="m-gm">—</div>
+                                <div class="metric-label">Gain Margin (dB)</div>
+                            </div>
+                            <div class="metric">
+                                <div class="metric-value" id="m-pm">—</div>
+                                <div class="metric-label">Phase Margin (°)</div>
+                            </div>
+                            <div class="metric">
+                                <div class="metric-value" id="m-wc">—</div>
+                                <div class="metric-label">ωc (rad/s)</div>
+                            </div>
+                        </div>
+                    </div>
+                </div>
+
+                <!-- Nyquist Plot -->
+                <div class="viz-panel">
+                    <div class="viz-header">
+                        <div class="viz-title">
+                            <span class="icon">🎯</span>
+                            Nyquist Plot
+                        </div>
+                        <div class="viz-subtitle">Im{G(jω)} vs Re{G(jω)}</div>
+                    </div>
+                    <div class="viz-body">
+                        <canvas id="nyquist-canvas"></canvas>
+                        <div class="derivation" style="margin-top: 15px;">
+                            <p style="font-size: 0.85em; color: var(--text2); line-height: 1.6;">
+                                Nyquist stability: The closed-loop system is stable if the 
+                                Nyquist curve doesn't encircle the critical point 
+                                <span style="color: var(--accent2);">(-1, 0)</span>.
+                            </p>
+                            <p style="font-size: 0.85em; color: var(--text2); margin-top: 8px;">
+                                Distance from (-1, 0) to curve indicates <strong>stability margin</strong>.
+                            </p>
+                        </div>
+                    </div>
+                </div>
+
+                <!-- Transfer Function Analysis -->
+                <div class="viz-panel full-width">
+                    <div class="viz-header">
+                        <div class="viz-title">
+                            <span class="icon">🧮</span>
+                            Transfer Function Analysis
+                        </div>
+                        <div class="viz-subtitle">Laplace Domain</div>
+                    </div>
+                    <div class="viz-body">
+                        <div style="display: grid; grid-template-columns: repeat(auto-fit, minmax(300px, 1fr)); gap: 20px;">
+                            <div>
+                                <h4 style="color: var(--accent); margin-bottom: 15px;">Controller Transfer Function</h4>
+                                <div class="tf-display">
+                                    <div class="tf-fraction">
+                                        <div class="tf-num" style="color: var(--accent);">
+                                            C(s) = K<sub>p</sub> + <sup>K<sub>i</sub></sup>/<sub>s</sub> + K<sub>d</sub>s
+                                        </div>
+                                    </div>
+                                </div>
+                                <div class="tf-display">
+                                    <div class="tf-fraction">
+                                        <div class="tf-num">
+                                            C(s) = <span id="tf-c-num">K<sub>d</sub>s² + K<sub>p</sub>s + K<sub>i</sub></span>
+                                        </div>
+                                        <div class="tf-line"></div>
+                                        <div class="tf-den">s</div>
+                                    </div>
+                                </div>
+                                <div style="font-family: 'JetBrains Mono'; font-size: 0.85em; text-align: center; margin-top: 10px;">
+                                    = (<span id="tf-kd-v">0.30</span>s² + <span id="tf-kp-v">2.00</span>s + <span id="tf-ki-v">0.50</span>) / s
+                                </div>
+                            </div>
+                            <div>
+                                <h4 style="color: var(--accent); margin-bottom: 15px;">Open-Loop Transfer Function</h4>
+                                <div class="tf-display">
+                                    <div class="tf-fraction">
+                                        <div class="tf-num">L(s) = C(s) · G(s)</div>
+                                    </div>
+                                </div>
+                                <div class="tf-display">
+                                    <div class="tf-fraction">
+                                        <div class="tf-num" id="ol-num">K(K<sub>d</sub>s² + K<sub>p</sub>s + K<sub>i</sub>)</div>
+                                        <div class="tf-line"></div>
+                                        <div class="tf-den" id="ol-den">s(τs + 1)</div>
+                                    </div>
+                                </div>
+                            </div>
+                            <div>
+                                <h4 style="color: var(--accent); margin-bottom: 15px;">Closed-Loop Transfer Function</h4>
+                                <div class="tf-display">
+                                    <div class="tf-fraction">
+                                        <div class="tf-num">T(s) = <sup>L(s)</sup>/<sub>1 + L(s)</sub></div>
+                                    </div>
+                                </div>
+                                <div class="tf-display">
+                                    <div class="tf-fraction">
+                                        <div class="tf-num" id="cl-num">K(K<sub>d</sub>s² + K<sub>p</sub>s + K<sub>i</sub>)</div>
+                                        <div class="tf-line"></div>
+                                        <div class="tf-den" id="cl-den">τs² + (1+KK<sub>p</sub>)s + KK<sub>i</sub></div>
+                                    </div>
+                                </div>
+                            </div>
+                        </div>
+                        <div class="pz-info" style="margin-top: 20px;">
+                            <div class="pz-box">
+                                <h5>Closed-Loop Poles (Eigenvalues)</h5>
+                                <div class="pz-list" id="cl-poles">Calculating...</div>
+                            </div>
+                            <div class="pz-box">
+                                <h5>Closed-Loop Zeros</h5>
+                                <div class="pz-list" id="cl-zeros">Calculating...</div>
+                            </div>
+                        </div>
+                        <div style="margin-top: 20px;">
+                            <h4 style="color: var(--accent); margin-bottom: 10px;">Characteristic Equation</h4>
+                            <div class="tf-display" id="char-eq">
+                                τs³ + (1 + KK<sub>d</sub>)s² + KK<sub>p</sub>s + KK<sub>i</sub> = 0
+                            </div>
+                        </div>
+                    </div>
+                </div>
+
+                <!-- Root Locus -->
+                <div class="viz-panel">
+                    <div class="viz-header">
+                        <div class="viz-title">
+                            <span class="icon">🎪</span>
+                            Pole-Zero Map
+                        </div>
+                        <div class="viz-subtitle">s-plane</div>
+                    </div>
+                    <div class="viz-body">
+                        <canvas id="pzmap-canvas"></canvas>
+                        <div class="legend" style="margin-top: 10px;">
+                            <div class="legend-item">
+                                <span style="color: var(--accent2); font-weight: bold;">×</span>
+                                <span>Poles</span>
+                            </div>
+                            <div class="legend-item">
+                                <span style="color: var(--accent3); font-weight: bold;">○</span>
+                                <span>Zeros</span>
+                            </div>
+                        </div>
+                        <div class="derivation" style="margin-top: 15px;">
+                            <p style="font-size: 0.85em; color: var(--text2);">
+                                <strong>Stability:</strong> All poles must be in the left half-plane (Re{s} &lt; 0)
+                            </p>
+                            <p style="font-size: 0.85em; color: var(--text2); margin-top: 5px;">
+                                <strong>Damping:</strong> Related to pole angle from negative real axis
+                            </p>
+                            <p style="font-size: 0.85em; color: var(--text2); margin-top: 5px;">
+                                <strong>Speed:</strong> Related to distance from origin
+                            </p>
+                        </div>
+                    </div>
+                </div>
+
+                <!-- Step Response Characteristics -->
+                <div class="viz-panel">
+                    <div class="viz-header">
+                        <div class="viz-title">
+                            <span class="icon">📏</span>
+                            Step Response Characteristics
+                        </div>
+                        <div class="viz-subtitle">Second-Order Approximation</div>
+                    </div>
+                    <div class="viz-body">
+                        <div class="derivation">
+                            <h4 style="color: var(--accent); margin-bottom: 15px;">Standard Second-Order Form</h4>
+                            <div class="tf-display">
+                                <div class="tf-fraction">
+                                    <div class="tf-num">ω<sub>n</sub>²</div>
+                                    <div class="tf-line"></div>
+                                    <div class="tf-den">s² + 2ζω<sub>n</sub>s + ω<sub>n</sub>²</div>
+                                </div>
+                            </div>
+                            
+                            <div class="metrics-grid" style="margin-top: 20px;">
+                                <div class="metric">
+                                    <div class="metric-value" id="m-wn">—</div>
+                                    <div class="metric-label">ω<sub>n</sub> (rad/s)</div>
+                                </div>
+                                <div class="metric">
+                                    <div class="metric-value" id="m-zeta">—</div>
+                                    <div class="metric-label">ζ (damping)</div>
+                                </div>
+                                <div class="metric">
+                                    <div class="metric-value" id="m-wd">—</div>
+                                    <div class="metric-label">ω<sub>d</sub> (damped)</div>
+                                </div>
+                            </div>
+
+                            <div style="margin-top: 20px;">
+                                <h4 style="color: var(--accent); margin-bottom: 10px;">Theoretical Formulas</h4>
+                                <div class="derivation-step">
+                                    <div class="step-content">
+                                        <div class="step-formula">t<sub>r</sub> ≈ <sup>1.8</sup>/<sub>ω<sub>n</sub></sub> (rise time)</div>
+                                    </div>
+                                </div>
+                                <div class="derivation-step">
+                                    <div class="step-content">
+                                        <div class="step-formula">t<sub>p</sub> = <sup>π</sup>/<sub>ω<sub>d</sub></sub> = <sup>π</sup>/<sub>ω<sub>n</sub>√(1-ζ²)</sub></div>
+                                    </div>
+                                </div>
+                                <div class="derivation-step">
+                                    <div class="step-content">
+                                        <div class="step-formula">M<sub>p</sub> = e<sup>-πζ/√(1-ζ²)</sup> (overshoot)</div>
+                                    </div>
+                                </div>
+                                <div class="derivation-step">
+                                    <div class="step-content">
+                                        <div class="step-formula">t<sub>s</sub> ≈ <sup>4</sup>/<sub>ζω<sub>n</sub></sub> (2% settling)</div>
+                                    </div>
+                                </div>
+                            </div>
+                        </div>
+                    </div>
+                </div>
+
+                <!-- Mathematical Derivation -->
+                <div class="viz-panel full-width">
+                    <div class="viz-header">
+                        <div class="viz-title">
+                            <span class="icon">📚</span>
+                            Complete PID Mathematical Framework
+                        </div>
+                    </div>
+                    <div class="viz-body">
+                        <div class="tab-bar" id="theory-tabs">
+                            <button class="tab-btn active" data-tab="continuous">Continuous Time</button>
+                            <button class="tab-btn" data-tab="discrete">Discrete Time</button>
+                            <button class="tab-btn" data-tab="laplace">Laplace Transform</button>
+                            <button class="tab-btn" data-tab="stability">Stability Analysis</button>
+                        </div>
+
+                        <div id="tab-continuous" class="tab-content">
+                            <div class="derivation">
+                                <h4 style="color: var(--accent); margin-bottom: 15px;">Continuous-Time PID Controller</h4>
+                                
+                                <div class="derivation-step">
+                                    <div class="step-num">1</div>
+                                    <div class="step-content">
+                                        <div class="step-formula" style="font-size: 1.3em;">
+                                            u(t) = K<sub>p</sub>e(t) + K<sub>i</sub>∫₀ᵗ e(τ)dτ + K<sub>d</sub><sup>de(t)</sup>/<sub>dt</sub>
+                                        </div>
+                                        <div class="step-desc">The parallel (ideal) PID form - most common representation</div>
+                                    </div>
+                                </div>
+
+                                <div class="derivation-step">
+                                    <div class="step-num">2</div>
+                                    <div class="step-content">
+                                        <div class="step-formula">
+                                            u(t) = K<sub>p</sub>[e(t) + <sup>1</sup>/<sub>T<sub>i</sub></sub>∫₀ᵗ e(τ)dτ + T<sub>d</sub><sup>de(t)</sup>/<sub>dt</sub>]
+                                        </div>
+                                        <div class="step-desc">Standard (ISA) form where T<sub>i</sub> = K<sub>p</sub>/K<sub>i</sub> and T<sub>d</sub> = K<sub>d</sub>/K<sub>p</sub></div>
+                                    </div>
+                                </div>
+
+                                <div class="derivation-step">
+                                    <div class="step-num">3</div>
+                                    <div class="step-content">
+                                        <div class="step-formula">
+                                            u(t) = K<sub>c</sub>[(1 + <sup>1</sup>/<sub>T<sub>i</sub>s</sub> + T<sub>d</sub>s)e(t)]
+                                        </div>
+                                        <div class="step-desc">Series (classical) form - historically used in analog controllers</div>
+                                    </div>
+                                </div>
+
+                                <h4 style="color: var(--accent); margin: 25px 0 15px;">Closed-Loop System</h4>
+                                
+                                <div class="derivation-step">
+                                    <div class="step-num">4</div>
+                                    <div class="step-content">
+                                        <div class="step-formula">E(s) = R(s) - Y(s)</div>
+                                        <div class="step-desc">Error in Laplace domain</div>
+                                    </div>
+                                </div>
+
+                                <div class="derivation-step">
+                                    <div class="step-num">5</div>
+                                    <div class="step-content">
+                                        <div class="step-formula">Y(s) = G(s)·U(s) = G(s)·C(s)·E(s)</div>
+                                        <div class="step-desc">Plant output equals plant transfer function times control</div>
+                                    </div>
+                                </div>
+
+                                <div class="derivation-step">
+                                    <div class="step-num">6</div>
+                                    <div class="step-content">
+                                        <div class="step-formula">Y(s) = <sup>C(s)G(s)</sup>/<sub>1 + C(s)G(s)</sub> · R(s)</div>
+                                        <div class="step-desc">Closed-loop transfer function derivation</div>
+                                    </div>
+                                </div>
+                            </div>
+                        </div>
+
+                        <div id="tab-discrete" class="tab-content" style="display: none;">
+                            <div class="derivation">
+                                <h4 style="color: var(--accent); margin-bottom: 15px;">Discrete-Time Implementation</h4>
+                                
+                                <div class="derivation-step">
+                                    <div class="step-num">1</div>
+                                    <div class="step-content">
+                                        <div class="step-formula">
+                                            u[k] = K<sub>p</sub>e[k] + K<sub>i</sub>T<sub>s</sub>Σⱼ₌₀ᵏ e[j] + K<sub>d</sub><sup>(e[k]-e[k-1])</sup>/<sub>T<sub>s</sub></sub>
+                                        </div>
+                                        <div class="step-desc">Position form - direct implementation of PID equation with sampling period T<sub>s</sub></div>
+                                    </div>
+                                </div>
+
+                                <div class="derivation-step">
+                                    <div class="step-num">2</div>
+                                    <div class="step-content">
+                                        <div class="step-formula">
+                                            Δu[k] = u[k] - u[k-1]
+                                        </div>
+                                        <div class="step-desc">Velocity (incremental) form - outputs change in control action</div>
+                                    </div>
+                                </div>
+
+                                <div class="derivation-step">
+                                    <div class="step-num">3</div>
+                                    <div class="step-content">
+                                        <div class="step-formula">
+                                            Δu[k] = K<sub>p</sub>(e[k]-e[k-1]) + K<sub>i</sub>T<sub>s</sub>e[k] + <sup>K<sub>d</sub></sup>/<sub>T<sub>s</sub></sub>(e[k]-2e[k-1]+e[k-2])
+                                        </div>
+                                        <div class="step-desc">Expanded velocity form - preferred in practice (bumpless transfer, anti-windup)</div>
+                                    </div>
+                                </div>
+
+                                <h4 style="color: var(--accent); margin: 25px 0 15px;">Z-Transform</h4>
+                                
+                                <div class="derivation-step">
+                                    <div class="step-num">4</div>
+                                    <div class="step-content">
+                                        <div class="step-formula">
+                                            C(z) = K<sub>p</sub> + <sup>K<sub>i</sub>T<sub>s</sub></sup>/<sub>(1-z⁻¹)</sub> + <sup>K<sub>d</sub>(1-z⁻¹)</sup>/<sub>T<sub>s</sub></sub>
+                                        </div>
+                                        <div class="step-desc">Discrete PID transfer function using backward difference</div>
+                                    </div>
+                                </div>
+
+                                <div class="derivation-step">
+                                    <div class="step-num">5</div>
+                                    <div class="step-content">
+                                        <div class="step-formula">
+                                            C(z) = <sup>q₀ + q₁z⁻¹ + q₂z⁻²</sup>/<sub>1 - z⁻¹</sub>
+                                        </div>
+                                        <div class="step-desc">Where q₀ = K<sub>p</sub> + K<sub>i</sub>T<sub>s</sub>/2 + K<sub>d</sub>/T<sub>s</sub>, etc.</div>
+                                    </div>
+                                </div>
+                            </div>
+                        </div>
+
+                        <div id="tab-laplace" class="tab-content" style="display: none;">
+                            <div class="derivation">
+                                <h4 style="color: var(--accent); margin-bottom: 15px;">Laplace Transform Analysis</h4>
+                                
+                                <div class="derivation-step">
+                                    <div class="step-num">1</div>
+                                    <div class="step-content">
+                                        <div class="step-formula">
+                                            ℒ{e(t)} = E(s), ℒ{∫e(τ)dτ} = <sup>E(s)</sup>/<sub>s</sub>, ℒ{<sup>de</sup>/<sub>dt</sub>} = sE(s)
+                                        </div>
+                                        <div class="step-desc">Key Laplace transform pairs</div>
+                                    </div>
+                                </div>
+
+                                <div class="derivation-step">
+                                    <div class="step-num">2</div>
+                                    <div class="step-content">
+                                        <div class="step-formula">
+                                            C(s) = <sup>U(s)</sup>/<sub>E(s)</sub> = K<sub>p</sub> + <sup>K<sub>i</sub></sup>/<sub>s</sub> + K<sub>d</sub>s
+                                        </div>
+                                        <div class="step-desc">PID transfer function</div>
+                                    </div>
+                                </div>
+
+                                <div class="derivation-step">
+                                    <div class="step-num">3</div>
+                                    <div class="step-content">
+                                        <div class="step-formula">
+                                            C(s) = <sup>K<sub>d</sub>s² + K<sub>p</sub>s + K<sub>i</sub></sup>/<sub>s</sub>
+                                        </div>
+                                        <div class="step-desc">Combined over common denominator - shows one pole at origin, two zeros</div>
+                                    </div>
+                                </div>
+
+                                <h4 style="color: var(--accent); margin: 25px 0 15px;">First-Order Process with PID</h4>
+                                
+                                <div class="derivation-step">
+                                    <div class="step-num">4</div>
+                                    <div class="step-content">
+                                        <div class="step-formula">
+                                            G(s) = <sup>K</sup>/<sub>τs + 1</sub>
+                                        </div>
+                                        <div class="step-desc">First-order process model</div>
+                                    </div>
+                                </div>
+
+                                <div class="derivation-step">
+                                    <div class="step-num">5</div>
+                                    <div class="step-content">
+                                        <div class="step-formula">
+                                            L(s) = C(s)G(s) = <sup>K(K<sub>d</sub>s² + K<sub>p</sub>s + K<sub>i</sub>)</sup>/<sub>s(τs + 1)</sub>
+                                        </div>
+                                        <div class="step-desc">Open-loop transfer function (Type 1 system)</div>
+                                    </div>
+                                </div>
+
+                                <div class="derivation-step">
+                                    <div class="step-num">6</div>
+                                    <div class="step-content">
+                                        <div class="step-formula">
+                                            T(s) = <sup>K(K<sub>d</sub>s² + K<sub>p</sub>s + K<sub>i</sub>)</sup>/<sub>(τ + KK<sub>d</sub>)s² + (1 + KK<sub>p</sub>)s + KK<sub>i</sub></sub>
+                                        </div>
+                                        <div class="step-desc">Closed-loop transfer function</div>
+                                    </div>
+                                </div>
+                            </div>
+                        </div>
+
+                        <div id="tab-stability" class="tab-content" style="display: none;">
+                            <div class="derivation">
+                                <h4 style="color: var(--accent); margin-bottom: 15px;">Stability Criteria</h4>
+                                
+                                <div class="derivation-step">
+                                    <div class="step-num">1</div>
+                                    <div class="step-content">
+                                        <div class="step-formula" style="color: var(--accent2);">
+                                            BIBO Stability: All poles must have Re{p} < 0
+                                        </div>
+                                        <div class="step-desc">Bounded-Input Bounded-Output stability requirement</div>
+                                    </div>
+                                </div>
+
+                                <div class="derivation-step">
+                                    <div class="step-num">2</div>
+                                    <div class="step-content">
+                                        <div class="step-formula">
+                                            Routh-Hurwitz Criterion: All first column elements > 0
+                                        </div>
+                                        <div class="step-desc">Necessary and sufficient for polynomial stability</div>
+                                    </div>
+                                </div>
+
+                                <h4 style="color: var(--accent); margin: 25px 0 15px;">Gain and Phase Margins</h4>
+                                
+                                <div class="derivation-step">
+                                    <div class="step-num">3</div>
+                                    <div class="step-content">
+                                        <div class="step-formula">
+                                            GM = <sup>1</sup>/<sub>|L(jω<sub>φ</sub>)|</sub> where ∠L(jω<sub>φ</sub>) = -180°
+                                        </div>
+                                        <div class="step-desc">Gain Margin at phase crossover frequency</div>
+                                    </div>
+                                </div>
+
+                                <div class="derivation-step">
+                                    <div class="step-num">4</div>
+                                    <div class="step-content">
+                                        <div class="step-formula">
+                                            PM = 180° + ∠L(jω<sub>c</sub>) where |L(jω<sub>c</sub>)| = 1
+                                        </div>
+                                        <div class="step-desc">Phase Margin at gain crossover frequency</div>
+                                    </div>
+                                </div>
+
+                                <h4 style="color: var(--accent); margin: 25px 0 15px;">Nyquist Criterion</h4>
+                                
+                                <div class="derivation-step">
+                                    <div class="step-num">5</div>
+                                    <div class="step-content">
+                                        <div class="step-formula">
+                                            Z = N + P
+                                        </div>
+                                        <div class="step-desc">Z = closed-loop RHP poles, N = encirclements of -1, P = open-loop RHP poles</div>
+                                    </div>
+                                </div>
+
+                                <div class="derivation-step">
+                                    <div class="step-num">6</div>
+                                    <div class="step-content">
+                                        <div class="step-formula" style="color: var(--accent3);">
+                                            Stable ⟺ Z = 0 ⟺ N = -P
+                                        </div>
+                                        <div class="step-desc">For stability, Nyquist plot must encircle -1 exactly P times counter-clockwise</div>
+                                    </div>
+                                </div>
+                            </div>
+                        </div>
+                    </div>
+                </div>
+
+            </div>
+        </main>
+    </div>
+
+    <script>
+        // ==================== SIMULATION ENGINE ====================
+        class PIDSimulator {
+            constructor() {
+                // PID Gains
+                this.Kp = 2.0;
+                this.Ki = 0.5;
+                this.Kd = 0.3;
+
+                // Process Model
+                this.K = 1.0;      // Process gain
+                this.tau = 1.0;   // Time constant
+                this.L = 0.0;     // Dead time
+
+                // Input Signal
+                this.inputType = 'step';
+                this.amplitude = 1.0;
+                this.frequency = 1.0;
+
+                // Simulation State
+                this.t = 0;
+                this.dt = 0.01;
+                this.speed = 1.0;
+                this.running = false;
+
+                // State Variables
+                this.y = 0;           // Process output
+                this.integral = 0;     // Integral of error
+                this.prevError = 0;    // Previous error for derivative
+                this.prevY = 0;        // Previous output
+
+                // Histories
+                this.maxLen = 800;
+                this.timeHist = [];
+                this.refHist = [];
+                this.yHist = [];
+                this.errHist = [];
+                this.uHist = [];
+                this.pHist = [];
+                this.iHist = [];
+                this.dHist = [];
+                this.deHist = [];  // derivative of error history
+
+                // Performance Metrics
+                this.riseTime = null;
+                this.peakTime = null;
+                this.overshoot = 0;
+                this.settlingTime = null;
+                this.ssError = 0;
+                this.iae = 0;
+                this.maxY = 0;
+
+                // Display options
+                this.showSetpoint = true;
+                this.showOutput = true;
+                this.showError = true;
+                this.showControl = true;
+                this.showComponents = false;
+
+                // Initialize canvases
+                this.initCanvases();
+                this.bindEvents();
+                this.updateEquations();
+                this.draw();
+            }
+
+            initCanvases() {
+                this.canvases = {
+                    time: { el: document.getElementById('time-canvas'), ctx: null },
+                    components: { el: document.getElementById('components-canvas'), ctx: null },
+                    error: { el: document.getElementById('error-canvas'), ctx: null },
+                    phase: { el: document.getElementById('phase-canvas'), ctx: null },
+                    bode: { el: document.getElementById('bode-canvas'), ctx: null },
+                    nyquist: { el: document.getElementById('nyquist-canvas'), ctx: null },
+                    pzmap: { el: document.getElementById('pzmap-canvas'), ctx: null },
+                };
+
+                for (let key in this.canvases) {
+                    const c = this.canvases[key];
+                    if (c.el) {
+                        this.resizeCanvas(c.el);
+                        c.ctx = c.el.getContext('2d');
+                    }
+                }
+
+                window.addEventListener('resize', () => {
+                    for (let key in this.canvases) {
+                        if (this.canvases[key].el) {
+                            this.resizeCanvas(this.canvases[key].el);
+                        }
+                    }
+                    this.draw();
+                });
+            }
+
+            resizeCanvas(canvas) {
+                const rect = canvas.getBoundingClientRect();
+                canvas.width = rect.width * window.devicePixelRatio;
+                canvas.height = rect.height * window.devicePixelRatio;
+            }
+
+            bindEvents() {
+                // Sliders
+                this.bindSlider('kp-slider', 'kp-val', v => { this.Kp = v; this.updateEquations(); });
+                this.bindSlider('ki-slider', 'ki-val', v => { this.Ki = v; this.updateEquations(); });
+                this.bindSlider('kd-slider', 'kd-val', v => { this.Kd = v; this.updateEquations(); });
+                this.bindSlider('pg-slider', 'pg-val', v => { this.K = v; this.updateEquations(); });
+                this.bindSlider('tc-slider', 'tc-val', v => { this.tau = v; this.updateEquations(); });
+                this.bindSlider('dt-slider', 'dt-val', v => { this.L = v; this.updateEquations(); });
+                this.bindSlider('amp-slider', 'amp-val', v => { this.amplitude = v; });
+                this.bindSlider('freq-slider', 'freq-val', v => { this.frequency = v; });
+                this.bindSlider('speed-slider', 'speed-val', v => { this.speed = v; }, v => v.toFixed(1) + 'x');
+
+                // Input type selection
+                document.querySelectorAll('#input-type .response-type').forEach(btn => {
+                    btn.addEventListener('click', () => {
+                        document.querySelectorAll('#input-type .response-type').forEach(b => b.classList.remove('active'));
+                        btn.classList.add('active');
+                        this.inputType = btn.dataset.type;
+                        document.getElementById('freq-group').style.display = 
+                            (this.inputType === 'sine' || this.inputType === 'square') ? 'block' : 'none';
+                    });
+                });
+
+                // Simulation controls
+                document.getElementById('start-btn').addEventListener('click', () => this.start());
+                document.getElementById('stop-btn').addEventListener('click', () => this.stop());
+                document.getElementById('reset-btn').addEventListener('click', () => this.reset());
+
+                // Display options
+                document.getElementById('show-setpoint').addEventListener('change', e => this.showSetpoint = e.target.checked);
+                document.getElementById('show-output').addEventListener('change', e => this.showOutput = e.target.checked);
+                document.getElementById('show-error').addEventListener('change', e => this.showError = e.target.checked);
+                document.getElementById('show-control').addEventListener('change', e => this.showControl = e.target.checked);
+                document.getElementById('show-components').addEventListener('change', e => this.showComponents = e.target.checked);
+
+                // Presets
+                document.querySelectorAll('.preset-btn').forEach(btn => {
+                    btn.addEventListener('click', () => this.applyPreset(btn.dataset.preset));
+                });
+
+                // Theory tabs
+                document.querySelectorAll('#theory-tabs .tab-btn').forEach(btn => {
+                    btn.addEventListener('click', () => {
+                        document.querySelectorAll('#theory-tabs .tab-btn').forEach(b => b.classList.remove('active'));
+                        btn.classList.add('active');
+                        document.querySelectorAll('.tab-content').forEach(tc => tc.style.display = 'none');
+                        document.getElementById('tab-' + btn.dataset.tab).style.display = 'block';
+                    });
+                });
+            }
+
+            bindSlider(sliderId, valId, callback, formatter = v => v.toFixed(2)) {
+                const slider = document.getElementById(sliderId);
+                const valEl = document.getElementById(valId);
+                if (!slider || !valEl) return;
+                slider.addEventListener('input', () => {
+                    const v = parseFloat(slider.value);
+                    valEl.textContent = formatter(v);
+                    callback(v);
+                    if (!this.running) this.draw();
+                });
+            }
+
+            applyPreset(preset) {
+                const presets = {
+                    underdamped: { Kp: 5, Ki: 1, Kd: 0.3 },
+                    critically: { Kp: 3, Ki: 0.8, Kd: 0.8 },
+                    overdamped: { Kp: 1, Ki: 0.3, Kd: 1.5 },
+                    unstable: { Kp: 15, Ki: 5, Kd: 0 },
+                    ponly: { Kp: 3, Ki: 0, Kd: 0 },
+                    pi: { Kp: 2, Ki: 1, Kd: 0 },
+                    pd: { Kp: 3, Ki: 0, Kd: 0.5 },
+                    zn: { Kp: 3.6, Ki: 2.4, Kd: 0.45 },
+                };
+
+                const p = presets[preset];
+                if (!p) return;
+
+                this.Kp = p.Kp;
+                this.Ki = p.Ki;
+                this.Kd = p.Kd;
+
+                document.getElementById('kp-slider').value = p.Kp;
+                document.getElementById('ki-slider').value = p.Ki;
+                document.getElementById('kd-slider').value = p.Kd;
+                document.getElementById('kp-val').textContent = p.Kp.toFixed(2);
+                document.getElementById('ki-val').textContent = p.Ki.toFixed(2);
+                document.getElementById('kd-val').textContent = p.Kd.toFixed(2);
+
+                this.updateEquations();
+                this.reset();
+            }
+
+            updateEquations() {
+                // Update displayed equations
+                document.getElementById('eq-kp').textContent = this.Kp.toFixed(2);
+                document.getElementById('eq-ki').textContent = this.Ki.toFixed(2);
+                document.getElementById('eq-kd').textContent = this.Kd.toFixed(2);
+                document.getElementById('eq-K').textContent = this.K.toFixed(2);
+                document.getElementById('eq-tau').textContent = this.tau.toFixed(2);
+                document.getElementById('eq-L').textContent = this.L.toFixed(1);
+
+                // Transfer function values
+                document.getElementById('tf-kp-v').textContent = this.Kp.toFixed(2);
+                document.getElementById('tf-ki-v').textContent = this.Ki.toFixed(2);
+                document.getElementById('tf-kd-v').textContent = this.Kd.toFixed(2);
+
+                // Computed component values
+                document.getElementById('comp-p').textContent = this.Kp.toFixed(2);
+                document.getElementById('comp-ki').textContent = this.Ki.toFixed(2);
+                document.getElementById('comp-kd').textContent = this.Kd.toFixed(2);
+
+                // Update transfer function analysis
+                this.updateTransferFunctions();
+                
+                // Redraw frequency domain plots
+                this.drawBode();
+                this.drawNyquist();
+                this.drawPoleZero();
+            }
+
+            updateTransferFunctions() {
+                // Calculate closed-loop poles for first-order process with PID
+                // Characteristic equation: (τ + K*Kd)s² + (1 + K*Kp)s + K*Ki = 0
+                // For simplicity, assume τ + K*Kd ≈ τ if Kd is small
+                
+                const a = this.tau + this.K * this.Kd;
+                const b = 1 + this.K * this.Kp;
+                const c = this.K * this.Ki;
+
+                const discriminant = b * b - 4 * a * c;
+                let poles = [];
+                let zeros = [];
+
+                if (Math.abs(a) < 1e-10) {
+                    // First order system
+                    if (Math.abs(b) > 1e-10) {
+                        poles.push({ re: -c / b, im: 0 });
+                    }
+                } else {
+                    if (discriminant >= 0) {
+                        const sqrtD = Math.sqrt(discriminant);
+                        poles.push({ re: (-b + sqrtD) / (2 * a), im: 0 });
+                        poles.push({ re: (-b - sqrtD) / (2 * a), im: 0 });
+                    } else {
+                        const sqrtD = Math.sqrt(-discriminant);
+                        poles.push({ re: -b / (2 * a), im: sqrtD / (2 * a) });
+                        poles.push({ re: -b / (2 * a), im: -sqrtD / (2 * a) });
+                    }
+                }
+
+                // Controller zeros from Kd*s² + Kp*s + Ki = 0
+                if (Math.abs(this.Kd) > 1e-10) {
+                    const zDisc = this.Kp * this.Kp - 4 * this.Kd * this.Ki;
+                    if (zDisc >= 0) {
+                        const sqrtZ = Math.sqrt(zDisc);
+                        zeros.push({ re: (-this.Kp + sqrtZ) / (2 * this.Kd), im: 0 });
+                        zeros.push({ re: (-this.Kp - sqrtZ) / (2 * this.Kd), im: 0 });
+                    } else {
+                        const sqrtZ = Math.sqrt(-zDisc);
+                        zeros.push({ re: -this.Kp / (2 * this.Kd), im: sqrtZ / (2 * this.Kd) });
+                        zeros.push({ re: -this.Kp / (2 * this.Kd), im: -sqrtZ / (2 * this.Kd) });
+                    }
+                } else if (Math.abs(this.Kp) > 1e-10) {
+                    zeros.push({ re: -this.Ki / this.Kp, im: 0 });
+                }
+
+                this.poles = poles;
+                this.zeros = zeros;
+
+                // Display poles
+                const polesEl = document.getElementById('cl-poles');
+                if (poles.length === 0) {
+                    polesEl.textContent = 'None';
+                } else {
+                    polesEl.innerHTML = poles.map(p => {
+                        if (Math.abs(p.im) < 1e-6) {
+                            return `s = ${p.re.toFixed(3)}`;
+                        } else {
+                            return `s = ${p.re.toFixed(3)} ± ${Math.abs(p.im).toFixed(3)}j`;
+                        }
+                    }).join('<br>');
+                }
+
+                // Display zeros
+                const zerosEl = document.getElementById('cl-zeros');
+                if (zeros.length === 0) {
+                    zerosEl.textContent = 'None';
+                } else {
+                    zerosEl.innerHTML = zeros.map(z => {
+                        if (Math.abs(z.im) < 1e-6) {
+                            return `s = ${z.re.toFixed(3)}`;
+                        } else {
+                            return `s = ${z.re.toFixed(3)} ± ${Math.abs(z.im).toFixed(3)}j`;
+                        }
+                    }).join('<br>');
+                }
+
+                // Calculate second-order characteristics if we have complex poles
+                if (poles.length >= 2 && Math.abs(poles[0].im) > 1e-6) {
+                    const sigma = -poles[0].re;
+                    const wd = Math.abs(poles[0].im);
+                    const wn = Math.sqrt(sigma * sigma + wd * wd);
+                    const zeta = sigma / wn;
+
+                    document.getElementById('m-wn').textContent = wn.toFixed(3);
+                    document.getElementById('m-zeta').textContent = zeta.toFixed(3);
+                    document.getElementById('m-wd').textContent = wd.toFixed(3);
+                } else if (poles.length >= 1) {
+                    // Real poles - overdamped or first order
+                    document.getElementById('m-wn').textContent = Math.abs(poles[0].re).toFixed(3);
+                    document.getElementById('m-zeta').textContent = '> 1';
+                    document.getElementById('m-wd').textContent = '0';
+                }
+            }
+
+            getReference(t) {
+                const A = this.amplitude;
+                const w = this.frequency;
+                switch (this.inputType) {
+                    case 'step': return t >= 0.5 ? A : 0;
+                    case 'ramp': return t >= 0.5 ? Math.min((t - 0.5) * A, A) : 0;
+                    case 'sine': return t >= 0.5 ? A * Math.sin(w * (t - 0.5)) : 0;
+                    case 'square': return t >= 0.5 ? A * Math.sign(Math.sin(w * (t - 0.5))) : 0;
+                    default: return A;
+                }
+            }
+
+            step() {
+                const r = this.getReference(this.t);
+                const e = r - this.y;
+
+                // PID components
+                const P = this.Kp * e;
+                this.integral += e * this.dt;
+                const I = this.Ki * this.integral;
+                const de = (e - this.prevError) / this.dt;
+                const D = this.Kd * de;
+
+                const u = P + I + D;
+
+                // First-order process: dy/dt = (K*u - y) / tau
+                // Considering dead time would require delay buffer - simplified here
+                const dy = (this.K * u - this.y) / this.tau;
+                this.y += dy * this.dt;
+
+                // Update histories
+                this.timeHist.push(this.t);
+                this.refHist.push(r);
+                this.yHist.push(this.y);
+                this.errHist.push(e);
+                this.uHist.push(u);
+                this.pHist.push(P);
+                this.iHist.push(I);
+                this.dHist.push(D);
+                this.deHist.push(de);
+
+                // Trim histories
+                while (this.timeHist.length > this.maxLen) {
+                    this.timeHist.shift();
+                    this.refHist.shift();
+                    this.yHist.shift();
+                    this.errHist.shift();
+                    this.uHist.shift();
+                    this.pHist.shift();
+                    this.iHist.shift();
+                    this.dHist.shift();
+                    this.deHist.shift();
+                }
+
+                // Calculate metrics for step input
+                if (this.inputType === 'step' && r > 0) {
+                    if (this.riseTime === null && this.y >= 0.9 * r) {
+                        this.riseTime = this.t - 0.5;
+                    }
+                    if (this.y > this.maxY) {
+                        this.maxY = this.y;
+                        this.peakTime = this.t - 0.5;
+                    }
+                    this.overshoot = Math.max(0, (this.maxY - r) / r * 100);
+                    this.ssError = Math.abs(e);
+                    this.iae += Math.abs(e) * this.dt;
+
+                    // Settling time (2%)
+                    if (Math.abs(e) < 0.02 * r) {
+                        if (this.settlingTime === null) this.settlingTime = this.t - 0.5;
+                    } else {
+                        this.settlingTime = null;
+                    }
+                }
+
+                this.prevError = e;
+                this.prevY = this.y;
+                this.t += this.dt;
+            }
+
+            start() {
+                if (this.running) return;
+                this.running = true;
+                document.getElementById('status-indicator').style.opacity = '1';
+                document.getElementById('status-text').textContent = 'Running';
+                this.loop();
+            }
+
+            stop() {
+                this.running = false;
+                document.getElementById('status-indicator').style.opacity = '0.3';
+                document.getElementById('status-text').textContent = 'Paused';
+            }
+
+            reset() {
+                this.stop();
+                this.t = 0;
+                this.y = 0;
+                this.integral = 0;
+                this.prevError = 0;
+                this.prevY = 0;
+                this.timeHist = [];
+                this.refHist = [];
+                this.yHist = [];
+                this.errHist = [];
+                this.uHist = [];
+                this.pHist = [];
+                this.iHist = [];
+                this.dHist = [];
+                this.deHist = [];
+                this.riseTime = null;
+                this.peakTime = null;
+                this.settlingTime = null;
+                this.overshoot = 0;
+                this.ssError = 0;
+                this.iae = 0;
+                this.maxY = 0;
+                this.draw();
+                this.updateMetricsDisplay();
+            }
+
+            loop() {
+                if (!this.running) return;
+                
+                const steps = Math.max(1, Math.round(this.speed * 3));
+                for (let i = 0; i < steps; i++) {
+                    this.step();
+                }
+
+                this.draw();
+                this.updateLiveValues();
+                this.updateMetricsDisplay();
+
+                requestAnimationFrame(() => this.loop());
+            }
+
+            updateLiveValues() {
+                const n = this.errHist.length;
+                if (n === 0) return;
+
+                const e = this.errHist[n - 1];
+                const P = this.pHist[n - 1];
+                const I = this.iHist[n - 1];
+                const D = this.dHist[n - 1];
+                const de = this.deHist[n - 1];
+
+                document.getElementById('live-p').textContent = P.toFixed(3);
+                document.getElementById('live-i').textContent = I.toFixed(3);
+                document.getElementById('live-d').textContent = D.toFixed(3);
+
+                document.getElementById('comp-e').textContent = e.toFixed(3);
+                document.getElementById('comp-int').textContent = this.integral.toFixed(3);
+                document.getElementById('comp-deriv').textContent = de.toFixed(3);
+                document.getElementById('comp-p-result').textContent = P.toFixed(3);
+                document.getElementById('comp-i-result').textContent = I.toFixed(3);
+                document.getElementById('comp-d-result').textContent = D.toFixed(3);
+
+                document.getElementById('m-error-now').textContent = e.toFixed(3);
+                document.getElementById('m-integral').textContent = this.integral.toFixed(3);
+                document.getElementById('m-derivative').textContent = de.toFixed(3);
+            }
+
+            updateMetricsDisplay() {
+                document.getElementById('m-rise').textContent = this.riseTime !== null ? this.riseTime.toFixed(3) : '—';
+                document.getElementById('m-peak').textContent = this.peakTime !== null ? this.peakTime.toFixed(3) : '—';
+                document.getElementById('m-overshoot').textContent = this.overshoot.toFixed(1);
+                document.getElementById('m-settling').textContent = this.settlingTime !== null ? this.settlingTime.toFixed(3) : '—';
+                document.getElementById('m-ss-error').textContent = this.ssError.toFixed(4);
+                document.getElementById('m-iae').textContent = this.iae.toFixed(3);
+            }
+
+            draw() {
+                this.drawTimeDomain();
+                this.drawComponents();
+                this.drawError();
+                this.drawPhase();
+            }
+
+            drawTimeDomain() {
+                const c = this.canvases.time;
+                if (!c.ctx) return;
+                const ctx = c.ctx;
+                const w = c.el.width;
+                const h = c.el.height;
+
+                ctx.fillStyle = '#0a0a0f';
+                ctx.fillRect(0, 0, w, h);
+
+                // Grid
+                ctx.strokeStyle = 'rgba(0, 212, 255, 0.1)';
+                ctx.lineWidth = 1;
+                for (let i = 0; i <= 10; i++) {
+                    ctx.beginPath();
+                    ctx.moveTo(w * i / 10, 0);
+                    ctx.lineTo(w * i / 10, h);
+                    ctx.stroke();
+                    ctx.beginPath();
+                    ctx.moveTo(0, h * i / 10);
+                    ctx.lineTo(w, h * i / 10);
+                    ctx.stroke();
+                }
+
+                if (this.timeHist.length < 2) {
+                    ctx.fillStyle = 'rgba(255,255,255,0.3)';
+                    ctx.font = `${14 * window.devicePixelRatio}px Inter`;
+                    ctx.textAlign = 'center';
+                    ctx.fillText('Press Start to begin simulation', w / 2, h / 2);
+                    return;
+                }
+
+                // Calculate bounds
+                let allVals = [];
+                if (this.showSetpoint) allVals.push(...this.refHist);
+                if (this.showOutput) allVals.push(...this.yHist);
+                if (this.showError) allVals.push(...this.errHist);
+                if (this.showControl) allVals.push(...this.uHist);
+
+                let minY = Math.min(...allVals, 0);
+                let maxY = Math.max(...allVals, this.amplitude * 1.5);
+                const padding = (maxY - minY) * 0.1;
+                minY -= padding;
+                maxY += padding;
+
+                const tMin = this.timeHist[0];
+                const tMax = this.timeHist[this.timeHist.length - 1];
+
+                const toX = (t) => ((t - tMin) / (tMax - tMin)) * w;
+                const toY = (v) => h - ((v - minY) / (maxY - minY)) * h;
+
+                const drawLine = (hist, color, lineWidth = 2) => {
+                    ctx.strokeStyle = color;
+                    ctx.lineWidth = lineWidth * window.devicePixelRatio;
+                    ctx.beginPath();
+                    hist.forEach((v, i) => {
+                        const x = toX(this.timeHist[i]);
+                        const y = toY(v);
+                        i === 0 ? ctx.moveTo(x, y) : ctx.lineTo(x, y);
+                    });
+                    ctx.stroke();
+                };
+
+                // Draw zero line
+                ctx.strokeStyle = 'rgba(255,255,255,0.2)';
+                ctx.lineWidth = 1;
+                ctx.beginPath();
+                ctx.moveTo(0, toY(0));
+                ctx.lineTo(w, toY(0));
+                ctx.stroke();
+
+                // Draw signals
+                if (this.showSetpoint) drawLine(this.refHist, '#ffe66d', 2);
+                if (this.showControl) drawLine(this.uHist, '#95e1d3', 1.5);
+                if (this.showError) drawLine(this.errHist, '#ff6b6b', 1.5);
+                if (this.showOutput) drawLine(this.yHist, '#00d4ff', 2.5);
+
+                // Labels
+                ctx.fillStyle = 'rgba(255,255,255,0.7)';
+                ctx.font = `${11 * window.devicePixelRatio}px JetBrains Mono`;
+                ctx.textAlign = 'left';
+                ctx.fillText(`t = ${this.t.toFixed(2)}s`, 10 * window.devicePixelRatio, 20 * window.devicePixelRatio);
+            }
+
+            drawComponents() {
+                const c = this.canvases.components;
+                if (!c.ctx) return;
+                const ctx = c.ctx;
+                const w = c.el.width;
+                const h = c.el.height;
+
+                ctx.fillStyle = '#0a0a0f';
+                ctx.fillRect(0, 0, w, h);
+
+                if (this.timeHist.length < 2) return;
+
+                // Calculate bounds
+                let allVals = [...this.pHist, ...this.iHist, ...this.dHist, ...this.uHist];
+                let minY = Math.min(...allVals, -1);
+                let maxY = Math.max(...allVals, 1);
+                const padding = (maxY - minY) * 0.1 || 1;
+                minY -= padding;
+                maxY += padding;
+
+                const tMin = this.timeHist[0];
+                const tMax = this.timeHist[this.timeHist.length - 1];
+
+                const toX = (t) => ((t - tMin) / (tMax - tMin)) * w;
+                const toY = (v) => h - ((v - minY) / (maxY - minY)) * h;
+
+                // Zero line
+                ctx.strokeStyle = 'rgba(255,255,255,0.2)';
+                ctx.lineWidth = 1;
+                ctx.beginPath();
+                ctx.moveTo(0, toY(0));
+                ctx.lineTo(w, toY(0));
+                ctx.stroke();
+
+                // Grid
+                ctx.strokeStyle = 'rgba(0, 212, 255, 0.05)';
+                for (let i = 0; i <= 8; i++) {
+                    ctx.beginPath();
+                    ctx.moveTo(w * i / 8, 0);
+                    ctx.lineTo(w * i / 8, h);
+                    ctx.stroke();
+                }
+
+                const drawLine = (hist, color) => {
+                    ctx.strokeStyle = color;
+                    ctx.lineWidth = 2 * window.devicePixelRatio;
+                    ctx.beginPath();
+                    hist.forEach((v, i) => {
+                        const x = toX(this.timeHist[i]);
+                        const y = toY(v);
+                        i === 0 ? ctx.moveTo(x, y) : ctx.lineTo(x, y);
+                    });
+                    ctx.stroke();
+                };
+
+                drawLine(this.pHist, '#ff6b6b');
+                drawLine(this.iHist, '#4ecdc4');
+                drawLine(this.dHist, '#ffe66d');
+                drawLine(this.uHist, '#00d4ff');
+            }
+
+            drawError() {
+                const c = this.canvases.error;
+                if (!c.ctx) return;
+                const ctx = c.ctx;
+                const w = c.el.width;
+                const h = c.el.height;
+
+                ctx.fillStyle = '#0a0a0f';
+                ctx.fillRect(0, 0, w, h);
+
+                if (this.timeHist.length < 2) return;
+
+                // Show error and fill area under curve (integral visualization)
+                let minY = Math.min(...this.errHist, -0.5);
+                let maxY = Math.max(...this.errHist, 0.5);
+                const padding = (maxY - minY) * 0.1 || 0.5;
+                minY -= padding;
+                maxY += padding;
+
+                const tMin = this.timeHist[0];
+                const tMax = this.timeHist[this.timeHist.length - 1];
+
+                const toX = (t) => ((t - tMin) / (tMax - tMin)) * w;
+                const toY = (v) => h - ((v - minY) / (maxY - minY)) * h;
+                const zeroY = toY(0);
+
+                // Fill area (integral)
+                ctx.fillStyle = 'rgba(78, 205, 196, 0.2)';
+                ctx.beginPath();
+                ctx.moveTo(toX(this.timeHist[0]), zeroY);
+                this.errHist.forEach((v, i) => {
+                    ctx.lineTo(toX(this.timeHist[i]), toY(v));
+                });
+                ctx.lineTo(toX(this.timeHist[this.timeHist.length - 1]), zeroY);
+                ctx.closePath();
+                ctx.fill();
+
+                // Zero line
+                ctx.strokeStyle = 'rgba(255,255,255,0.3)';
+                ctx.lineWidth = 1;
+                ctx.setLineDash([5, 5]);
+                ctx.beginPath();
+                ctx.moveTo(0, zeroY);
+                ctx.lineTo(w, zeroY);
+                ctx.stroke();
+                ctx.setLineDash([]);
+
+                // Error curve
+                ctx.strokeStyle = '#ff6b6b';
+                ctx.lineWidth = 2 * window.devicePixelRatio;
+                ctx.beginPath();
+                this.errHist.forEach((v, i) => {
+                    const x = toX(this.timeHist[i]);
+                    const y = toY(v);
+                    i === 0 ? ctx.moveTo(x, y) : ctx.lineTo(x, y);
+                });
+                ctx.stroke();
+
+                // Derivative visualization (tangent at end)
+                if (this.errHist.length > 1) {
+                    const n = this.errHist.length - 1;
+                    const slope = this.deHist[n];
+                    const x0 = toX(this.timeHist[n]);
+                    const y0 = toY(this.errHist[n]);
+                    const dx = w * 0.1;
+                    
+                    ctx.strokeStyle = '#ffe66d';
+                    ctx.lineWidth = 2 * window.devicePixelRatio;
+                    ctx.beginPath();
+                    ctx.moveTo(x0 - dx, y0 + slope * (tMax - tMin) / w * dx);
+                    ctx.lineTo(x0 + dx, y0 - slope * (tMax - tMin) / w * dx);
+                    ctx.stroke();
+                }
+            }
+
+            drawPhase() {
+                const c = this.canvases.phase;
+                if (!c.ctx) return;
+                const ctx = c.ctx;
+                const w = c.el.width;
+                const h = c.el.height;
+
+                ctx.fillStyle = '#0a0a0f';
+                ctx.fillRect(0, 0, w, h);
+
+                if (this.errHist.length < 2) {
+                    ctx.fillStyle = 'rgba(255,255,255,0.3)';
+                    ctx.font = `${12 * window.devicePixelRatio}px Inter`;
+                    ctx.textAlign = 'center';
+                    ctx.fillText('Phase portrait will appear here', w / 2, h / 2);
+                    return;
+                }
+
+                // Calculate bounds
+                let minE = Math.min(...this.errHist);
+                let maxE = Math.max(...this.errHist);
+                let minDE = Math.min(...this.deHist);
+                let maxDE = Math.max(...this.deHist);
+
+                const padE = Math.max((maxE - minE) * 0.2, 0.5);
+                const padDE = Math.max((maxDE - minDE) * 0.2, 0.5);
+                minE -= padE; maxE += padE;
+                minDE -= padDE; maxDE += padDE;
+
+                const toX = (e) => ((e - minE) / (maxE - minE)) * w;
+                const toY = (de) => h - ((de - minDE) / (maxDE - minDE)) * h;
+
+                // Axes
+                ctx.strokeStyle = 'rgba(255,255,255,0.2)';
+                ctx.lineWidth = 1;
+                const originX = toX(0);
+                const originY = toY(0);
+                ctx.beginPath();
+                ctx.moveTo(0, originY);
+                ctx.lineTo(w, originY);
+                ctx.moveTo(originX, 0);
+                ctx.lineTo(originX, h);
+                ctx.stroke();
+
+                // Origin marker
+                ctx.fillStyle = '#4ecdc4';
+                ctx.beginPath();
+                ctx.arc(originX, originY, 5 * window.devicePixelRatio, 0, Math.PI * 2);
+                ctx.fill();
+
+                // Trajectory
+                ctx.strokeStyle = '#00d4ff';
+                ctx.lineWidth = 2 * window.devicePixelRatio;
+                ctx.beginPath();
+                for (let i = 0; i < this.errHist.length; i++) {
+                    const x = toX(this.errHist[i]);
+                    const y = toY(this.deHist[i]);
+                    i === 0 ? ctx.moveTo(x, y) : ctx.lineTo(x, y);
+                }
+                ctx.stroke();
+
+                // Current point
+                const n = this.errHist.length - 1;
+                ctx.fillStyle = '#ff6b6b';
+                ctx.beginPath();
+                ctx.arc(toX(this.errHist[n]), toY(this.deHist[n]), 6 * window.devicePixelRatio, 0, Math.PI * 2);
+                ctx.fill();
+
+                // Labels
+                ctx.fillStyle = 'rgba(255,255,255,0.5)';
+                ctx.font = `${10 * window.devicePixelRatio}px JetBrains Mono`;
+                ctx.textAlign = 'center';
+                ctx.fillText('e(t)', w - 30 * window.devicePixelRatio, originY - 10 * window.devicePixelRatio);
+                ctx.fillText('ė(t)', originX + 20 * window.devicePixelRatio, 15 * window.devicePixelRatio);
+            }
+
+            drawBode() {
+                const c = this.canvases.bode;
+                if (!c.ctx) return;
+                const ctx = c.ctx;
+                const w = c.el.width;
+                const h = c.el.height;
+
+                ctx.fillStyle = '#0a0a0f';
+                ctx.fillRect(0, 0, w, h);
+
+                const hMag = h * 0.5;
+                const hPhase = h * 0.5;
+
+                // Frequency range
+                const wMin = 0.01;
+                const wMax = 100;
+                const numPoints = 200;
+
+                const magnitudes = [];
+                const phases = [];
+                const freqs = [];
+
+                // Calculate open-loop frequency response: L(jw) = C(jw) * G(jw)
+                for (let i = 0; i < numPoints; i++) {
+                    const omega = wMin * Math.pow(wMax / wMin, i / (numPoints - 1));
+                    freqs.push(omega);
+
+                    // Controller: C(jw) = Kp + Ki/(jw) + Kd*jw
+                    const Cre = this.Kp;
+                    const Cim = this.Kd * omega - this.Ki / omega;
+
+                    // Process: G(jw) = K / (1 + jwt)
+                    const den = 1 + this.tau * this.tau * omega * omega;
+                    const Gre = this.K / den;
+                    const Gim = -this.K * this.tau * omega / den;
+
+                    // L = C * G
+                    const Lre = Cre * Gre - Cim * Gim;
+                    const Lim = Cre * Gim + Cim * Gre;
+
+                    const mag = Math.sqrt(Lre * Lre + Lim * Lim);
+                    const phase = Math.atan2(Lim, Lre) * 180 / Math.PI;
+
+                    magnitudes.push(20 * Math.log10(mag));
+                    phases.push(phase);
+                }
+
+                // Find crossover frequencies
+                let wcIdx = -1;
+                let wpIdx = -1;
+                for (let i = 0; i < numPoints - 1; i++) {
+                    if (magnitudes[i] > 0 && magnitudes[i + 1] <= 0) wcIdx = i;
+                    if (phases[i] > -180 && phases[i + 1] <= -180) wpIdx = i;
+                }
+
+                const gainMargin = wpIdx >= 0 ? -magnitudes[wpIdx] : Infinity;
+                const phaseMargin = wcIdx >= 0 ? 180 + phases[wcIdx] : Infinity;
+                const wc = wcIdx >= 0 ? freqs[wcIdx] : null;
+
+                document.getElementById('m-gm').textContent = isFinite(gainMargin) ? gainMargin.toFixed(1) : '∞';
+                document.getElementById('m-pm').textContent = isFinite(phaseMargin) ? phaseMargin.toFixed(1) : '∞';
+                document.getElementById('m-wc').textContent = wc !== null ? wc.toFixed(3) : '—';
+
+                // Magnitude plot
+                const magMin = Math.min(...magnitudes, -40);
+                const magMax = Math.max(...magnitudes, 40);
+                const magRange = magMax - magMin;
+
+                const toXLog = (w) => (Math.log10(w / wMin) / Math.log10(wMax / wMin)) * w;
+                const toYMag = (m) => hMag - ((m - magMin) / magRange) * hMag * 0.9 - hMag * 0.05;
+
+                // Grid for magnitude
+                ctx.strokeStyle = 'rgba(0, 212, 255, 0.1)';
+                ctx.lineWidth = 1;
+                for (let decade = -2; decade <= 2; decade++) {
+                    const x = toXLog(Math.pow(10, decade));
+                    ctx.beginPath();
+                    ctx.moveTo(x, 0);
+                    ctx.lineTo(x, hMag);
+                    ctx.stroke();
+                }
+
+                // 0 dB line
+                ctx.strokeStyle = 'rgba(255,255,255,0.3)';
+                ctx.setLineDash([5, 5]);
+                ctx.beginPath();
+                ctx.moveTo(0, toYMag(0));
+                ctx.lineTo(w, toYMag(0));
+                ctx.stroke();
+                ctx.setLineDash([]);
+
+                // Magnitude curve
+                ctx.strokeStyle = '#00d4ff';
+                ctx.lineWidth = 2 * window.devicePixelRatio;
+                ctx.beginPath();
+                for (let i = 0; i < numPoints; i++) {
+                    const x = toXLog(freqs[i]);
+                    const y = toYMag(magnitudes[i]);
+                    i === 0 ? ctx.moveTo(x, y) : ctx.lineTo(x, y);
+                }
+                ctx.stroke();
+
+                // Phase plot
+                const toYPhase = (p) => hMag + (hPhase - ((p + 270) / 360) * hPhase * 0.9) - hPhase * 0.05;
+
+                // -180° line
+                ctx.strokeStyle = 'rgba(255, 107, 107, 0.5)';
+                ctx.setLineDash([5, 5]);
+                ctx.beginPath();
+                ctx.moveTo(0, toYPhase(-180));
+                ctx.lineTo(w, toYPhase(-180));
+                ctx.stroke();
+                ctx.setLineDash([]);
+
+                // Phase curve
+                ctx.strokeStyle = '#ff6b6b';
+                ctx.lineWidth = 2 * window.devicePixelRatio;
+                ctx.beginPath();
+                for (let i = 0; i < numPoints; i++) {
+                    const x = toXLog(freqs[i]);
+                    const y = toYPhase(phases[i]);
+                    i === 0 ? ctx.moveTo(x, y) : ctx.lineTo(x, y);
+                }
+                ctx.stroke();
+
+                // Labels
+                ctx.fillStyle = 'rgba(255,255,255,0.6)';
+                ctx.font = `${10 * window.devicePixelRatio}px JetBrains Mono`;
+                ctx.textAlign = 'left';
+                ctx.fillText('Magnitude (dB)', 10 * window.devicePixelRatio, 15 * window.devicePixelRatio);
+                ctx.fillText('Phase (°)', 10 * window.devicePixelRatio, hMag + 15 * window.devicePixelRatio);
+            }
+
+            drawNyquist() {
+                const c = this.canvases.nyquist;
+                if (!c.ctx) return;
+                const ctx = c.ctx;
+                const w = c.el.width;
+                const h = c.el.height;
+
+                ctx.fillStyle = '#0a0a0f';
+                ctx.fillRect(0, 0, w, h);
+
+                // Calculate Nyquist plot points
+                const points = [];
+                const wMin = 0.001;
+                const wMax = 1000;
+                const numPoints = 500;
+
+                for (let i = 0; i < numPoints; i++) {
+                    const omega = wMin * Math.pow(wMax / wMin, i / (numPoints - 1));
+
+                    // L(jw) = C(jw) * G(jw)
+                    const Cre = this.Kp;
+                    const Cim = this.Kd * omega - this.Ki / omega;
+
+                    const den = 1 + this.tau * this.tau * omega * omega;
+                    const Gre = this.K / den;
+                    const Gim = -this.K * this.tau * omega / den;
+
+                    const Lre = Cre * Gre - Cim * Gim;
+                    const Lim = Cre * Gim + Cim * Gre;
+
+                    if (isFinite(Lre) && isFinite(Lim)) {
+                        points.push({ re: Lre, im: Lim });
+                    }
+                }
+
+                // Find bounds
+                let minRe = Math.min(...points.map(p => p.re), -2);
+                let maxRe = Math.max(...points.map(p => p.re), 2);
+                let minIm = Math.min(...points.map(p => p.im), -2);
+                let maxIm = Math.max(...points.map(p => p.im), 2);
+
+                // Ensure -1 is visible
+                minRe = Math.min(minRe, -1.5);
+                maxRe = Math.max(maxRe, 0.5);
+
+                const padRe = (maxRe - minRe) * 0.1;
+                const padIm = (maxIm - minIm) * 0.1;
+                minRe -= padRe; maxRe += padRe;
+                minIm -= padIm; maxIm += padIm;
+
+                const toX = (re) => ((re - minRe) / (maxRe - minRe)) * w;
+                const toY = (im) => h - ((im - minIm) / (maxIm - minIm)) * h;
+
+                // Grid
+                ctx.strokeStyle = 'rgba(0, 212, 255, 0.1)';
+                ctx.lineWidth = 1;
+
+                // Axes
+                ctx.strokeStyle = 'rgba(255,255,255,0.3)';
+                ctx.beginPath();
+                ctx.moveTo(0, toY(0));
+                ctx.lineTo(w, toY(0));
+                ctx.moveTo(toX(0), 0);
+                ctx.lineTo(toX(0), h);
+                ctx.stroke();
+
+                // Critical point (-1, 0)
+                ctx.fillStyle = '#ff6b6b';
+                ctx.beginPath();
+                ctx.arc(toX(-1), toY(0), 6 * window.devicePixelRatio, 0, Math.PI * 2);
+                ctx.fill();
+                ctx.strokeStyle = 'rgba(255, 107, 107, 0.5)';
+                ctx.lineWidth = 2 * window.devicePixelRatio;
+                ctx.beginPath();
+                ctx.arc(toX(-1), toY(0), 10 * window.devicePixelRatio, 0, Math.PI * 2);
+                ctx.stroke();
+
+                // Nyquist curve
+                ctx.strokeStyle = '#00d4ff';
+                ctx.lineWidth = 2 * window.devicePixelRatio;
+                ctx.beginPath();
+                for (let i = 0; i < points.length; i++) {
+                    const x = toX(points[i].re);
+                    const y = toY(points[i].im);
+                    if (x < -w || x > 2 * w || y < -h || y > 2 * h) continue;
+                    i === 0 ? ctx.moveTo(x, y) : ctx.lineTo(x, y);
+                }
+                ctx.stroke();
+
+                // Label
+                ctx.fillStyle = 'rgba(255,255,255,0.5)';
+                ctx.font = `${10 * window.devicePixelRatio}px JetBrains Mono`;
+                ctx.textAlign = 'left';
+                ctx.fillText('-1', toX(-1) + 10 * window.devicePixelRatio, toY(0) - 10 * window.devicePixelRatio);
+            }
+
+            drawPoleZero() {
+                const c = this.canvases.pzmap;
+                if (!c.ctx) return;
+                const ctx = c.ctx;
+                const w = c.el.width;
+                const h = c.el.height;
+
+                ctx.fillStyle = '#0a0a0f';
+                ctx.fillRect(0, 0, w, h);
+
+                const poles = this.poles || [];
+                const zeros = this.zeros || [];
+
+                // Calculate bounds
+                let allPts = [...poles, ...zeros];
+                if (allPts.length === 0) {
+                    allPts = [{ re: -1, im: 1 }, { re: -1, im: -1 }];
+                }
+
+                let minRe = Math.min(...allPts.map(p => p.re), -2);
+                let maxRe = Math.max(...allPts.map(p => p.re), 0.5);
+                let maxIm = Math.max(...allPts.map(p => Math.abs(p.im)), 2);
+
+                const padRe = (maxRe - minRe) * 0.2;
+                const padIm = maxIm * 0.2;
+                minRe -= padRe; maxRe += padRe;
+                maxIm += padIm;
+
+                const toX = (re) => ((re - minRe) / (maxRe - minRe)) * w;
+                const toY = (im) => h / 2 - (im / maxIm) * (h / 2) * 0.9;
+
+                // Grid
+                ctx.strokeStyle = 'rgba(0, 212, 255, 0.1)';
+                ctx.lineWidth = 1;
+
+                // Imaginary axis (stability boundary)
+                ctx.strokeStyle = 'rgba(255, 107, 107, 0.3)';
+                ctx.lineWidth = 2 * window.devicePixelRatio;
+                ctx.setLineDash([5, 5]);
+                ctx.beginPath();
+                ctx.moveTo(toX(0), 0);
+                ctx.lineTo(toX(0), h);
+                ctx.stroke();
+                ctx.setLineDash([]);
+
+                // Real axis
+                ctx.strokeStyle = 'rgba(255,255,255,0.3)';
+                ctx.lineWidth = 1;
+                ctx.beginPath();
+                ctx.moveTo(0, h / 2);
+                ctx.lineTo(w, h / 2);
+                ctx.stroke();
+
+                // Left half-plane shading (stable region)
+                ctx.fillStyle = 'rgba(78, 205, 196, 0.05)';
+                ctx.fillRect(0, 0, toX(0), h);
+
+                // Draw zeros (circles)
+                ctx.strokeStyle = '#4ecdc4';
+                ctx.lineWidth = 2 * window.devicePixelRatio;
+                zeros.forEach(z => {
+                    ctx.beginPath();
+                    ctx.arc(toX(z.re), toY(z.im), 8 * window.devicePixelRatio, 0, Math.PI * 2);
+                    ctx.stroke();
+                    if (Math.abs(z.im) > 1e-6) {
+                        ctx.beginPath();
+                        ctx.arc(toX(z.re), toY(-z.im), 8 * window.devicePixelRatio, 0, Math.PI * 2);
+                        ctx.stroke();
+                    }
+                });
+
+                // Draw poles (X marks)
+                ctx.strokeStyle = '#ff6b6b';
+                ctx.lineWidth = 2 * window.devicePixelRatio;
+                const sz = 8 * window.devicePixelRatio;
+                poles.forEach(p => {
+                    const x = toX(p.re);
+                    const y = toY(p.im);
+                    ctx.beginPath();
+                    ctx.moveTo(x - sz, y - sz);
+                    ctx.lineTo(x + sz, y + sz);
+                    ctx.moveTo(x + sz, y - sz);
+                    ctx.lineTo(x - sz, y + sz);
+                    ctx.stroke();
+                    if (Math.abs(p.im) > 1e-6) {
+                        const y2 = toY(-p.im);
+                        ctx.beginPath();
+                        ctx.moveTo(x - sz, y2 - sz);
+                        ctx.lineTo(x + sz, y2 + sz);
+                        ctx.moveTo(x + sz, y2 - sz);
+                        ctx.lineTo(x - sz, y2 + sz);
+                        ctx.stroke();
+                    }
+                });
+
+                // Labels
+                ctx.fillStyle = 'rgba(255,255,255,0.5)';
+                ctx.font = `${10 * window.devicePixelRatio}px JetBrains Mono`;
+                ctx.textAlign = 'center';
+                ctx.fillText('Re(s)', w - 30 * window.devicePixelRatio, h / 2 - 10 * window.devicePixelRatio);
+                ctx.fillText('Im(s)', toX(0) + 20 * window.devicePixelRatio, 15 * window.devicePixelRatio);
+                ctx.fillText('STABLE', w * 0.15, h - 15 * window.devicePixelRatio);
+                ctx.fillStyle = 'rgba(255, 107, 107, 0.5)';
+                ctx.fillText('UNSTABLE', w * 0.85, h - 15 * window.devicePixelRatio);
+            }
+        }
+
+        // Initialize simulator
+        const sim = new PIDSimulator();
+    </script>
+</body>
+</html>
