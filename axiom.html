@@ -639,7 +639,6 @@
                     let toolCmd = null;
                     let jsonStr = '';
                     
-                    // 1. Try extracting JSON block
                     const toolMatch = content.match(/```(?:json)?\s*(\{[\s\S]*?\})\s*```/i);
                     if (toolMatch) {
                         jsonStr = toolMatch[1];
@@ -654,26 +653,48 @@
                             toolCmd = JSON.parse(jsonStr); 
                         } catch(e1) {
                             try {
-                                // Fallback 1: Fix invalid escapes like \ followed by space (Common with GLM/Mistral)
-                                toolCmd = JSON.parse(jsonStr.replace(/\\([^"\\\/bfnrtu])/g, '$1'));
+                                // LLM Hallucination Fix: Convert unescaped newlines to valid JSON \n,
+                                // and evaluate via JS Function to elegantly swallow invalid hallucinatory 
+                                // escapes (like \ followed by a space)
+                                let inStr = false, esc = false, resStr = "";
+                                for (let i = 0; i < jsonStr.length; i++) {
+                                    let c = jsonStr[i];
+                                    if (c === '"' && !esc) inStr = !inStr;
+                                    if (c === '\\' && !esc) esc = true;
+                                    else esc = false;
+                                    
+                                    if (inStr && c === '\n') resStr += '\\n';
+                                    else if (inStr && c === '\r') resStr += '\\r';
+                                    else if (inStr && c === '\t') resStr += '\\t';
+                                    else resStr += c;
+                                }
+                                toolCmd = new Function('return ' + resStr)();
                             } catch(e2) {
-                                // Fallback 2: Manual Regex Extraction (Bypasses JSON completely)
+                                // Extreme Regex Fallback if even the JS engine throws
                                 const fm = jsonStr.match(/"filename"\s*:\s*"([^"]+)"/);
-                                const toolName = jsonStr.includes('"edit_file"') ? 'edit_file' : (jsonStr.includes('"write_file"') ? 'write_file' : null);
+                                const tName = jsonStr.includes('"edit_file"') ? 'edit_file' : (jsonStr.includes('"write_file"') ? 'write_file' : null);
                                 
-                                if (toolName === 'write_file') {
+                                // Clean up the extracted string to remove those hallucinatory backslashes
+                                const unescapeStr = (str) => {
+                                    return str.replace(/\\n/g, '\n')
+                                              .replace(/\\t/g, '\t')
+                                              .replace(/\\"/g, '"')
+                                              .replace(/\\([ \t\r\n])/g, '$1') // Swallows line-continuation \
+                                              .replace(/\\\\/g, '\\');
+                                };
+
+                                if (tName === 'write_file') {
                                     const cIdx = jsonStr.indexOf('"content"');
                                     if (cIdx > -1) {
                                         const sQ = jsonStr.indexOf('"', cIdx + 9);
                                         let eQMatch = jsonStr.match(/"\s*\}?\s*\}\s*$/);
                                         let eQ = eQMatch ? eQMatch.index : jsonStr.lastIndexOf('"');
                                         if (sQ > -1 && eQ > sQ) {
-                                            let val = jsonStr.substring(sQ + 1, eQ);
-                                            val = val.replace(/\\n/g, '\n').replace(/\\t/g, '\t').replace(/\\"/g, '"').replace(/\\\\/g, '\\');
+                                            let val = unescapeStr(jsonStr.substring(sQ + 1, eQ));
                                             toolCmd = { tool: 'write_file', args: { filename: fm ? fm[1] : 'app.js', content: val } };
                                         }
                                     }
-                                } else if (toolName === 'edit_file') {
+                                } else if (tName === 'edit_file') {
                                     const sIdx = jsonStr.indexOf('"search"');
                                     const rIdx = jsonStr.indexOf('"replace"');
                                     if (sIdx > -1 && rIdx > -1) {
@@ -683,8 +704,8 @@
                                         let eQMatch = jsonStr.match(/"\s*\}?\s*\}\s*$/);
                                         let eQ2 = eQMatch ? eQMatch.index : jsonStr.lastIndexOf('"');
                                         if (sQ1 > -1 && eQ1 > sQ1 && sQ2 > -1 && eQ2 > sQ2) {
-                                            let sVal = jsonStr.substring(sQ1 + 1, eQ1).replace(/\\n/g, '\n').replace(/\\t/g, '\t').replace(/\\"/g, '"').replace(/\\\\/g, '\\');
-                                            let rVal = jsonStr.substring(sQ2 + 1, eQ2).replace(/\\n/g, '\n').replace(/\\t/g, '\t').replace(/\\"/g, '"').replace(/\\\\/g, '\\');
+                                            let sVal = unescapeStr(jsonStr.substring(sQ1 + 1, eQ1));
+                                            let rVal = unescapeStr(jsonStr.substring(sQ2 + 1, eQ2));
                                             toolCmd = { tool: 'edit_file', args: { filename: fm ? fm[1] : 'app.js', search: sVal, replace: rVal } };
                                         }
                                     }
@@ -722,11 +743,9 @@
                     }
 
                     removeLoading();
-                    
                     if (!toolCmd && content.includes('"tool"') && content.includes('"args"')) {
                         addMsg('error', 'AI generated an invalid JSON tool call that could not be parsed.');
                     }
-                    
                     addMsg('assistant', content); 
                     state.history.push({ role: 'assistant', content });
                 } else {
