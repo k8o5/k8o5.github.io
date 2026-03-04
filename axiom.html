@@ -151,6 +151,10 @@
         <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><circle cx="12" cy="12" r="3"></circle><path d="M19.4 15a1.65 1.65 0 0 0 .33 1.82l.06.06a2 2 0 0 1 0 2.83 2 2 0 0 1-2.83 0l-.06-.06a1.65 1.65 0 0 0-1.82-.33 1.65 1.65 0 0 0-1 1.51V21a2 2 0 0 1-2 2 2 2 0 0 1-2-2v-.09A1.65 1.65 0 0 0 9 19.4a1.65 1.65 0 0 0-1.82.33l-.06.06a2 2 0 0 1-2.83 0 2 2 0 0 1 0-2.83l.06-.06a1.65 1.65 0 0 0 .33-1.82 1.65 1.65 0 0 0-1.51-1H3a2 2 0 0 1-2-2 2 2 0 0 1 2-2h.09A1.65 1.65 0 0 0 4.6 9a1.65 1.65 0 0 0-.33-1.82l-.06-.06a2 2 0 0 1 0-2.83 2 2 0 0 1 2.83 0l.06.06a1.65 1.65 0 0 0 1.82.33H9a1.65 1.65 0 0 0 1-1.51V3a2 2 0 0 1 2-2 2 2 0 0 1 2 2v.09a1.65 1.65 0 0 0 1 1.51 1.65 1.65 0 0 0 1.82-.33l.06-.06a2 2 0 0 1 2.83 0 2 2 0 0 1 0 2.83l-.06.06a1.65 1.65 0 0 0-.33 1.82V9a1.65 1.65 0 0 0 1.51 1H21a2 2 0 0 1 2 2 2 2 0 0 1-2 2h-.09a1.65 1.65 0 0 0-1.51 1z"></path></svg>
         <span class="btn-text">Config</span>
     </button>
+    <button class="btn btn-secondary" onclick="saveWorkspace()" title="Save Workspace">
+        <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M19 21H5a2 2 0 0 1-2-2V5a2 2 0 0 1 2-2h11l5 5v11a2 2 0 0 1-2 2z"></path><polyline points="17 21 17 13 7 13 7 21"></polyline><polyline points="7 3 7 8 15 8"></polyline></svg>
+        <span class="btn-text">Save</span>
+    </button>
     <button class="btn btn-secondary" onclick="document.getElementById('fileInput').click()" title="Upload Files">
         <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M21 15v4a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2v-4"></path><polyline points="17 8 12 3 7 8"></polyline><line x1="12" y1="3" x2="12" y2="15"></line></svg>
         <span class="btn-text">Upload</span>
@@ -347,17 +351,62 @@
         custom: { name: 'Custom', type: 'custom', keyUrl: '#', defaultModel: '', defaultEndpoint: '', buildRequest: (msgs, cfg) => ({ url: cfg.endpoint, headers: cfg.apiKey ? { 'Authorization': `Bearer ${cfg.apiKey}`, 'Content-Type': 'application/json' } : { 'Content-Type': 'application/json' }, body: { model: cfg.model, messages: msgs } }) }
     };
 
-    const state = { provider: 'google', configs: {}, connected: false, yoloMode: false, files: new Map(), openTabs: ['README.md'], activeTab: 'README.md', history: [], cmdHistory: [], cmdIndex: -1, currentInput: '' };
+    const state = { provider: 'google', configs: {}, connected: false, yoloMode: false, files: new Map(), openTabs: [], activeTab: '', history: [], cmdHistory: [], cmdIndex: -1, currentInput: '' };
     let editor = null;
 
     document.addEventListener('DOMContentLoaded', () => {
         editor = CodeMirror.fromTextArea(document.getElementById('codeEditor'), { theme: 'material-darker', lineNumbers: true, mode: 'markdown', tabSize: 4, lineWrapping: true });
-        state.files.set('README.md', { content: `# AXIOM - AI Code Editor\n\nWelcome to AXIOM. Built for pure AI-driven creation.\n\n1. Click the Config button (⚙️) to set your Provider & API Key.\n2. Open the Terminal (▼) and type "Create a snake game in index.html".\n3. Ask for changes ("Make the snake blue"). The AI uses Smart Line-Editing to automatically fix indentation and inject the fix exactly where needed.\n4. Toggle YOLO for autonomous iterative loops.`, modified: false });
-        editor.setValue(state.files.get('README.md').content);
+        
+        loadWorkspace(); // Load saved files first
+
+        if (state.files.size === 0) {
+            state.files.set('README.md', { content: `# AXIOM - AI Code Editor\n\nWelcome to AXIOM. Built for pure AI-driven creation.\n\n1. Click the Config button (⚙️) to set your Provider & API Key.\n2. Open the Terminal (▼) and type "Create a snake game in index.html".\n3. Ask for changes ("Make the snake blue"). The AI uses Smart Line-Editing to automatically fix indentation and inject the fix exactly where needed.\n4. Toggle YOLO for autonomous iterative loops.`, modified: false });
+            state.openTabs = ['README.md'];
+            state.activeTab = 'README.md';
+        }
+
         updateFileList(); updateTabs();
-        editor.on('change', () => { const f = state.files.get(state.activeTab); if (f) { f.modified = true; f.content = editor.getValue(); updateTabs(); updateFileList(); } });
+        editor.setValue(state.files.get(state.activeTab).content);
+        const info = CodeMirror.findModeByFileName(state.activeTab);
+        editor.setOption('mode', info ? info.mode : 'text/plain');
+
+        editor.on('change', (cm, changeObj) => { 
+            if (changeObj.origin !== 'setValue') { // only mark modified if actually typed
+                const f = state.files.get(state.activeTab); 
+                if (f) { f.modified = true; f.content = editor.getValue(); updateTabs(); updateFileList(); } 
+            }
+        });
+
         loadConfig(); setupEvents();
     });
+
+    function loadWorkspace() {
+        try {
+            const saved = localStorage.getItem('axiom_workspace');
+            if (saved) {
+                const workspace = JSON.parse(saved);
+                if (workspace && workspace.length > 0) {
+                    state.files.clear();
+                    state.openTabs = [];
+                    workspace.forEach(f => state.files.set(f.name, { content: f.content, modified: false }));
+                    const firstFile = workspace[0].name;
+                    state.openTabs.push(firstFile);
+                    state.activeTab = firstFile;
+                }
+            }
+        } catch (e) { console.error('Failed to load workspace', e); }
+    }
+
+    function saveWorkspace() {
+        const workspace = [];
+        state.files.forEach((file, name) => {
+            workspace.push({ name, content: file.content });
+            file.modified = false;
+        });
+        localStorage.setItem('axiom_workspace', JSON.stringify(workspace));
+        updateFileList(); updateTabs();
+        toast('Workspace saved locally');
+    }
 
     function loadConfig() {
         const saved = localStorage.getItem('axiom_v9');
@@ -534,6 +583,7 @@
         addMsg('tool', `${name}(${msgStr})`);
         
         switch (name) {
+            case 'list_files': return { files: [...state.files.keys()] };
             case 'read_file': { 
                 const f = state.files.get(args.filename); 
                 if (!f) return { error: 'Not found' }; 
@@ -575,7 +625,6 @@
                 addMsg('system', `Edited lines ${args.start_line}-${args.end_line} in ${args.filename}`); 
                 return { success: true };
             }
-            case 'list_files': return { files: [...state.files.keys()] };
             default: return { error: 'Unknown tool' };
         }
     }
@@ -590,9 +639,10 @@
             state.history.push({
                 role: 'user',
                 content: `SYSTEM INSTRUCTION: You are an autonomous AI Editor. YOU MUST USE TOOLS. No markdown code dumps.
-- "read_file" (args: "filename"): Returns file content WITH LINE NUMBERS. ALWAYS read files before editing.
-- "write_file" (args: "filename", "content"): Creates a new file. DO NOT include line numbers in content.
-- "edit_lines" (args: "filename", "start_line", "end_line", "replace_with"): Replaces a range of lines exactly. Start and end are inclusive. DO NOT include line numbers in "replace_with" string. CRITICAL: Maintain exact indentation in replace_with to match the original code!
+- "list_files" (args: {}): Returns a list of all files in the directory.
+- "read_file" (args: {"filename": "..."}): Returns file content WITH LINE NUMBERS. ALWAYS read files before editing.
+- "write_file" (args: {"filename": "...", "content": "..."}): Creates a new file. DO NOT include line numbers in content.
+- "edit_lines" (args: {"filename": "...", "start_line": 1, "end_line": 2, "replace_with": "..."}): Replaces a range of lines exactly. Start and end are inclusive. DO NOT include line numbers in "replace_with" string. CRITICAL: Maintain exact indentation in replace_with to match the original code!
 
 Format EXACTLY:
 \`\`\`json
@@ -660,7 +710,7 @@ CRITICAL FOR REASONING MODELS: If you use a thinking/reasoning process, YOU MUST
                             } catch(e2) {
                                 // Ultimate Regex Fallback for syntax disasters
                                 const fm = jsonStr.match(/"filename"\s*:\s*"([^"]+)"/);
-                                const tName = jsonStr.includes('"edit_lines"') ? 'edit_lines' : (jsonStr.includes('"write_file"') ? 'write_file' : null);
+                                const tName = jsonStr.includes('"edit_lines"') ? 'edit_lines' : (jsonStr.includes('"write_file"') ? 'write_file' : (jsonStr.includes('"list_files"') ? 'list_files' : null));
                                 const unescapeStr = (str) => str.replace(/\\n/g, '\n').replace(/\\t/g, '\t').replace(/\\"/g, '"').replace(/\\([ \t\r\n])/g, '$1').replace(/\\\\/g, '\\');
                                 
                                 if (tName === 'write_file') {
@@ -676,6 +726,8 @@ CRITICAL FOR REASONING MODELS: If you use a thinking/reasoning process, YOU MUST
                                         const sQ = jsonStr.indexOf('"', rIdx + 14); let eQMatch = jsonStr.match(/"\s*\}?\s*\}\s*$/); let eQ = eQMatch ? eQMatch.index : jsonStr.lastIndexOf('"');
                                         if (sQ > -1 && eQ > sQ) toolCmd = { tool: 'edit_lines', args: { filename: fm ? fm[1] : 'app.js', start_line: parseInt(sl[1]), end_line: parseInt(el[1]), replace_with: unescapeStr(jsonStr.substring(sQ + 1, eQ)) } };
                                     }
+                                } else if (tName === 'list_files') {
+                                    toolCmd = { tool: 'list_files', args: {} };
                                 }
                             }
                         }
