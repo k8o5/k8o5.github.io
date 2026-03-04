@@ -79,7 +79,12 @@
     .terminal-output { flex: 1; overflow-y: auto; padding: 10px; display: flex; flex-direction: column; gap: 8px; }
     .msg { padding: 8px 10px; border-radius: 4px; border-left: 3px solid; background: var(--bg-tertiary); font-size: 12px; line-height: 1.5; }
     .msg.user { border-left-color: var(--accent-secondary); } .msg.assistant { border-left-color: var(--accent-primary); background: rgba(111,66,193,0.08); } .msg.system { border-left-color: var(--success); background: rgba(46,164,79,0.08); } .msg.error { border-left-color: var(--error); background: rgba(214,69,69,0.08); } .msg.tool { border-left-color: var(--warning); background: rgba(201,146,46,0.08); }
-    .msg-header { font-size: 9px; text-transform: uppercase; color: var(--text-muted); font-weight: 600; margin-bottom: 4px; } .msg-body { white-space: pre-wrap; word-break: break-word; }
+    .msg-header { display: flex; justify-content: space-between; align-items: center; font-size: 9px; text-transform: uppercase; color: var(--text-muted); font-weight: 600; margin-bottom: 4px; cursor: pointer; user-select: none; }
+    .msg-header:hover { color: var(--text-secondary); }
+    .msg-toggle { font-size: 8px; transition: transform 0.2s; }
+    .msg.collapsed .msg-toggle { transform: rotate(-90deg); }
+    .msg.collapsed .msg-body { display: none; }
+    .msg-body { white-space: pre-wrap; word-break: break-word; }
     
     .terminal-input-area { display: flex; align-items: center; padding: 8px 10px; border-top: 1px solid var(--border-subtle); gap: 8px; background: var(--bg-secondary); }
     .prompt-char { color: var(--accent-primary); font-weight: bold; }
@@ -193,7 +198,10 @@
 
             <div class="terminal-output" id="terminalOutput">
                 <div class="msg system">
-                    <div class="msg-header">System</div>
+                    <div class="msg-header" onclick="this.parentElement.classList.toggle('collapsed')">
+                        <span>System</span>
+                        <span class="msg-toggle">▼</span>
+                    </div>
                     <div class="msg-body">Ready. Advanced Context Saving Tools Active.</div>
                 </div>
             </div>
@@ -564,90 +572,112 @@
     }
 
     function runTool(name, args) {
-        let msgStr = JSON.stringify(args); if(msgStr.length > 50) msgStr = msgStr.substring(0, 50) + '...}';
-        addMsg('tool', `${name}(${msgStr})`);
-        
-        switch (name) {
-            case 'list_files': return { files: [...state.files.keys()] };
-            
-            case 'search_file': {
-                const f = state.files.get(args.filename);
-                if (!f) return { error: 'Not found' };
-                const lines = f.content.split('\n');
-                const query = args.query.toLowerCase();
-                let results = [];
-                for (let i = 0; i < lines.length; i++) {
-                    if (lines[i].toLowerCase().includes(query)) {
-                        let s = Math.max(0, i - 2);
-                        let e = Math.min(lines.length - 1, i + 2);
-                        results.push(`--- Match around line ${i+1} ---`);
-                        for (let j = s; j <= e; j++) {
-                            results.push(`${j + 1} | ${lines[j]}`);
+        let result;
+        try {
+            switch (name) {
+                case 'list_files': 
+                    result = { files: [...state.files.keys()] }; 
+                    break;
+                
+                case 'search_file': {
+                    const f = state.files.get(args.filename);
+                    if (!f) { result = { error: 'Not found' }; break; }
+                    const lines = f.content.split('\n');
+                    const query = args.query.toLowerCase();
+                    let results = [];
+                    for (let i = 0; i < lines.length; i++) {
+                        if (lines[i].toLowerCase().includes(query)) {
+                            let s = Math.max(0, i - 2);
+                            let e = Math.min(lines.length - 1, i + 2);
+                            results.push(`--- Match around line ${i+1} ---`);
+                            for (let j = s; j <= e; j++) {
+                                results.push(`${j + 1} | ${lines[j]}`);
+                            }
                         }
                     }
-                }
-                if (results.length === 0) return { error: `No matches found for '${args.query}'` };
-                return { matches: results.join('\n') };
-            }
-
-            case 'read_file': { 
-                const f = state.files.get(args.filename); 
-                if (!f) return { error: 'Not found' }; 
-                const lines = f.content.split('\n');
-                
-                let start = 0;
-                let end = lines.length;
-                
-                if (args.start_line !== undefined) start = Math.max(0, parseInt(args.start_line) - 1);
-                if (args.end_line !== undefined) end = Math.min(lines.length, parseInt(args.end_line));
-                if (start >= end) return { error: 'Invalid line range' };
-
-                const numbered = lines.slice(start, end).map((l, i) => `${start + i + 1} | ${l}`).join('\n');
-                return { 
-                    total_lines_in_file: lines.length, 
-                    showing_lines: `${start + 1} to ${end}`,
-                    content: numbered 
-                }; 
-            }
-            
-            case 'write_file': {
-                state.files.set(args.filename, { content: args.content, modified: false }); updateFileList();
-                if (!state.openTabs.includes(args.filename)) state.openTabs.push(args.filename);
-                if (state.activeTab === 'README.md' && state.openTabs.length > 1) closeTab('README.md');
-                state.activeTab = args.filename; updateTabs(); editor.setValue(args.content);
-                const info = CodeMirror.findModeByFileName(args.filename); editor.setOption('mode', info ? info.mode : 'text/plain');
-                addMsg('system', `Created: ${args.filename}`); return { success: true };
-            }
-            
-            case 'edit_lines': {
-                const f = state.files.get(args.filename); if (!f) return { error: 'Not found' };
-                const lines = f.content.split('\n');
-                let start = parseInt(args.start_line); let end = parseInt(args.end_line);
-                if(isNaN(start) || isNaN(end)) return { error: 'Invalid line numbers' };
-                start = Math.max(1, start) - 1; end = Math.min(lines.length, end);
-                if(start > end) return { error: 'start_line must be <= end_line' };
-                
-                // Smart Indentation Fix
-                const originalIndent = lines[start] ? lines[start].match(/^\s*/)[0] : '';
-                let replacementLines = args.replace_with.split('\n');
-                
-                if (originalIndent.length > 0 && replacementLines.length > 0 && !replacementLines[0].match(/^\s+/)) {
-                    args.replace_with = replacementLines.map(l => l.trim() !== '' ? originalIndent + l : l).join('\n');
+                    if (results.length === 0) { result = { error: `No matches found for '${args.query}'` }; break; }
+                    result = { matches: results.join('\n') };
+                    break;
                 }
 
-                lines.splice(start, end - start, args.replace_with);
-                f.content = lines.join('\n'); f.modified = false; state.files.set(args.filename, f); updateFileList();
-                
-                if (state.activeTab === args.filename) {
-                    const scrollInfo = editor.getScrollInfo();
-                    editor.setValue(f.content);
-                    editor.scrollTo(scrollInfo.left, scrollInfo.top);
+                case 'read_file': { 
+                    const f = state.files.get(args.filename); 
+                    if (!f) { result = { error: 'Not found' }; break; }
+                    const lines = f.content.split('\n');
+                    
+                    let start = 0;
+                    let end = lines.length;
+                    
+                    if (args.start_line !== undefined) start = Math.max(0, parseInt(args.start_line) - 1);
+                    if (args.end_line !== undefined) end = Math.min(lines.length, parseInt(args.end_line));
+                    if (start >= end) { result = { error: 'Invalid line range' }; break; }
+
+                    const numbered = lines.slice(start, end).map((l, i) => `${start + i + 1} | ${l}`).join('\n');
+                    result = { 
+                        total_lines_in_file: lines.length, 
+                        showing_lines: `${start + 1} to ${end}`,
+                        content: numbered 
+                    }; 
+                    break;
                 }
-                addMsg('system', `Edited lines ${args.start_line}-${args.end_line} in ${args.filename}`); 
-                return { success: true };
+                
+                case 'write_file': {
+                    state.files.set(args.filename, { content: args.content, modified: false }); updateFileList();
+                    if (!state.openTabs.includes(args.filename)) state.openTabs.push(args.filename);
+                    if (state.activeTab === 'README.md' && state.openTabs.length > 1) closeTab('README.md');
+                    state.activeTab = args.filename; updateTabs(); editor.setValue(args.content);
+                    const info = CodeMirror.findModeByFileName(args.filename); editor.setOption('mode', info ? info.mode : 'text/plain');
+                    result = { success: true };
+                    break;
+                }
+                
+                case 'edit_lines': {
+                    const f = state.files.get(args.filename); 
+                    if (!f) { result = { error: 'Not found' }; break; }
+                    const lines = f.content.split('\n');
+                    let start = parseInt(args.start_line); let end = parseInt(args.end_line);
+                    if(isNaN(start) || isNaN(end)) { result = { error: 'Invalid line numbers' }; break; }
+                    start = Math.max(1, start) - 1; end = Math.min(lines.length, end);
+                    if(start > end) { result = { error: 'start_line must be <= end_line' }; break; }
+                    
+                    // Smart Indentation Fix
+                    const originalIndent = lines[start] ? lines[start].match(/^\s*/)[0] : '';
+                    let replacementLines = args.replace_with.split('\n');
+                    
+                    if (originalIndent.length > 0 && replacementLines.length > 0 && !replacementLines[0].match(/^\s+/)) {
+                        args.replace_with = replacementLines.map(l => l.trim() !== '' ? originalIndent + l : l).join('\n');
+                    }
+
+                    lines.splice(start, end - start, args.replace_with);
+                    f.content = lines.join('\n'); f.modified = false; state.files.set(args.filename, f); updateFileList();
+                    
+                    if (state.activeTab === args.filename) {
+                        const scrollInfo = editor.getScrollInfo();
+                        editor.setValue(f.content);
+                        editor.scrollTo(scrollInfo.left, scrollInfo.top);
+                    }
+                    result = { success: true };
+                    break;
+                }
+                default: 
+                    result = { error: 'Unknown tool' };
             }
-            default: return { error: 'Unknown tool' };
+        } catch (e) {
+            result = { error: e.message };
         }
+
+        // Pretty print action and result to UI inside a collapsible block
+        let argStr = JSON.stringify(args);
+        if (argStr.length > 80) argStr = argStr.substring(0, 80) + '...}';
+        let resContent = typeof result === 'object' ? JSON.stringify(result, null, 2) : result;
+        
+        addMsg('tool', `Action: ${name}(${argStr})\n\nResult:\n${resContent}`, true);
+        
+        // Output clean system notifications for modifications
+        if (name === 'write_file' && result.success) addMsg('system', `Created file: ${args.filename}`);
+        if (name === 'edit_lines' && result.success) addMsg('system', `Edited lines ${args.start_line}-${args.end_line} in ${args.filename}`);
+
+        return result;
     }
 
     async function sendMessage() {
@@ -790,15 +820,29 @@ CRITICAL FOR REASONING MODELS: If you use a thinking/reasoning process, YOU MUST
         }
     }
 
-    function addMsg(type, content) {
-        removeLoading(); const out = document.getElementById('terminalOutput'); const labels = { user: 'You', assistant: 'AI', system: 'System', error: 'Error', tool: 'Tool' };
-        const div = document.createElement('div'); div.className = `msg ${type}`; div.innerHTML = `<div class="msg-header">${labels[type]}</div><div class="msg-body">${esc(content)}</div>`;
-        out.appendChild(div); out.scrollTop = out.scrollHeight;
+    function addMsg(type, content, isCollapsed = false) {
+        removeLoading(); 
+        const out = document.getElementById('terminalOutput'); 
+        const labels = { user: 'You', assistant: 'AI', system: 'System', error: 'Error', tool: 'Tool' };
+        
+        const div = document.createElement('div'); 
+        div.className = `msg ${type}${isCollapsed ? ' collapsed' : ''}`; 
+        
+        div.innerHTML = `
+            <div class="msg-header" onclick="this.parentElement.classList.toggle('collapsed')" title="Click to expand/collapse">
+                <span>${labels[type]}</span>
+                <span class="msg-toggle">▼</span>
+            </div>
+            <div class="msg-body">${esc(content)}</div>
+        `;
+        
+        out.appendChild(div); 
+        out.scrollTop = out.scrollHeight;
     }
 
     function showLoading() {
         const out = document.getElementById('terminalOutput'); const div = document.createElement('div'); div.className = 'msg assistant loading';
-        div.innerHTML = `<div class="msg-header">AI</div><div class="msg-body"><div class="loading-dots"><span></span><span></span><span></span></div></div>`;
+        div.innerHTML = `<div class="msg-header"><span>AI</span></div><div class="msg-body"><div class="loading-dots"><span></span><span></span><span></span></div></div>`;
         out.appendChild(div); out.scrollTop = out.scrollHeight;
     }
 
