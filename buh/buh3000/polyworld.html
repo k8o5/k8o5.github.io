@@ -1,0 +1,1707 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>PolyWorld - 4X Strategy Game</title>
+    <style>
+        * {
+            margin: 0;
+            padding: 0;
+            box-sizing: border-box;
+        }
+
+        body {
+            font-family: 'Segoe UI', Tahoma, Geneva, Verdana, sans-serif;
+            background: linear-gradient(135deg, #1a1a2e 0%, #16213e 100%);
+            min-height: 100vh;
+            color: #fff;
+            overflow: hidden;
+        }
+
+        #game-container {
+            display: flex;
+            height: 100vh;
+        }
+
+        #sidebar {
+            width: 280px;
+            background: rgba(0,0,0,0.5);
+            padding: 15px;
+            display: flex;
+            flex-direction: column;
+            gap: 10px;
+            overflow-y: auto;
+        }
+
+        #main-area {
+            flex: 1;
+            display: flex;
+            flex-direction: column;
+        }
+
+        #top-bar {
+            background: rgba(0,0,0,0.7);
+            padding: 10px 20px;
+            display: flex;
+            justify-content: space-between;
+            align-items: center;
+        }
+
+        #resources {
+            display: flex;
+            gap: 20px;
+        }
+
+        .resource {
+            display: flex;
+            align-items: center;
+            gap: 5px;
+            font-size: 18px;
+        }
+
+        #map-container {
+            flex: 1;
+            overflow: auto;
+            position: relative;
+        }
+
+        #game-map {
+            display: grid;
+            gap: 2px;
+            padding: 20px;
+            width: fit-content;
+        }
+
+        .tile {
+            width: 60px;
+            height: 60px;
+            border-radius: 8px;
+            cursor: pointer;
+            position: relative;
+            display: flex;
+            flex-direction: column;
+            align-items: center;
+            justify-content: center;
+            transition: all 0.2s;
+            font-size: 24px;
+            border: 2px solid transparent;
+        }
+
+        .tile:hover {
+            transform: scale(1.05);
+            z-index: 10;
+        }
+
+        .tile.selected {
+            border-color: #ffff00;
+            box-shadow: 0 0 15px #ffff00;
+        }
+
+        .tile.move-target {
+            border-color: #00ff00;
+            box-shadow: 0 0 10px #00ff00;
+        }
+
+        .tile.attack-target {
+            border-color: #ff0000;
+            box-shadow: 0 0 10px #ff0000;
+        }
+
+        .terrain-water { background: linear-gradient(135deg, #0077be, #00a8e8); }
+        .terrain-land { background: linear-gradient(135deg, #7cb342, #8bc34a); }
+        .terrain-forest { background: linear-gradient(135deg, #2e7d32, #388e3c); }
+        .terrain-mountain { background: linear-gradient(135deg, #757575, #9e9e9e); }
+        .terrain-city { background: linear-gradient(135deg, #ff9800, #ffc107); }
+        .terrain-village { background: linear-gradient(135deg, #8d6e63, #a1887f); }
+        .terrain-fruit { background: linear-gradient(135deg, #7cb342, #c0ca33); }
+        .terrain-mine { background: linear-gradient(135deg, #757575, #ffd700); }
+        .terrain-farm { background: linear-gradient(135deg, #cddc39, #8bc34a); }
+
+        .fog {
+            background: #333 !important;
+            opacity: 0.7;
+        }
+
+        .unit {
+            position: absolute;
+            font-size: 28px;
+            text-shadow: 2px 2px 2px rgba(0,0,0,0.5);
+        }
+
+        .unit-hp {
+            position: absolute;
+            bottom: 2px;
+            left: 50%;
+            transform: translateX(-50%);
+            font-size: 10px;
+            background: rgba(0,0,0,0.7);
+            padding: 1px 4px;
+            border-radius: 3px;
+        }
+
+        .city-level {
+            position: absolute;
+            top: 2px;
+            right: 2px;
+            font-size: 10px;
+            background: rgba(0,0,0,0.7);
+            padding: 1px 4px;
+            border-radius: 3px;
+        }
+
+        .city-owner {
+            position: absolute;
+            top: 2px;
+            left: 2px;
+            width: 10px;
+            height: 10px;
+            border-radius: 50%;
+        }
+
+        .panel {
+            background: rgba(255,255,255,0.1);
+            border-radius: 10px;
+            padding: 15px;
+        }
+
+        .panel h3 {
+            margin-bottom: 10px;
+            color: #ffc107;
+        }
+
+        .tech-tree {
+            display: grid;
+            grid-template-columns: repeat(2, 1fr);
+            gap: 5px;
+        }
+
+        .tech-btn {
+            background: rgba(100,100,255,0.3);
+            border: none;
+            color: white;
+            padding: 8px;
+            border-radius: 5px;
+            cursor: pointer;
+            font-size: 11px;
+            transition: all 0.2s;
+        }
+
+        .tech-btn:hover:not(:disabled) {
+            background: rgba(100,100,255,0.6);
+        }
+
+        .tech-btn:disabled {
+            opacity: 0.5;
+            cursor: not-allowed;
+        }
+
+        .tech-btn.researched {
+            background: rgba(0,200,0,0.5);
+        }
+
+        .action-btn {
+            background: linear-gradient(135deg, #667eea 0%, #764ba2 100%);
+            border: none;
+            color: white;
+            padding: 12px;
+            border-radius: 8px;
+            cursor: pointer;
+            font-size: 14px;
+            width: 100%;
+            margin-top: 5px;
+            transition: all 0.2s;
+        }
+
+        .action-btn:hover:not(:disabled) {
+            transform: translateY(-2px);
+            box-shadow: 0 5px 15px rgba(102, 126, 234, 0.4);
+        }
+
+        .action-btn:disabled {
+            opacity: 0.5;
+            cursor: not-allowed;
+        }
+
+        #unit-panel, #city-panel {
+            display: none;
+        }
+
+        .unit-actions {
+            display: flex;
+            flex-wrap: wrap;
+            gap: 5px;
+        }
+
+        .unit-action-btn {
+            flex: 1;
+            min-width: 80px;
+            background: rgba(255,255,255,0.2);
+            border: none;
+            color: white;
+            padding: 8px;
+            border-radius: 5px;
+            cursor: pointer;
+            font-size: 12px;
+        }
+
+        .unit-action-btn:hover:not(:disabled) {
+            background: rgba(255,255,255,0.4);
+        }
+
+        #message-log {
+            max-height: 100px;
+            overflow-y: auto;
+            font-size: 12px;
+            background: rgba(0,0,0,0.3);
+            padding: 10px;
+            border-radius: 5px;
+        }
+
+        .log-entry {
+            padding: 2px 0;
+            border-bottom: 1px solid rgba(255,255,255,0.1);
+        }
+
+        #menu-screen, #tribe-select, #victory-screen {
+            position: fixed;
+            top: 0;
+            left: 0;
+            width: 100%;
+            height: 100%;
+            background: linear-gradient(135deg, #1a1a2e 0%, #16213e 100%);
+            display: flex;
+            flex-direction: column;
+            align-items: center;
+            justify-content: center;
+            z-index: 100;
+        }
+
+        .menu-title {
+            font-size: 64px;
+            margin-bottom: 40px;
+            background: linear-gradient(45deg, #ffc107, #ff5722);
+            -webkit-background-clip: text;
+            -webkit-text-fill-color: transparent;
+            background-clip: text;
+        }
+
+        .menu-btn {
+            background: linear-gradient(135deg, #667eea 0%, #764ba2 100%);
+            border: none;
+            color: white;
+            padding: 15px 50px;
+            border-radius: 10px;
+            cursor: pointer;
+            font-size: 20px;
+            margin: 10px;
+            transition: all 0.3s;
+        }
+
+        .menu-btn:hover {
+            transform: scale(1.05);
+            box-shadow: 0 10px 30px rgba(102, 126, 234, 0.4);
+        }
+
+        .tribe-grid {
+            display: grid;
+            grid-template-columns: repeat(4, 1fr);
+            gap: 15px;
+            padding: 20px;
+        }
+
+        .tribe-card {
+            background: rgba(255,255,255,0.1);
+            padding: 20px;
+            border-radius: 15px;
+            cursor: pointer;
+            text-align: center;
+            transition: all 0.3s;
+            border: 3px solid transparent;
+        }
+
+        .tribe-card:hover {
+            transform: translateY(-5px);
+            background: rgba(255,255,255,0.2);
+        }
+
+        .tribe-card.selected {
+            border-color: #ffc107;
+        }
+
+        .tribe-emoji {
+            font-size: 48px;
+            margin-bottom: 10px;
+        }
+
+        .tribe-name {
+            font-size: 18px;
+            font-weight: bold;
+        }
+
+        .tribe-bonus {
+            font-size: 12px;
+            color: #aaa;
+            margin-top: 5px;
+        }
+
+        .hidden {
+            display: none !important;
+        }
+
+        #minimap {
+            width: 100%;
+            height: 120px;
+            background: rgba(0,0,0,0.5);
+            border-radius: 10px;
+            overflow: hidden;
+        }
+
+        #minimap canvas {
+            width: 100%;
+            height: 100%;
+        }
+
+        .tribe-color-0 { color: #3498db; }
+        .tribe-color-1 { color: #e74c3c; }
+        .tribe-color-2 { color: #2ecc71; }
+        .tribe-color-3 { color: #9b59b6; }
+
+        .owner-0 { background-color: #3498db; }
+        .owner-1 { background-color: #e74c3c; }
+        .owner-2 { background-color: #2ecc71; }
+        .owner-3 { background-color: #9b59b6; }
+
+        @keyframes damage {
+            0%, 100% { transform: translateX(0); }
+            25% { transform: translateX(-5px); }
+            75% { transform: translateX(5px); }
+        }
+
+        .damage-animation {
+            animation: damage 0.3s ease-in-out;
+        }
+
+        @keyframes spawn {
+            from { transform: scale(0); opacity: 0; }
+            to { transform: scale(1); opacity: 1; }
+        }
+
+        .spawn-animation {
+            animation: spawn 0.3s ease-out;
+        }
+    </style>
+</head>
+<body>
+    <!-- Main Menu -->
+    <div id="menu-screen">
+        <h1 class="menu-title">⚔️ PolyWorld ⚔️</h1>
+        <button class="menu-btn" onclick="showTribeSelect()">🎮 New Game</button>
+        <button class="menu-btn" onclick="showInstructions()">📖 How to Play</button>
+        <div id="instructions" class="hidden panel" style="max-width: 500px; margin-top: 20px;">
+            <h3>How to Play</h3>
+            <p>• Select a tribe and conquer the world!</p>
+            <p>• Capture cities to earn ⭐ stars each turn</p>
+            <p>• Research technologies to unlock units & abilities</p>
+            <p>• Train units to explore, fight, and capture</p>
+            <p>• Harvest resources to upgrade your cities</p>
+            <p>• Eliminate all enemies or reach 10000 score to win!</p>
+        </div>
+    </div>
+
+    <!-- Tribe Selection -->
+    <div id="tribe-select" class="hidden">
+        <h1 class="menu-title">Choose Your Tribe</h1>
+        <div class="tribe-grid" id="tribe-grid"></div>
+        <button class="menu-btn" onclick="startGame()">⚔️ Start Conquest</button>
+        <div style="margin-top: 20px;">
+            <label>Map Size: </label>
+            <select id="map-size" style="padding: 10px; border-radius: 5px;">
+                <option value="small">Small (15x15)</option>
+                <option value="medium" selected>Medium (20x20)</option>
+                <option value="large">Large (25x25)</option>
+            </select>
+            <label style="margin-left: 20px;">Opponents: </label>
+            <select id="num-opponents" style="padding: 10px; border-radius: 5px;">
+                <option value="1">1</option>
+                <option value="2" selected>2</option>
+                <option value="3">3</option>
+            </select>
+        </div>
+    </div>
+
+    <!-- Victory Screen -->
+    <div id="victory-screen" class="hidden">
+        <h1 class="menu-title" id="victory-title">🏆 Victory! 🏆</h1>
+        <p id="victory-message" style="font-size: 24px; margin-bottom: 30px;"></p>
+        <p id="final-score" style="font-size: 32px; margin-bottom: 30px;"></p>
+        <button class="menu-btn" onclick="location.reload()">🔄 Play Again</button>
+    </div>
+
+    <!-- Game Screen -->
+    <div id="game-container" class="hidden">
+        <div id="sidebar">
+            <div class="panel">
+                <h3>🏛️ Empire Info</h3>
+                <div id="empire-info"></div>
+            </div>
+
+            <div class="panel">
+                <h3>🔬 Technology</h3>
+                <div class="tech-tree" id="tech-tree"></div>
+            </div>
+
+            <div class="panel" id="unit-panel">
+                <h3>⚔️ Selected Unit</h3>
+                <div id="unit-info"></div>
+                <div class="unit-actions" id="unit-actions"></div>
+            </div>
+
+            <div class="panel" id="city-panel">
+                <h3>🏰 Selected City</h3>
+                <div id="city-info"></div>
+                <div id="city-actions"></div>
+            </div>
+
+            <div class="panel">
+                <h3>📜 Log</h3>
+                <div id="message-log"></div>
+            </div>
+
+            <div class="panel">
+                <h3>🗺️ Minimap</h3>
+                <div id="minimap">
+                    <canvas id="minimap-canvas"></canvas>
+                </div>
+            </div>
+        </div>
+
+        <div id="main-area">
+            <div id="top-bar">
+                <div id="resources">
+                    <div class="resource">⭐ <span id="stars">0</span></div>
+                    <div class="resource">🏙️ <span id="city-count">0</span></div>
+                    <div class="resource">⚔️ <span id="unit-count">0</span></div>
+                    <div class="resource">🏆 <span id="score">0</span></div>
+                </div>
+                <div>
+                    <span id="turn-info">Turn 1</span>
+                    <button class="action-btn" style="width: auto; margin-left: 20px;" onclick="endTurn()">End Turn ⏭️</button>
+                </div>
+            </div>
+            <div id="map-container">
+                <div id="game-map"></div>
+            </div>
+        </div>
+    </div>
+
+    <script>
+        // ============= GAME CONFIGURATION =============
+        const TRIBES = [
+            { id: 0, name: "Imperius", emoji: "🏛️", color: "#3498db", bonus: "Starts with Organization", startTech: "organization" },
+            { id: 1, name: "Bardur", emoji: "🪓", color: "#e74c3c", bonus: "Starts with Hunting", startTech: "hunting" },
+            { id: 2, name: "Oumaji", emoji: "🐎", color: "#2ecc71", bonus: "Starts with Riding", startTech: "riding" },
+            { id: 3, name: "Kickoo", emoji: "🎣", color: "#9b59b6", bonus: "Starts with Fishing", startTech: "fishing" },
+            { id: 4, name: "Hoodrick", emoji: "🏹", color: "#f39c12", bonus: "Starts with Archery", startTech: "archery" },
+            { id: 5, name: "Luxidoor", emoji: "👑", color: "#e91e63", bonus: "Starts with extra stars", startTech: "organization", extraStars: 10 },
+            { id: 6, name: "Zebasi", emoji: "🌾", color: "#8bc34a", bonus: "Starts with Farming", startTech: "farming" },
+            { id: 7, name: "Ai-Mo", emoji: "🧘", color: "#00bcd4", bonus: "Starts with Meditation", startTech: "meditation" },
+        ];
+
+        const TECHNOLOGIES = {
+            climbing: { name: "Climbing", cost: 5, emoji: "🧗", unlocks: ["mountain_harvest"], prereq: null },
+            fishing: { name: "Fishing", cost: 5, emoji: "🎣", unlocks: ["water_harvest"], prereq: null },
+            hunting: { name: "Hunting", cost: 5, emoji: "🏹", unlocks: ["forest_harvest", "archer"], prereq: null },
+            organization: { name: "Organization", cost: 5, emoji: "📋", unlocks: ["harvest_fruit"], prereq: null },
+            riding: { name: "Riding", cost: 5, emoji: "🐎", unlocks: ["rider"], prereq: null },
+            archery: { name: "Archery", cost: 6, emoji: "🎯", unlocks: ["archer"], prereq: "hunting" },
+            farming: { name: "Farming", cost: 5, emoji: "🌾", unlocks: ["farm"], prereq: "organization" },
+            forestry: { name: "Forestry", cost: 6, emoji: "🪓", unlocks: ["lumber"], prereq: "hunting" },
+            mining: { name: "Mining", cost: 6, emoji: "⛏️", unlocks: ["mine"], prereq: "climbing" },
+            meditation: { name: "Meditation", cost: 5, emoji: "🧘", unlocks: ["temple"], prereq: null },
+            sailing: { name: "Sailing", cost: 6, emoji: "⛵", unlocks: ["boat", "water_move"], prereq: "fishing" },
+            roads: { name: "Roads", cost: 6, emoji: "🛤️", unlocks: ["road"], prereq: "riding" },
+            trading: { name: "Trading", cost: 7, emoji: "💰", unlocks: ["market"], prereq: "organization" },
+            shields: { name: "Shields", cost: 6, emoji: "🛡️", unlocks: ["defender"], prereq: null },
+            smithery: { name: "Smithery", cost: 8, emoji: "⚒️", unlocks: ["swordsman"], prereq: "mining" },
+            chivalry: { name: "Chivalry", cost: 8, emoji: "🏇", unlocks: ["knight"], prereq: "riding" },
+            mathematics: { name: "Mathematics", cost: 8, emoji: "📐", unlocks: ["catapult"], prereq: "climbing" },
+            navigation: { name: "Navigation", cost: 8, emoji: "🧭", unlocks: ["battleship"], prereq: "sailing" },
+        };
+
+        const UNIT_TYPES = {
+            warrior: { name: "Warrior", emoji: "⚔️", attack: 2, defense: 2, hp: 10, movement: 1, range: 1, cost: 2 },
+            archer: { name: "Archer", emoji: "🏹", attack: 2, defense: 1, hp: 10, movement: 1, range: 2, cost: 3, tech: "archery" },
+            rider: { name: "Rider", emoji: "🐎", attack: 2, defense: 1, hp: 10, movement: 2, range: 1, cost: 3, tech: "riding" },
+            defender: { name: "Defender", emoji: "🛡️", attack: 1, defense: 3, hp: 15, movement: 1, range: 1, cost: 3, tech: "shields" },
+            swordsman: { name: "Swordsman", emoji: "🗡️", attack: 3, defense: 3, hp: 15, movement: 1, range: 1, cost: 5, tech: "smithery" },
+            knight: { name: "Knight", emoji: "🏇", attack: 4, defense: 1, hp: 10, movement: 3, range: 1, cost: 8, tech: "chivalry", persist: true },
+            catapult: { name: "Catapult", emoji: "🎯", attack: 4, defense: 0, hp: 10, movement: 1, range: 3, cost: 8, tech: "mathematics" },
+            boat: { name: "Boat", emoji: "⛵", attack: 1, defense: 1, hp: 10, movement: 2, range: 1, cost: 0, tech: "sailing", water: true },
+            battleship: { name: "Battleship", emoji: "🚢", attack: 4, defense: 3, hp: 20, movement: 3, range: 2, cost: 15, tech: "navigation", water: true },
+        };
+
+        // ============= GAME STATE =============
+        let gameState = {
+            turn: 1,
+            currentPlayer: 0,
+            players: [],
+            map: [],
+            mapWidth: 20,
+            mapHeight: 20,
+            selectedTile: null,
+            selectedUnit: null,
+            selectedCity: null,
+            gameOver: false
+        };
+
+        let selectedTribe = 0;
+
+        // ============= HELPER FUNCTIONS =============
+        function log(message) {
+            const logDiv = document.getElementById('message-log');
+            const entry = document.createElement('div');
+            entry.className = 'log-entry';
+            entry.textContent = `[T${gameState.turn}] ${message}`;
+            logDiv.insertBefore(entry, logDiv.firstChild);
+            if (logDiv.children.length > 50) logDiv.removeChild(logDiv.lastChild);
+        }
+
+        function distance(x1, y1, x2, y2) {
+            return Math.abs(x1 - x2) + Math.abs(y1 - y2);
+        }
+
+        function getNeighbors(x, y) {
+            const neighbors = [];
+            const dirs = [[0,-1], [0,1], [-1,0], [1,0]];
+            for (const [dx, dy] of dirs) {
+                const nx = x + dx, ny = y + dy;
+                if (nx >= 0 && nx < gameState.mapWidth && ny >= 0 && ny < gameState.mapHeight) {
+                    neighbors.push({x: nx, y: ny});
+                }
+            }
+            return neighbors;
+        }
+
+        function getTile(x, y) {
+            if (x < 0 || x >= gameState.mapWidth || y < 0 || y >= gameState.mapHeight) return null;
+            return gameState.map[y][x];
+        }
+
+        // ============= MAP GENERATION =============
+        function generateMap() {
+            const map = [];
+            const {mapWidth, mapHeight} = gameState;
+
+            // Initialize with water
+            for (let y = 0; y < mapHeight; y++) {
+                map[y] = [];
+                for (let x = 0; x < mapWidth; x++) {
+                    map[y][x] = {
+                        x, y,
+                        terrain: 'water',
+                        resource: null,
+                        unit: null,
+                        city: null,
+                        improvement: null,
+                        visible: [],
+                        explored: []
+                    };
+                    for (let i = 0; i < gameState.players.length; i++) {
+                        map[y][x].visible.push(false);
+                        map[y][x].explored.push(false);
+                    }
+                }
+            }
+
+            // Generate landmasses using cellular automata
+            const landChance = 0.52;
+            const tempMap = [];
+
+            for (let y = 0; y < mapHeight; y++) {
+                tempMap[y] = [];
+                for (let x = 0; x < mapWidth; x++) {
+                    tempMap[y][x] = Math.random() < landChance ? 1 : 0;
+                }
+            }
+
+            // Smooth the terrain
+            for (let iteration = 0; iteration < 4; iteration++) {
+                const newTemp = [];
+                for (let y = 0; y < mapHeight; y++) {
+                    newTemp[y] = [];
+                    for (let x = 0; x < mapWidth; x++) {
+                        let landCount = 0;
+                        for (let dy = -1; dy <= 1; dy++) {
+                            for (let dx = -1; dx <= 1; dx++) {
+                                const ny = y + dy, nx = x + dx;
+                                if (ny >= 0 && ny < mapHeight && nx >= 0 && nx < mapWidth) {
+                                    landCount += tempMap[ny][nx];
+                                } else {
+                                    landCount += 1;
+                                }
+                            }
+                        }
+                        newTemp[y][x] = landCount >= 5 ? 1 : 0;
+                    }
+                }
+                for (let y = 0; y < mapHeight; y++) {
+                    for (let x = 0; x < mapWidth; x++) {
+                        tempMap[y][x] = newTemp[y][x];
+                    }
+                }
+            }
+
+            // Apply terrain types
+            for (let y = 0; y < mapHeight; y++) {
+                for (let x = 0; x < mapWidth; x++) {
+                    if (tempMap[y][x] === 1) {
+                        const rand = Math.random();
+                        if (rand < 0.15) {
+                            map[y][x].terrain = 'forest';
+                        } else if (rand < 0.22) {
+                            map[y][x].terrain = 'mountain';
+                        } else {
+                            map[y][x].terrain = 'land';
+                        }
+
+                        // Add resources
+                        if (map[y][x].terrain === 'land' && Math.random() < 0.15) {
+                            map[y][x].resource = 'fruit';
+                        } else if (map[y][x].terrain === 'forest' && Math.random() < 0.3) {
+                            map[y][x].resource = 'game';
+                        } else if (map[y][x].terrain === 'mountain' && Math.random() < 0.4) {
+                            map[y][x].resource = 'ore';
+                        }
+
+                        // Add villages
+                        if (map[y][x].terrain === 'land' && Math.random() < 0.04) {
+                            map[y][x].terrain = 'village';
+                            map[y][x].resource = null;
+                        }
+                    } else if (Math.random() < 0.1) {
+                        map[y][x].resource = 'fish';
+                    }
+                }
+            }
+
+            return map;
+        }
+
+        function findValidCityLocation(map, minDistance = 5) {
+            const {mapWidth, mapHeight} = gameState;
+            let attempts = 0;
+            while (attempts < 1000) {
+                const x = Math.floor(Math.random() * mapWidth);
+                const y = Math.floor(Math.random() * mapHeight);
+                const tile = map[y][x];
+
+                if (tile.terrain !== 'water' && tile.terrain !== 'mountain' && !tile.city) {
+                    // Check distance from other cities
+                    let validLocation = true;
+                    for (let cy = 0; cy < mapHeight && validLocation; cy++) {
+                        for (let cx = 0; cx < mapWidth && validLocation; cx++) {
+                            if (map[cy][cx].city && distance(x, y, cx, cy) < minDistance) {
+                                validLocation = false;
+                            }
+                        }
+                    }
+                    if (validLocation) return {x, y};
+                }
+                attempts++;
+            }
+            return null;
+        }
+
+        function createCity(x, y, owner, isCapital = false) {
+            const tile = gameState.map[y][x];
+            tile.terrain = 'city';
+            tile.city = {
+                owner: owner,
+                level: 1,
+                population: 0,
+                populationNeeded: 2,
+                production: 1,
+                isCapital: isCapital,
+                walls: false,
+                workshop: false
+            };
+            tile.resource = null;
+            gameState.players[owner].cities.push({x, y});
+            updateVisibility(owner);
+        }
+
+        // ============= PLAYER & TRIBE INITIALIZATION =============
+        function initializePlayers(numPlayers) {
+            gameState.players = [];
+
+            for (let i = 0; i < numPlayers; i++) {
+                const tribeIndex = i === 0 ? selectedTribe : (selectedTribe + i) % TRIBES.length;
+                const tribe = TRIBES[tribeIndex];
+
+                const player = {
+                    id: i,
+                    tribe: tribe,
+                    isHuman: i === 0,
+                    stars: tribe.extraStars ? 10 + tribe.extraStars : 5,
+                    technologies: [tribe.startTech],
+                    cities: [],
+                    units: [],
+                    score: 0,
+                    alive: true
+                };
+                gameState.players.push(player);
+            }
+        }
+
+        // ============= VISIBILITY =============
+        function updateVisibility(playerId) {
+            const player = gameState.players[playerId];
+            const {mapWidth, mapHeight} = gameState;
+
+            // Reset visibility
+            for (let y = 0; y < mapHeight; y++) {
+                for (let x = 0; x < mapWidth; x++) {
+                    gameState.map[y][x].visible[playerId] = false;
+                }
+            }
+
+            // Reveal around cities
+            player.cities.forEach(cityPos => {
+                for (let dy = -2; dy <= 2; dy++) {
+                    for (let dx = -2; dx <= 2; dx++) {
+                        const ny = cityPos.y + dy, nx = cityPos.x + dx;
+                        if (ny >= 0 && ny < mapHeight && nx >= 0 && nx < mapWidth) {
+                            gameState.map[ny][nx].visible[playerId] = true;
+                            gameState.map[ny][nx].explored[playerId] = true;
+                        }
+                    }
+                }
+            });
+
+            // Reveal around units
+            player.units.forEach(unit => {
+                const range = 2;
+                for (let dy = -range; dy <= range; dy++) {
+                    for (let dx = -range; dx <= range; dx++) {
+                        const ny = unit.y + dy, nx = unit.x + dx;
+                        if (ny >= 0 && ny < mapHeight && nx >= 0 && nx < mapWidth) {
+                            gameState.map[ny][nx].visible[playerId] = true;
+                            gameState.map[ny][nx].explored[playerId] = true;
+                        }
+                    }
+                }
+            });
+        }
+
+        // ============= UNIT FUNCTIONS =============
+        function createUnit(type, x, y, owner) {
+            const unitType = UNIT_TYPES[type];
+            const unit = {
+                id: Date.now() + Math.random(),
+                type: type,
+                owner: owner,
+                x: x,
+                y: y,
+                hp: unitType.hp,
+                maxHp: unitType.hp,
+                moved: false,
+                attacked: false,
+                ...unitType
+            };
+
+            gameState.map[y][x].unit = unit;
+            gameState.players[owner].units.push(unit);
+            updateVisibility(owner);
+            return unit;
+        }
+
+        function moveUnit(unit, targetX, targetY) {
+            const oldTile = getTile(unit.x, unit.y);
+            const newTile = getTile(targetX, targetY);
+
+            if (!newTile || newTile.unit) return false;
+
+            // Check if can move on terrain
+            if (newTile.terrain === 'water' && !unit.water && !gameState.players[unit.owner].technologies.includes('sailing')) {
+                return false;
+            }
+
+            oldTile.unit = null;
+            newTile.unit = unit;
+            unit.x = targetX;
+            unit.y = targetY;
+            unit.moved = true;
+
+            // Capture village
+            if (newTile.terrain === 'village') {
+                createCity(targetX, targetY, unit.owner);
+                log(`${gameState.players[unit.owner].tribe.name} captured a village!`);
+            }
+
+            updateVisibility(unit.owner);
+            return true;
+        }
+
+        function attack(attacker, defender) {
+            const attackPower = attacker.attack * (attacker.hp / attacker.maxHp);
+            const defensePower = defender.defense * (defender.hp / defender.maxHp);
+
+            const attackDamage = Math.max(1, Math.round(attackPower * 4.5 * Math.random() + 0.5));
+            const defenseDamage = Math.max(0, Math.round(defensePower * 2 * Math.random()));
+
+            defender.hp -= attackDamage;
+            attacker.hp -= defenseDamage;
+
+            attacker.attacked = true;
+            attacker.moved = true;
+
+            log(`${attacker.emoji} attacks ${defender.emoji}: ${attackDamage} damage!`);
+
+            // Check for deaths
+            if (defender.hp <= 0) {
+                killUnit(defender);
+                log(`${defender.emoji} was destroyed!`);
+
+                // Knight persist - can attack again
+                if (attacker.persist && attacker.hp > 0) {
+                    attacker.attacked = false;
+                    moveUnit(attacker, defender.x, defender.y);
+                }
+            }
+
+            if (attacker.hp <= 0) {
+                killUnit(attacker);
+                log(`${attacker.emoji} was destroyed!`);
+            }
+
+            return true;
+        }
+
+        function killUnit(unit) {
+            const tile = getTile(unit.x, unit.y);
+            if (tile.unit === unit) tile.unit = null;
+
+            const player = gameState.players[unit.owner];
+            const index = player.units.findIndex(u => u.id === unit.id);
+            if (index > -1) player.units.splice(index, 1);
+        }
+
+        function healUnits(playerId) {
+            const player = gameState.players[playerId];
+            player.units.forEach(unit => {
+                // Heal if on friendly territory
+                const tile = getTile(unit.x, unit.y);
+                if (tile.city && tile.city.owner === playerId) {
+                    unit.hp = Math.min(unit.maxHp, unit.hp + 4);
+                } else {
+                    unit.hp = Math.min(unit.maxHp, unit.hp + 2);
+                }
+            });
+        }
+
+        // ============= CITY FUNCTIONS =============
+        function getCityIncome(city) {
+            return city.level + (city.workshop ? 1 : 0);
+        }
+
+        function getCityPopulationForLevel(level) {
+            return level + 1;
+        }
+
+        function upgradeCity(cityTile) {
+            const city = cityTile.city;
+            city.level++;
+            city.population = 0;
+            city.populationNeeded = getCityPopulationForLevel(city.level);
+
+            // Rewards for leveling up
+            const player = gameState.players[city.owner];
+            if (city.level === 3) {
+                player.stars += 5;
+                log(`City upgraded! +5 stars bonus`);
+            } else if (city.level === 4) {
+                city.walls = true;
+                log(`City upgraded! Walls built`);
+            } else if (city.level === 5) {
+                city.workshop = true;
+                log(`City upgraded! Workshop built (+1 star/turn)`);
+            } else {
+                player.stars += city.level;
+                log(`City upgraded to level ${city.level}! +${city.level} stars`);
+            }
+        }
+
+        function addPopulation(cityTile, amount = 1) {
+            const city = cityTile.city;
+            city.population += amount;
+            if (city.population >= city.populationNeeded) {
+                upgradeCity(cityTile);
+            }
+        }
+
+        function captureCity(cityTile, newOwner) {
+            const city = cityTile.city;
+            const oldOwner = city.owner;
+
+            // Remove from old owner
+            const oldPlayer = gameState.players[oldOwner];
+            const idx = oldPlayer.cities.findIndex(c => c.x === cityTile.x && c.y === cityTile.y);
+            if (idx > -1) oldPlayer.cities.splice(idx, 1);
+
+            // Check if old owner is eliminated
+            if (oldPlayer.cities.length === 0) {
+                oldPlayer.alive = false;
+                log(`${oldPlayer.tribe.name} has been eliminated!`);
+                // Kill all their units
+                [...oldPlayer.units].forEach(u => killUnit(u));
+            }
+
+            // Add to new owner
+            city.owner = newOwner;
+            gameState.players[newOwner].cities.push({x: cityTile.x, y: cityTile.y});
+            updateVisibility(newOwner);
+
+            log(`${gameState.players[newOwner].tribe.name} captured a city!`);
+        }
+
+        // ============= TECHNOLOGY =============
+        function canResearch(playerId, techId) {
+            const player = gameState.players[playerId];
+            const tech = TECHNOLOGIES[techId];
+
+            if (player.technologies.includes(techId)) return false;
+            if (tech.prereq && !player.technologies.includes(tech.prereq)) return false;
+            if (player.stars < getTechCost(playerId, techId)) return false;
+
+            return true;
+        }
+
+        function getTechCost(playerId, techId) {
+            const player = gameState.players[playerId];
+            const baseCost = TECHNOLOGIES[techId].cost;
+            return Math.max(1, Math.round(baseCost * (1 + player.cities.length * 0.2)));
+        }
+
+        function researchTech(playerId, techId) {
+            const player = gameState.players[playerId];
+            const cost = getTechCost(playerId, techId);
+
+            if (!canResearch(playerId, techId)) return false;
+
+            player.stars -= cost;
+            player.technologies.push(techId);
+            log(`Researched ${TECHNOLOGIES[techId].name}!`);
+            return true;
+        }
+
+        // ============= HARVESTING & IMPROVEMENTS =============
+        function canHarvest(tile, playerId) {
+            const player = gameState.players[playerId];
+            const techs = player.technologies;
+
+            if (!tile.resource) return false;
+            if (tile.improvement) return false;
+
+            switch(tile.resource) {
+                case 'fruit': return techs.includes('organization');
+                case 'game': return techs.includes('hunting');
+                case 'fish': return techs.includes('fishing');
+                case 'ore': return techs.includes('mining');
+                default: return false;
+            }
+        }
+
+        function harvest(tile, playerId) {
+            if (!canHarvest(tile, playerId)) return false;
+
+            const player = gameState.players[playerId];
+
+            // Find nearest city
+            let nearestCity = null;
+            let nearestDist = Infinity;
+            player.cities.forEach(cityPos => {
+                const d = distance(tile.x, tile.y, cityPos.x, cityPos.y);
+                if (d < nearestDist) {
+                    nearestDist = d;
+                    nearestCity = getTile(cityPos.x, cityPos.y);
+                }
+            });
+
+            if (nearestCity && nearestDist <= 3) {
+                addPopulation(nearestCity);
+                player.stars += 2;
+                tile.improvement = 'harvested';
+                tile.resource = null;
+                log(`Harvested resource! +1 population, +2 stars`);
+                return true;
+            }
+
+            return false;
+        }
+
+        // ============= AI =============
+        function runAI(playerId) {
+            const player = gameState.players[playerId];
+            if (!player.alive) return;
+
+            // Collect income
+            collectIncome(playerId);
+            healUnits(playerId);
+
+            // Reset unit actions
+            player.units.forEach(unit => {
+                unit.moved = false;
+                unit.attacked = false;
+            });
+
+            // Research random available tech
+            const availableTechs = Object.keys(TECHNOLOGIES).filter(t => canResearch(playerId, t));
+            if (availableTechs.length > 0 && Math.random() < 0.5) {
+                const tech = availableTechs[Math.floor(Math.random() * availableTechs.length)];
+                researchTech(playerId, tech);
+            }
+
+            // Train units at cities
+            player.cities.forEach(cityPos => {
+                const tile = getTile(cityPos.x, cityPos.y);
+                if (!tile.unit && player.stars >= 2) {
+                    const availableUnits = Object.entries(UNIT_TYPES).filter(([type, data]) => {
+                        if (data.cost > player.stars) return false;
+                        if (data.tech && !player.technologies.includes(data.tech)) return false;
+                        if (data.water) return false;
+                        return true;
+                    });
+
+                    if (availableUnits.length > 0) {
+                        const [unitType, unitData] = availableUnits[Math.floor(Math.random() * availableUnits.length)];
+                        player.stars -= unitData.cost;
+                        createUnit(unitType, cityPos.x, cityPos.y, playerId);
+                    }
+                }
+            });
+
+            // Move and attack with units
+            [...player.units].forEach(unit => {
+                if (unit.moved) return;
+
+                // Find nearest enemy unit or city
+                let bestTarget = null;
+                let bestDist = Infinity;
+
+                gameState.players.forEach((otherPlayer, otherId) => {
+                    if (otherId === playerId || !otherPlayer.alive) return;
+
+                    otherPlayer.units.forEach(enemy => {
+                        const d = distance(unit.x, unit.y, enemy.x, enemy.y);
+                        if (d < bestDist) {
+                            bestDist = d;
+                            bestTarget = {x: enemy.x, y: enemy.y, isUnit: true};
+                        }
+                    });
+
+                    otherPlayer.cities.forEach(cityPos => {
+                        const d = distance(unit.x, unit.y, cityPos.x, cityPos.y);
+                        if (d < bestDist) {
+                            bestDist = d;
+                            bestTarget = {x: cityPos.x, y: cityPos.y, isCity: true};
+                        }
+                    });
+                });
+
+                if (bestTarget) {
+                    // Try to attack if in range
+                    if (bestDist <= unit.range && bestTarget.isUnit) {
+                        const targetTile = getTile(bestTarget.x, bestTarget.y);
+                        if (targetTile.unit) {
+                            attack(unit, targetTile.unit);
+                            return;
+                        }
+                    }
+
+                    // Move towards target
+                    const neighbors = getNeighbors(unit.x, unit.y);
+                    let bestMove = null;
+                    let bestMoveDist = distance(unit.x, unit.y, bestTarget.x, bestTarget.y);
+
+                    neighbors.forEach(n => {
+                        const tile = getTile(n.x, n.y);
+                        if (tile.terrain === 'water' && !unit.water) return;
+                        if (tile.unit && tile.unit.owner !== playerId) {
+                            // Can attack
+                            if (!unit.attacked) {
+                                attack(unit, tile.unit);
+                            }
+                            return;
+                        }
+                        if (tile.unit) return;
+
+                        const d = distance(n.x, n.y, bestTarget.x, bestTarget.y);
+                        if (d < bestMoveDist) {
+                            bestMoveDist = d;
+                            bestMove = n;
+                        }
+                    });
+
+                    if (bestMove && !unit.moved) {
+                        moveUnit(unit, bestMove.x, bestMove.y);
+
+                        // Capture empty city
+                        const newTile = getTile(unit.x, unit.y);
+                        if (newTile.city && newTile.city.owner !== playerId && !newTile.unit) {
+                            captureCity(newTile, playerId);
+                        }
+                    }
+                }
+            });
+
+            // Harvest resources
+            for (let y = 0; y < gameState.mapHeight; y++) {
+                for (let x = 0; x < gameState.mapWidth; x++) {
+                    const tile = gameState.map[y][x];
+                    if (tile.visible[playerId] && canHarvest(tile, playerId)) {
+                        harvest(tile, playerId);
+                    }
+                }
+            }
+        }
+
+        // ============= TURN MANAGEMENT =============
+        function collectIncome(playerId) {
+            const player = gameState.players[playerId];
+            let income = 0;
+
+            player.cities.forEach(cityPos => {
+                const tile = getTile(cityPos.x, cityPos.y);
+                income += getCityIncome(tile.city);
+            });
+
+            player.stars += income;
+        }
+
+        function calculateScore(playerId) {
+            const player = gameState.players[playerId];
+            let score = 0;
+
+            score += player.stars * 2;
+            score += player.technologies.length * 100;
+            player.cities.forEach(cityPos => {
+                const tile = getTile(cityPos.x, cityPos.y);
+                score += tile.city.level * 200;
+            });
+            score += player.units.length * 50;
+            score += gameState.turn * 5;
+
+            player.score = score;
+            return score;
+        }
+
+        function endTurn() {
+            const currentPlayer = gameState.players[gameState.currentPlayer];
+
+            // Reset unit states for next turn
+            currentPlayer.units.forEach(unit => {
+                unit.moved = false;
+                unit.attacked = false;
+            });
+
+            // AI turns
+            for (let i = 1; i < gameState.players.length; i++) {
+                if (gameState.players[i].alive) {
+                    runAI(i);
+                }
+            }
+
+            // New turn
+            gameState.turn++;
+
+            // Human player turn start
+            collectIncome(0);
+            healUnits(0);
+            gameState.players[0].units.forEach(unit => {
+                unit.moved = false;
+                unit.attacked = false;
+            });
+
+            // Calculate scores
+            gameState.players.forEach((p, i) => calculateScore(i));
+
+            // Check victory conditions
+            checkVictory();
+
+            // Deselect
+            gameState.selectedTile = null;
+            gameState.selectedUnit = null;
+            gameState.selectedCity = null;
+
+            updateUI();
+            renderMap();
+        }
+
+        function checkVictory() {
+            const alivePlayers = gameState.players.filter(p => p.alive);
+
+            if (alivePlayers.length === 1) {
+                endGame(alivePlayers[0].id);
+                return;
+            }
+
+            // Score victory
+            if (gameState.turn >= 30) {
+                let winner = 0;
+                let maxScore = 0;
+                gameState.players.forEach((p, i) => {
+                    if (p.score > maxScore) {
+                        maxScore = p.score;
+                        winner = i;
+                    }
+                });
+                endGame(winner);
+            }
+
+            // Early domination
+            const player = gameState.players[0];
+            if (player.score >= 10000) {
+                endGame(0);
+            }
+        }
+
+        function endGame(winnerId) {
+            gameState.gameOver = true;
+            const winner = gameState.players[winnerId];
+
+            document.getElementById('game-container').classList.add('hidden');
+            document.getElementById('victory-screen').classList.remove('hidden');
+
+            if (winnerId === 0) {
+                document.getElementById('victory-title').textContent = '🏆 Victory! 🏆';
+            } else {
+                document.getElementById('victory-title').textContent = '💀 Defeat 💀';
+            }
+
+            document.getElementById('victory-message').textContent =
+                `${winner.tribe.name} has conquered the world!`;
+            document.getElementById('final-score').textContent =
+                `Final Score: ${winner.score}`;
+        }
+
+        // ============= UI RENDERING =============
+        function renderMap() {
+            const mapEl = document.getElementById('game-map');
+            mapEl.innerHTML = '';
+            mapEl.style.gridTemplateColumns = `repeat(${gameState.mapWidth}, 60px)`;
+
+            const playerId = 0;
+
+            for (let y = 0; y < gameState.mapHeight; y++) {
+                for (let x = 0; x < gameState.mapWidth; x++) {
+                    const tile = gameState.map[y][x];
+                    const tileEl = document.createElement('div');
+                    tileEl.className = 'tile';
+                    tileEl.dataset.x = x;
+                    tileEl.dataset.y = y;
+
+                    if (!tile.explored[playerId]) {
+                        tileEl.classList.add('fog');
+                        tileEl.textContent = '?';
+                    } else if (!tile.visible[playerId]) {
+                        tileEl.classList.add(`terrain-${tile.terrain}`);
+                        tileEl.style.opacity = '0.5';
+                        renderTileContent(tileEl, tile, false);
+                    } else {
+                        tileEl.classList.add(`terrain-${tile.terrain}`);
+                        renderTileContent(tileEl, tile, true);
+                    }
+
+                    // Selection highlighting
+                    if (gameState.selectedTile && gameState.selectedTile.x === x && gameState.selectedTile.y === y) {
+                        tileEl.classList.add('selected');
+                    }
+
+                    // Move/attack targets
+                    if (gameState.selectedUnit && tile.visible[playerId]) {
+                        const unit = gameState.selectedUnit;
+                        const dist = distance(unit.x, unit.y, x, y);
+
+                        if (dist <= unit.movement && !unit.moved && !tile.unit && tile.terrain !== 'water') {
+                            tileEl.classList.add('move-target');
+                        }
+
+                        if (dist <= unit.range && !unit.attacked && tile.unit && tile.unit.owner !== playerId) {
+                            tileEl.classList.add('attack-target');
+                        }
+                    }
+
+                    tileEl.addEventListener('click', () => handleTileClick(x, y));
+                    mapEl.appendChild(tileEl);
+                }
+            }
+
+            renderMinimap();
+        }
+
+        function renderTileContent(tileEl, tile, showUnits) {
+            let content = '';
+
+            // Base terrain emoji
+            switch(tile.terrain) {
+                case 'water': content = '🌊'; break;
+                case 'forest': content = '🌲'; break;
+                case 'mountain': content = '⛰️'; break;
+                case 'land': content = ''; break;
+                case 'village': content = '🏘️'; break;
+                case 'city': content = '🏰'; break;
+            }
+
+            // Resource
+            if (tile.resource) {
+                switch(tile.resource) {
+                    case 'fruit': content = '🍎'; break;
+                    case 'game': content = '🦌'; break;
+                    case 'fish': content = '🐟'; break;
+                    case 'ore': content = '💎'; break;
+                }
+            }
+
+            // City info
+            if (tile.city) {
+                tileEl.innerHTML = `
+                    <div class="city-owner owner-${tile.city.owner}"></div>
+                    <div class="city-level">Lv${tile.city.level}</div>
+                    <span>${tile.city.isCapital ? '👑' : '🏰'}</span>
+                `;
+            } else {
+                tileEl.textContent = content;
+            }
+
+            // Unit
+            if (showUnits && tile.unit) {
+                const unit = tile.unit;
+                const unitEl = document.createElement('div');
+                unitEl.className = `unit tribe-color-${unit.owner}`;
+                unitEl.textContent = unit.emoji;
+
+                const hpEl = document.createElement('div');
+                hpEl.className = 'unit-hp';
+                hpEl.textContent = `${unit.hp}/${unit.maxHp}`;
+
+                tileEl.appendChild(unitEl);
+                tileEl.appendChild(hpEl);
+            }
+        }
+
+        function renderMinimap() {
+            const canvas = document.getElementById('minimap-canvas');
+            const ctx = canvas.getContext('2d');
+            const {mapWidth, mapHeight} = gameState;
+
+            canvas.width = mapWidth * 5;
+            canvas.height = mapHeight * 5;
+
+            for (let y = 0; y < mapHeight; y++) {
+                for (let x = 0; x < mapWidth; x++) {
+                    const tile = gameState.map[y][x];
+
+                    if (!tile.explored[0]) {
+                        ctx.fillStyle = '#333';
+                    } else {
+                        switch(tile.terrain) {
+                            case 'water': ctx.fillStyle = '#0077be'; break;
+                            case 'forest': ctx.fillStyle = '#2e7d32'; break;
+                            case 'mountain': ctx.fillStyle = '#757575'; break;
+                            case 'city':
+                                ctx.fillStyle = TRIBES[tile.city.owner % TRIBES.length].color;
+                                break;
+                            default: ctx.fillStyle = '#7cb342';
+                        }
+                    }
+
+                    ctx.fillRect(x * 5, y * 5, 5, 5);
+
+                    // Units
+                    if (tile.unit && tile.visible[0]) {
+                        ctx.fillStyle = TRIBES[tile.unit.owner % TRIBES.length].color;
+                        ctx.fillRect(x * 5 + 1, y * 5 + 1, 3, 3);
+                    }
+                }
+            }
+        }
+
+        function updateUI() {
+            const player = gameState.players[0];
+
+            // Resources
+            document.getElementById('stars').textContent = player.stars;
+            document.getElementById('city-count').textContent = player.cities.length;
+            document.getElementById('unit-count').textContent = player.units.length;
+            document.getElementById('score').textContent = player.score;
+            document.getElementById('turn-info').textContent = `Turn ${gameState.turn}`;
+
+            // Empire info
+            document.getElementById('empire-info').innerHTML = `
+                <p><strong>${player.tribe.emoji} ${player.tribe.name}</strong></p>
+                <p>Technologies: ${player.technologies.length}</p>
+            `;
+
+            // Tech tree
+            renderTechTree();
+
+            // Unit panel
+            if (gameState.selectedUnit && gameState.selectedUnit.owner === 0) {
+                document.getElementById('unit-panel').style.display = 'block';
+                renderUnitPanel();
+            } else {
+                document.getElementById('unit-panel').style.display = 'none';
+            }
+
+            // City panel
+            if (gameState.selectedCity && gameState.selectedCity.owner === 0) {
+                document.getElementById('city-panel').style.display = 'block';
+                renderCityPanel();
+            } else {
+                document.getElementById('city-panel').style.display = 'none';
+            }
+        }
+
+        function renderTechTree() {
+            const player = gameState.players[0];
+            const techTreeEl = document.getElementById('tech-tree');
+            techTreeEl.innerHTML = '';
+
+            Object.entries(TECHNOLOGIES).forEach(([id, tech]) => {
+                const btn = document.createElement('button');
+                btn.className = 'tech-btn';
+                const cost = getTechCost(0, id);
+
+                if (player.technologies.includes(id)) {
+                    btn.classList.add('researched');
+                    btn.textContent = `${tech.emoji} ✓`;
+                    btn.disabled = true;
+                } else {
+                    btn.textContent = `${tech.emoji} ${cost}⭐`;
+                    btn.disabled = !canResearch(0, id);
+                    btn.onclick = () => {
+                        if (researchTech(0, id)) {
+                            updateUI();
+                            renderMap();
+                        }
+                    };
+                }
+
+                btn.title = `${tech.name}\n${tech.prereq ? 'Requires: ' + TECHNOLOGIES[tech.prereq].name : 'No requirements'}`;
+                techTreeEl.appendChild(btn);
+            });
+        }
+
+        function renderUnitPanel() {
+            const unit = gameState.selectedUnit;
+            const infoEl = document.getElementById('unit-info');
+            const actionsEl = document.getElementById('unit-actions');
+
+            infoEl.innerHTML = `
+                <p><strong>${unit.emoji} ${unit.name}</strong></p>
+                <p>HP: ${unit.hp}/${unit.maxHp}</p>
+                <p>Attack: ${unit.attack} | Defense: ${unit.defense}</p>
+                <p>Movement: ${unit.movement} | Range: ${unit.range}</p>
+                <p>${unit.moved ? '🔴 Moved' : '🟢 Ready'}</p>
+            `;
+
+            actionsEl.innerHTML = '';
+
+            // Disband button
+            const disbandBtn = document.createElement('button');
+            disbandBtn.className = 'unit-action-btn';
+            disbandBtn.textContent = '💀 Disband';
+            disbandBtn.onclick = () => {
+                killUnit(unit);
+                gameState.selectedUnit = null;
+                updateUI();
+                renderMap();
+            };
+            actionsEl.appendChild(disbandBtn);
+        }
+
+        function renderCityPanel() {
+            const tile = gameState.selectedTile;
+            const city = tile.city;
+            const player = gameState.players[0];
+            const infoEl = document.getElementById('city-info');
+            const actionsEl = document.getElementById('city-actions');
+
+            infoEl.innerHTML = `
+                <p><strong>${city.isCapital ? '👑' : '🏰'} Level ${city.level}</strong></p>
+                <p>Population: ${city.population}/${city.populationNeeded}</p>
+                <p>Income: ${getCityIncome(city)}⭐/turn</p>
+                <p>${city.walls ? '🏰 Walls' : ''} ${city.workshop ? '🔧 Workshop' : ''}</p>
+            `;
+
+            actionsEl.innerHTML = '<p style="font-size: 12px; margin-bottom: 5px;">Train Unit:</p>';
+
+            // Unit training buttons
+            Object.entries(UNIT_TYPES).forEach(([type, data]) => {
+                if (data.tech && !player.technologies.includes(data.tech)) return;
+                if (data.water) return; // Can't train water units on land
+
+                const btn = document.createElement('button');
+                btn.className = 'unit-action-btn';
+                btn.textContent = `${data.emoji} ${data.cost}⭐`;
+                btn.disabled = player.stars < data.cost || tile.unit !== null;
+                btn.title = `${data.name}\nAtk: ${data.attack} Def: ${data.defense} HP: ${data.hp}`;
+
+                btn.onclick = () => {
+                    player.stars -= data.cost;
+                    createUnit(type, tile.x, tile.y, 0);
+                    updateUI();
+                    renderMap();
+                };
+
+                actionsEl.appendChild(btn);
+            });
+        }
+
+        // ============= INPUT HANDLING =============
+        function handleTileClick(x, y) {
+            const tile = gameState.map[y][x];
+            const player = gameState.players[0];
+
+            // If we have a selected unit
+            if (gameState.selectedUnit) {
+                const unit = gameState.selectedUnit;
+                const dist = distance(unit.x, unit.y, x, y);
+
+                // Attack enemy
+                if (tile.unit && tile.unit.owner !== 0 && dist <= unit.range && !unit.attacked) {
+                    attack(unit, tile.unit);
+                    gameState.selectedUnit = null;
+                    updateUI();
+                    renderMap();
+                    return;
+                }
+
+                // Move
+                if (!tile.unit && dist <= unit.movement && !unit.moved && tile.terrain !== 'water') {
+                    moveUnit(unit, x, y);
+
+                    // Capture city
+                    if (tile.city && tile.city.owner !== 0 && !tile.unit) {
+                        captureCity(tile, 0);
+                    }
+
+                    gameState.selectedUnit = null;
+                    updateUI();
+                    renderMap();
+                    return;
+                }
+            }
+
+            // Select new tile
+            gameState.selectedTile = tile;
+            gameState.selectedUnit = null;
+            gameState.selectedCity = null;
+
+            // Select unit
+            if (tile.unit && tile.unit.owner === 0) {
+                gameState.selectedUnit = tile.unit;
+            }
+
+            // Select city
+            if (tile.city && tile.city.owner === 0) {
+                gameState.selectedCity = tile.city;
+            }
+
+            // Harvest resource
+            if (canHarvest(tile, 0)) {
+                harvest(tile, 0);
+            }
+
+            updateUI();
+            renderMap();
+        }
+
+        // ============= MENU FUNCTIONS =============
+        function showTribeSelect() {
+            document.getElementById('menu-screen').classList.add('hidden');
+            document.getElementById('tribe-select').classList.remove('hidden');
+
+            const grid = document.getElementById('tribe-grid');
+            grid.innerHTML = '';
+
+            TRIBES.forEach((tribe, i) => {
+                const card = document.createElement('div');
+                card.className = 'tribe-card' + (i === selectedTribe ? ' selected' : '');
+                card.innerHTML = `
+                    <div class="tribe-emoji">${tribe.emoji}</div>
+                    <div class="tribe-name">${tribe.name}</div>
+                    <div class="tribe-bonus">${tribe.bonus}</div>
+                `;
+                card.onclick = () => {
+                    selectedTribe = i;
+                    document.querySelectorAll('.tribe-card').forEach(c => c.classList.remove('selected'));
+                    card.classList.add('selected');
+                };
+                grid.appendChild(card);
+            });
+        }
+
+        function showInstructions() {
+            document.getElementById('instructions').classList.toggle('hidden');
+        }
+
+        function startGame() {
+            const mapSizeSelect = document.getElementById('map-size').value;
+            const numOpponents = parseInt(document.getElementById('num-opponents').value);
+
+            switch(mapSizeSelect) {
+                case 'small': gameState.mapWidth = gameState.mapHeight = 15; break;
+                case 'medium': gameState.mapWidth = gameState.mapHeight = 20; break;
+                case 'large': gameState.mapWidth = gameState.mapHeight = 25; break;
+            }
+
+            // Initialize players
+            initializePlayers(1 + numOpponents);
+
+            // Generate map
+            gameState.map = generateMap();
+
+            // Place starting cities
+            gameState.players.forEach((player, i) => {
+                const loc = findValidCityLocation(gameState.map, 7);
+                if (loc) {
+                    createCity(loc.x, loc.y, i, true);
+                    createUnit('warrior', loc.x, loc.y, i);
+                }
+            });
+
+            // Update visibility for all players
+            gameState.players.forEach((_, i) => updateVisibility(i));
+
+            // Initial income
+            collectIncome(0);
+
+            // Hide menu, show game
+            document.getElementById('tribe-select').classList.add('hidden');
+            document.getElementById('game-container').classList.remove('hidden');
+
+            calculateScore(0);
+            updateUI();
+            renderMap();
+
+            log(`Game started! You are ${gameState.players[0].tribe.name}`);
+            log(`Conquer all cities or reach 10000 score to win!`);
+        }
+
+        // Keyboard shortcuts
+        document.addEventListener('keydown', (e) => {
+            if (e.key === 'Enter' || e.key === ' ') {
+                if (!gameState.gameOver) endTurn();
+            }
+            if (e.key === 'Escape') {
+                gameState.selectedUnit = null;
+                gameState.selectedCity = null;
+                updateUI();
+                renderMap();
+            }
+        });
+    </script>
+</body>
+</html>
