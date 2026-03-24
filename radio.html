@@ -162,11 +162,17 @@
             .sidebar.collapsed + .sidebar-toggle { left: 15px; transform: none; }
             
             .player-dock { 
+                position: fixed !important;
+                bottom: 0 !important;
+                left: 0 !important;
+                right: 0 !important;
+                width: 100% !important;
                 height: 120px; 
                 padding: 0 15px calc(10px + env(safe-area-inset-bottom)); 
                 flex-wrap: wrap; 
                 justify-content: space-between; 
                 align-items: center;
+                z-index: 10000;
             }
             .now-playing { width: auto; min-width: 0; flex: 1; max-width: 60%; }
             .np-img { width: 50px; height: 50px; }
@@ -242,6 +248,17 @@
     <audio id="audio-player" crossorigin="anonymous"></audio>
 
 <script>
+    // Utility functions
+    function escapeHtml(text) { 
+        if(!text) return ''; 
+        return String(text)
+            .replace(/&/g, '&amp;')
+            .replace(/</g, '&lt;')
+            .replace(/>/g, '&gt;')
+            .replace(/"/g, '&quot;')
+            .replace(/'/g, '&#039;');
+    }
+
     let apiBaseUrl = 'https://de1.api.radio-browser.info/json';
     let allStations =[];
     let availableGenres = [];
@@ -294,42 +311,101 @@
     }
 
     function processStationData(data) {
+        normalizeTags(data);
         addStationsToGlobe(data);
         extractGenres(data);
         extractCountries(data);
         renderSidebarList(allStations.slice(0, 1000));
     }
 
-    function extractGenres(data) {
-        let tagCount = {};
-        const normalizationMap = {
-            'mexico': 'mexican',
-            'mexicana': 'mexican',
-            'mexicano': 'mexican',
-            'deutsch': 'german',
-            'español': 'spanish',
-            'espana': 'spanish',
-            'brazil': 'brazilian',
-            'brasil': 'brazilian',
-            'italy': 'italian',
-            'italia': 'italian',
-            'france': 'french'
-        };
-        const blacklistedTags = new Set(['radio', 'music', 'live', 'stream', 'internet', 'station', 'world', 'top', 'fm', 'am', 'web', 'online', 'digital', 'hits', 'various', 'other', 'misc', 'unknown']);
+    const genreNormalizationMap = {
+        // Spanish
+        'español': 'spanish', 'espana': 'spanish', 'éxitos': 'hits', 'exitos': 'hits',
+        'noticias': 'news', 'deportes': 'sports', 'cristiana': 'christian', 
+        'cristiano': 'christian', 'religiosa': 'religious', 'variada': 'various', 
+        'romantica': 'romantic', 'viejitas': 'oldies', 'viejitos': 'oldies',
+        'latina': 'latin', 'latino': 'latin', 'clasica': 'classical', 'clásica': 'classical', 
+        'urbano': 'urban', 'infantil': 'children', 'entrevistas': 'talk', 'cultura': 'culture', 
+        'educacion': 'education', 'educación': 'education', 'electronica': 'electronic', 
+        'electrónica': 'electronic', 'religión': 'religious', 'religion': 'religious',
+        'alternativa': 'alternative', 'pública': 'public', 'publica': 'public', 
+        'universitaria': 'university', 'comunidad': 'community', 'juvenil': 'youth', 
+        'clásicos': 'classics', 'clasicos': 'classics', 'baladas': 'ballads', 
+        'recuerdos': 'memories', 'evangélica': 'evangelical', 'evangelica': 'evangelical', 
+        'católica': 'catholic', 'catolica': 'catholic', 'entretenimiento': 'entertainment',
+        'información': 'info', 'informacion': 'info', 'variedades': 'various',
+        'juveniles': 'youth', 'deportiva': 'sports', 'románticas': 'romantic',
+        
+        // German
+        'deutsch': 'german', 'nachrichten': 'news', 'oldies': 'oldies', 'sport': 'sports',
+        
+        // French
+        'français': 'french', 'informations': 'news',
+        
+        // Portuguese
+        'notícias': 'news',
+        
+        // Italian
+        'notizie': 'news'
+    };
+    
+    const blacklistedTags = new Set([
+        'radio', 'music', 'live', 'stream', 'internet', 'station', 'world', 'top', 
+        'fm', 'am', 'web', 'online', 'digital', 'hits', 'various', 'other', 'misc', 
+        'unknown', 'música', 'musica', 'public', 'free', 'community', 'estación', 
+        'estacion', 'latinoamérica', 'norteamérica', 'moi merino', 'regional', 
+        'popular', 'traditional', 'various', 'variety', 'mixed', 'global'
+    ]);
 
+    function normalizeTags(data) {
         data.forEach(s => {
             if(s.tags) {
+                const stationTags = new Set();
                 s.tags.split(',').forEach(tag => {
                     let t = tag.trim().toLowerCase();
-                    if (normalizationMap[t]) t = normalizationMap[t];
-                    if (t.length > 2 && !/^\d+$/.test(t) && !blacklistedTags.has(t)) {
-                        tagCount[t] = (tagCount[t] || 0) + 1;
+                    
+                    // 1. Remove noise suffixes and prefixes
+                    t = t.replace(/^(música|musica|radio|estación|station|traditional|popular|en)\s+/, '');
+                    t = t.replace(/\s+(radio|music|station|fm|am|estación|estacion|fm|digital|web|online|stream)$/, '');
+                    t = t.replace(/^(ciudad de|valle de|estado de)\s+/, '');
+
+                    // 2. Consolidation & Translation
+                    if (t.includes('mexic') || t.includes('méxic') || t === 'mex' || t === 'cdmx') {
+                        t = 'mexican';
+                    } else if (t.includes('españ') || t.includes('espan') || t === 'spanish') {
+                        t = 'spanish';
+                    } else if (t.includes('noticia') || t === 'news' || t === 'news talk') {
+                        t = 'news';
+                    } else if (t.includes('cristian') || t.includes('religious') || t.includes('religio')) {
+                        t = 'religious';
                     }
+
+                    // 3. Map common terms
+                    if (genreNormalizationMap[t]) t = genreNormalizationMap[t];
+                    
+                    // 4. Final filter
+                    if (t.length > 2 && !/^\d+$/.test(t) && !blacklistedTags.has(t)) {
+                        stationTags.add(t);
+                    }
+                });
+                s.normalizedTagsArray = Array.from(stationTags);
+            } else {
+                s.normalizedTagsArray = [];
+            }
+        });
+    }
+
+    function extractGenres(data) {
+        let tagCount = {};
+        data.forEach(s => {
+            if(s.normalizedTagsArray) {
+                s.normalizedTagsArray.forEach(t => {
+                    tagCount[t] = (tagCount[t] || 0) + 1;
                 });
             }
         });
         
-        availableGenres = Object.keys(tagCount).sort((a,b) => tagCount[b] - tagCount[a]).slice(0, 50);
+        availableGenres = Object.keys(tagCount).sort((a,b) => tagCount[b] - tagCount[a]).slice(0, 60);
         const filterEl = document.getElementById('genre-filter');
         filterEl.innerHTML = '<option value="">All Genres</option>' + 
             availableGenres.map(g => `<option value="${g}">${g.charAt(0).toUpperCase() + g.slice(1)}</option>`).join('');
@@ -610,7 +686,10 @@
         
         let filtered = sourceList.filter(s => {
             const matchQuery = !query || (s.name && s.name.toLowerCase().includes(query)) || (s.country && s.country.toLowerCase().includes(query));
-            const matchGenre = !genre || (s.tags && s.tags.toLowerCase().includes(genre));
+            
+            // Use normalized tags for genre matching
+            const matchGenre = !genre || (s.normalizedTagsArray && s.normalizedTagsArray.includes(genre));
+            
             const matchCountry = !country || s.country === country;
             return matchQuery && matchGenre && matchCountry;
         });
@@ -753,17 +832,6 @@
 
     document.getElementById('volume-slider').addEventListener('input', (e) => { audio.volume = e.target.value / 100; });
     
-    // Hardened Regex string escape preventing unescaped quotes causing the layout bug
-    function escapeHtml(text) { 
-        if(!text) return ''; 
-        return String(text)
-            .replace(/&/g, '&amp;')
-            .replace(/</g, '&lt;')
-            .replace(/>/g, '&gt;')
-            .replace(/"/g, '&quot;')
-            .replace(/'/g, '&#039;');
-    }
-
     /* --- SIDEBAR COLLAPSE LOGIC FIX --- */
     const sidebar = document.getElementById('sidebar');
     let collapseTimer;
@@ -788,6 +856,7 @@
         if (!sidebar.classList.contains('collapsed')) resetCollapseTimer();
     });
 
+    normalizeTags(favorites);
     initApp();
 </script>
 </body>
