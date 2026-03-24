@@ -112,6 +112,15 @@
         .btn-fav.active { color: #ff3366; }
         .btn-fav.active svg { fill: #ff3366; stroke: #ff3366; }
 
+        .btn-next {
+            background: none; border: none; color: var(--apple-text-muted); padding: 5px;
+            cursor: pointer; transition: transform 0.2s, color 0.2s; outline: none;
+            display: flex; align-items: center; justify-content: center;
+        }
+        .btn-next svg { width: 28px; height: 28px; fill: currentColor; }
+        .btn-next:hover { transform: scale(1.1); color: #fff; }
+        .btn-next:active { transform: scale(0.9); }
+
         .btn-play {
             width: 54px; height: 54px; border-radius: 50%; background: #fff; color: #000; border: none; font-size: 22px;
             cursor: pointer; display: flex; align-items: center; justify-content: center; transition: transform 0.1s;
@@ -237,6 +246,9 @@
                 <button class="btn-play" id="play-btn">
                     <svg viewBox="0 0 24 24" fill="currentColor" width="24" height="24"><path d="M8 5v14l11-7z"/></svg>
                 </button>
+                <button class="btn-next" id="next-btn" title="Next station">
+                    <svg viewBox="0 0 24 24"><path d="M6 18l8.5-6L6 6v12zM16 6v12h2V6h-2z"/></svg>
+                </button>
             </div>
             <div class="volume-ctrl">
                 <svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="#aaa" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><polygon points="11 5 6 9 2 9 2 15 6 15 11 19 11 5"></polygon><path d="M19.07 4.93a10 10 0 0 1 0 14.14M15.54 8.46a5 5 0 0 1 0 7.07"></path></svg>
@@ -263,6 +275,7 @@
 
     let apiBaseUrl = 'https://de1.api.radio-browser.info/json';
     let allStations =[];
+    let currentFilteredList = [];
     let availableGenres = [];
     let availableCountries = [];
 
@@ -320,7 +333,8 @@
         addStationsToGlobe(data);
         extractGenres(data);
         extractCountries(data);
-        renderSidebarList(allStations.slice(0, 1000));
+        currentFilteredList = allStations.slice(0, 1000);
+        renderSidebarList(currentFilteredList);
     }
 
     const genreNormalizationMap = {
@@ -550,7 +564,7 @@
 
     /* --- GLOBE INTERACTION --- */
     const raycaster = new THREE.Raycaster(); 
-    raycaster.params.Points.threshold = isMobile ? 6.0 : 4.0; // Larger hit area on mobile
+    raycaster.params.Points.threshold = isMobile ? 4.0 : 2.0; // Precision threshold
     const mouse = new THREE.Vector2();
     let isFlying = false; let targetCameraPos = new THREE.Vector3();
     const tooltip = document.getElementById('tooltip');
@@ -563,17 +577,23 @@
         
         raycaster.setFromCamera(mouse, camera);
 
-        let hitPoint = null;
+        // 1. Prioritize exact point clicks (the "dots")
         const dotHits = raycaster.intersectObject(pointsMesh);
+        if (dotHits.length > 0) {
+            const station = allStations[dotHits[0].index];
+            if (station) {
+                startStationPlayback(station);
+                return;
+            }
+        }
+
+        // 2. Fallback to clicking the globe surface near a dot
         const earthHit = raycaster.intersectObject(earth);
-
-        if (dotHits.length > 0) hitPoint = allStations[dotHits[0].index].position;
-        else if (earthHit.length > 0) hitPoint = earthHit[0].point;
-
-        if (hitPoint) {
+        if (earthHit.length > 0) {
+            const hitPoint = earthHit[0].point;
             const nearbyStations = allStations
                 .map(s => ({ station: s, dist: s.position.distanceTo(hitPoint) }))
-                .filter(item => item.dist < 20)
+                .filter(item => item.dist < 8) // Tightened radius for accuracy
                 .sort((a, b) => a.dist - b.dist)
                 .map(item => item.station);
 
@@ -699,7 +719,8 @@
             return matchQuery && matchGenre && matchCountry;
         });
 
-        renderSidebarList(filtered.slice(0, 500));
+        currentFilteredList = filtered.slice(0, 500);
+        renderSidebarList(currentFilteredList);
     }
 
     document.getElementById('tab-all').addEventListener('click', () => {
@@ -828,6 +849,18 @@
         initVisualizer();
         if (audioCtx && audioCtx.state === 'suspended') audioCtx.resume();
     });
+
+    function playNextStation() {
+        if (!currentFilteredList.length) return;
+        let index = 0;
+        if (currentStation) {
+            index = currentFilteredList.findIndex(s => s.stationuuid === currentStation.stationuuid);
+            index = (index + 1) % currentFilteredList.length;
+        }
+        startStationPlayback(currentFilteredList[index]);
+    }
+
+    document.getElementById('next-btn').addEventListener('click', playNextStation);
 
     document.getElementById('play-btn').addEventListener('click', () => {
         if(!audio.src) return;
