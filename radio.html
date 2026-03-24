@@ -3,7 +3,7 @@
 <head>
     <meta charset="UTF-8">
     <meta name="viewport" content="width=device-width, initial-scale=1.0, maximum-scale=1.0, user-scalable=no, viewport-fit=cover">
-    <title>Radio a09</title>
+    <title>a09</title>
     <link rel="icon" type="image/svg+xml" href="data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 32 32'%3E%3Crect width='32' height='32' fill='black'/%3E%3Ctext x='50%25' y='50%25' dominant-baseline='central' text-anchor='middle' fill='white' font-family='sans-serif' font-weight='bold' font-size='14'%3Ea09%3C/text%3E%3C/svg%3E">
     
     <!-- ROCK SOLID DEPENDENCIES -->
@@ -274,11 +274,21 @@
             .replace(/'/g, '&#039;');
     }
 
+    function sanitizeUrl(url) {
+        if(!url) return '';
+        return String(url)
+            .replace(/&#038;/g, '&')
+            .replace(/&amp;/g, '&')
+            .replace(/"/g, '%22')
+            .replace(/'/g, '%27');
+    }
+
     let apiBaseUrl = 'https://de1.api.radio-browser.info/json';
-    let allStations =[];
-    let currentFilteredList = [];
+    let allStations = [];
+    let mappedStations = []; // Stations with coordinates
+    let currentFilteredList =[];
     let availableGenres = [];
-    let availableCountries = [];
+    let availableCountries =[];
 
     // Manage favorites state
     let favorites = JSON.parse(localStorage.getItem('radioFavorites')) ||[];
@@ -315,15 +325,40 @@
             const servers = await sRes.json();
             apiBaseUrl = `https://${servers[0].name}/json`;
             
-            const res = await fetch(`${apiBaseUrl}/stations/search?has_geo_info=true&limit=2500&order=votes&reverse=true&hidebroken=true`);
-            const data = await res.json();
+            const res = await fetch(`${apiBaseUrl}/stations/search?limit=5000&order=votes&reverse=true&hidebroken=true`);
+            const rawData = await res.json();
             
-            localStorage.setItem('radio_cache_a09', JSON.stringify(data));
+            // Strip out API bloat to avoid QuotaExceededError
+            const slimData = rawData.map(s => ({
+                stationuuid: s.stationuuid,
+                name: s.name,
+                url: s.url,
+                url_resolved: s.url_resolved,
+                favicon: s.favicon,
+                tags: s.tags,
+                country: s.country,
+                countryCode: s.countrycode || s.countryCode, // support both just in case
+                language: s.language,
+                geo_lat: s.geo_lat,
+                geo_long: s.geo_long
+            }));
             
-            if (!allStations.length) {
-                processStationData(data);
-                hideLoader();
+            try {
+                localStorage.setItem('radio_cache_a09', JSON.stringify(slimData));
+            } catch(storageErr) {
+                console.warn("Storage quota full, running live from RAM instead.", storageErr);
+                localStorage.removeItem('radio_cache_a09'); // Clear it if it's broken
             }
+            
+            if (pointsMesh) {
+                scene.remove(pointsMesh);
+                pointsMesh.geometry.dispose();
+                pointsMesh.material.dispose();
+                pointsMesh = null;
+            }
+
+            processStationData(slimData);
+            hideLoader();
         } catch(e) {
             console.error("Background refresh failed", e);
         }
@@ -339,7 +374,6 @@
     }
 
     const genreNormalizationMap = {
-        // Spanish
         'español': 'spanish', 'espana': 'spanish', 'éxitos': 'hits', 'exitos': 'hits',
         'noticias': 'news', 'deportes': 'sports', 'cristiana': 'christian', 
         'cristiano': 'christian', 'religiosa': 'religious', 'variada': 'various', 
@@ -355,18 +389,9 @@
         'católica': 'catholic', 'catolica': 'catholic', 'entretenimiento': 'entertainment',
         'información': 'info', 'informacion': 'info', 'variedades': 'various',
         'juveniles': 'youth', 'deportiva': 'sports', 'románticas': 'romantic',
-        
-        // German
         'deutsch': 'german', 'nachrichten': 'news', 'oldies': 'oldies', 'sport': 'sports',
-        
-        // French
         'français': 'french', 'informations': 'news',
-        
-        // Portuguese
-        'notícias': 'news',
-        
-        // Italian
-        'notizie': 'news'
+        'notícias': 'news', 'notizie': 'news'
     };
     
     const blacklistedTags = new Set([
@@ -383,34 +408,21 @@
                 const stationTags = new Set();
                 s.tags.split(',').forEach(tag => {
                     let t = tag.trim().toLowerCase();
-                    
-                    // 1. Remove noise suffixes and prefixes
                     t = t.replace(/^(música|musica|radio|estación|station|traditional|popular|en)\s+/, '');
                     t = t.replace(/\s+(radio|music|station|fm|am|estación|estacion|fm|digital|web|online|stream)$/, '');
                     t = t.replace(/^(ciudad de|valle de|estado de)\s+/, '');
 
-                    // 2. Consolidation & Translation
-                    if (t.includes('mexic') || t.includes('méxic') || t === 'mex' || t === 'cdmx') {
-                        t = 'mexican';
-                    } else if (t.includes('españ') || t.includes('espan') || t === 'spanish') {
-                        t = 'spanish';
-                    } else if (t.includes('noticia') || t === 'news' || t === 'news talk') {
-                        t = 'news';
-                    } else if (t.includes('cristian') || t.includes('religious') || t.includes('religio')) {
-                        t = 'religious';
-                    }
+                    if (t.includes('mexic') || t.includes('méxic') || t === 'mex' || t === 'cdmx') t = 'mexican';
+                    else if (t.includes('españ') || t.includes('espan') || t === 'spanish') t = 'spanish';
+                    else if (t.includes('noticia') || t === 'news' || t === 'news talk') t = 'news';
+                    else if (t.includes('cristian') || t.includes('religious') || t.includes('religio')) t = 'religious';
 
-                    // 3. Map common terms
                     if (genreNormalizationMap[t]) t = genreNormalizationMap[t];
-                    
-                    // 4. Final filter
-                    if (t.length > 2 && !/^\d+$/.test(t) && !blacklistedTags.has(t)) {
-                        stationTags.add(t);
-                    }
+                    if (t.length > 2 && !/^\d+$/.test(t) && !blacklistedTags.has(t)) stationTags.add(t);
                 });
                 s.normalizedTagsArray = Array.from(stationTags);
             } else {
-                s.normalizedTagsArray = [];
+                s.normalizedTagsArray =[];
             }
         });
     }
@@ -451,13 +463,11 @@
         setTimeout(() => loader.style.display = 'none', 500);
     }
 
-    /* --- SELF-GENERATED FAVICONS (AAA Quality + Bug Fixes) --- */
+    /* --- SELF-GENERATED FAVICONS --- */
     function getFallbackIcon(name) {
         const cleanName = name ? String(name).trim().replace(/[^a-zA-Z0-9]/g, '') : '';
         const initials = cleanName.length > 0 ? cleanName.substring(0, 2).toUpperCase() : 'A0';
-        
-        // Hash for color
-        const colors = ['#FF2D55', '#5856D6', '#FF9500', '#34C759', '#0a84ff', '#AF52DE', '#FF3366'];
+        const colors =['#FF2D55', '#5856D6', '#FF9500', '#34C759', '#0a84ff', '#AF52DE', '#FF3366'];
         let charCode = 0;
         for(let i=0; i<cleanName.length; i++) charCode += cleanName.charCodeAt(i);
         const bgColor = colors[charCode % colors.length];
@@ -466,8 +476,6 @@
             <rect width="100" height="100" fill="${bgColor}"/>
             <text x="50" y="50" font-family="sans-serif" font-size="44" font-weight="600" fill="#ffffff" text-anchor="middle" dominant-baseline="central">${initials}</text>
         </svg>`;
-        
-        // Fully URI encode to prevent unescaped double-quotes & brackets from breaking the HTML <img> tag
         return `data:image/svg+xml,${encodeURIComponent(svg)}`;
     }
 
@@ -486,7 +494,6 @@
     controls.autoRotate = true; controls.autoRotateSpeed = 0.8;
     controls.enablePan = false; controls.minDistance = 120; controls.maxDistance = 600;
 
-    // Background Stars
     const starGeo = new THREE.BufferGeometry();
     const starPos =[];
     for(let i=0; i<1500; i++) {
@@ -498,7 +505,6 @@
     starGeo.setAttribute('position', new THREE.Float32BufferAttribute(starPos, 3));
     scene.add(new THREE.Points(starGeo, new THREE.PointsMaterial({color: 0xffffff, size: 1.2, transparent: true, opacity: 0.6})));
 
-    // Earth Sphere
     const earthRadius = 100;
     const earthMat = new THREE.MeshStandardMaterial({ color: 0x222b45, roughness: 0.8, metalness: 0.1 });
     const earth = new THREE.Mesh(new THREE.SphereGeometry(earthRadius, 64, 64), earthMat);
@@ -532,9 +538,11 @@
     let pointsMesh;
     function addStationsToGlobe(data) {
         const positions = [];
-        allStations =[];
+        allStations = [];
+        mappedStations =[];
 
         data.forEach(s => {
+            allStations.push(s);
             if(s.geo_lat !== null && s.geo_long !== null) {
                 const lat = parseFloat(s.geo_lat);
                 const lng = parseFloat(s.geo_long); 
@@ -542,12 +550,12 @@
                     const pos = latLngToVector3(lat, lng, earthRadius + 0.5);
                     s.position = pos;
                     positions.push(pos.x, pos.y, pos.z);
-                    allStations.push(s);
+                    mappedStations.push(s);
                 }
             }
         });
 
-        if(allStations.length > 0) {
+        if(positions.length > 0) {
             const geometry = new THREE.BufferGeometry();
             geometry.setAttribute('position', new THREE.Float32BufferAttribute(positions, 3));
             pointsMesh = new THREE.Points(geometry, new THREE.PointsMaterial({
@@ -557,7 +565,6 @@
         }
     }
 
-    // Active Beacon (Apple Blue)
     const activeBeacon = new THREE.Group(); activeBeacon.visible = false; scene.add(activeBeacon);
     activeBeacon.add(new THREE.Mesh(new THREE.SphereGeometry(1.2, 16, 16), new THREE.MeshBasicMaterial({ color: 0x0a84ff })));
     const ring = new THREE.Mesh(new THREE.RingGeometry(1.5, 3.5, 32), new THREE.MeshBasicMaterial({ color: 0x0a84ff, transparent: true, side: THREE.DoubleSide }));
@@ -565,7 +572,7 @@
 
     /* --- GLOBE INTERACTION --- */
     const raycaster = new THREE.Raycaster(); 
-    raycaster.params.Points.threshold = isMobile ? 4.0 : 2.0; // Precision threshold
+    raycaster.params.Points.threshold = isMobile ? 4.0 : 2.0; 
     const mouse = new THREE.Vector2();
     let isFlying = false; let targetCameraPos = new THREE.Vector3();
     const tooltip = document.getElementById('tooltip');
@@ -578,23 +585,18 @@
         
         raycaster.setFromCamera(mouse, camera);
 
-        // 1. Prioritize exact point clicks (the "dots")
         const dotHits = raycaster.intersectObject(pointsMesh);
         if (dotHits.length > 0) {
-            const station = allStations[dotHits[0].index];
-            if (station) {
-                startStationPlayback(station);
-                return;
-            }
+            const station = mappedStations[dotHits[0].index];
+            if (station) { startStationPlayback(station); return; }
         }
 
-        // 2. Fallback to clicking the globe surface near a dot
         const earthHit = raycaster.intersectObject(earth);
         if (earthHit.length > 0) {
             const hitPoint = earthHit[0].point;
-            const nearbyStations = allStations
+            const nearbyStations = mappedStations
                 .map(s => ({ station: s, dist: s.position.distanceTo(hitPoint) }))
-                .filter(item => item.dist < 8) // Tightened radius for accuracy
+                .filter(item => item.dist < 8) 
                 .sort((a, b) => a.dist - b.dist)
                 .map(item => item.station);
 
@@ -612,7 +614,7 @@
         
         const intersects = raycaster.intersectObject(pointsMesh);
         if(intersects.length > 0) {
-            const station = allStations[intersects[0].index];
+            const station = mappedStations[intersects[0].index];
             document.body.style.cursor = 'pointer';
             tooltip.style.left = e.clientX + 15 + 'px'; tooltip.style.top = e.clientY + 15 + 'px';
             tooltip.textContent = station.name;
@@ -661,7 +663,6 @@
         camera.updateProjectionMatrix(); renderer.setSize(window.innerWidth, window.innerHeight);
     });
 
-
     /* --- UI, LABELS & FILTER LOGIC --- */
     function renderSidebarList(list) {
         const container = document.getElementById('station-list');
@@ -674,17 +675,14 @@
             const cleanObj = { ...s }; delete cleanObj.position;
             const fallbackStr = encodeURIComponent(JSON.stringify(cleanObj));
             
-            // Clean up text
             const name = escapeHtml(s.name);
-            const countryInfo = [s.countryCode || s.country, s.language].filter(Boolean).join(' • ');
+            const countryInfo =[s.countryCode || s.country, s.language].filter(Boolean).join(' • ');
             const geoText = escapeHtml(countryInfo || 'Global Stream');
             
-            // Tags/Genres
             const tags = s.tags ? escapeHtml(s.tags.split(',').slice(0,3).join(', ')) : '';
             const tagHtml = tags ? `<div class="station-tags">${tags}</div>` : '';
 
-            // Favicon logic (Safely escapes so any bad URLs won't break HTML layout)
-            const iconSrc = s.favicon ? escapeHtml(s.favicon) : getFallbackIcon(s.name);
+            const iconSrc = s.favicon ? sanitizeUrl(s.favicon) : getFallbackIcon(s.name);
 
             return `
             <div class="station-item" id="item-${s.stationuuid}" onclick="selectFromList('${s.stationuuid}', '${fallbackStr}')">
@@ -703,19 +701,50 @@
         }
     }
 
+    let searchTimeout;
     function applyFilters() {
         const query = document.getElementById('search-input').value.trim().toLowerCase();
         const genre = document.getElementById('genre-filter').value.toLowerCase();
         const country = document.getElementById('country-filter').value;
         
         let sourceList = currentMode === 'fav' ? favorites : allStations;
+
+        if (currentMode === 'all' && query.length > 1) {
+            clearTimeout(searchTimeout);
+            searchTimeout = setTimeout(async () => {
+                document.getElementById('station-list').innerHTML = `<div style="padding:15px; color:#888; text-align:center;">Searching live database...</div>`;
+                try {
+                    let url = `${apiBaseUrl}/stations/search?name=${encodeURIComponent(query)}&limit=100&order=votes&reverse=true`;
+                    if (country) url += `&country=${encodeURIComponent(country)}`;
+                    if (genre) url += `&tag=${encodeURIComponent(genre)}`;
+                    
+                    const res = await fetch(url);
+                    let data = await res.json();
+                    
+                    normalizeTags(data);
+                    
+                    data.forEach(s => {
+                        if(s.geo_lat !== null && s.geo_long !== null) {
+                            const lat = parseFloat(s.geo_lat);
+                            const lng = parseFloat(s.geo_long);
+                            if(!isNaN(lat) && !isNaN(lng)) {
+                                s.position = latLngToVector3(lat, lng, earthRadius + 0.5);
+                            }
+                        }
+                    });
+                    
+                    currentFilteredList = data;
+                    renderSidebarList(currentFilteredList);
+                } catch(e) {
+                    console.error("API search failed", e);
+                }
+            }, 400); 
+            return;
+        }
         
         let filtered = sourceList.filter(s => {
             const matchQuery = !query || (s.name && s.name.toLowerCase().includes(query)) || (s.country && s.country.toLowerCase().includes(query));
-            
-            // Use normalized tags for genre matching
             const matchGenre = !genre || (s.normalizedTagsArray && s.normalizedTagsArray.includes(genre));
-            
             const matchCountry = !country || s.country === country;
             return matchQuery && matchGenre && matchCountry;
         });
@@ -743,7 +772,9 @@
     document.getElementById('country-filter').addEventListener('change', applyFilters);
 
     window.selectFromList = function(uuid, fallbackStr) {
-        let station = allStations.find(s => s.stationuuid === uuid) || favorites.find(s => s.stationuuid === uuid);
+        let station = currentFilteredList.find(s => s.stationuuid === uuid) || 
+                      allStations.find(s => s.stationuuid === uuid) || 
+                      favorites.find(s => s.stationuuid === uuid);
         if(!station && fallbackStr) station = JSON.parse(decodeURIComponent(fallbackStr));
         if(station) startStationPlayback(station);
     };
@@ -761,7 +792,7 @@
         document.getElementById('player-title').textContent = station.name;
         document.getElementById('player-subtitle').textContent = "Connecting...";
         
-        iconImg.src = station.favicon || getFallbackIcon(station.name);
+        iconImg.src = station.favicon ? sanitizeUrl(station.favicon) : getFallbackIcon(station.name);
         iconImg.onerror = function() { this.onerror=null; this.src=getFallbackIcon(station.name); };
 
         const isFav = favorites.some(s => s.stationuuid === station.stationuuid);
@@ -792,11 +823,9 @@
             document.getElementById('player-subtitle').textContent = '❌ Stream offline';
         });
 
-        // Close sidebar on mobile after selection
         if(isMobile) sidebar.classList.add('collapsed');
     }
 
-    // Favorites Logic
     document.getElementById('fav-btn').addEventListener('click', () => {
         if(!currentStation) return;
         const favBtnEl = document.getElementById('fav-btn');
@@ -818,7 +847,7 @@
     /* --- AUDIO VISUALIZER --- */
     let audioCtx, analyser, dataArray;
     const visContainer = document.getElementById('visualizer-container');
-    const barCount = 48; const bars = [];
+    const barCount = 48; const bars =[];
 
     for(let i=0; i<barCount; i++) {
         const bar = document.createElement('div');
@@ -876,13 +905,12 @@
 
     document.getElementById('volume-slider').addEventListener('input', (e) => { audio.volume = e.target.value / 100; });
     
-    /* --- SIDEBAR COLLAPSE LOGIC FIX --- */
+    /* --- SIDEBAR COLLAPSE LOGIC --- */
     const sidebar = document.getElementById('sidebar');
     let collapseTimer;
 
     function resetCollapseTimer() {
         clearTimeout(collapseTimer);
-        // Never auto-collapse on mobile devices
         if (isMobile) return; 
         collapseTimer = setTimeout(() => { sidebar.classList.add('collapsed'); }, 8000);
     }
@@ -892,10 +920,7 @@
         if (!sidebar.classList.contains('collapsed')) resetCollapseTimer();
     });
 
-    // Clear timeout completely if mouse is inside sidebar
     sidebar.addEventListener('mouseenter', () => clearTimeout(collapseTimer));
-    
-    // Restart timeout only when mouse leaves
     sidebar.addEventListener('mouseleave', () => {
         if (!sidebar.classList.contains('collapsed')) resetCollapseTimer();
     });
