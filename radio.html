@@ -2,7 +2,7 @@
 <html lang="en">
 <head>
     <meta charset="UTF-8">
-    <meta name="viewport" content="width=device-width, initial-scale=1.0, maximum-scale=1.0, user-scalable=no">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0, maximum-scale=1.0, user-scalable=no, viewport-fit=cover">
     <title>Radio a09</title>
     
     <!-- ROCK SOLID DEPENDENCIES -->
@@ -152,13 +152,21 @@
         #loader-text { margin-top: 25px; font-size: 14px; letter-spacing: 2px; color: var(--apple-text-muted); font-weight: 600; text-transform: uppercase;}
 
         @media (max-width: 768px) {
-            .sidebar { width: 85vw; max-width: 380px; height: calc(100vh - 90px); z-index: 200; }
+            .sidebar {
+                width: 85vw;
+                max-width: 380px;
+                height: calc(100vh - 120px - env(safe-area-inset-bottom));
+                z-index: 200;
+            }
             .sidebar-toggle { left: 85vw; transform: translateX(-5px); top: 15px; }
             .sidebar.collapsed + .sidebar-toggle { left: 15px; transform: none; }
             
             .player-dock { 
-                height: 90px; padding: 0 15px; 
-                flex-wrap: wrap; justify-content: space-between; 
+                height: 120px;
+                padding: 0 15px calc(10px + env(safe-area-inset-bottom));
+                flex-wrap: wrap;
+                justify-content: space-between;
+                align-items: center;
             }
             .now-playing { width: auto; min-width: 0; flex: 1; max-width: 60%; }
             .np-img { width: 50px; height: 50px; }
@@ -169,7 +177,7 @@
             .btn-play { width: 44px; height: 44px; font-size: 18px; }
             
             .volume-ctrl { display: none; }
-            #visualizer-container { bottom: 90px; }
+            #visualizer-container { bottom: 120px; }
         }
     </style>
 </head>
@@ -192,6 +200,9 @@
                     <button class="tab-btn" id="tab-fav">Favorites</button>
                 </div>
                 <input type="text" class="search-box" id="search-input" placeholder="Search station, country...">
+                <select class="filter-box" id="country-filter">
+                    <option value="">All Countries</option>
+                </select>
                 <select class="filter-box" id="genre-filter">
                     <option value="">All Genres</option>
                 </select>
@@ -234,7 +245,8 @@
     let apiBaseUrl = 'https://de1.api.radio-browser.info/json';
     let allStations =[];
     let availableGenres = [];
-    
+    let availableCountries = [];
+
     // Manage favorites state
     let favorites = JSON.parse(localStorage.getItem('radioFavorites')) ||[];
     let currentMode = 'all'; // 'all' oder 'fav'
@@ -284,25 +296,57 @@
     function processStationData(data) {
         addStationsToGlobe(data);
         extractGenres(data);
+        extractCountries(data);
         renderSidebarList(allStations.slice(0, 1000));
     }
 
     function extractGenres(data) {
         let tagCount = {};
+        const normalizationMap = {
+            'mexico': 'mexican',
+            'mexicana': 'mexican',
+            'mexicano': 'mexican',
+            'deutsch': 'german',
+            'español': 'spanish',
+            'espana': 'spanish',
+            'brazil': 'brazilian',
+            'brasil': 'brazilian',
+            'italy': 'italian',
+            'italia': 'italian',
+            'france': 'french'
+        };
+        const blacklistedTags = new Set(['radio', 'music', 'live', 'stream', 'internet', 'station', 'world', 'top', 'fm', 'am', 'web', 'online', 'digital', 'hits', 'various', 'other', 'misc', 'unknown']);
+
         data.forEach(s => {
             if(s.tags) {
                 s.tags.split(',').forEach(tag => {
                     let t = tag.trim().toLowerCase();
-                    if(t.length > 2) { tagCount[t] = (tagCount[t] || 0) + 1; }
+                    if (normalizationMap[t]) t = normalizationMap[t];
+                    if (t.length > 2 && !/^\d+$/.test(t) && !blacklistedTags.has(t)) {
+                        tagCount[t] = (tagCount[t] || 0) + 1;
+                    }
                 });
             }
         });
         
-        // Pick top 30 genres
-        availableGenres = Object.keys(tagCount).sort((a,b) => tagCount[b] - tagCount[a]).slice(0, 30);
+        availableGenres = Object.keys(tagCount).sort((a,b) => tagCount[b] - tagCount[a]).slice(0, 50);
         const filterEl = document.getElementById('genre-filter');
         filterEl.innerHTML = '<option value="">All Genres</option>' + 
             availableGenres.map(g => `<option value="${g}">${g.charAt(0).toUpperCase() + g.slice(1)}</option>`).join('');
+    }
+
+    function extractCountries(data) {
+        let countryCount = {};
+        data.forEach(s => {
+            if(s.country) {
+                let c = s.country.trim();
+                if(c) countryCount[c] = (countryCount[c] || 0) + 1;
+            }
+        });
+        availableCountries = Object.keys(countryCount).sort();
+        const filterEl = document.getElementById('country-filter');
+        filterEl.innerHTML = '<option value="">All Countries</option>' +
+            availableCountries.map(c => `<option value="${escapeHtml(c)}">${escapeHtml(c)}</option>`).join('');
     }
 
     function hideLoader() {
@@ -560,13 +604,15 @@
     function applyFilters() {
         const query = document.getElementById('search-input').value.trim().toLowerCase();
         const genre = document.getElementById('genre-filter').value.toLowerCase();
+        const country = document.getElementById('country-filter').value;
         
         let sourceList = currentMode === 'fav' ? favorites : allStations;
         
         let filtered = sourceList.filter(s => {
             const matchQuery = !query || (s.name && s.name.toLowerCase().includes(query)) || (s.country && s.country.toLowerCase().includes(query));
             const matchGenre = !genre || (s.tags && s.tags.toLowerCase().includes(genre));
-            return matchQuery && matchGenre;
+            const matchCountry = !country || s.country === country;
+            return matchQuery && matchGenre && matchCountry;
         });
 
         renderSidebarList(filtered.slice(0, 500));
@@ -588,6 +634,7 @@
 
     document.getElementById('search-input').addEventListener('input', applyFilters);
     document.getElementById('genre-filter').addEventListener('change', applyFilters);
+    document.getElementById('country-filter').addEventListener('change', applyFilters);
 
     window.selectFromList = function(uuid, fallbackStr) {
         let station = allStations.find(s => s.stationuuid === uuid) || favorites.find(s => s.stationuuid === uuid);
