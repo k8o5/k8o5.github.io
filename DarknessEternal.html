@@ -1,0 +1,3032 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>Darkness Eternal - ARPG</title>
+<style>
+* { margin: 0; padding: 0; box-sizing: border-box; }
+body { background: #000; overflow: hidden; font-family: 'Georgia', serif; cursor: default; user-select: none; }
+canvas { display: block; }
+#ui-layer {
+    position: absolute; top: 0; left: 0; width: 100%; height: 100%;
+    pointer-events: none;
+}
+#ui-layer > * { pointer-events: auto; }
+
+/* Health/Mana Orbs */
+.orb-container {
+    position: absolute; bottom: 10px; display: flex; align-items: flex-end;
+}
+#health-orb-container { left: 10px; }
+#mana-orb-container { right: 10px; }
+.orb {
+    width: 100px; height: 100px; border-radius: 50%;
+    border: 3px solid #444; position: relative; overflow: hidden;
+    background: #1a0a0a;
+}
+.orb-fill {
+    position: absolute; bottom: 0; width: 100%; transition: height 0.3s;
+}
+#health-fill { background: radial-gradient(circle, #ff3333, #8b0000); height: 100%; }
+#mana-fill { background: radial-gradient(circle, #3366ff, #00008b); height: 100%; }
+.orb-text {
+    position: absolute; top: 50%; left: 50%; transform: translate(-50%, -50%);
+    color: #fff; font-size: 14px; font-weight: bold; text-shadow: 0 0 5px #000;
+    z-index: 2;
+}
+.orb-label {
+    color: #aaa; font-size: 12px; text-align: center; margin-bottom: 5px;
+}
+
+/* Skill Bar */
+#skill-bar {
+    position: absolute; bottom: 10px; left: 50%; transform: translateX(-50%);
+    display: flex; gap: 5px; background: rgba(0,0,0,0.8); padding: 8px;
+    border: 2px solid #555; border-radius: 5px;
+}
+.skill-slot {
+    width: 50px; height: 50px; border: 2px solid #666; border-radius: 5px;
+    background: rgba(30,15,0,0.9); position: relative; cursor: pointer;
+    display: flex; align-items: center; justify-content: center;
+    font-size: 24px; color: #ff9900; transition: all 0.1s;
+}
+.skill-slot:hover { border-color: #ffcc00; box-shadow: 0 0 10px rgba(255,200,0,0.5); }
+.skill-slot .cooldown-overlay {
+    position: absolute; top: 0; left: 0; width: 100%; height: 0%;
+    background: rgba(0,0,0,0.7); transition: height 0.1s;
+}
+.skill-slot .key-bind {
+    position: absolute; bottom: 2px; right: 3px; font-size: 10px; color: #999;
+}
+
+/* XP Bar */
+#xp-bar-container {
+    position: absolute; bottom: 115px; left: 50%; transform: translateX(-50%);
+    width: 400px; height: 8px; background: #111; border: 1px solid #333;
+    border-radius: 4px;
+}
+#xp-bar { height: 100%; background: linear-gradient(90deg, #ffcc00, #ff9900); width: 0%; border-radius: 4px; transition: width 0.3s; }
+
+/* Character Info */
+#char-info {
+    position: absolute; top: 10px; left: 10px; color: #ddd;
+    background: rgba(0,0,0,0.7); padding: 10px; border: 1px solid #444;
+    border-radius: 5px; font-size: 13px;
+}
+#char-info .name { color: #ffcc00; font-size: 16px; font-weight: bold; }
+#char-info .level { color: #aaa; }
+#char-info .gold { color: #ffd700; }
+
+/* Minimap */
+#minimap {
+    position: absolute; top: 10px; right: 10px;
+    width: 180px; height: 180px; border: 2px solid #555;
+    border-radius: 5px; overflow: hidden; background: #0a0a0a;
+}
+#minimap canvas { width: 100%; height: 100%; }
+
+/* Inventory */
+#inventory-panel {
+    position: absolute; top: 50%; right: 20px; transform: translateY(-50%);
+    width: 320px; background: rgba(10,5,0,0.95); border: 2px solid #665533;
+    border-radius: 5px; padding: 15px; display: none;
+}
+#inventory-panel h3 { color: #ffcc00; margin-bottom: 10px; text-align: center; }
+#inv-grid {
+    display: grid; grid-template-columns: repeat(8,35px); gap: 3px;
+    justify-content: center;
+}
+.inv-slot {
+    width: 35px; height: 35px; border: 1px solid #443322; background: rgba(30,15,0,0.8);
+    border-radius: 3px; display: flex; align-items: center; justify-content: center;
+    font-size: 18px; cursor: pointer; position: relative;
+}
+.inv-slot:hover { border-color: #ffcc00; }
+.inv-slot.equipped { border-color: #00ff66; background: rgba(0,60,0,0.5); }
+
+/* Equipment Panel */
+#equip-panel {
+    margin-top: 10px; display: grid; grid-template-columns: repeat(4,50px);
+    gap: 5px; justify-content: center;
+}
+.equip-slot {
+    width: 50px; height: 50px; border: 2px solid #554433; background: rgba(20,10,0,0.8);
+    border-radius: 5px; display: flex; align-items: center; justify-content: center;
+    font-size: 22px; cursor: pointer; position: relative;
+}
+.equip-slot::after {
+    content: attr(data-slot); position: absolute; bottom: -14px; font-size: 9px;
+    color: #666; white-space: nowrap;
+}
+.equip-slot:hover { border-color: #ffcc00; }
+
+/* Stats Panel */
+#stats-panel {
+    position: absolute; top: 50%; left: 20px; transform: translateY(-50%);
+    width: 250px; background: rgba(10,5,0,0.95); border: 2px solid #665533;
+    border-radius: 5px; padding: 15px; display: none; color: #ccc; font-size: 13px;
+}
+#stats-panel h3 { color: #ffcc00; margin-bottom: 10px; }
+.stat-row { display: flex; justify-content: space-between; padding: 3px 0; border-bottom: 1px solid #222; }
+.stat-row .val { color: #ff9900; }
+.stat-btn {
+    background: #443300; color: #ffcc00; border: 1px solid #665500; padding: 1px 8px;
+    cursor: pointer; border-radius: 3px; font-size: 12px; margin-left: 5px;
+}
+.stat-btn:hover { background: #665500; }
+
+/* Tooltip */
+#tooltip {
+    position: absolute; display: none; background: rgba(5,0,10,0.95);
+    border: 2px solid #665533; padding: 12px; border-radius: 5px;
+    color: #ddd; font-size: 13px; max-width: 280px; z-index: 1000;
+    pointer-events: none;
+}
+#tooltip .item-name { font-size: 16px; font-weight: bold; margin-bottom: 5px; }
+#tooltip .item-type { color: #888; font-size: 11px; }
+#tooltip .item-stats { margin-top: 8px; }
+#tooltip .item-stats div { padding: 2px 0; }
+#tooltip .item-flavor { color: #886644; font-style: italic; margin-top: 8px; font-size: 11px; }
+
+/* Damage Numbers */
+.dmg-number {
+    position: absolute; pointer-events: none; font-weight: bold;
+    animation: floatUp 1s ease-out forwards; z-index: 100;
+}
+@keyframes floatUp {
+    0% { opacity: 1; transform: translateY(0) scale(1); }
+    100% { opacity: 0; transform: translateY(-60px) scale(0.7); }
+}
+
+/* Level Up */
+#level-up-text {
+    position: absolute; top: 30%; left: 50%; transform: translateX(-50%);
+    font-size: 48px; color: #ffcc00; text-shadow: 0 0 30px #ff9900, 0 0 60px #ff6600;
+    display: none; animation: levelPulse 2s ease-out forwards;
+    pointer-events: none;
+}
+@keyframes levelPulse {
+    0% { opacity: 0; transform: translateX(-50%) scale(0.5); }
+    20% { opacity: 1; transform: translateX(-50%) scale(1.2); }
+    100% { opacity: 0; transform: translateX(-50%) scale(1); }
+}
+
+/* Loot drops */
+.loot-label {
+    position: absolute; pointer-events: auto; cursor: pointer;
+    padding: 2px 8px; font-size: 12px; border: 1px solid;
+    border-radius: 3px; white-space: nowrap;
+    animation: lootBounce 0.5s ease-out;
+}
+@keyframes lootBounce {
+    0% { transform: translateY(-30px); opacity: 0; }
+    60% { transform: translateY(5px); }
+    100% { transform: translateY(0); opacity: 1; }
+}
+
+/* Zone Name */
+#zone-name {
+    position: absolute; top: 15%; left: 50%; transform: translateX(-50%);
+    font-size: 32px; color: #ccaa77; text-shadow: 0 0 20px rgba(200,150,50,0.5);
+    display: none; pointer-events: none;
+    animation: zoneFade 3s ease-out forwards;
+}
+@keyframes zoneFade {
+    0% { opacity: 0; }
+    20% { opacity: 1; }
+    80% { opacity: 1; }
+    100% { opacity: 0; }
+}
+
+/* Menu Screen */
+#main-menu {
+    position: absolute; top: 0; left: 0; width: 100%; height: 100%;
+    background: radial-gradient(ellipse at center, #1a0a00 0%, #000 70%);
+    display: flex; flex-direction: column; align-items: center; justify-content: center;
+    z-index: 2000;
+}
+#main-menu h1 {
+    font-size: 64px; color: #ff6600;
+    text-shadow: 0 0 30px #ff3300, 0 0 60px #990000, 0 0 90px #660000;
+    margin-bottom: 10px; letter-spacing: 5px;
+}
+#main-menu .subtitle { color: #886644; font-size: 18px; margin-bottom: 40px; }
+.class-select { display: flex; gap: 20px; margin-bottom: 30px; }
+.class-option {
+    width: 120px; padding: 20px; text-align: center; border: 2px solid #443322;
+    background: rgba(30,15,0,0.8); border-radius: 10px; cursor: pointer;
+    color: #ddd; transition: all 0.3s;
+}
+.class-option:hover, .class-option.selected {
+    border-color: #ff9900; box-shadow: 0 0 20px rgba(255,100,0,0.3);
+    transform: translateY(-5px);
+}
+.class-option .icon { font-size: 48px; margin-bottom: 10px; }
+.class-option .name { font-size: 16px; color: #ffcc00; }
+.class-option .desc { font-size: 11px; color: #888; margin-top: 5px; }
+#start-btn {
+    padding: 15px 60px; font-size: 22px; background: linear-gradient(180deg, #663300, #441100);
+    color: #ffcc00; border: 2px solid #885500; border-radius: 5px;
+    cursor: pointer; letter-spacing: 3px;
+    transition: all 0.3s;
+}
+#start-btn:hover { background: linear-gradient(180deg, #884400, #662200); box-shadow: 0 0 20px rgba(255,100,0,0.5); }
+
+/* Passive Tree */
+#passive-tree {
+    position: absolute; top: 0; left: 0; width: 100%; height: 100%;
+    background: rgba(0,0,0,0.95); display: none; z-index: 1500;
+}
+#passive-tree h2 { color: #ffcc00; text-align: center; padding: 10px; }
+#passive-tree .close-btn {
+    position: absolute; top: 10px; right: 20px; color: #ff6600; font-size: 24px;
+    cursor: pointer;
+}
+
+/* World Map */
+#world-map {
+    position: absolute; top: 0; left: 0; width: 100%; height: 100%;
+    background: rgba(0,0,0,0.95); display: none; z-index: 1500;
+}
+#world-map .close-btn {
+    position: absolute; top: 10px; right: 20px; color: #ff6600; font-size: 24px;
+    cursor: pointer; z-index: 10;
+}
+#world-map h2 { color: #ffcc00; text-align: center; padding: 10px; }
+
+/* Dialog */
+#dialog-box {
+    position: absolute; bottom: 130px; left: 50%; transform: translateX(-50%);
+    width: 500px; background: rgba(10,5,0,0.95); border: 2px solid #665533;
+    padding: 15px; border-radius: 5px; display: none; color: #ddd;
+}
+#dialog-box .npc-name { color: #ffcc00; font-size: 16px; margin-bottom: 5px; }
+#dialog-box .dialog-text { font-size: 14px; line-height: 1.5; }
+#dialog-box .dialog-options { margin-top: 10px; }
+#dialog-box .dialog-option {
+    color: #88aaff; cursor: pointer; padding: 3px 0;
+}
+#dialog-box .dialog-option:hover { color: #ffcc00; }
+
+/* Death screen */
+#death-screen {
+    position: absolute; top: 0; left: 0; width: 100%; height: 100%;
+    background: rgba(50,0,0,0.8); display: none; z-index: 1800;
+    flex-direction: column; align-items: center; justify-content: center;
+}
+#death-screen h1 { font-size: 64px; color: #ff0000; text-shadow: 0 0 30px #990000; }
+#death-screen p { color: #999; margin: 20px; }
+#death-screen button {
+    padding: 10px 40px; font-size: 18px; background: #441111;
+    color: #ff6666; border: 2px solid #662222; cursor: pointer; border-radius: 5px;
+}
+</style>
+</head>
+<body>
+
+<canvas id="game-canvas"></canvas>
+
+<div id="ui-layer">
+    <!-- Main Menu -->
+    <div id="main-menu">
+        <h1>DARKNESS ETERNAL</h1>
+        <div class="subtitle">Descend into the Abyss</div>
+        <div class="class-select">
+            <div class="class-option selected" data-class="warrior">
+                <div class="icon">⚔️</div>
+                <div class="name">Warrior</div>
+                <div class="desc">Master of melee combat and brutal strikes</div>
+            </div>
+            <div class="class-option" data-class="mage">
+                <div class="icon">🔮</div>
+                <div class="name">Sorcerer</div>
+                <div class="desc">Wielder of devastating elemental magic</div>
+            </div>
+            <div class="class-option" data-class="ranger">
+                <div class="icon">🏹</div>
+                <div class="name">Ranger</div>
+                <div class="desc">Swift hunter with deadly precision</div>
+            </div>
+            <div class="class-option" data-class="necro">
+                <div class="icon">💀</div>
+                <div class="name">Necromancer</div>
+                <div class="desc">Commander of the undead legions</div>
+            </div>
+        </div>
+        <button id="start-btn">ENTER DARKNESS</button>
+    </div>
+
+    <!-- Health Orb -->
+    <div class="orb-container" id="health-orb-container">
+        <div>
+            <div class="orb-label">LIFE</div>
+            <div class="orb">
+                <div class="orb-fill" id="health-fill"></div>
+                <div class="orb-text" id="health-text">100/100</div>
+            </div>
+        </div>
+    </div>
+
+    <!-- Mana Orb -->
+    <div class="orb-container" id="mana-orb-container">
+        <div>
+            <div class="orb-label">MANA</div>
+            <div class="orb">
+                <div class="orb-fill" id="mana-fill"></div>
+                <div class="orb-text" id="mana-text">50/50</div>
+            </div>
+        </div>
+    </div>
+
+    <!-- Skill Bar -->
+    <div id="skill-bar"></div>
+
+    <!-- XP Bar -->
+    <div id="xp-bar-container"><div id="xp-bar"></div></div>
+
+    <!-- Char Info -->
+    <div id="char-info">
+        <div class="name" id="ci-name">Hero</div>
+        <div class="level" id="ci-level">Level 1 Warrior</div>
+        <div class="gold" id="ci-gold">💰 0</div>
+        <div style="margin-top:5px;font-size:11px;color:#888">
+            [I]nventory [C]haracter [P]assives [M]ap [T]own
+        </div>
+    </div>
+
+    <!-- Minimap -->
+    <div id="minimap"><canvas id="minimap-canvas" width="180" height="180"></canvas></div>
+
+    <!-- Inventory -->
+    <div id="inventory-panel">
+        <h3>⚔️ Equipment & Inventory</h3>
+        <div id="equip-panel">
+            <div class="equip-slot" data-slot="Helmet" data-eslot="helmet">🎩</div>
+            <div class="equip-slot" data-slot="Armor" data-eslot="armor">👕</div>
+            <div class="equip-slot" data-slot="Weapon" data-eslot="weapon">🗡️</div>
+            <div class="equip-slot" data-slot="Shield" data-eslot="shield">🛡️</div>
+            <div class="equip-slot" data-slot="Gloves" data-eslot="gloves">���</div>
+            <div class="equip-slot" data-slot="Boots" data-eslot="boots">👢</div>
+            <div class="equip-slot" data-slot="Ring" data-eslot="ring1">💍</div>
+            <div class="equip-slot" data-slot="Amulet" data-eslot="amulet">📿</div>
+        </div>
+        <div style="color:#888;font-size:11px;margin:10px 0;text-align:center">Backpack</div>
+        <div id="inv-grid"></div>
+    </div>
+
+    <!-- Stats Panel -->
+    <div id="stats-panel">
+        <h3>📊 Character Stats</h3>
+        <div id="stat-points-display"></div>
+        <div id="stats-list"></div>
+    </div>
+
+    <!-- Tooltip -->
+    <div id="tooltip">
+        <div class="item-name"></div>
+        <div class="item-type"></div>
+        <div class="item-stats"></div>
+        <div class="item-flavor"></div>
+    </div>
+
+    <!-- Level Up -->
+    <div id="level-up-text">LEVEL UP!</div>
+
+    <!-- Zone Name -->
+    <div id="zone-name"></div>
+
+    <!-- Passive Tree -->
+    <div id="passive-tree">
+        <span class="close-btn" onclick="document.getElementById('passive-tree').style.display='none'">✕</span>
+        <h2>🌟 Passive Skill Tree</h2>
+        <canvas id="passive-canvas" width="800" height="600"></canvas>
+    </div>
+
+    <!-- World Map -->
+    <div id="world-map">
+        <span class="close-btn" onclick="document.getElementById('world-map').style.display='none'">✕</span>
+        <h2>🗺️ World Map</h2>
+        <canvas id="worldmap-canvas"></canvas>
+    </div>
+
+    <!-- Dialog -->
+    <div id="dialog-box">
+        <div class="npc-name"></div>
+        <div class="dialog-text"></div>
+        <div class="dialog-options"></div>
+    </div>
+
+    <!-- Death Screen -->
+    <div id="death-screen">
+        <h1>YOU HAVE DIED</h1>
+        <p>Your soul lingers between worlds...</p>
+        <button onclick="respawnPlayer()">Resurrect in Town</button>
+    </div>
+</div>
+
+<script>
+// ==================== GAME ENGINE ====================
+const canvas = document.getElementById('game-canvas');
+const ctx = canvas.getContext('2d');
+const minimapCanvas = document.getElementById('minimap-canvas');
+const minimapCtx = minimapCanvas.getContext('2d');
+
+canvas.width = window.innerWidth;
+canvas.height = window.innerHeight;
+
+window.addEventListener('resize', () => {
+    canvas.width = window.innerWidth;
+    canvas.height = window.innerHeight;
+});
+
+// ==================== CONSTANTS ====================
+const TILE_SIZE = 48;
+const RARITY = { common: '#aaa', magic: '#6666ff', rare: '#ffff00', legendary: '#ff8800', unique: '#8B4513' };
+const RARITY_NAMES = ['common','magic','rare','legendary','unique'];
+
+// ==================== WORLD MAP DATA ====================
+const ZONES = {
+    town: {
+        name: "Tristhold - Town of the Damned",
+        level: 1, type: 'town', music: 'calm',
+        width: 40, height: 40,
+        groundColor: '#3a3025', wallColor: '#5a4a35',
+        ambient: 'rgba(255,200,100,0.03)',
+        npcs: [
+            { x: 18, y: 15, name: "Blacksmith Gorm", icon: '🔨', dialog: 'I can repair your gear... for a price.', shop: 'weapons' },
+            { x: 22, y: 15, name: "Mystic Elara", icon: '🔮', dialog: 'The darkness grows stronger. Take these potions.', shop: 'potions' },
+            { x: 20, y: 12, name: "Elder Theron", icon: '👴', dialog: 'Hero... the Demon Lord stirs in his domain. You must vanquish him before all is lost.', quest: true },
+            { x: 15, y: 18, name: "Stash", icon: '📦', dialog: 'Your personal stash.', stash: true }
+        ],
+        portals: [
+            { x: 20, y: 35, target: 'darkwood', name: 'Darkwood Forest →', tx: 20, ty: 5 },
+            { x: 5, y: 20, target: 'crypt', name: '← Forgotten Crypt', tx: 35, ty: 20 },
+            { x: 35, y: 20, target: 'desert', name: 'Scorched Wastes →', tx: 5, ty: 20 }
+        ]
+    },
+    darkwood: {
+        name: "Darkwood Forest",
+        level: 1, type: 'outdoor', music: 'dark',
+        width: 60, height: 60,
+        groundColor: '#1a2a15', wallColor: '#0d1a08',
+        treeColor: '#2d4a20',
+        ambient: 'rgba(0,50,0,0.05)',
+        monsters: ['zombie', 'skeleton', 'wolf'],
+        density: 0.03, bossChance: 0.005,
+        portals: [
+            { x: 20, y: 2, target: 'town', name: '← Tristhold', tx: 20, ty: 33 },
+            { x: 55, y: 55, target: 'swamp', name: 'Blighted Marsh →', tx: 5, ty: 5 }
+        ]
+    },
+    crypt: {
+        name: "Forgotten Crypt",
+        level: 4, type: 'dungeon', music: 'horror',
+        width: 50, height: 50,
+        groundColor: '#1a1a22', wallColor: '#2a2a35',
+        ambient: 'rgba(100,50,200,0.03)',
+        monsters: ['skeleton', 'wraith', 'skeleton_mage'],
+        density: 0.04, bossChance: 0.008,
+        portals: [
+            { x: 38, y: 20, target: 'town', name: 'Tristhold →', tx: 7, ty: 20 },
+            { x: 5, y: 45, target: 'depths', name: '↓ Abyssal Depths', tx: 25, ty: 5 }
+        ]
+    },
+    desert: {
+        name: "Scorched Wastes",
+        level: 6, type: 'outdoor', music: 'epic',
+        width: 70, height: 70,
+        groundColor: '#3a2d1a', wallColor: '#5a4830',
+        ambient: 'rgba(255,150,50,0.04)',
+        monsters: ['scorpion', 'sandworm', 'desert_mage', 'mummy'],
+        density: 0.025, bossChance: 0.006,
+        portals: [
+            { x: 2, y: 20, target: 'town', name: '← Tristhold', tx: 33, ty: 20 },
+            { x: 65, y: 65, target: 'volcano', name: 'Molten Core →', tx: 5, ty: 5 }
+        ]
+    },
+    swamp: {
+        name: "Blighted Marsh",
+        level: 8, type: 'outdoor', music: 'dark',
+        width: 55, height: 55,
+        groundColor: '#1a2520', wallColor: '#0a1510',
+        ambient: 'rgba(0,100,50,0.05)',
+        monsters: ['swamp_beast', 'poison_spider', 'bog_witch'],
+        density: 0.035, bossChance: 0.007,
+        portals: [
+            { x: 2, y: 2, target: 'darkwood', name: '← Darkwood', tx: 53, ty: 53 },
+            { x: 50, y: 50, target: 'hellgate', name: 'Hellgate →', tx: 5, ty: 5 }
+        ]
+    },
+    depths: {
+        name: "Abyssal Depths",
+        level: 10, type: 'dungeon', music: 'horror',
+        width: 45, height: 45,
+        groundColor: '#0a0a15', wallColor: '#15152a',
+        ambient: 'rgba(50,0,100,0.05)',
+        monsters: ['deep_horror', 'wraith', 'abyssal_demon'],
+        density: 0.04, bossChance: 0.01,
+        portals: [
+            { x: 25, y: 2, target: 'crypt', name: '↑ Forgotten Crypt', tx: 5, ty: 43 },
+            { x: 40, y: 40, target: 'hellgate', name: 'Hellgate →', tx: 30, ty: 5 }
+        ]
+    },
+    volcano: {
+        name: "Molten Core",
+        level: 14, type: 'dungeon', music: 'epic',
+        width: 50, height: 50,
+        groundColor: '#2a0a00', wallColor: '#1a0500',
+        ambient: 'rgba(255,50,0,0.06)',
+        monsters: ['fire_demon', 'lava_elemental', 'hellhound'],
+        density: 0.04, bossChance: 0.01,
+        portals: [
+            { x: 2, y: 2, target: 'desert', name: '← Scorched Wastes', tx: 63, ty: 63 },
+            { x: 45, y: 45, target: 'hellgate', name: 'Hellgate →', tx: 15, ty: 5 }
+        ]
+    },
+    hellgate: {
+        name: "Hellgate - Domain of the Demon Lord",
+        level: 18, type: 'dungeon', music: 'boss',
+        width: 60, height: 60,
+        groundColor: '#1a0000', wallColor: '#330000',
+        ambient: 'rgba(255,0,0,0.05)',
+        monsters: ['hell_knight', 'abyssal_demon', 'fire_demon'],
+        density: 0.05, bossChance: 0.015,
+        hasFinalBoss: true,
+        portals: [
+            { x: 2, y: 2, target: 'town', name: '← Tristhold (Portal)', tx: 20, ty: 20 }
+        ]
+    }
+};
+
+// ==================== MONSTER TEMPLATES ====================
+const MONSTER_TEMPLATES = {
+    zombie: { name: 'Zombie', icon: '🧟', hp: 30, dmg: 5, speed: 0.8, xp: 15, color: '#446633', size: 14 },
+    skeleton: { name: 'Skeleton', icon: '💀', hp: 25, dmg: 7, speed: 1.2, xp: 18, color: '#aaaaaa', size: 13 },
+    wolf: { name: 'Dire Wolf', icon: '🐺', hp: 35, dmg: 8, speed: 1.8, xp: 20, color: '#666666', size: 12 },
+    wraith: { name: 'Wraith', icon: '👻', hp: 40, dmg: 12, speed: 1.5, xp: 30, color: '#8888cc', size: 15 },
+    skeleton_mage: { name: 'Skeleton Mage', icon: '🧙', hp: 20, dmg: 15, speed: 1.0, xp: 25, color: '#9966cc', size: 13, ranged: true },
+    scorpion: { name: 'Giant Scorpion', icon: '🦂', hp: 60, dmg: 14, speed: 1.4, xp: 35, color: '#886633', size: 14 },
+    sandworm: { name: 'Sand Wyrm', icon: '🐛', hp: 80, dmg: 18, speed: 0.7, xp: 45, color: '#aa8844', size: 18 },
+    desert_mage: { name: 'Sand Sorcerer', icon: '🧙', hp: 35, dmg: 20, speed: 1.0, xp: 40, color: '#ccaa44', size: 13, ranged: true },
+    mummy: { name: 'Ancient Mummy', icon: '🧟', hp: 70, dmg: 16, speed: 0.9, xp: 42, color: '#bbaa77', size: 15 },
+    swamp_beast: { name: 'Swamp Horror', icon: '🐊', hp: 90, dmg: 22, speed: 1.0, xp: 55, color: '#336633', size: 18 },
+    poison_spider: { name: 'Venomous Spider', icon: '🕷️', hp: 40, dmg: 18, speed: 2.0, xp: 40, color: '#336600', size: 11, poison: true },
+    bog_witch: { name: 'Bog Witch', icon: '🧙‍♀️', hp: 50, dmg: 25, speed: 1.0, xp: 50, color: '#449944', size: 14, ranged: true },
+    deep_horror: { name: 'Deep Horror', icon: '🐙', hp: 120, dmg: 28, speed: 0.8, xp: 70, color: '#4444aa', size: 20 },
+    abyssal_demon: { name: 'Abyssal Demon', icon: '👹', hp: 150, dmg: 35, speed: 1.3, xp: 90, color: '#aa2222', size: 20 },
+    fire_demon: { name: 'Fire Demon', icon: '😈', hp: 180, dmg: 40, speed: 1.2, xp: 100, color: '#ff4400', size: 20 },
+    lava_elemental: { name: 'Lava Elemental', icon: '🔥', hp: 200, dmg: 35, speed: 0.9, xp: 110, color: '#ff6600', size: 22 },
+    hellhound: { name: 'Hellhound', icon: '🐕', hp: 100, dmg: 30, speed: 2.2, xp: 80, color: '#cc3300', size: 14 },
+    hell_knight: { name: 'Hell Knight', icon: '🗡️', hp: 250, dmg: 45, speed: 1.1, xp: 130, color: '#880000', size: 22 },
+    demon_lord: { name: 'AZMORATH - Demon Lord', icon: '👿', hp: 5000, dmg: 80, speed: 1.0, xp: 5000, color: '#ff0000', size: 35, boss: true, phases: 3 }
+};
+
+// ==================== ITEM GENERATION ====================
+const ITEM_BASES = {
+    weapon: [
+        { name: 'Rusty Sword', icon: '🗡️', slot: 'weapon', baseDmg: [3,7], lvl: 1 },
+        { name: 'Iron Blade', icon: '⚔️', slot: 'weapon', baseDmg: [6,12], lvl: 3 },
+        { name: 'Steel Greatsword', icon: '⚔️', slot: 'weapon', baseDmg: [10,20], lvl: 6 },
+        { name: 'War Axe', icon: '🪓', slot: 'weapon', baseDmg: [15,28], lvl: 10 },
+        { name: 'Demon Slayer', icon: '⚔️', slot: 'weapon', baseDmg: [25,45], lvl: 15 },
+        { name: 'Hellforged Blade', icon: '🗡️', slot: 'weapon', baseDmg: [35,60], lvl: 18 }
+    ],
+    armor: [
+        { name: 'Leather Tunic', icon: '👕', slot: 'armor', baseArmor: 5, lvl: 1 },
+        { name: 'Chainmail', icon: '🦺', slot: 'armor', baseArmor: 15, lvl: 4 },
+        { name: 'Plate Armor', icon: '🦺', slot: 'armor', baseArmor: 30, lvl: 8 },
+        { name: 'Demonic Plate', icon: '🦺', slot: 'armor', baseArmor: 55, lvl: 14 }
+    ],
+    helmet: [
+        { name: 'Leather Cap', icon: '🎩', slot: 'helmet', baseArmor: 3, lvl: 1 },
+        { name: 'Iron Helm', icon: '⛑️', slot: 'helmet', baseArmor: 10, lvl: 5 },
+        { name: 'Crown of Thorns', icon: '👑', slot: 'helmet', baseArmor: 22, lvl: 12 }
+    ],
+    boots: [
+        { name: 'Leather Boots', icon: '👢', slot: 'boots', baseArmor: 2, movSpeed: 5, lvl: 1 },
+        { name: 'Iron Greaves', icon: '👢', slot: 'boots', baseArmor: 8, movSpeed: 0, lvl: 5 },
+        { name: 'Windrunners', icon: '👢', slot: 'boots', baseArmor: 5, movSpeed: 20, lvl: 8 }
+    ],
+    gloves: [
+        { name: 'Leather Gloves', icon: '🧤', slot: 'gloves', baseArmor: 2, lvl: 1 },
+        { name: 'Spiked Gauntlets', icon: '🧤', slot: 'gloves', baseArmor: 7, lvl: 5 }
+    ],
+    ring1: [
+        { name: 'Copper Ring', icon: '💍', slot: 'ring1', lvl: 1 },
+        { name: 'Gold Ring', icon: '💍', slot: 'ring1', lvl: 5 },
+        { name: 'Demon Ring', icon: '💍', slot: 'ring1', lvl: 12 }
+    ],
+    amulet: [
+        { name: 'Bone Amulet', icon: '📿', slot: 'amulet', lvl: 1 },
+        { name: 'Ruby Pendant', icon: '📿', slot: 'amulet', lvl: 6 }
+    ],
+    shield: [
+        { name: 'Wooden Shield', icon: '🛡️', slot: 'shield', baseArmor: 5, block: 10, lvl: 1 },
+        { name: 'Tower Shield', icon: '🛡️', slot: 'shield', baseArmor: 20, block: 20, lvl: 7 }
+    ],
+    potion: [
+        { name: 'Health Potion', icon: '🧪', slot: null, heal: 50, lvl: 1, stackable: true },
+        { name: 'Mana Potion', icon: '🧪', slot: null, manaRestore: 40, lvl: 1, stackable: true },
+        { name: 'Greater Health Potion', icon: '🧪', slot: null, heal: 150, lvl: 5, stackable: true }
+    ]
+};
+
+const AFFIXES = {
+    prefix: [
+        { name: 'Sharp', stats: { dmgBonus: [2,8] }, req: 'weapon' },
+        { name: 'Cruel', stats: { dmgBonus: [5,15] }, req: 'weapon' },
+        { name: 'Sturdy', stats: { armorBonus: [3,10] } },
+        { name: 'Blessed', stats: { maxHp: [10,40] } },
+        { name: 'Arcane', stats: { maxMana: [8,25] } },
+        { name: 'Swift', stats: { attackSpeed: [5,15] } },
+        { name: 'Vampiric', stats: { lifeSteal: [2,8] } },
+        { name: 'Thorned', stats: { thornsDmg: [3,12] } },
+        { name: 'Blazing', stats: { fireDmg: [5,20] } },
+        { name: 'Frozen', stats: { coldDmg: [4,15] } },
+        { name: 'Shocking', stats: { lightningDmg: [6,18] } }
+    ],
+    suffix: [
+        { name: 'of Power', stats: { strength: [2,8] } },
+        { name: 'of Intellect', stats: { intelligence: [2,8] } },
+        { name: 'of Dexterity', stats: { dexterity: [2,8] } },
+        { name: 'of Vitality', stats: { vitality: [2,8] } },
+        { name: 'of the Bear', stats: { maxHp: [15,50] } },
+        { name: 'of the Sage', stats: { maxMana: [10,35] } },
+        { name: 'of Fortune', stats: { magicFind: [5,25] } },
+        { name: 'of Haste', stats: { movSpeed: [3,10] } },
+        { name: 'of Regeneration', stats: { hpRegen: [1,5] } },
+        { name: 'of the Leech', stats: { lifeSteal: [3,7] } },
+        { name: 'of Resistance', stats: { allRes: [3,12] } },
+        { name: 'of Criticals', stats: { critChance: [3,10] } }
+    ]
+};
+
+const UNIQUE_ITEMS = [
+    { name: "Ashbringer", icon: '⚔️', slot: 'weapon', rarity: 'unique', baseDmg: [40,70],
+        stats: { fireDmg: 25, critChance: 15, strength: 10 },
+        flavor: "Forged in the heart of a dying star." },
+    { name: "Veil of Shadows", icon: '🎩', slot: 'helmet', rarity: 'unique', baseArmor: 35,
+        stats: { dexterity: 15, critChance: 10, movSpeed: 10 },
+        flavor: "Those who wear it become one with darkness." },
+    { name: "Soulkeeper", icon: '🛡️', slot: 'shield', rarity: 'unique', baseArmor: 40, block: 35,
+        stats: { maxHp: 80, allRes: 15, hpRegen: 5 },
+        flavor: "It feeds on the souls of the fallen." }
+];
+
+const FLAVORS = [
+    "Stained with the blood of a thousand battles.",
+    "Whispers of forgotten power echo within.",
+    "Forged by a mad smith in the depths.",
+    "The previous owner died screaming.",
+    "It hums with dark energy.",
+    "Ancient runes glow faintly on its surface."
+];
+
+function generateItem(level, forcedRarity) {
+    // Check for unique drop
+    if (!forcedRarity && Math.random() < 0.005) {
+        let u = UNIQUE_ITEMS[Math.floor(Math.random() * UNIQUE_ITEMS.length)];
+        return { ...u, id: Math.random() };
+    }
+
+    let types = Object.keys(ITEM_BASES).filter(t => t !== 'potion');
+    let type = types[Math.floor(Math.random() * types.length)];
+    let bases = ITEM_BASES[type].filter(b => b.lvl <= level + 2);
+    if (bases.length === 0) bases = [ITEM_BASES[type][0]];
+    let base = { ...bases[Math.floor(Math.random() * bases.length)] };
+
+    let rarityRoll = forcedRarity || rollRarity(level);
+    base.rarity = rarityRoll;
+    base.id = Math.random();
+    base.stats = {};
+    base.level = level;
+
+    let numAffixes = rarityRoll === 'common' ? 0 : rarityRoll === 'magic' ? 1 + (Math.random() < 0.5 ? 1 : 0) :
+        rarityRoll === 'rare' ? 3 + Math.floor(Math.random() * 2) : 4 + Math.floor(Math.random() * 3);
+
+    let usedPrefixes = [], usedSuffixes = [];
+    for (let i = 0; i < numAffixes; i++) {
+        let pool = Math.random() < 0.5 ? 'prefix' : 'suffix';
+        let affixes = AFFIXES[pool].filter(a => (!a.req || a.req === type) &&
+            !(pool === 'prefix' ? usedPrefixes : usedSuffixes).includes(a.name));
+        if (affixes.length === 0) continue;
+        let affix = affixes[Math.floor(Math.random() * affixes.length)];
+        if (pool === 'prefix') { usedPrefixes.push(affix.name); base.name = affix.name + ' ' + base.name; }
+        else { usedSuffixes.push(affix.name); base.name = base.name + ' ' + affix.name; }
+
+        for (let stat in affix.stats) {
+            let range = affix.stats[stat];
+            let val = range[0] + Math.floor(Math.random() * (range[1] - range[0] + 1));
+            val = Math.floor(val * (1 + level * 0.05));
+            base.stats[stat] = (base.stats[stat] || 0) + val;
+        }
+    }
+
+    if (base.baseDmg) {
+        let mult = 1 + rarityRoll === 'legendary' ? 0.5 : rarityRoll === 'rare' ? 0.3 : rarityRoll === 'magic' ? 0.15 : 0;
+        base.baseDmg = [Math.floor(base.baseDmg[0] * (1 + mult)), Math.floor(base.baseDmg[1] * (1 + mult))];
+    }
+
+    if (rarityRoll !== 'common' && Math.random() < 0.3) {
+        base.flavor = FLAVORS[Math.floor(Math.random() * FLAVORS.length)];
+    }
+
+    return base;
+}
+
+function rollRarity(level) {
+    let r = Math.random() * 100;
+    let legendaryChance = 1 + (player ? (player.stats.magicFind || 0) * 0.01 : 0) + level * 0.2;
+    let rareChance = 8 + level * 0.5;
+    let magicChance = 25 + level;
+    if (r < legendaryChance) return 'legendary';
+    if (r < legendaryChance + rareChance) return 'rare';
+    if (r < legendaryChance + rareChance + magicChance) return 'magic';
+    return 'common';
+}
+
+// ==================== SKILL DEFINITIONS ====================
+const SKILLS = {
+    warrior: [
+        { name: 'Cleave', icon: '⚔️', key: '1', manaCost: 8, cooldown: 0.3, dmgMult: 1.2, range: 60, aoe: 50, type: 'melee', desc: 'Sweeping attack' },
+        { name: 'Whirlwind', icon: '🌀', key: '2', manaCost: 20, cooldown: 2, dmgMult: 0.8, range: 80, aoe: 80, type: 'spin', duration: 1.5, desc: 'Spin dealing damage' },
+        { name: 'Leap Slam', icon: '💥', key: '3', manaCost: 25, cooldown: 4, dmgMult: 2.0, range: 200, aoe: 60, type: 'leap', desc: 'Leap and slam' },
+        { name: 'War Cry', icon: '📢', key: '4', manaCost: 30, cooldown: 10, type: 'buff', buffDuration: 8, buffStats: { dmgMult: 1.3, armorMult: 1.2 }, desc: '+30% damage, +20% armor' },
+        { name: 'Shield Bash', icon: '🛡️', key: '5', manaCost: 15, cooldown: 3, dmgMult: 1.5, range: 50, type: 'melee', stun: 1.5, desc: 'Stun enemies' }
+    ],
+    mage: [
+        { name: 'Fireball', icon: '🔥', key: '1', manaCost: 12, cooldown: 0.5, dmgMult: 1.5, range: 300, aoe: 40, type: 'projectile', projSpeed: 8, desc: 'Explosive fireball' },
+        { name: 'Ice Nova', icon: '❄️', key: '2', manaCost: 25, cooldown: 3, dmgMult: 1.8, range: 0, aoe: 120, type: 'nova', slow: 0.5, desc: 'Freezing nova' },
+        { name: 'Lightning', icon: '⚡', key: '3', manaCost: 18, cooldown: 1, dmgMult: 2.5, range: 250, type: 'chain', chains: 3, desc: 'Chain lightning' },
+        { name: 'Teleport', icon: '✨', key: '4', manaCost: 20, cooldown: 3, range: 200, type: 'teleport', desc: 'Instant teleport' },
+        { name: 'Meteor', icon: '☄️', key: '5', manaCost: 50, cooldown: 8, dmgMult: 4.0, range: 300, aoe: 100, type: 'meteor', delay: 0.8, desc: 'Devastating meteor' }
+    ],
+    ranger: [
+        { name: 'Power Shot', icon: '🏹', key: '1', manaCost: 6, cooldown: 0.3, dmgMult: 1.3, range: 350, type: 'projectile', projSpeed: 12, desc: 'Precise arrow' },
+        { name: 'Multi Shot', icon: '🎯', key: '2', manaCost: 15, cooldown: 1.5, dmgMult: 0.8, range: 300, type: 'multishot', projCount: 5, projSpeed: 10, desc: '5 arrows' },
+        { name: 'Poison Arrow', icon: '☠️', key: '3', manaCost: 12, cooldown: 2, dmgMult: 0.5, range: 300, type: 'projectile', projSpeed: 10, dot: { dmg: 5, duration: 4 }, desc: 'Poison damage over time' },
+        { name: 'Evasion', icon: '💨', key: '4', manaCost: 15, cooldown: 5, type: 'buff', buffDuration: 3, buffStats: { movSpeed: 50, dodgeChance: 40 }, desc: 'Dodge and speed' },
+        { name: 'Rain of Arrows', icon: '🌧️', key: '5', manaCost: 35, cooldown: 6, dmgMult: 2.0, range: 250, aoe: 120, type: 'meteor', delay: 0.5, desc: 'Area bombardment' }
+    ],
+    necro: [
+        { name: 'Bone Spear', icon: '🦴', key: '1', manaCost: 8, cooldown: 0.4, dmgMult: 1.4, range: 300, type: 'projectile', projSpeed: 9, pierce: true, desc: 'Piercing bone projectile' },
+        { name: 'Raise Dead', icon: '💀', key: '2', manaCost: 25, cooldown: 5, type: 'summon', summonCount: 3, summonDuration: 15, desc: 'Summon 3 skeletons' },
+        { name: 'Corpse Explosion', icon: '💥', key: '3', manaCost: 15, cooldown: 1, dmgMult: 3.0, range: 200, aoe: 80, type: 'corpse_explode', desc: 'Explode nearby corpses' },
+        { name: 'Dark Pact', icon: '🩸', key: '4', manaCost: 0, cooldown: 1, type: 'sacrifice', hpCost: 0.15, dmgMult: 3.0, range: 150, aoe: 100, desc: 'Sacrifice HP for damage' },
+        { name: 'Army of Dead', icon: '⚰️', key: '5', manaCost: 60, cooldown: 20, type: 'summon', summonCount: 8, summonDuration: 20, desc: 'Summon undead army' }
+    ]
+};
+
+// ==================== PASSIVE TREE ====================
+const PASSIVE_NODES = [
+    { id: 0, x: 400, y: 500, name: 'START', stats: {}, cost: 0, children: [1,2,3] },
+    { id: 1, x: 300, y: 430, name: '+10 Strength', stats: { strength: 10 }, cost: 1, children: [4,5] },
+    { id: 2, x: 400, y: 400, name: '+10 Vitality', stats: { vitality: 10 }, cost: 1, children: [6,7] },
+    { id: 3, x: 500, y: 430, name: '+10 Intelligence', stats: { intelligence: 10 }, cost: 1, children: [8,9] },
+    { id: 4, x: 230, y: 360, name: '+5% Crit Chance', stats: { critChance: 5 }, cost: 1, children: [10] },
+    { id: 5, x: 330, y: 340, name: '+15% Attack Speed', stats: { attackSpeed: 15 }, cost: 1, children: [10,11] },
+    { id: 6, x: 370, y: 300, name: '+30 Max HP', stats: { maxHp: 30 }, cost: 1, children: [11,12] },
+    { id: 7, x: 440, y: 310, name: '+5 HP Regen', stats: { hpRegen: 5 }, cost: 1, children: [12,13] },
+    { id: 8, x: 500, y: 340, name: '+20 Max Mana', stats: { maxMana: 20 }, cost: 1, children: [13] },
+    { id: 9, x: 570, y: 360, name: '+15% Spell Damage', stats: { spellDmg: 15 }, cost: 1, children: [14] },
+    { id: 10, x: 270, y: 260, name: '+20% Phys Damage', stats: { physDmg: 20 }, cost: 2, children: [15] },
+    { id: 11, x: 350, y: 240, name: '+5% Life Steal', stats: { lifeSteal: 5 }, cost: 2, children: [15,16] },
+    { id: 12, x: 400, y: 220, name: '+50 Max HP', stats: { maxHp: 50 }, cost: 2, children: [16] },
+    { id: 13, x: 460, y: 240, name: '+10 All Res', stats: { allRes: 10 }, cost: 2, children: [16,17] },
+    { id: 14, x: 550, y: 260, name: '+25% Elemental Dmg', stats: { elemDmg: 25 }, cost: 2, children: [17] },
+    { id: 15, x: 300, y: 170, name: 'BERSERKER: +40% Dmg', stats: { dmgMult: 0.4 }, cost: 3, children: [] },
+    { id: 16, x: 400, y: 150, name: 'JUGGERNAUT: +100 HP', stats: { maxHp: 100 }, cost: 3, children: [] },
+    { id: 17, x: 500, y: 170, name: 'ARCHMAGE: +50% Spell', stats: { spellDmg: 50 }, cost: 3, children: [] }
+];
+
+// ==================== GAME STATE ====================
+let gameState = 'menu'; // menu, playing, dead
+let player = null;
+let camera = { x: 0, y: 0 };
+let currentZone = null;
+let currentZoneData = null;
+let mapData = null;
+let monsters = [];
+let projectiles = [];
+let particles = [];
+let lootDrops = [];
+let summons = [];
+let corpses = [];
+let keys = {};
+let mouse = { x: 0, y: 0, down: false, rightDown: false };
+let lastTime = 0;
+let skillCooldowns = {};
+let activeBuff = null;
+let screenShake = 0;
+let damageNumbers = [];
+let portalEntities = [];
+let npcEntities = [];
+let ambientParticles = [];
+let frameCount = 0;
+let selectedClass = 'warrior';
+let questState = { talkedToElder: false, bossKilled: false };
+
+// ==================== PLAYER ====================
+function createPlayer(className) {
+    const classStats = {
+        warrior: { strength: 15, dexterity: 8, intelligence: 5, vitality: 12, baseHp: 120, baseMana: 40, baseDmg: [5,10] },
+        mage: { strength: 5, dexterity: 8, intelligence: 15, vitality: 8, baseHp: 70, baseMana: 100, baseDmg: [3,6] },
+        ranger: { strength: 8, dexterity: 15, intelligence: 5, vitality: 10, baseHp: 90, baseMana: 60, baseDmg: [4,8] },
+        necro: { strength: 6, dexterity: 8, intelligence: 14, vitality: 10, baseHp: 80, baseMana: 80, baseDmg: [3,7] }
+    };
+    let cs = classStats[className];
+    return {
+        x: 20 * TILE_SIZE, y: 20 * TILE_SIZE,
+        class: className,
+        level: 1, xp: 0, xpToNext: 100,
+        hp: cs.baseHp, maxHp: cs.baseHp,
+        mana: cs.baseMana, maxMana: cs.baseMana,
+        baseStrength: cs.strength, baseDexterity: cs.dexterity,
+        baseIntelligence: cs.intelligence, baseVitality: cs.vitality,
+        baseHp: cs.baseHp, baseMana: cs.baseMana, baseDmg: [...cs.baseDmg],
+        stats: {
+            strength: cs.strength, dexterity: cs.dexterity,
+            intelligence: cs.intelligence, vitality: cs.vitality,
+            maxHp: 0, maxMana: 0, armorBonus: 0, dmgBonus: 0,
+            critChance: 5, critDmg: 150, attackSpeed: 0, movSpeed: 0,
+            lifeSteal: 0, magicFind: 0, hpRegen: 1, manaRegen: 2,
+            fireDmg: 0, coldDmg: 0, lightningDmg: 0,
+            physDmg: 0, spellDmg: 0, elemDmg: 0, allRes: 0,
+            dodgeChance: 0, block: 0, thornsDmg: 0, dmgMult: 0
+        },
+        gold: 0, statPoints: 0, passivePoints: 0,
+        equipment: { helmet: null, armor: null, weapon: null, shield: null, gloves: null, boots: null, ring1: null, amulet: null },
+        inventory: [],
+        skills: SKILLS[className],
+        passivesAllocated: [0],
+        size: 16, speed: 3,
+        attackTimer: 0, isAttacking: false, attackDir: 0,
+        spinning: false, spinTimer: 0,
+        potionCooldown: 0,
+        regenTimer: 0
+    };
+}
+
+// ==================== MAP GENERATION ====================
+function generateMap(zoneKey) {
+    let zone = ZONES[zoneKey];
+    let w = zone.width, h = zone.height;
+    let map = [];
+
+    for (let y = 0; y < h; y++) {
+        map[y] = [];
+        for (let x = 0; x < w; x++) {
+            map[y][x] = { type: 'floor', decoration: 0, variant: Math.random() };
+        }
+    }
+
+    // Borders
+    for (let x = 0; x < w; x++) { map[0][x].type = 'wall'; map[h-1][x].type = 'wall'; }
+    for (let y = 0; y < h; y++) { map[y][0].type = 'wall'; map[y][w-1].type = 'wall'; }
+
+    if (zone.type === 'dungeon') {
+        // Room-based dungeon generation
+        for (let y = 0; y < h; y++)
+            for (let x = 0; x < w; x++) map[y][x].type = 'wall';
+
+        let rooms = [];
+        for (let i = 0; i < 15; i++) {
+            let rw = 4 + Math.floor(Math.random() * 8);
+            let rh = 4 + Math.floor(Math.random() * 8);
+            let rx = 2 + Math.floor(Math.random() * (w - rw - 4));
+            let ry = 2 + Math.floor(Math.random() * (h - rh - 4));
+            let overlap = false;
+            for (let r of rooms) {
+                if (rx < r.x + r.w + 1 && rx + rw + 1 > r.x && ry < r.y + r.h + 1 && ry + rh + 1 > r.y) {
+                    overlap = true; break;
+                }
+            }
+            if (!overlap) {
+                rooms.push({ x: rx, y: ry, w: rw, h: rh });
+                for (let dy = ry; dy < ry + rh; dy++)
+                    for (let dx = rx; dx < rx + rw; dx++)
+                        if (dy > 0 && dy < h-1 && dx > 0 && dx < w-1) map[dy][dx].type = 'floor';
+            }
+        }
+
+        // Connect rooms with corridors
+        for (let i = 1; i < rooms.length; i++) {
+            let cx1 = Math.floor(rooms[i-1].x + rooms[i-1].w / 2);
+            let cy1 = Math.floor(rooms[i-1].y + rooms[i-1].h / 2);
+            let cx2 = Math.floor(rooms[i].x + rooms[i].w / 2);
+            let cy2 = Math.floor(rooms[i].y + rooms[i].h / 2);
+            let x = cx1, y = cy1;
+            while (x !== cx2) {
+                if (y > 0 && y < h-1 && x > 0 && x < w-1) map[y][x].type = 'floor';
+                x += x < cx2 ? 1 : -1;
+            }
+            while (y !== cy2) {
+                if (y > 0 && y < h-1 && x > 0 && x < w-1) map[y][x].type = 'floor';
+                y += y < cy2 ? 1 : -1;
+            }
+        }
+    } else if (zone.type === 'outdoor') {
+        // Scatter obstacles like trees/rocks
+        for (let y = 2; y < h-2; y++) {
+            for (let x = 2; x < w-2; x++) {
+                if (Math.random() < 0.12) {
+                    map[y][x].type = 'wall';
+                    map[y][x].decoration = Math.random() < 0.7 ? 'tree' : 'rock';
+                }
+            }
+        }
+        // Clear paths to portals
+        if (zone.portals) {
+            for (let p of zone.portals) {
+                for (let r = -2; r <= 2; r++)
+                    for (let c = -2; c <= 2; c++) {
+                        let py = p.y + r, px = p.x + c;
+                        if (py > 0 && py < h-1 && px > 0 && px < w-1) map[py][px].type = 'floor';
+                    }
+            }
+        }
+    } else if (zone.type === 'town') {
+        // Town: some buildings
+        let buildings = [
+            { x: 15, y: 10, w: 10, h: 8 },
+            { x: 10, y: 22, w: 8, h: 6 },
+            { x: 25, y: 20, w: 6, h: 8 }
+        ];
+        for (let b of buildings) {
+            for (let dy = b.y; dy < b.y + b.h; dy++)
+                for (let dx = b.x; dx < b.x + b.w; dx++) {
+                    if (dy > 0 && dy < h-1 && dx > 0 && dx < w-1) {
+                        if (dy === b.y || dy === b.y+b.h-1 || dx === b.x || dx === b.x+b.w-1) {
+                            map[dy][dx].type = 'wall';
+                            map[dy][dx].decoration = 'building';
+                        }
+                    }
+                }
+            // Door
+            map[b.y + b.h - 1][Math.floor(b.x + b.w/2)].type = 'floor';
+        }
+    }
+
+    // Ensure portal locations are walkable
+    if (zone.portals) {
+        for (let p of zone.portals) {
+            if (p.y >= 0 && p.y < h && p.x >= 0 && p.x < w) {
+                map[p.y][p.x].type = 'floor';
+                for (let dy = -1; dy <= 1; dy++)
+                    for (let dx = -1; dx <= 1; dx++) {
+                        let ny = p.y + dy, nx = p.x + dx;
+                        if (ny > 0 && ny < h-1 && nx > 0 && nx < w-1) map[ny][nx].type = 'floor';
+                    }
+            }
+        }
+    }
+
+    // Ensure NPC locations are walkable
+    if (zone.npcs) {
+        for (let n of zone.npcs) {
+            if (n.y >= 0 && n.y < h && n.x >= 0 && n.x < w) {
+                map[n.y][n.x].type = 'floor';
+                for (let dy = -1; dy <= 1; dy++)
+                    for (let dx = -1; dx <= 1; dx++) {
+                        let ny = n.y + dy, nx = n.x + dx;
+                        if (ny > 0 && ny < h-1 && nx > 0 && nx < w-1) map[ny][nx].type = 'floor';
+                    }
+            }
+        }
+    }
+
+    return map;
+}
+
+function spawnMonsters(zoneKey) {
+    monsters = [];
+    let zone = ZONES[zoneKey];
+    if (!zone.monsters) return;
+
+    for (let y = 3; y < zone.height - 3; y++) {
+        for (let x = 3; x < zone.width - 3; x++) {
+            if (mapData[y][x].type !== 'floor') continue;
+            if (Math.random() < zone.density) {
+                let templateKey = zone.monsters[Math.floor(Math.random() * zone.monsters.length)];
+                let t = MONSTER_TEMPLATES[templateKey];
+                let levelMult = 1 + (zone.level - 1) * 0.15;
+                let isElite = Math.random() < 0.08;
+                let isBoss = Math.random() < zone.bossChance;
+
+                let mon = {
+                    x: x * TILE_SIZE + TILE_SIZE/2, y: y * TILE_SIZE + TILE_SIZE/2,
+                    template: templateKey,
+                    name: t.name, icon: t.icon,
+                    hp: Math.floor(t.hp * levelMult * (isElite ? 3 : 1) * (isBoss ? 8 : 1)),
+                    maxHp: Math.floor(t.hp * levelMult * (isElite ? 3 : 1) * (isBoss ? 8 : 1)),
+                    dmg: Math.floor(t.dmg * levelMult * (isElite ? 1.5 : 1) * (isBoss ? 2.5 : 1)),
+                    speed: t.speed, xp: Math.floor(t.xp * levelMult * (isElite ? 3 : 1) * (isBoss ? 10 : 1)),
+                    color: t.color, size: t.size * (isBoss ? 1.8 : isElite ? 1.3 : 1),
+                    isElite, isBoss,
+                    ranged: t.ranged || false,
+                    poison: t.poison || false,
+                    attackTimer: 0, attackCooldown: 1.0,
+                    stunTimer: 0, slowTimer: 0,
+                    aggroRange: 250, state: 'idle',
+                    homeX: x * TILE_SIZE + TILE_SIZE/2,
+                    homeY: y * TILE_SIZE + TILE_SIZE/2,
+                    hitFlash: 0,
+                    dotTimer: 0, dotDmg: 0,
+                    moveAngle: Math.random() * Math.PI * 2,
+                    wanderTimer: 0,
+                    shootTimer: 0
+                };
+                if (isElite) {
+                    mon.name = '⭐ ' + mon.name;
+                    mon.color = '#ffcc00';
+                }
+                if (isBoss) {
+                    mon.name = '👑 ' + mon.name;
+                    mon.color = '#ff4400';
+                }
+                monsters.push(mon);
+            }
+        }
+    }
+
+    // Final boss spawn
+    if (zone.hasFinalBoss && questState.talkedToElder) {
+        let t = MONSTER_TEMPLATES.demon_lord;
+        let bx = Math.floor(zone.width / 2) * TILE_SIZE;
+        let by = Math.floor(zone.height / 2) * TILE_SIZE;
+        monsters.push({
+            x: bx, y: by, template: 'demon_lord',
+            name: t.name, icon: t.icon,
+            hp: t.hp, maxHp: t.hp, dmg: t.dmg,
+            speed: t.speed, xp: t.xp, color: t.color, size: t.size,
+            isElite: false, isBoss: true, isFinalBoss: true,
+            ranged: false, poison: false,
+            attackTimer: 0, attackCooldown: 1.5,
+            stunTimer: 0, slowTimer: 0,
+            aggroRange: 500, state: 'idle',
+            homeX: bx, homeY: by,
+            hitFlash: 0, dotTimer: 0, dotDmg: 0,
+            moveAngle: 0, wanderTimer: 0, shootTimer: 0,
+            phase: 1
+        });
+    }
+}
+
+// ==================== ZONE MANAGEMENT ====================
+function enterZone(zoneKey, spawnX, spawnY) {
+    currentZone = zoneKey;
+    currentZoneData = ZONES[zoneKey];
+    mapData = generateMap(zoneKey);
+    // Ensure spawn area is clear
+    for (let dy = -1; dy <= 1; dy++) {
+        for (let dx = -1; dx <= 1; dx++) {
+            let ty = spawnY + dy, tx = spawnX + dx;
+            if (mapData[ty] && mapData[ty][tx]) mapData[ty][tx].type = 'floor';
+        }
+    }
+    spawnMonsters(zoneKey);
+    projectiles = [];
+    particles = [];
+    lootDrops = [];
+    summons = [];
+    corpses = [];
+    portalEntities = [];
+    npcEntities = [];
+    ambientParticles = [];
+
+    player.x = spawnX * TILE_SIZE + TILE_SIZE/2;
+    player.y = spawnY * TILE_SIZE + TILE_SIZE/2;
+
+    // Setup portals
+    if (currentZoneData.portals) {
+        for (let p of currentZoneData.portals) {
+            portalEntities.push({
+                x: p.x * TILE_SIZE + TILE_SIZE/2,
+                y: p.y * TILE_SIZE + TILE_SIZE/2,
+                target: p.target, name: p.name,
+                tx: p.tx, ty: p.ty,
+                anim: 0
+            });
+        }
+    }
+
+    // Setup NPCs
+    if (currentZoneData.npcs) {
+        for (let n of currentZoneData.npcs) {
+            npcEntities.push({
+                x: n.x * TILE_SIZE + TILE_SIZE/2,
+                y: n.y * TILE_SIZE + TILE_SIZE/2,
+                name: n.name, icon: n.icon,
+                dialog: n.dialog, shop: n.shop,
+                quest: n.quest, stash: n.stash
+            });
+        }
+    }
+
+    // Show zone name
+    let zn = document.getElementById('zone-name');
+    zn.textContent = currentZoneData.name;
+    zn.style.display = 'block';
+    zn.style.animation = 'none';
+    zn.offsetHeight; // reflow
+    zn.style.animation = 'zoneFade 3s ease-out forwards';
+    setTimeout(() => zn.style.display = 'none', 3000);
+
+    // Clear old loot labels
+    document.querySelectorAll('.loot-label').forEach(el => el.remove());
+}
+
+// ==================== COMBAT ====================
+function calculatePlayerDamage() {
+    let base = [...player.baseDmg];
+    let weapon = player.equipment.weapon;
+    if (weapon && weapon.baseDmg) base = [...weapon.baseDmg];
+
+    let strBonus = player.stats.strength * 0.5;
+    let dmgBonusFlat = (player.stats.dmgBonus || 0) + strBonus;
+    let dmgBonusMult = 1 + (player.stats.physDmg || 0) / 100 + (player.stats.dmgMult || 0);
+
+    let min = Math.floor((base[0] + dmgBonusFlat) * dmgBonusMult);
+    let max = Math.floor((base[1] + dmgBonusFlat) * dmgBonusMult);
+
+    let elemDmg = (player.stats.fireDmg || 0) + (player.stats.coldDmg || 0) + (player.stats.lightningDmg || 0);
+    elemDmg = Math.floor(elemDmg * (1 + (player.stats.elemDmg || 0) / 100));
+
+    return { min, max, elem: elemDmg };
+}
+
+function rollDamage(dmgInfo, skillMult) {
+    let base = dmgInfo.min + Math.floor(Math.random() * (dmgInfo.max - dmgInfo.min + 1));
+    base = Math.floor(base * (skillMult || 1));
+    base += dmgInfo.elem;
+
+    let isCrit = Math.random() * 100 < player.stats.critChance;
+    if (isCrit) base = Math.floor(base * (player.stats.critDmg / 100));
+
+    return { damage: Math.max(1, base), isCrit };
+}
+
+function calculateArmor() {
+    let armor = 0;
+    for (let slot in player.equipment) {
+        let item = player.equipment[slot];
+        if (item && item.baseArmor) armor += item.baseArmor;
+        if (item && item.stats && item.stats.armorBonus) armor += item.stats.armorBonus;
+    }
+    armor += player.stats.armorBonus || 0;
+    armor += player.stats.vitality * 0.5;
+    return Math.floor(armor);
+}
+
+function damageReduction(armor) {
+    return armor / (armor + 100);
+}
+
+function dealDamageToMonster(mon, baseDmg, isCrit, source) {
+    mon.hp -= baseDmg;
+    mon.hitFlash = 0.15;
+
+    // Life steal
+    if (player.stats.lifeSteal > 0) {
+        let healed = Math.floor(baseDmg * player.stats.lifeSteal / 100);
+        player.hp = Math.min(player.maxHp, player.hp + healed);
+    }
+
+    spawnDamageNumber(mon.x, mon.y - mon.size, baseDmg, isCrit ? '#ffff00' : '#ffffff', isCrit);
+
+    // Particles
+    for (let i = 0; i < (isCrit ? 8 : 4); i++) {
+        particles.push({
+            x: mon.x, y: mon.y,
+            vx: (Math.random() - 0.5) * 4, vy: (Math.random() - 0.5) * 4,
+            life: 0.3 + Math.random() * 0.3,
+            color: isCrit ? '#ffff00' : '#ff4444',
+            size: isCrit ? 4 : 2
+        });
+    }
+
+    if (mon.hp <= 0) killMonster(mon);
+}
+
+function killMonster(mon) {
+    // XP
+    giveXP(mon.xp);
+
+    // Gold
+    let goldDrop = Math.floor(mon.xp * 0.5 + Math.random() * mon.xp);
+    player.gold += goldDrop;
+
+    // Corpse
+    corpses.push({ x: mon.x, y: mon.y, timer: 30 });
+
+    // Loot
+    let dropChance = mon.isBoss ? 1.0 : mon.isElite ? 0.5 : 0.15;
+    dropChance += player.stats.magicFind * 0.002;
+    let numDrops = mon.isBoss ? 3 + Math.floor(Math.random() * 3) : mon.isElite ? 1 + (Math.random() < 0.3 ? 1 : 0) : 1;
+
+    if (Math.random() < dropChance) {
+        for (let i = 0; i < numDrops; i++) {
+            let item = generateItem(currentZoneData.level + Math.floor(player.level * 0.3));
+            dropLoot(mon.x + (Math.random()-0.5) * 40, mon.y + (Math.random()-0.5) * 40, item);
+        }
+    }
+
+    // Always drop a potion chance
+    if (Math.random() < 0.15) {
+        let potion = { ...ITEM_BASES.potion[player.level >= 5 ? 2 : 0], id: Math.random(), rarity: 'common' };
+        dropLoot(mon.x + (Math.random()-0.5) * 30, mon.y, potion);
+    }
+
+    // Death particles
+    for (let i = 0; i < 15; i++) {
+        particles.push({
+            x: mon.x, y: mon.y,
+            vx: (Math.random()-0.5) * 6, vy: (Math.random()-0.5) * 6,
+            life: 0.5 + Math.random() * 0.5,
+            color: mon.color, size: 3
+        });
+    }
+
+    if (mon.isFinalBoss) {
+        questState.bossKilled = true;
+        // Victory particles
+        for (let i = 0; i < 100; i++) {
+            particles.push({
+                x: mon.x + (Math.random()-0.5)*100,
+                y: mon.y + (Math.random()-0.5)*100,
+                vx: (Math.random()-0.5)*10, vy: -Math.random()*8,
+                life: 2 + Math.random() * 2,
+                color: ['#ff0','#f80','#f00','#ff0','#fff'][Math.floor(Math.random()*5)],
+                size: 3 + Math.random() * 4
+            });
+        }
+    }
+
+    // Remove
+    let idx = monsters.indexOf(mon);
+    if (idx > -1) monsters.splice(idx, 1);
+}
+
+function giveXP(amount) {
+    player.xp += amount;
+    while (player.xp >= player.xpToNext) {
+        player.xp -= player.xpToNext;
+        player.level++;
+        player.xpToNext = Math.floor(player.xpToNext * 1.5);
+        player.statPoints += 5;
+        player.passivePoints += 1;
+
+        // Stat increases
+        player.baseHp += 10;
+        player.baseMana += 5;
+        recalcPlayerStats();
+        player.hp = player.maxHp;
+        player.mana = player.maxMana;
+
+        // Level up effect
+        let lut = document.getElementById('level-up-text');
+        lut.style.display = 'block';
+        lut.style.animation = 'none';
+        lut.offsetHeight;
+        lut.style.animation = 'levelPulse 2s ease-out forwards';
+        setTimeout(() => lut.style.display = 'none', 2000);
+
+        screenShake = 0.3;
+
+        for (let i = 0; i < 30; i++) {
+            particles.push({
+                x: player.x, y: player.y,
+                vx: (Math.random()-0.5)*8, vy: (Math.random()-0.5)*8,
+                life: 1 + Math.random(), color: '#ffcc00', size: 3
+            });
+        }
+    }
+}
+
+function dropLoot(x, y, item) {
+    lootDrops.push({ x, y, item, pickupTimer: 0.5 });
+}
+
+function spawnDamageNumber(x, y, value, color, isCrit) {
+    damageNumbers.push({
+        x, y, value, color, isCrit, life: 1.0,
+        vx: (Math.random()-0.5)*2, vy: -2
+    });
+}
+
+// ==================== SKILL EXECUTION ====================
+function useSkill(skillIndex) {
+    if (skillIndex >= player.skills.length) return;
+    let skill = player.skills[skillIndex];
+    let cdKey = skill.name;
+
+    if (skillCooldowns[cdKey] > 0) return;
+    if (player.mana < skill.manaCost && skill.type !== 'sacrifice') return;
+
+    let dmgInfo = calculatePlayerDamage();
+    let angle = Math.atan2(mouse.y + camera.y - player.y, mouse.x + camera.x - player.x);
+    let targetX = mouse.x + camera.x;
+    let targetY = mouse.y + camera.y;
+
+    if (skill.type !== 'sacrifice') player.mana -= skill.manaCost;
+    skillCooldowns[cdKey] = skill.cooldown;
+
+    switch (skill.type) {
+        case 'melee': {
+            let { damage, isCrit } = rollDamage(dmgInfo, skill.dmgMult);
+            monsters.forEach(m => {
+                let dist = Math.hypot(m.x - player.x, m.y - player.y);
+                if (dist < skill.range) {
+                    let angToMon = Math.atan2(m.y - player.y, m.x - player.x);
+                    let angleDiff = Math.abs(angToMon - angle);
+                    if (angleDiff > Math.PI) angleDiff = Math.PI * 2 - angleDiff;
+                    if (angleDiff < Math.PI * 0.6 || skill.aoe) {
+                        let d = rollDamage(dmgInfo, skill.dmgMult);
+                        dealDamageToMonster(m, d.damage, d.isCrit);
+                        if (skill.stun) m.stunTimer = skill.stun;
+                    }
+                }
+            });
+            player.isAttacking = true;
+            player.attackDir = angle;
+            player.attackTimer = 0.2;
+            screenShake = 0.1;
+
+            // Melee visual
+            for (let i = 0; i < 5; i++) {
+                let a = angle + (Math.random()-0.5)*1.2;
+                particles.push({
+                    x: player.x + Math.cos(a)*30, y: player.y + Math.sin(a)*30,
+                    vx: Math.cos(a)*3, vy: Math.sin(a)*3,
+                    life: 0.2, color: '#ffaa44', size: 3
+                });
+            }
+            break;
+        }
+        case 'spin': {
+            player.spinning = true;
+            player.spinTimer = skill.duration;
+            break;
+        }
+        case 'leap': {
+            let dist = Math.min(skill.range, Math.hypot(targetX - player.x, targetY - player.y));
+            player.x += Math.cos(angle) * dist;
+            player.y += Math.sin(angle) * dist;
+            // Clamp to map
+            player.x = Math.max(TILE_SIZE, Math.min((currentZoneData.width-1)*TILE_SIZE, player.x));
+            player.y = Math.max(TILE_SIZE, Math.min((currentZoneData.height-1)*TILE_SIZE, player.y));
+            screenShake = 0.2;
+            monsters.forEach(m => {
+                if (Math.hypot(m.x - player.x, m.y - player.y) < skill.aoe) {
+                    let d = rollDamage(dmgInfo, skill.dmgMult);
+                    dealDamageToMonster(m, d.damage, d.isCrit);
+                }
+            });
+            for (let i = 0; i < 20; i++) {
+                particles.push({
+                    x: player.x + (Math.random()-0.5)*skill.aoe,
+                    y: player.y + (Math.random()-0.5)*skill.aoe,
+                    vx: (Math.random()-0.5)*4, vy: (Math.random()-0.5)*4-2,
+                    life: 0.5, color: '#ffaa00', size: 3
+                });
+            }
+            break;
+        }
+        case 'buff': {
+            activeBuff = { stats: skill.buffStats, timer: skill.buffDuration, name: skill.name };
+            for (let i = 0; i < 15; i++) {
+                particles.push({
+                    x: player.x, y: player.y,
+                    vx: (Math.random()-0.5)*4, vy: -Math.random()*3,
+                    life: 0.5, color: '#44ff44', size: 2
+                });
+            }
+            break;
+        }
+        case 'projectile': {
+            let proj = {
+                x: player.x, y: player.y,
+                vx: Math.cos(angle) * skill.projSpeed,
+                vy: Math.sin(angle) * skill.projSpeed,
+                dmgMult: skill.dmgMult, dmgInfo: {...dmgInfo},
+                life: skill.range / skill.projSpeed / 60,
+                size: 6, color: skill.name.includes('Fire') ? '#ff4400' : skill.name.includes('Bone') ? '#ccccaa' : skill.name.includes('Poison') ? '#44ff00' : '#ffaa44',
+                pierce: skill.pierce || false,
+                dot: skill.dot || null,
+                type: 'player', trail: []
+            };
+            projectiles.push(proj);
+            break;
+        }
+        case 'multishot': {
+            let spreadAngle = 0.4;
+            for (let i = 0; i < skill.projCount; i++) {
+                let a = angle - spreadAngle + (spreadAngle * 2 * i / (skill.projCount - 1));
+                projectiles.push({
+                    x: player.x, y: player.y,
+                    vx: Math.cos(a) * skill.projSpeed,
+                    vy: Math.sin(a) * skill.projSpeed,
+                    dmgMult: skill.dmgMult, dmgInfo: {...dmgInfo},
+                    life: skill.range / skill.projSpeed / 60,
+                    size: 4, color: '#ffcc44', type: 'player', trail: []
+                });
+            }
+            break;
+        }
+        case 'nova': {
+            screenShake = 0.15;
+            monsters.forEach(m => {
+                if (Math.hypot(m.x - player.x, m.y - player.y) < skill.aoe) {
+                    let d = rollDamage(dmgInfo, skill.dmgMult);
+                    dealDamageToMonster(m, d.damage, d.isCrit);
+                    if (skill.slow) m.slowTimer = skill.slow;
+                }
+            });
+            for (let i = 0; i < 30; i++) {
+                let a = (Math.PI * 2 / 30) * i;
+                particles.push({
+                    x: player.x, y: player.y,
+                    vx: Math.cos(a)*6, vy: Math.sin(a)*6,
+                    life: 0.4, color: '#88ccff', size: 4
+                });
+            }
+            break;
+        }
+        case 'chain': {
+            let targets = [];
+            let closest = null, closestDist = skill.range;
+            monsters.forEach(m => {
+                let dist = Math.hypot(m.x - player.x, m.y - player.y);
+                if (dist < closestDist) { closest = m; closestDist = dist; }
+            });
+            if (closest) {
+                targets.push(closest);
+                let current = closest;
+                for (let i = 1; i < (skill.chains || 3); i++) {
+                    let next = null, nextDist = 200;
+                    monsters.forEach(m => {
+                        if (targets.includes(m)) return;
+                        let dist = Math.hypot(m.x - current.x, m.y - current.y);
+                        if (dist < nextDist) { next = m; nextDist = dist; }
+                    });
+                    if (next) { targets.push(next); current = next; }
+                }
+                let prev = { x: player.x, y: player.y };
+                targets.forEach(t => {
+                    let d = rollDamage(dmgInfo, skill.dmgMult);
+                    dealDamageToMonster(t, d.damage, d.isCrit);
+                    // Lightning visual
+                    for (let i = 0; i < 8; i++) {
+                        let frac = i / 8;
+                        particles.push({
+                            x: prev.x + (t.x-prev.x)*frac + (Math.random()-0.5)*20,
+                            y: prev.y + (t.y-prev.y)*frac + (Math.random()-0.5)*20,
+                            vx: 0, vy: 0, life: 0.3, color: '#aaddff', size: 3
+                        });
+                    }
+                    prev = t;
+                });
+            }
+            break;
+        }
+        case 'teleport': {
+            let dist = Math.min(skill.range, Math.hypot(targetX - player.x, targetY - player.y));
+            let newX = player.x + Math.cos(angle) * dist;
+            let newY = player.y + Math.sin(angle) * dist;
+            // Particles at old position
+            for (let i = 0; i < 15; i++) {
+                particles.push({
+                    x: player.x, y: player.y,
+                    vx: (Math.random()-0.5)*4, vy: (Math.random()-0.5)*4,
+                    life: 0.5, color: '#aa88ff', size: 3
+                });
+            }
+            player.x = Math.max(TILE_SIZE, Math.min((currentZoneData.width-1)*TILE_SIZE, newX));
+            player.y = Math.max(TILE_SIZE, Math.min((currentZoneData.height-1)*TILE_SIZE, newY));
+            // Particles at new position
+            for (let i = 0; i < 15; i++) {
+                particles.push({
+                    x: player.x, y: player.y,
+                    vx: (Math.random()-0.5)*4, vy: (Math.random()-0.5)*4,
+                    life: 0.5, color: '#aa88ff', size: 3
+                });
+            }
+            break;
+        }
+        case 'meteor': {
+            setTimeout(() => {
+                screenShake = 0.3;
+                monsters.forEach(m => {
+                    if (Math.hypot(m.x - targetX, m.y - targetY) < skill.aoe) {
+                        let d = rollDamage(dmgInfo, skill.dmgMult);
+                        dealDamageToMonster(m, d.damage, d.isCrit);
+                    }
+                });
+                for (let i = 0; i < 40; i++) {
+                    particles.push({
+                        x: targetX + (Math.random()-0.5)*skill.aoe,
+                        y: targetY + (Math.random()-0.5)*skill.aoe,
+                        vx: (Math.random()-0.5)*8, vy: (Math.random()-0.5)*8-3,
+                        life: 0.5 + Math.random()*0.5,
+                        color: ['#ff4400','#ffaa00','#ff6600'][Math.floor(Math.random()*3)],
+                        size: 3 + Math.random()*4
+                    });
+                }
+            }, (skill.delay || 0.8) * 1000);
+            // Indicator
+            particles.push({
+                x: targetX, y: targetY, vx: 0, vy: 0,
+                life: skill.delay || 0.8, color: 'rgba(255,50,0,0.3)',
+                size: skill.aoe, isIndicator: true
+            });
+            break;
+        }
+        case 'summon': {
+            for (let i = 0; i < skill.summonCount; i++) {
+                let a = (Math.PI * 2 / skill.summonCount) * i;
+                summons.push({
+                    x: player.x + Math.cos(a)*40, y: player.y + Math.sin(a)*40,
+                    hp: 30 + player.level * 5, maxHp: 30 + player.level * 5,
+                    dmg: 5 + player.level * 2, speed: 2, size: 10,
+                    timer: skill.summonDuration, attackTimer: 0
+                });
+            }
+            break;
+        }
+        case 'corpse_explode': {
+            let exploded = false;
+            corpses.forEach(c => {
+                if (Math.hypot(c.x - player.x, c.y - player.y) < skill.range) {
+                    exploded = true;
+                    monsters.forEach(m => {
+                        if (Math.hypot(m.x - c.x, m.y - c.y) < skill.aoe) {
+                            let d = rollDamage(dmgInfo, skill.dmgMult);
+                            dealDamageToMonster(m, d.damage, d.isCrit);
+                        }
+                    });
+                    for (let i = 0; i < 20; i++) {
+                        particles.push({
+                            x: c.x, y: c.y,
+                            vx: (Math.random()-0.5)*8, vy: (Math.random()-0.5)*8,
+                            life: 0.5, color: '#882222', size: 4
+                        });
+                    }
+                    c.timer = 0;
+                }
+            });
+            if (!exploded) { player.mana += skill.manaCost; skillCooldowns[cdKey] = 0; }
+            break;
+        }
+        case 'sacrifice': {
+            let hpCost = Math.floor(player.maxHp * skill.hpCost);
+            if (player.hp <= hpCost) return;
+            player.hp -= hpCost;
+            screenShake = 0.15;
+            monsters.forEach(m => {
+                if (Math.hypot(m.x - player.x, m.y - player.y) < skill.range) {
+                    let d = rollDamage(dmgInfo, skill.dmgMult);
+                    dealDamageToMonster(m, d.damage, d.isCrit);
+                }
+            });
+            for (let i = 0; i < 20; i++) {
+                let a = (Math.PI * 2 / 20) * i;
+                particles.push({
+                    x: player.x, y: player.y,
+                    vx: Math.cos(a)*5, vy: Math.sin(a)*5,
+                    life: 0.5, color: '#990000', size: 4
+                });
+            }
+            break;
+        }
+    }
+}
+
+// ==================== RECALCULATE STATS ====================
+function recalcPlayerStats() {
+    // Reset to base
+    let s = player.stats;
+    s.strength = player.baseStrength;
+    s.dexterity = player.baseDexterity;
+    s.intelligence = player.baseIntelligence;
+    s.vitality = player.baseVitality;
+    s.maxHp = 0; s.maxMana = 0; s.armorBonus = 0; s.dmgBonus = 0;
+    s.critChance = 5; s.critDmg = 150; s.attackSpeed = 0; s.movSpeed = 0;
+    s.lifeSteal = 0; s.magicFind = 0; s.hpRegen = 1; s.manaRegen = 2;
+    s.fireDmg = 0; s.coldDmg = 0; s.lightningDmg = 0;
+    s.physDmg = 0; s.spellDmg = 0; s.elemDmg = 0; s.allRes = 0;
+    s.dodgeChance = 0; s.block = 0; s.thornsDmg = 0; s.dmgMult = 0;
+
+    // Equipment stats
+    for (let slot in player.equipment) {
+        let item = player.equipment[slot];
+        if (!item || !item.stats) continue;
+        for (let stat in item.stats) {
+            if (s[stat] !== undefined) s[stat] += item.stats[stat];
+        }
+        if (item.block) s.block += item.block;
+    }
+
+    // Passive tree stats
+    for (let nodeId of player.passivesAllocated) {
+        let node = PASSIVE_NODES[nodeId];
+        if (node.stats) {
+            for (let stat in node.stats) {
+                if (s[stat] !== undefined) s[stat] += node.stats[stat];
+            }
+        }
+    }
+
+    // Calculate max HP/Mana
+    player.maxHp = player.baseHp + s.vitality * 5 + s.maxHp;
+    player.maxMana = player.baseMana + s.intelligence * 3 + s.maxMana;
+
+    // Dex gives crit and dodge
+    s.critChance += s.dexterity * 0.2;
+    s.dodgeChance += s.dexterity * 0.15;
+
+    // Clamp HP
+    if (player.hp > player.maxHp) player.hp = player.maxHp;
+    if (player.mana > player.maxMana) player.mana = player.maxMana;
+}
+
+// ==================== UPDATE ====================
+function update(dt) {
+    if (gameState !== 'playing') return;
+    frameCount++;
+
+    // Cooldowns
+    for (let key in skillCooldowns) {
+        if (skillCooldowns[key] > 0) skillCooldowns[key] = Math.max(0, skillCooldowns[key] - dt);
+    }
+
+    // Player movement
+    let moveX = 0, moveY = 0;
+    if (keys['KeyW'] || keys['ArrowUp']) moveY -= 1;
+    if (keys['KeyS'] || keys['ArrowDown']) moveY += 1;
+    if (keys['KeyA'] || keys['ArrowLeft']) moveX -= 1;
+    if (keys['KeyD'] || keys['ArrowRight']) moveX += 1;
+
+    let moveSpeed = player.speed * (1 + player.stats.movSpeed / 100);
+    if (activeBuff && activeBuff.stats.movSpeed) moveSpeed *= (1 + activeBuff.stats.movSpeed / 100);
+
+    if (moveX !== 0 || moveY !== 0) {
+        let len = Math.hypot(moveX, moveY);
+        moveX /= len; moveY /= len;
+        let newX = player.x + moveX * moveSpeed;
+        let newY = player.y + moveY * moveSpeed;
+
+        let tileX = Math.floor(newX / TILE_SIZE);
+        let tileY = Math.floor(newY / TILE_SIZE);
+        if (tileX >= 0 && tileX < currentZoneData.width && tileY >= 0 && tileY < currentZoneData.height) {
+            if (mapData[tileY][Math.floor(player.x/TILE_SIZE)].type !== 'wall') player.y = newY;
+            if (mapData[Math.floor(player.y/TILE_SIZE)][tileX].type !== 'wall') player.x = newX;
+        }
+    }
+
+    // Right-click move (click to move)
+    if (mouse.rightDown) {
+        let targetX = mouse.x + camera.x;
+        let targetY = mouse.y + camera.y;
+        let angle = Math.atan2(targetY - player.y, targetX - player.x);
+        let dist = Math.hypot(targetX - player.x, targetY - player.y);
+        if (dist > 5) {
+            let mx = Math.cos(angle) * moveSpeed;
+            let my = Math.sin(angle) * moveSpeed;
+            let newX = player.x + mx;
+            let newY = player.y + my;
+            let tileX = Math.floor(newX / TILE_SIZE);
+            let tileY = Math.floor(newY / TILE_SIZE);
+            if (tileX >= 0 && tileX < currentZoneData.width && tileY >= 0 && tileY < currentZoneData.height) {
+                if (mapData[tileY][Math.floor(player.x/TILE_SIZE)].type !== 'wall') player.y = newY;
+                if (mapData[Math.floor(player.y/TILE_SIZE)][tileX].type !== 'wall') player.x = newX;
+            }
+        }
+    }
+
+    // Auto-attack on left click
+    if (mouse.down && !player.spinning) {
+        if (player.attackTimer <= 0) {
+            useSkill(0); // Default skill
+        }
+    }
+
+    // Whirlwind/spin
+    if (player.spinning) {
+        player.spinTimer -= dt;
+        if (player.spinTimer <= 0) player.spinning = false;
+        else {
+            let dmgInfo = calculatePlayerDamage();
+            monsters.forEach(m => {
+                if (Math.hypot(m.x - player.x, m.y - player.y) < 80) {
+                    if (Math.random() < 0.1) {
+                        let d = rollDamage(dmgInfo, 0.8);
+                        dealDamageToMonster(m, d.damage, d.isCrit);
+                    }
+                }
+            });
+            for (let i = 0; i < 2; i++) {
+                let a = frameCount * 0.3 + i * Math.PI;
+                particles.push({
+                    x: player.x + Math.cos(a)*30, y: player.y + Math.sin(a)*30,
+                    vx: Math.cos(a)*2, vy: Math.sin(a)*2,
+                    life: 0.2, color: '#ffcc44', size: 2
+                });
+            }
+        }
+    }
+
+    // Attack timer
+    if (player.attackTimer > 0) player.attackTimer -= dt;
+    if (player.attackTimer <= 0) player.isAttacking = false;
+
+    // Regen
+    player.regenTimer += dt;
+    if (player.regenTimer >= 1) {
+        player.regenTimer = 0;
+        player.hp = Math.min(player.maxHp, player.hp + player.stats.hpRegen);
+        player.mana = Math.min(player.maxMana, player.mana + player.stats.manaRegen);
+    }
+
+    // Buff timer
+    if (activeBuff) {
+        activeBuff.timer -= dt;
+        if (activeBuff.timer <= 0) activeBuff = null;
+    }
+
+    // Potion cooldown
+    if (player.potionCooldown > 0) player.potionCooldown -= dt;
+
+    // Update monsters
+    monsters.forEach(mon => {
+        if (mon.stunTimer > 0) { mon.stunTimer -= dt; return; }
+        if (mon.hitFlash > 0) mon.hitFlash -= dt;
+
+        let distToPlayer = Math.hypot(mon.x - player.x, mon.y - player.y);
+        let speedMult = mon.slowTimer > 0 ? 0.5 : 1;
+        if (mon.slowTimer > 0) mon.slowTimer -= dt;
+
+        // DOT
+        if (mon.dotTimer > 0) {
+            mon.dotTimer -= dt;
+            if (frameCount % 30 === 0) {
+                mon.hp -= mon.dotDmg;
+                spawnDamageNumber(mon.x, mon.y - mon.size, mon.dotDmg, '#44ff00', false);
+                if (mon.hp <= 0) killMonster(mon);
+            }
+        }
+
+        if (distToPlayer < mon.aggroRange) {
+            mon.state = 'chase';
+            let angle = Math.atan2(player.y - mon.y, player.x - mon.x);
+
+            if (mon.ranged && distToPlayer < 250 && distToPlayer > 100) {
+                // Stay at range
+                mon.shootTimer += dt;
+                if (mon.shootTimer >= 1.5) {
+                    mon.shootTimer = 0;
+                    projectiles.push({
+                        x: mon.x, y: mon.y,
+                        vx: Math.cos(angle) * 5, vy: Math.sin(angle) * 5,
+                        dmg: mon.dmg, life: 3, size: 5,
+                        color: '#ff44ff', type: 'enemy', trail: []
+                    });
+                }
+            } else if (distToPlayer > 40) {
+                mon.x += Math.cos(angle) * mon.speed * speedMult;
+                mon.y += Math.sin(angle) * mon.speed * speedMult;
+            }
+
+            // Melee attack
+            if (distToPlayer < 40 + mon.size) {
+                mon.attackTimer += dt;
+                if (mon.attackTimer >= mon.attackCooldown) {
+                    mon.attackTimer = 0;
+                    let dodge = Math.random() * 100 < (player.stats.dodgeChance + (activeBuff && activeBuff.stats.dodgeChance ? activeBuff.stats.dodgeChance : 0));
+                    if (!dodge) {
+                        let blocked = Math.random() * 100 < player.stats.block;
+                        let dmg = mon.dmg;
+                        let armor = calculateArmor();
+                        if (activeBuff && activeBuff.stats.armorMult) armor *= activeBuff.stats.armorMult;
+                        dmg = Math.floor(dmg * (1 - damageReduction(armor)));
+                        if (blocked) dmg = Math.floor(dmg * 0.3);
+                        player.hp -= dmg;
+                        spawnDamageNumber(player.x, player.y - 20, dmg, blocked ? '#4444ff' : '#ff4444', false);
+                        screenShake = 0.05;
+
+                        // Thorns
+                        if (player.stats.thornsDmg > 0) {
+                            mon.hp -= player.stats.thornsDmg;
+                            if (mon.hp <= 0) killMonster(mon);
+                        }
+
+                        if (mon.poison) {
+                            // Poison DOT on player
+                            // (simplified - just extra damage)
+                            player.hp -= 3;
+                        }
+                    } else {
+                        spawnDamageNumber(player.x, player.y - 20, 'DODGE', '#44ff44', false);
+                    }
+                }
+            }
+        } else {
+            mon.state = 'idle';
+            mon.wanderTimer += dt;
+            if (mon.wanderTimer > 2 + Math.random() * 3) {
+                mon.wanderTimer = 0;
+                mon.moveAngle = Math.random() * Math.PI * 2;
+            }
+            mon.x += Math.cos(mon.moveAngle) * mon.speed * 0.3 * speedMult;
+            mon.y += Math.sin(mon.moveAngle) * mon.speed * 0.3 * speedMult;
+
+            // Keep within bounds
+            let tileX = Math.floor(mon.x / TILE_SIZE);
+            let tileY = Math.floor(mon.y / TILE_SIZE);
+            if (tileX < 1 || tileX >= currentZoneData.width-1 || tileY < 1 || tileY >= currentZoneData.height-1 ||
+                mapData[tileY][tileX].type === 'wall') {
+                mon.moveAngle += Math.PI;
+                mon.x = Math.max(TILE_SIZE, Math.min((currentZoneData.width-2)*TILE_SIZE, mon.x));
+                mon.y = Math.max(TILE_SIZE, Math.min((currentZoneData.height-2)*TILE_SIZE, mon.y));
+            }
+        }
+
+        // Final boss special attacks
+        if (mon.isFinalBoss && distToPlayer < 400) {
+            if (frameCount % 120 === 0) {
+                // Radial projectile burst
+                for (let i = 0; i < 12; i++) {
+                    let a = (Math.PI * 2 / 12) * i;
+                    projectiles.push({
+                        x: mon.x, y: mon.y,
+                        vx: Math.cos(a) * 4, vy: Math.sin(a) * 4,
+                        dmg: mon.dmg * 0.5, life: 3, size: 8,
+                        color: '#ff0000', type: 'enemy', trail: []
+                    });
+                }
+            }
+        }
+    });
+
+    // Update projectiles
+    projectiles = projectiles.filter(p => {
+        p.x += p.vx; p.y += p.vy;
+        p.life -= dt;
+        p.trail.push({ x: p.x, y: p.y });
+        if (p.trail.length > 8) p.trail.shift();
+
+        if (p.type === 'player') {
+            for (let i = monsters.length - 1; i >= 0; i--) {
+                let m = monsters[i];
+                if (Math.hypot(m.x - p.x, m.y - p.y) < m.size + p.size) {
+                    let d = rollDamage(p.dmgInfo, p.dmgMult);
+                    dealDamageToMonster(m, d.damage, d.isCrit);
+                    if (p.dot) { m.dotTimer = p.dot.duration; m.dotDmg = p.dot.dmg; }
+                    if (!p.pierce) return false;
+                }
+            }
+        } else if (p.type === 'enemy') {
+            if (Math.hypot(player.x - p.x, player.y - p.y) < player.size + p.size) {
+                let dodge = Math.random() * 100 < player.stats.dodgeChance;
+                if (!dodge) {
+                    let dmg = p.dmg;
+                    let armor = calculateArmor();
+                    dmg = Math.floor(dmg * (1 - damageReduction(armor)));
+                    player.hp -= dmg;
+                    spawnDamageNumber(player.x, player.y - 20, dmg, '#ff4444', false);
+                }
+                return false;
+            }
+        }
+
+        // Check wall collision
+        let tx = Math.floor(p.x / TILE_SIZE);
+        let ty = Math.floor(p.y / TILE_SIZE);
+        if (tx < 0 || tx >= currentZoneData.width || ty < 0 || ty >= currentZoneData.height || mapData[ty][tx].type === 'wall')
+            return false;
+
+        return p.life > 0;
+    });
+
+    // Update summons
+    summons.forEach(s => {
+        s.timer -= dt;
+        // Find nearest monster
+        let target = null, minDist = 200;
+        monsters.forEach(m => {
+            let dist = Math.hypot(m.x - s.x, m.y - s.y);
+            if (dist < minDist) { target = m; minDist = dist; }
+        });
+        if (target) {
+            let angle = Math.atan2(target.y - s.y, target.x - s.x);
+            if (minDist > 30) {
+                s.x += Math.cos(angle) * s.speed;
+                s.y += Math.sin(angle) * s.speed;
+            } else {
+                s.attackTimer += dt;
+                if (s.attackTimer >= 0.8) {
+                    s.attackTimer = 0;
+                    target.hp -= s.dmg;
+                    spawnDamageNumber(target.x, target.y - target.size, s.dmg, '#88ff88', false);
+                    if (target.hp <= 0) killMonster(target);
+                }
+            }
+        } else {
+            // Follow player
+            let dist = Math.hypot(player.x - s.x, player.y - s.y);
+            if (dist > 60) {
+                let a = Math.atan2(player.y - s.y, player.x - s.x);
+                s.x += Math.cos(a) * s.speed;
+                s.y += Math.sin(a) * s.speed;
+            }
+        }
+    });
+    summons = summons.filter(s => s.timer > 0 && s.hp > 0);
+
+    // Update corpses
+    corpses = corpses.filter(c => { c.timer -= dt; return c.timer > 0; });
+
+    // Update particles
+    particles = particles.filter(p => {
+        p.x += p.vx || 0; p.y += p.vy || 0;
+        p.life -= dt;
+        return p.life > 0;
+    });
+
+    // Damage numbers
+    damageNumbers = damageNumbers.filter(d => {
+        d.x += d.vx; d.y += d.vy;
+        d.life -= dt;
+        return d.life > 0;
+    });
+
+    // Loot pickup timer
+    lootDrops.forEach(l => {
+        if (l.pickupTimer > 0) l.pickupTimer -= dt;
+    });
+
+    // Portal interaction
+    portalEntities.forEach(p => {
+        p.anim += dt;
+        if (Math.hypot(player.x - p.x, player.y - p.y) < 40) {
+            // Show interact hint - press E to enter
+            if (keys['KeyE']) {
+                enterZone(p.target, p.tx, p.ty);
+                keys['KeyE'] = false;
+            }
+        }
+    });
+
+    // NPC interaction
+    npcEntities.forEach(n => {
+        if (Math.hypot(player.x - n.x, player.y - n.y) < 50 && keys['KeyE']) {
+            showDialog(n);
+            keys['KeyE'] = false;
+        }
+    });
+
+    // Ambient particles
+    if (frameCount % 10 === 0 && currentZoneData.type !== 'town') {
+        ambientParticles.push({
+            x: player.x + (Math.random()-0.5) * canvas.width,
+            y: player.y + (Math.random()-0.5) * canvas.height,
+            vx: (Math.random()-0.5)*0.5, vy: -Math.random()*0.5,
+            life: 3 + Math.random()*3, size: 1 + Math.random()*2,
+            color: currentZone === 'hellgate' ? '#ff330033' : currentZone === 'swamp' ? '#33ff3322' : '#ffffff11'
+        });
+    }
+    ambientParticles = ambientParticles.filter(p => {
+        p.x += p.vx; p.y += p.vy; p.life -= dt;
+        return p.life > 0;
+    });
+
+    // Screen shake
+    if (screenShake > 0) screenShake -= dt;
+
+    // Camera
+    camera.x = player.x - canvas.width / 2;
+    camera.y = player.y - canvas.height / 2;
+    if (screenShake > 0) {
+        camera.x += (Math.random()-0.5) * screenShake * 20;
+        camera.y += (Math.random()-0.5) * screenShake * 20;
+    }
+
+    // Check death
+    if (player.hp <= 0) {
+        gameState = 'dead';
+        document.getElementById('death-screen').style.display = 'flex';
+    }
+
+    // Update UI
+    updateUI();
+}
+
+// ==================== RENDER ====================
+function render() {
+    ctx.clearRect(0, 0, canvas.width, canvas.height);
+    if (gameState === 'menu') return;
+
+    ctx.save();
+    ctx.translate(-camera.x, -camera.y);
+
+    // Determine visible tiles
+    let startX = Math.max(0, Math.floor(camera.x / TILE_SIZE) - 1);
+    let startY = Math.max(0, Math.floor(camera.y / TILE_SIZE) - 1);
+    let endX = Math.min(currentZoneData.width, Math.ceil((camera.x + canvas.width) / TILE_SIZE) + 1);
+    let endY = Math.min(currentZoneData.height, Math.ceil((camera.y + canvas.height) / TILE_SIZE) + 1);
+
+    // Draw map
+    for (let y = startY; y < endY; y++) {
+        for (let x = startX; x < endX; x++) {
+            let tile = mapData[y][x];
+            let px = x * TILE_SIZE, py = y * TILE_SIZE;
+
+            if (tile.type === 'wall') {
+                ctx.fillStyle = currentZoneData.wallColor;
+                ctx.fillRect(px, py, TILE_SIZE, TILE_SIZE);
+                if (tile.decoration === 'tree') {
+                    ctx.fillStyle = currentZoneData.treeColor || '#2a4020';
+                    ctx.beginPath();
+                    ctx.arc(px + TILE_SIZE/2, py + TILE_SIZE/3, TILE_SIZE/2.5, 0, Math.PI * 2);
+                    ctx.fill();
+                    ctx.fillStyle = '#3a2a1a';
+                    ctx.fillRect(px + TILE_SIZE/2 - 3, py + TILE_SIZE/3, 6, TILE_SIZE/2);
+                } else if (tile.decoration === 'rock') {
+                    ctx.fillStyle = '#555';
+                    ctx.beginPath();
+                    ctx.arc(px + TILE_SIZE/2, py + TILE_SIZE/2, TILE_SIZE/3, 0, Math.PI * 2);
+                    ctx.fill();
+                } else if (tile.decoration === 'building') {
+                    ctx.fillStyle = '#4a3a2a';
+                    ctx.fillRect(px, py, TILE_SIZE, TILE_SIZE);
+                    ctx.strokeStyle = '#665544';
+                    ctx.strokeRect(px, py, TILE_SIZE, TILE_SIZE);
+                } else {
+                    // Generic wall with some texture
+                    ctx.fillStyle = 'rgba(0,0,0,0.3)';
+                    ctx.fillRect(px, py + TILE_SIZE - 4, TILE_SIZE, 4);
+                }
+            } else {
+                // Floor
+                let shade = tile.variant * 0.1;
+                let baseCol = currentZoneData.groundColor;
+                ctx.fillStyle = baseCol;
+                ctx.fillRect(px, py, TILE_SIZE, TILE_SIZE);
+
+                // Floor detail
+                if (tile.variant > 0.9) {
+                    ctx.fillStyle = 'rgba(255,255,255,0.03)';
+                    ctx.fillRect(px + 5, py + 5, 3, 3);
+                }
+                if (tile.variant < 0.05) {
+                    ctx.fillStyle = 'rgba(100,50,0,0.1)';
+                    ctx.fillRect(px + 10, py + 10, 8, 2);
+                }
+            }
+        }
+    }
+
+    // Draw ambient
+    if (currentZoneData.ambient) {
+        ctx.fillStyle = currentZoneData.ambient;
+        ctx.fillRect(camera.x, camera.y, canvas.width, canvas.height);
+    }
+
+    // Ambient particles
+    ambientParticles.forEach(p => {
+        ctx.fillStyle = p.color;
+        ctx.beginPath();
+        ctx.arc(p.x, p.y, p.size, 0, Math.PI * 2);
+        ctx.fill();
+    });
+
+    // Draw corpses
+    corpses.forEach(c => {
+        ctx.fillStyle = 'rgba(80,0,0,0.5)';
+        ctx.beginPath();
+        ctx.ellipse(c.x, c.y, 12, 6, 0, 0, Math.PI * 2);
+        ctx.fill();
+    });
+
+    // Draw loot
+    lootDrops.forEach(l => {
+        let glow = Math.sin(frameCount * 0.1) * 0.3 + 0.7;
+        let color = RARITY[l.item.rarity] || '#aaa';
+        ctx.shadowColor = color;
+        ctx.shadowBlur = 10 * glow;
+        ctx.fillStyle = color;
+        ctx.beginPath();
+        ctx.arc(l.x, l.y, 5, 0, Math.PI * 2);
+        ctx.fill();
+        ctx.shadowBlur = 0;
+    });
+
+    // Draw portals
+    portalEntities.forEach(p => {
+        let pulse = Math.sin(p.anim * 3) * 0.3 + 0.7;
+        ctx.strokeStyle = `rgba(100,150,255,${pulse})`;
+        ctx.lineWidth = 3;
+        ctx.beginPath();
+        ctx.ellipse(p.x, p.y, 20, 25, 0, 0, Math.PI * 2);
+        ctx.stroke();
+        ctx.fillStyle = `rgba(50,100,200,${pulse * 0.3})`;
+        ctx.fill();
+
+        // Portal glow
+        ctx.shadowColor = '#4488ff';
+        ctx.shadowBlur = 15 * pulse;
+        ctx.strokeStyle = `rgba(100,180,255,${pulse * 0.5})`;
+        ctx.stroke();
+        ctx.shadowBlur = 0;
+
+        // Label
+        ctx.fillStyle = '#aaccff';
+        ctx.font = '11px Georgia';
+        ctx.textAlign = 'center';
+        ctx.fillText(p.name, p.x, p.y - 35);
+        ctx.fillText('[E] Enter', p.x, p.y + 40);
+    });
+
+    // Draw NPCs
+    npcEntities.forEach(n => {
+        ctx.font = '24px serif';
+        ctx.textAlign = 'center';
+        ctx.fillText(n.icon, n.x, n.y + 8);
+
+        ctx.fillStyle = '#ffcc00';
+        ctx.font = '11px Georgia';
+        ctx.fillText(n.name, n.x, n.y - 20);
+
+        if (Math.hypot(player.x - n.x, player.y - n.y) < 60) {
+            ctx.fillStyle = '#aaa';
+            ctx.font = '10px Georgia';
+            ctx.fillText('[E] Talk', n.x, n.y + 30);
+        }
+    });
+
+    // Draw summons
+    summons.forEach(s => {
+        ctx.fillStyle = '#88cc88';
+        ctx.beginPath();
+        ctx.arc(s.x, s.y, s.size, 0, Math.PI * 2);
+        ctx.fill();
+        ctx.fillStyle = '#44ff44';
+        ctx.font = '14px serif';
+        ctx.textAlign = 'center';
+        ctx.fillText('💀', s.x, s.y + 5);
+    });
+
+    // Draw monsters
+    monsters.forEach(mon => {
+        if (mon.x < camera.x - 50 || mon.x > camera.x + canvas.width + 50 ||
+            mon.y < camera.y - 50 || mon.y > camera.y + canvas.height + 50) return;
+
+        // Shadow
+        ctx.fillStyle = 'rgba(0,0,0,0.3)';
+        ctx.beginPath();
+        ctx.ellipse(mon.x, mon.y + mon.size, mon.size * 0.8, mon.size * 0.3, 0, 0, Math.PI * 2);
+        ctx.fill();
+
+        // Body
+        let bodyColor = mon.hitFlash > 0 ? '#ffffff' : mon.color;
+        ctx.fillStyle = bodyColor;
+        ctx.beginPath();
+        ctx.arc(mon.x, mon.y, mon.size, 0, Math.PI * 2);
+        ctx.fill();
+
+        // Icon
+        ctx.font = `${Math.max(12, mon.size)}px serif`;
+        ctx.textAlign = 'center';
+        ctx.fillText(mon.icon, mon.x, mon.y + mon.size * 0.3);
+
+        // Elite/Boss glow
+        if (mon.isElite || mon.isBoss) {
+            ctx.strokeStyle = mon.isBoss ? '#ff4400' : '#ffcc00';
+            ctx.lineWidth = 2;
+            ctx.beginPath();
+            ctx.arc(mon.x, mon.y, mon.size + 3, 0, Math.PI * 2);
+            ctx.stroke();
+        }
+
+        // Health bar
+        let barWidth = mon.size * 2;
+        let hpPercent = mon.hp / mon.maxHp;
+        ctx.fillStyle = '#333';
+        ctx.fillRect(mon.x - barWidth/2, mon.y - mon.size - 12, barWidth, 5);
+        ctx.fillStyle = hpPercent > 0.5 ? '#44cc44' : hpPercent > 0.25 ? '#cccc44' : '#cc4444';
+        ctx.fillRect(mon.x - barWidth/2, mon.y - mon.size - 12, barWidth * hpPercent, 5);
+
+        // Name
+        if (mon.isElite || mon.isBoss) {
+            ctx.fillStyle = mon.isBoss ? '#ff6644' : '#ffcc44';
+            ctx.font = '10px Georgia';
+            ctx.fillText(mon.name, mon.x, mon.y - mon.size - 16);
+        }
+
+        // Stun indicator
+        if (mon.stunTimer > 0) {
+            ctx.fillStyle = '#ffff00';
+            ctx.font = '12px serif';
+            ctx.fillText('💫', mon.x, mon.y - mon.size - 5);
+        }
+    });
+
+    // Draw projectiles
+    projectiles.forEach(p => {
+        // Trail
+        if (p.trail.length > 1) {
+            ctx.strokeStyle = p.color + '44';
+            ctx.lineWidth = p.size * 0.7;
+            ctx.beginPath();
+            ctx.moveTo(p.trail[0].x, p.trail[0].y);
+            for (let t of p.trail) ctx.lineTo(t.x, t.y);
+            ctx.stroke();
+        }
+
+        ctx.fillStyle = p.color;
+        ctx.shadowColor = p.color;
+        ctx.shadowBlur = 10;
+        ctx.beginPath();
+        ctx.arc(p.x, p.y, p.size, 0, Math.PI * 2);
+        ctx.fill();
+        ctx.shadowBlur = 0;
+    });
+
+    // Draw particles
+    particles.forEach(p => {
+        if (p.isIndicator) {
+            ctx.fillStyle = p.color;
+            ctx.beginPath();
+            ctx.arc(p.x, p.y, p.size, 0, Math.PI * 2);
+            ctx.fill();
+            return;
+        }
+        let alpha = Math.min(1, p.life * 2);
+        ctx.globalAlpha = alpha;
+        ctx.fillStyle = p.color;
+        ctx.beginPath();
+        ctx.arc(p.x, p.y, p.size, 0, Math.PI * 2);
+        ctx.fill();
+        ctx.globalAlpha = 1;
+    });
+
+    // Draw player
+    // Shadow
+    ctx.fillStyle = 'rgba(0,0,0,0.4)';
+    ctx.beginPath();
+    ctx.ellipse(player.x, player.y + player.size, player.size * 0.8, player.size * 0.3, 0, 0, Math.PI * 2);
+    ctx.fill();
+
+    // Body
+    let playerColor = player.class === 'warrior' ? '#cc6633' : player.class === 'mage' ? '#6633cc' :
+        player.class === 'ranger' ? '#33aa33' : '#666699';
+
+    if (activeBuff) {
+        let pulse = Math.sin(frameCount * 0.2) * 0.3 + 0.7;
+        ctx.shadowColor = '#44ff44';
+        ctx.shadowBlur = 15 * pulse;
+    }
+
+    ctx.fillStyle = playerColor;
+    ctx.beginPath();
+    ctx.arc(player.x, player.y, player.size, 0, Math.PI * 2);
+    ctx.fill();
+    ctx.shadowBlur = 0;
+
+    // Player icon
+    let pIcon = player.class === 'warrior' ? '⚔️' : player.class === 'mage' ? '🔮' : player.class === 'ranger' ? '🏹' : '💀';
+    ctx.font = '16px serif';
+    ctx.textAlign = 'center';
+    ctx.fillText(pIcon, player.x, player.y + 6);
+
+    // Attack swing visual
+    if (player.isAttacking) {
+        ctx.strokeStyle = 'rgba(255,200,100,0.6)';
+        ctx.lineWidth = 3;
+        ctx.beginPath();
+        ctx.arc(player.x, player.y, 35,
+            player.attackDir - 0.5, player.attackDir + 0.5);
+        ctx.stroke();
+    }
+
+    // Whirlwind visual
+    if (player.spinning) {
+        ctx.strokeStyle = 'rgba(255,200,50,0.4)';
+        ctx.lineWidth = 2;
+        ctx.beginPath();
+        ctx.arc(player.x, player.y, 50, frameCount * 0.3, frameCount * 0.3 + Math.PI * 1.5);
+        ctx.stroke();
+    }
+
+    // Damage numbers
+    damageNumbers.forEach(d => {
+        let alpha = d.life;
+        ctx.globalAlpha = alpha;
+        ctx.font = d.isCrit ? 'bold 22px Georgia' : '16px Georgia';
+        ctx.textAlign = 'center';
+        ctx.fillStyle = d.color;
+        ctx.strokeStyle = '#000';
+        ctx.lineWidth = 2;
+        let text = typeof d.value === 'number' ? Math.floor(d.value).toString() : d.value;
+        ctx.strokeText(text, d.x, d.y);
+        ctx.fillText(text, d.x, d.y);
+        ctx.globalAlpha = 1;
+    });
+
+    // Portal/NPC interaction hints
+    portalEntities.forEach(p => {
+        if (Math.hypot(player.x - p.x, player.y - p.y) < 50) {
+            ctx.fillStyle = 'rgba(100,150,255,0.15)';
+            ctx.beginPath();
+            ctx.arc(p.x, p.y, 30, 0, Math.PI * 2);
+            ctx.fill();
+        }
+    });
+
+    ctx.restore();
+
+    // Vignette
+    let grad = ctx.createRadialGradient(canvas.width/2, canvas.height/2, canvas.width*0.3,
+        canvas.width/2, canvas.height/2, canvas.width*0.7);
+    grad.addColorStop(0, 'rgba(0,0,0,0)');
+    grad.addColorStop(1, 'rgba(0,0,0,0.5)');
+    ctx.fillStyle = grad;
+    ctx.fillRect(0, 0, canvas.width, canvas.height);
+
+    // Draw minimap
+    renderMinimap();
+}
+
+function renderMinimap() {
+    minimapCtx.clearRect(0, 0, 180, 180);
+    minimapCtx.fillStyle = '#0a0a0a';
+    minimapCtx.fillRect(0, 0, 180, 180);
+
+    let scale = 180 / Math.max(currentZoneData.width, currentZoneData.height);
+    let offsetX = (180 - currentZoneData.width * scale) / 2;
+    let offsetY = (180 - currentZoneData.height * scale) / 2;
+
+    // Draw tiles (simplified)
+    for (let y = 0; y < currentZoneData.height; y++) {
+        for (let x = 0; x < currentZoneData.width; x++) {
+            if (mapData[y][x].type === 'wall') {
+                minimapCtx.fillStyle = '#333';
+            } else {
+                minimapCtx.fillStyle = '#1a1a1a';
+            }
+            minimapCtx.fillRect(offsetX + x * scale, offsetY + y * scale, Math.max(1, scale), Math.max(1, scale));
+        }
+    }
+
+    // Draw portals
+    portalEntities.forEach(p => {
+        minimapCtx.fillStyle = '#4488ff';
+        minimapCtx.beginPath();
+        minimapCtx.arc(offsetX + (p.x/TILE_SIZE) * scale, offsetY + (p.y/TILE_SIZE) * scale, 3, 0, Math.PI * 2);
+        minimapCtx.fill();
+    });
+
+    // Draw NPCs
+    npcEntities.forEach(n => {
+        minimapCtx.fillStyle = '#ffcc00';
+        minimapCtx.fillRect(offsetX + (n.x/TILE_SIZE) * scale - 1, offsetY + (n.y/TILE_SIZE) * scale - 1, 3, 3);
+    });
+
+    // Draw monsters
+    monsters.forEach(m => {
+        minimapCtx.fillStyle = m.isBoss ? '#ff0000' : m.isElite ? '#ffcc00' : '#ff4444';
+        let s = m.isBoss ? 3 : 1.5;
+        minimapCtx.fillRect(offsetX + (m.x/TILE_SIZE) * scale - s/2, offsetY + (m.y/TILE_SIZE) * scale - s/2, s, s);
+    });
+
+    // Draw player
+    minimapCtx.fillStyle = '#44ff44';
+    minimapCtx.beginPath();
+    minimapCtx.arc(offsetX + (player.x/TILE_SIZE) * scale, offsetY + (player.y/TILE_SIZE) * scale, 3, 0, Math.PI * 2);
+    minimapCtx.fill();
+}
+
+// ==================== UI UPDATE ====================
+function updateUI() {
+    let hpPercent = Math.max(0, player.hp / player.maxHp * 100);
+    let manaPercent = Math.max(0, player.mana / player.maxMana * 100);
+    document.getElementById('health-fill').style.height = hpPercent + '%';
+    document.getElementById('mana-fill').style.height = manaPercent + '%';
+    document.getElementById('health-text').textContent = Math.floor(player.hp) + '/' + player.maxHp;
+    document.getElementById('mana-text').textContent = Math.floor(player.mana) + '/' + player.maxMana;
+
+    document.getElementById('xp-bar').style.width = (player.xp / player.xpToNext * 100) + '%';
+
+    document.getElementById('ci-name').textContent = player.class.charAt(0).toUpperCase() + player.class.slice(1);
+    document.getElementById('ci-level').textContent = `Level ${player.level} ${player.class.charAt(0).toUpperCase()+player.class.slice(1)}`;
+    document.getElementById('ci-gold').textContent = `💰 ${player.gold}`;
+
+    // Update skill cooldowns
+    player.skills.forEach((skill, i) => {
+        let slot = document.getElementById('skill-slot-' + i);
+        if (!slot) return;
+        let cd = skillCooldowns[skill.name] || 0;
+        let overlay = slot.querySelector('.cooldown-overlay');
+        if (overlay) overlay.style.height = (cd / skill.cooldown * 100) + '%';
+    });
+}
+
+function buildSkillBar() {
+    let bar = document.getElementById('skill-bar');
+    bar.innerHTML = '';
+    player.skills.forEach((skill, i) => {
+        let slot = document.createElement('div');
+        slot.className = 'skill-slot';
+        slot.id = 'skill-slot-' + i;
+        slot.innerHTML = `${skill.icon}<div class="cooldown-overlay"></div><div class="key-bind">${skill.key}</div>`;
+        slot.title = `${skill.name}: ${skill.desc} (${skill.manaCost || 0} mana)`;
+        slot.addEventListener('click', () => useSkill(i));
+        bar.appendChild(slot);
+    });
+
+    // Add potion slot
+    let potSlot = document.createElement('div');
+    potSlot.className = 'skill-slot';
+    potSlot.innerHTML = '🧪<div class="key-bind">Q</div>';
+    potSlot.title = 'Use Health Potion';
+    potSlot.addEventListener('click', usePotion);
+    bar.appendChild(potSlot);
+}
+
+function usePotion() {
+    if (player.potionCooldown > 0) return;
+    let potionIdx = player.inventory.findIndex(item => item && item.heal);
+    if (potionIdx === -1) return;
+    let potion = player.inventory[potionIdx];
+    player.hp = Math.min(player.maxHp, player.hp + potion.heal);
+    player.inventory.splice(potionIdx, 1);
+    player.potionCooldown = 2;
+    for (let i = 0; i < 10; i++) {
+        particles.push({
+            x: player.x, y: player.y,
+            vx: (Math.random()-0.5)*3, vy: -Math.random()*3,
+            life: 0.5, color: '#ff4444', size: 2
+        });
+    }
+}
+
+function buildInventory() {
+    let grid = document.getElementById('inv-grid');
+    grid.innerHTML = '';
+    for (let i = 0; i < 40; i++) {
+        let slot = document.createElement('div');
+        slot.className = 'inv-slot';
+        slot.dataset.index = i;
+        if (player.inventory[i]) {
+            let item = player.inventory[i];
+            slot.textContent = item.icon;
+            slot.style.borderColor = RARITY[item.rarity] || '#443322';
+            slot.addEventListener('mouseenter', (e) => showTooltip(e, item));
+            slot.addEventListener('mouseleave', hideTooltip);
+            slot.addEventListener('click', () => {
+                if (item.slot && item.slot !== null) {
+                    // Equip
+                    let oldEquip = player.equipment[item.slot];
+                    player.equipment[item.slot] = item;
+                    player.inventory[i] = oldEquip;
+                    recalcPlayerStats();
+                    buildInventory();
+                    buildEquipment();
+                } else if (item.heal) {
+                    player.hp = Math.min(player.maxHp, player.hp + item.heal);
+                    player.inventory.splice(i, 1);
+                    buildInventory();
+                } else if (item.manaRestore) {
+                    player.mana = Math.min(player.maxMana, player.mana + item.manaRestore);
+                    player.inventory.splice(i, 1);
+                    buildInventory();
+                }
+            });
+            slot.addEventListener('contextmenu', (e) => {
+                e.preventDefault();
+                // Sell / drop
+                player.gold += Math.floor((player.inventory[i].level || 1) * 5 * (RARITY_NAMES.indexOf(player.inventory[i].rarity) + 1));
+                player.inventory.splice(i, 1);
+                buildInventory();
+            });
+        }
+        grid.appendChild(slot);
+    }
+}
+
+function buildEquipment() {
+    document.querySelectorAll('.equip-slot').forEach(slot => {
+        let eslot = slot.dataset.eslot;
+        let item = player.equipment[eslot];
+        if (item) {
+            slot.textContent = item.icon;
+            slot.style.borderColor = RARITY[item.rarity] || '#554433';
+            slot.onmouseenter = (e) => showTooltip(e, item);
+            slot.onmouseleave = hideTooltip;
+            slot.onclick = () => {
+                // Unequip
+                if (player.inventory.length < 40) {
+                    player.inventory.push(item);
+                    player.equipment[eslot] = null;
+                    slot.textContent = eslot === 'helmet' ? '🎩' : eslot === 'armor' ? '👕' : eslot === 'weapon' ? '🗡️' :
+                        eslot === 'shield' ? '🛡️' : eslot === 'gloves' ? '🧤' : eslot === 'boots' ? '👢' :
+                        eslot === 'ring1' ? '💍' : '📿';
+                    slot.style.borderColor = '#554433';
+                    recalcPlayerStats();
+                    buildInventory();
+                    buildEquipment();
+                }
+            };
+        } else {
+            slot.textContent = eslot === 'helmet' ? '🎩' : eslot === 'armor' ? '👕' : eslot === 'weapon' ? '🗡️' :
+                eslot === 'shield' ? '🛡️' : eslot === 'gloves' ? '🧤' : eslot === 'boots' ? '👢' :
+                eslot === 'ring1' ? '💍' : '📿';
+            slot.style.borderColor = '#554433';
+            slot.onmouseenter = null;
+            slot.onclick = null;
+        }
+    });
+}
+
+function showTooltip(event, item) {
+    let tt = document.getElementById('tooltip');
+    tt.style.display = 'block';
+    tt.querySelector('.item-name').textContent = item.name;
+    tt.querySelector('.item-name').style.color = RARITY[item.rarity] || '#aaa';
+    tt.querySelector('.item-type').textContent = (item.slot ? item.slot.charAt(0).toUpperCase() + item.slot.slice(1) : 'Consumable') +
+        (item.rarity ? ' (' + item.rarity + ')' : '');
+
+    let statsHtml = '';
+    if (item.baseDmg) statsHtml += `<div style="color:#ff9900">⚔️ ${item.baseDmg[0]}-${item.baseDmg[1]} Damage</div>`;
+    if (item.baseArmor) statsHtml += `<div style="color:#8888ff">🛡️ ${item.baseArmor} Armor</div>`;
+    if (item.block) statsHtml += `<div style="color:#8888ff">🛡️ ${item.block}% Block</div>`;
+    if (item.heal) statsHtml += `<div style="color:#ff4444">❤️ Restores ${item.heal} HP</div>`;
+    if (item.manaRestore) statsHtml += `<div style="color:#4444ff">💧 Restores ${item.manaRestore} Mana</div>`;
+    if (item.stats) {
+        for (let stat in item.stats) {
+            let val = item.stats[stat];
+            let label = stat.replace(/([A-Z])/g, ' $1').trim();
+            statsHtml += `<div style="color:#44ccff">+${val} ${label}</div>`;
+        }
+    }
+    tt.querySelector('.item-stats').innerHTML = statsHtml;
+    tt.querySelector('.item-flavor').textContent = item.flavor || '';
+
+    let rect = event.target.getBoundingClientRect();
+    tt.style.left = (rect.left - 290) + 'px';
+    tt.style.top = rect.top + 'px';
+    if (parseInt(tt.style.left) < 10) {
+        tt.style.left = (rect.right + 10) + 'px';
+    }
+}
+
+function hideTooltip() {
+    document.getElementById('tooltip').style.display = 'none';
+}
+
+function buildStats() {
+    let panel = document.getElementById('stats-panel');
+    let sp = document.getElementById('stat-points-display');
+    sp.innerHTML = `<div style="color:#ffcc00;margin-bottom:8px">Stat Points: ${player.statPoints} | Passive Points: ${player.passivePoints}</div>`;
+
+    let list = document.getElementById('stats-list');
+    let dmg = calculatePlayerDamage();
+    let armor = calculateArmor();
+
+    let stats = [
+        ['Level', player.level],
+        ['Strength', player.stats.strength, 'strength'],
+        ['Dexterity', player.stats.dexterity, 'dexterity'],
+        ['Intelligence', player.stats.intelligence, 'intelligence'],
+        ['Vitality', player.stats.vitality, 'vitality'],
+        ['---', ''],
+        ['Damage', `${dmg.min}-${dmg.max} +${dmg.elem} elem`],
+        ['Armor', armor + ` (${Math.floor(damageReduction(armor)*100)}% red.)`],
+        ['Crit Chance', player.stats.critChance.toFixed(1) + '%'],
+        ['Crit Damage', player.stats.critDmg + '%'],
+        ['Attack Speed', '+' + player.stats.attackSpeed + '%'],
+        ['Move Speed', '+' + player.stats.movSpeed + '%'],
+        ['Life Steal', player.stats.lifeSteal + '%'],
+        ['HP Regen', player.stats.hpRegen + '/s'],
+        ['Mana Regen', player.stats.manaRegen + '/s'],
+        ['Block', player.stats.block + '%'],
+        ['Dodge', player.stats.dodgeChance.toFixed(1) + '%'],
+        ['All Resist', player.stats.allRes],
+        ['Magic Find', player.stats.magicFind + '%'],
+        ['Fire Dmg', '+' + player.stats.fireDmg],
+        ['Cold Dmg', '+' + player.stats.coldDmg],
+        ['Lightning Dmg', '+' + player.stats.lightningDmg]
+    ];
+
+    list.innerHTML = '';
+    stats.forEach(s => {
+        if (s[0] === '---') { list.innerHTML += '<hr style="border-color:#333;margin:5px 0">'; return; }
+        let row = document.createElement('div');
+        row.className = 'stat-row';
+        let canAdd = player.statPoints > 0 && s[2];
+        row.innerHTML = `<span>${s[0]}</span><span class="val">${s[1]}${canAdd ? `<button class="stat-btn" data-stat="${s[2]}">+</button>` : ''}</span>`;
+        list.appendChild(row);
+    });
+
+    list.querySelectorAll('.stat-btn').forEach(btn => {
+        btn.addEventListener('click', () => {
+            if (player.statPoints <= 0) return;
+            let stat = btn.dataset.stat;
+            if (stat === 'strength') player.baseStrength += 2;
+            else if (stat === 'dexterity') player.baseDexterity += 2;
+            else if (stat === 'intelligence') player.baseIntelligence += 2;
+            else if (stat === 'vitality') { player.baseVitality += 2; player.baseHp += 5; }
+            player.statPoints--;
+            recalcPlayerStats();
+            buildStats();
+        });
+    });
+}
+
+// ==================== DIALOG ====================
+function showDialog(npc) {
+    let db = document.getElementById('dialog-box');
+    db.style.display = 'block';
+    db.querySelector('.npc-name').textContent = npc.name;
+    db.querySelector('.dialog-text').textContent = npc.dialog;
+
+    let opts = db.querySelector('.dialog-options');
+    opts.innerHTML = '';
+
+    if (npc.quest) {
+        questState.talkedToElder = true;
+        let opt = document.createElement('div');
+        opt.className = 'dialog-option';
+        opt.textContent = questState.bossKilled ? '🎉 The Demon Lord is vanquished!' : '⚔️ I will defeat the Demon Lord!';
+        opt.onclick = () => db.style.display = 'none';
+        opts.appendChild(opt);
+    }
+
+    if (npc.shop === 'weapons') {
+        let opt = document.createElement('div');
+        opt.className = 'dialog-option';
+        opt.textContent = '🛒 Buy a weapon (50 gold)';
+        opt.onclick = () => {
+            if (player.gold >= 50 && player.inventory.length < 40) {
+                player.gold -= 50;
+                player.inventory.push(generateItem(player.level, 'magic'));
+                buildInventory();
+            }
+        };
+        opts.appendChild(opt);
+    }
+
+    if (npc.shop === 'potions') {
+        let opt = document.createElement('div');
+        opt.className = 'dialog-option';
+        opt.textContent = '🧪 Buy potions (10 gold for 3)';
+        opt.onclick = () => {
+            if (player.gold >= 10) {
+                player.gold -= 10;
+                for (let i = 0; i < 3 && player.inventory.length < 40; i++) {
+                    player.inventory.push({ ...ITEM_BASES.potion[player.level >= 5 ? 2 : 0], id: Math.random(), rarity: 'common' });
+                }
+                buildInventory();
+            }
+        };
+        opts.appendChild(opt);
+
+        let opt2 = document.createElement('div');
+        opt2.className = 'dialog-option';
+        opt2.textContent = '💧 Buy mana potions (10 gold for 3)';
+        opt2.onclick = () => {
+            if (player.gold >= 10) {
+                player.gold -= 10;
+                for (let i = 0; i < 3 && player.inventory.length < 40; i++) {
+                    player.inventory.push({ ...ITEM_BASES.potion[1], id: Math.random(), rarity: 'common' });
+                }
+                buildInventory();
+            }
+        };
+        opts.appendChild(opt2);
+    }
+
+    let closeOpt = document.createElement('div');
+    closeOpt.className = 'dialog-option';
+    closeOpt.textContent = '✕ Close';
+    closeOpt.onclick = () => db.style.display = 'none';
+    opts.appendChild(closeOpt);
+}
+
+// ==================== PASSIVE TREE RENDER ====================
+function renderPassiveTree() {
+    let pc = document.getElementById('passive-canvas');
+    pc.width = 800; pc.height = 600;
+    let pctx = pc.getContext('2d');
+    pctx.clearRect(0, 0, 800, 600);
+    pctx.fillStyle = '#0a0a15';
+    pctx.fillRect(0, 0, 800, 600);
+
+    // Draw connections
+    PASSIVE_NODES.forEach(node => {
+        node.children.forEach(childId => {
+            let child = PASSIVE_NODES[childId];
+            let allocated = player.passivesAllocated.includes(node.id) && player.passivesAllocated.includes(childId);
+            pctx.strokeStyle = allocated ? '#ffcc00' : '#333';
+            pctx.lineWidth = 2;
+            pctx.beginPath();
+            pctx.moveTo(node.x, node.y);
+            pctx.lineTo(child.x, child.y);
+            pctx.stroke();
+        });
+    });
+
+    // Draw nodes
+    PASSIVE_NODES.forEach(node => {
+        let allocated = player.passivesAllocated.includes(node.id);
+        let canAllocate = !allocated && player.passivePoints > 0 && node.cost <= player.passivePoints;
+        // Check if connected to an allocated node
+        let connected = node.id === 0;
+        PASSIVE_NODES.forEach(other => {
+            if (player.passivesAllocated.includes(other.id) && other.children.includes(node.id)) connected = true;
+        });
+
+        pctx.fillStyle = allocated ? '#ffcc00' : connected && canAllocate ? '#664400' : '#222';
+        pctx.strokeStyle = allocated ? '#ffcc00' : connected ? '#666' : '#333';
+        pctx.lineWidth = 2;
+        pctx.beginPath();
+        let r = node.cost >= 3 ? 22 : node.cost >= 2 ? 18 : 15;
+        pctx.arc(node.x, node.y, r, 0, Math.PI * 2);
+        pctx.fill();
+        pctx.stroke();
+
+        pctx.fillStyle = allocated ? '#000' : '#aaa';
+        pctx.font = '10px Georgia';
+        pctx.textAlign = 'center';
+        pctx.fillText(node.name, node.x, node.y + 3);
+    });
+
+    pctx.fillStyle = '#888';
+    pctx.font = '14px Georgia';
+    pctx.textAlign = 'center';
+    pctx.fillText(`Passive Points: ${player.passivePoints}  |  Click nodes to allocate`, 400, 580);
+
+    // Click handler
+    pc.onclick = (e) => {
+        let rect = pc.getBoundingClientRect();
+        let mx = (e.clientX - rect.left) * (800 / rect.width);
+        let my = (e.clientY - rect.top) * (600 / rect.height);
+        PASSIVE_NODES.forEach(node => {
+            if (Math.hypot(mx - node.x, my - node.y) < 20) {
+                if (player.passivesAllocated.includes(node.id)) return;
+                if (player.passivePoints < node.cost) return;
+                // Check connection
+                let connected = node.id === 0;
+                PASSIVE_NODES.forEach(other => {
+                    if (player.passivesAllocated.includes(other.id) && other.children.includes(node.id)) connected = true;
+                });
+                if (!connected) return;
+                player.passivesAllocated.push(node.id);
+                player.passivePoints -= node.cost;
+                recalcPlayerStats();
+                renderPassiveTree();
+            }
+        });
+    };
+}
+
+// ==================== WORLD MAP RENDER ====================
+function renderWorldMap() {
+    let wc = document.getElementById('worldmap-canvas');
+    wc.width = 800; wc.height = 600;
+    let wctx = wc.getContext('2d');
+    wctx.clearRect(0, 0, 800, 600);
+
+    // Background
+    let bgGrad = wctx.createRadialGradient(400, 300, 50, 400, 300, 400);
+    bgGrad.addColorStop(0, '#1a1510');
+    bgGrad.addColorStop(1, '#050505');
+    wctx.fillStyle = bgGrad;
+    wctx.fillRect(0, 0, 800, 600);
+
+    // Zone positions on world map
+    let zonePositions = {
+        town: { x: 400, y: 250, icon: '🏰', color: '#ffcc00' },
+        darkwood: { x: 400, y: 380, icon: '🌲', color: '#33aa33' },
+        crypt: { x: 250, y: 250, icon: '⚰️', color: '#8866cc' },
+        desert: { x: 570, y: 250, icon: '🏜️', color: '#ccaa44' },
+        swamp: { x: 500, y: 450, icon: '🐊', color: '#336633' },
+        depths: { x: 180, y: 380, icon: '🕳️', color: '#4444aa' },
+        volcano: { x: 670, y: 380, icon: '🌋', color: '#ff6600' },
+        hellgate: { x: 400, y: 520, icon: '👿', color: '#ff0000' }
+    };
+
+    // Draw connections
+    let connections = [
+        ['town','darkwood'],['town','crypt'],['town','desert'],
+        ['darkwood','swamp'],['crypt','depths'],['desert','volcano'],
+        ['swamp','hellgate'],['depths','hellgate'],['volcano','hellgate']
+    ];
+
+    connections.forEach(([a,b]) => {
+        let pa = zonePositions[a], pb = zonePositions[b];
+        wctx.strokeStyle = '#333';
+        wctx.lineWidth = 2;
+        wctx.setLineDash([5,5]);
+        wctx.beginPath();
+        wctx.moveTo(pa.x, pa.y);
+        wctx.lineTo(pb.x, pb.y);
+        wctx.stroke();
+        wctx.setLineDash([]);
+    });
+
+    // Draw zones
+    for (let key in zonePositions) {
+        let zp = zonePositions[key];
+        let zone = ZONES[key];
+        let isCurrent = currentZone === key;
+
+        wctx.fillStyle = isCurrent ? 'rgba(255,200,0,0.2)' : 'rgba(50,50,50,0.3)';
+        wctx.beginPath();
+        wctx.arc(zp.x, zp.y, 35, 0, Math.PI * 2);
+        wctx.fill();
+
+        wctx.strokeStyle = isCurrent ? '#ffcc00' : zp.color;
+        wctx.lineWidth = isCurrent ? 3 : 2;
+        wctx.beginPath();
+        wctx.arc(zp.x, zp.y, 35, 0, Math.PI * 2);
+        wctx.stroke();
+
+        wctx.font = '28px serif';
+        wctx.textAlign = 'center';
+        wctx.fillText(zp.icon, zp.x, zp.y + 8);
+
+        wctx.fillStyle = isCurrent ? '#ffcc00' : '#aaa';
+        wctx.font = '12px Georgia';
+        wctx.fillText(zone.name.split(' - ')[0], zp.x, zp.y - 42);
+        wctx.fillStyle = '#666';
+        wctx.font = '10px Georgia';
+        wctx.fillText(`Level ${zone.level}+`, zp.x, zp.y - 30);
+    }
+
+    // Current zone marker
+    if (zonePositions[currentZone]) {
+        let cp = zonePositions[currentZone];
+        wctx.fillStyle = '#44ff44';
+        wctx.beginPath();
+        wctx.arc(cp.x, cp.y - 50, 5, 0, Math.PI * 2);
+        wctx.fill();
+        wctx.fillStyle = '#44ff44';
+        wctx.font = '10px Georgia';
+        wctx.fillText('▼ YOU', cp.x, cp.y - 55);
+    }
+
+    wctx.fillStyle = '#666';
+    wctx.font = '12px Georgia';
+    wctx.textAlign = 'center';
+    wctx.fillText('Use portals in each zone to travel between areas', 400, 580);
+}
+
+// ==================== RESPAWN ====================
+function respawnPlayer() {
+    player.hp = player.maxHp;
+    player.mana = player.maxMana;
+    player.gold = Math.floor(player.gold * 0.9); // 10% gold penalty
+    gameState = 'playing';
+    document.getElementById('death-screen').style.display = 'none';
+    enterZone('town', 20, 20);
+}
+
+// ==================== INPUT ====================
+document.addEventListener('keydown', (e) => {
+    keys[e.code] = true;
+
+    if (gameState !== 'playing') return;
+
+    // Skill keys
+    if (e.key >= '1' && e.key <= '5') {
+        useSkill(parseInt(e.key) - 1);
+    }
+    if (e.code === 'KeyQ') usePotion();
+
+    // Toggle panels
+    if (e.code === 'KeyI') {
+        let inv = document.getElementById('inventory-panel');
+        inv.style.display = inv.style.display === 'none' ? 'block' : 'none';
+        if (inv.style.display === 'block') { buildInventory(); buildEquipment(); }
+    }
+    if (e.code === 'KeyC') {
+        let stats = document.getElementById('stats-panel');
+        stats.style.display = stats.style.display === 'none' ? 'block' : 'none';
+        if (stats.style.display === 'block') buildStats();
+    }
+    if (e.code === 'KeyP') {
+        let pt = document.getElementById('passive-tree');
+        pt.style.display = pt.style.display === 'none' ? 'block' : 'none';
+        if (pt.style.display === 'block') renderPassiveTree();
+    }
+    if (e.code === 'KeyM') {
+        let wm = document.getElementById('world-map');
+        wm.style.display = wm.style.display === 'none' ? 'block' : 'none';
+        if (wm.style.display === 'block') renderWorldMap();
+    }
+    if (e.code === 'KeyT' && currentZone !== 'town') {
+        // Town portal
+        enterZone('town', 20, 20);
+    }
+    if (e.code === 'Escape') {
+        document.getElementById('inventory-panel').style.display = 'none';
+        document.getElementById('stats-panel').style.display = 'none';
+        document.getElementById('passive-tree').style.display = 'none';
+        document.getElementById('world-map').style.display = 'none';
+        document.getElementById('dialog-box').style.display = 'none';
+    }
+
+    // Pick up loot with F
+    if (e.code === 'KeyF') {
+        for (let i = lootDrops.length - 1; i >= 0; i--) {
+            let l = lootDrops[i];
+            if (l.pickupTimer > 0) continue;
+            if (Math.hypot(player.x - l.x, player.y - l.y) < 80) {
+                if (player.inventory.length < 40) {
+                    player.inventory.push(l.item);
+                    lootDrops.splice(i, 1);
+                    // Remove loot label if exists
+                }
+            }
+        }
+    }
+});
+
+document.addEventListener('keyup', (e) => { keys[e.code] = false; });
+
+canvas.addEventListener('mousemove', (e) => {
+    mouse.x = e.clientX; mouse.y = e.clientY;
+});
+canvas.addEventListener('mousedown', (e) => {
+    if (e.button === 0) mouse.down = true;
+    if (e.button === 2) mouse.rightDown = true;
+
+    // Click on loot labels
+    if (e.button === 0 && gameState === 'playing') {
+        let worldX = e.clientX + camera.x;
+        let worldY = e.clientY + camera.y;
+        for (let i = lootDrops.length - 1; i >= 0; i--) {
+            let l = lootDrops[i];
+            if (l.pickupTimer > 0) continue;
+            if (Math.hypot(worldX - l.x, worldY - l.y) < 30 && Math.hypot(player.x - l.x, player.y - l.y) < 120) {
+                if (player.inventory.length < 40) {
+                    player.inventory.push(l.item);
+                    lootDrops.splice(i, 1);
+                }
+            }
+        }
+    }
+});
+canvas.addEventListener('mouseup', (e) => {
+    if (e.button === 0) mouse.down = false;
+    if (e.button === 2) mouse.rightDown = false;
+});
+canvas.addEventListener('contextmenu', (e) => e.preventDefault());
+
+// ==================== CLASS SELECTION ====================
+document.querySelectorAll('.class-option').forEach(opt => {
+    opt.addEventListener('click', () => {
+        document.querySelectorAll('.class-option').forEach(o => o.classList.remove('selected'));
+        opt.classList.add('selected');
+        selectedClass = opt.dataset.class;
+    });
+});
+
+document.getElementById('start-btn').addEventListener('click', () => {
+    document.getElementById('main-menu').style.display = 'none';
+    player = createPlayer(selectedClass);
+    recalcPlayerStats();
+    player.hp = player.maxHp;
+    player.mana = player.maxMana;
+
+    // Starting gear
+    let startWeapon = { ...ITEM_BASES.weapon[0], rarity: 'common', id: Math.random(), stats: {}, level: 1 };
+    player.equipment.weapon = startWeapon;
+
+    // Starting potions
+    for (let i = 0; i < 5; i++) {
+        player.inventory.push({ ...ITEM_BASES.potion[0], id: Math.random(), rarity: 'common' });
+    }
+
+    buildSkillBar();
+    enterZone('town', 20, 20);
+    gameState = 'playing';
+});
+
+// ==================== GAME LOOP ====================
+function gameLoop(time) {
+    let dt = Math.min(0.05, (time - lastTime) / 1000);
+    lastTime = time;
+
+    update(dt);
+    render();
+
+    requestAnimationFrame(gameLoop);
+}
+
+window.respawnPlayer = respawnPlayer;
+requestAnimationFrame(gameLoop);
+</script>
+</body>
+</html>
