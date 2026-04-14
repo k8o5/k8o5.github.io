@@ -1765,74 +1765,87 @@
         };
 
         const SOURCES = {
-            news: { name: 'NEWS', enabled: true, bang: '!n', count: 0,
+            news: {
+                name: 'NEWS',
+                enabled: true,
+                bang: '!n',
+                count: 0,
                 fetch: async (q) => {
                     const isGeneral = !q || q.trim().length === 0;
-                    // Redundancy via Aggregation
                     let urls = [];
-                    
-                    if(isGeneral) {
-                         // General News Sources
-                         urls.push({u: `https://www.reddit.com/r/worldnews/new.json?limit=6`, type: 'reddit', label: 'REDDIT r/WORLDNEWS'});
-                         // HackerNews Top Daily (Front Page)
-                         urls.push({u: `https://hn.algolia.com/api/v1/search?tags=front_page&hitsPerPage=6`, type: 'hn', label: 'HACKERNEWS TOP'});
-                         urls.push({u: `https://api.rss2json.com/v1/api.json?rss_url=https://watcher.guru/news/feed`, type: 'rss', label: 'WATCHER.GURU'});
-                         urls.push({u: `https://api.rss2json.com/v1/api.json?rss_url=https://www.coindesk.com/arc/outboundfeeds/rss/`, type: 'rss', label: 'COINDESK'});
-                         urls.push({u: `https://api.rss2json.com/v1/api.json?rss_url=https://news.google.com/rss`, type: 'rss', label: 'GOOGLE NEWS'});
+
+                    if (isGeneral) {
+                        // !MAINSTREAM MODE - raw alternative sources only
+                        urls = [
+                            {u: `https://www.reddit.com/r/conspiracy+geopolitics+actualnews+TrueUnpopularOpinion/new.json?limit=8`, type: 'reddit', label: 'REDDIT /RAW'},
+                            {u: `https://hn.algolia.com/api/v1/search?tags=front_page&hitsPerPage=5`, type: 'hn', label: 'HACKERNEWS'},
+                            {u: `https://api.rss2json.com/v1/api.json?rss_url=https://www.zerohedge.com/feed`, type: 'rss', label: 'ZERO HEDGE'},
+                            {u: `https://api.rss2json.com/v1/api.json?rss_url=https://thegrayzone.com/feed/`, type: 'rss', label: 'GRAYZONE'},
+                            {u: `https://api.rss2json.com/v1/api.json?rss_url=https://mintpressnews.com/feed/`, type: 'rss', label: 'MINTPRESS'},
+                            {u: `https://api.rss2json.com/v1/api.json?rss_url=https://www.antiwar.com/rss/`, type: 'rss', label: 'ANTIWAR'},
+                            {u: `https://api.rss2json.com/v1/api.json?rss_url=https://www.globalresearch.ca/feed`, type: 'rss', label: 'GLOBAL RESEARCH'}
+                        ];
                     } else {
-                         // Specific News Search
-                         const eq = encodeURIComponent(q);
-                         urls.push({u: `https://www.reddit.com/r/worldnews+globaltalk+geopolitics/search.json?q=${eq}&restrict_sr=1&sort=new&limit=5`, type: 'reddit', label: 'REDDIT'});
-                         urls.push({u: `https://hn.algolia.com/api/v1/search_by_date?query=${eq}&tags=story&hitsPerPage=3`, type: 'hn', label: 'HACKERNEWS'});
-                         // Google News RSS Search
-                         urls.push({u: `https://api.rss2json.com/v1/api.json?rss_url=https://news.google.com/rss/search?q=${eq}`, type: 'rss', label: 'GOOGLE NEWS'});
+                        // Search mode - still biased toward alt sources
+                        const eq = encodeURIComponent(q);
+                        urls = [
+                            {u: `https://www.reddit.com/r/conspiracy+geopolitics+actualnews+TrueUnpopularOpinion/search.json?q=${eq}&restrict_sr=1&sort=new&limit=8`, type: 'reddit', label: 'REDDIT /RAW'},
+                            {u: `https://hn.algolia.com/api/v1/search_by_date?query=${eq}&tags=story&hitsPerPage=4`, type: 'hn', label: 'HACKERNEWS'},
+                            {u: `https://api.rss2json.com/v1/api.json?rss_url=https://www.zerohedge.com/feed`, type: 'rss', label: 'ZERO HEDGE'},
+                            {u: `https://api.rss2json.com/v1/api.json?rss_url=https://thegrayzone.com/feed/`, type: 'rss', label: 'GRAYZONE'}
+                        ];
                     }
 
-                    const promises = urls.map(src => fetch(src.u).then(r => r.json().then(data => ({data, src}))).catch(()=>null));
+                    const promises = urls.map(src =>
+                        fetch(src.u)
+                            .then(r => r.json().then(data => ({data, src})))
+                            .catch(() => null)
+                    );
+
                     const rawResults = await Promise.all(promises);
-                    
                     let combined = [];
-                    
+
                     rawResults.forEach(res => {
-                        if(!res || !res.data) return;
-                        
-                        if(res.src.type === 'reddit') {
-                             (res.data.data?.children || []).forEach(c => {
-                                 combined.push({
-                                     title: c.data.title,
-                                     url: `https://reddit.com${c.data.permalink}`,
-                                     snippet: `${res.src.label} // ${c.data.score} UP`,
-                                     meta: { lang: 'EN', date: c.data.created_utc },
-                                     source: 'reddit'
-                                 });
-                             });
-                        } else if (res.src.type === 'hn') {
-                             (res.data.hits || []).forEach(h => {
-                                 combined.push({
-                                     title: h.title,
-                                     url: h.url || `https://news.ycombinator.com/item?id=${h.objectID}`,
-                                     snippet: `HACKERNEWS // ${h.points||0} PTS`,
-                                     meta: { lang: 'EN', date: h.created_at_i },
-                                     source: 'hackernews'
-                                 });
-                             });
-                        } else if (res.src.type === 'rss') {
-                             (res.data.items || []).forEach(item => {
-                                 // Simple date parsing
-                                 const ts = new Date(item.pubDate.replace(/-/g, '/')).getTime() / 1000;
-                                 combined.push({
-                                     title: item.title,
-                                     url: item.link,
-                                     snippet: `${res.src.label} // RSS`,
-                                     meta: { lang: 'EN', date: ts },
-                                     source: 'rss'
-                                 });
-                             });
+                        if (!res || !res.data) return;
+
+                        if (res.src.type === 'reddit') {
+                            (res.data.data?.children || []).forEach(c => {
+                                combined.push({
+                                    title: c.data.title,
+                                    url: `https://reddit.com${c.data.permalink}`,
+                                    snippet: `RAW // ${c.data.score || 0} ↑`,
+                                    meta: { lang: 'EN', date: c.data.created_utc },
+                                    source: 'reddit'
+                                });
+                            });
+                        }
+                        else if (res.src.type === 'hn') {
+                            (res.data.hits || []).forEach(h => {
+                                combined.push({
+                                    title: h.title,
+                                    url: h.url || `https://news.ycombinator.com/item?id=${h.objectID}`,
+                                    snippet: `HN // ${h.points || 0} PTS`,
+                                    meta: { lang: 'EN', date: h.created_at_i },
+                                    source: 'hackernews'
+                                });
+                            });
+                        }
+                        else if (res.src.type === 'rss') {
+                            (res.data.items || []).forEach(item => {
+                                const ts = item.pubDate ? new Date(item.pubDate).getTime() / 1000 : Date.now()/1000;
+                                combined.push({
+                                    title: item.title,
+                                    url: item.link,
+                                    snippet: `${res.src.label}`,
+                                    meta: { lang: 'EN', date: ts },
+                                    source: 'alt'
+                                });
+                            });
                         }
                     });
 
-                    // Sort by newest
-                    return combined.sort((a,b) => b.meta.date - a.meta.date);
+                    // Newest first, max 12 results
+                    return combined.sort((a, b) => b.meta.date - a.meta.date).slice(0, 12);
                 }
             },
             wikipedia: { name: 'WIKIPEDIA', enabled: true, bang: '!w', count: 0,
