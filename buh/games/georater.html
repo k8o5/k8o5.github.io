@@ -1,0 +1,322 @@
+<!DOCTYPE html>
+<html lang="de">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Geo-Rater Pro</title>
+    <link rel="preconnect" href="https://fonts.googleapis.com">
+    <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+    <link href="https://fonts.googleapis.com/css2?family=Poppins:wght@400;600;700&display=swap" rel="stylesheet">
+    <style>
+        :root {
+            --bg-dark: #111827;
+            --bg-panel: rgba(30, 41, 59, 0.75);
+            --border-color: rgba(148, 163, 184, 0.2);
+            --text-primary: #e2e8f0;
+            --text-secondary: #94a3b8;
+            --accent-cyan: #22d3ee;
+            --accent-cyan-dark: #0e7490;
+            --accent-green: #4ade80;
+            --accent-green-dark: #16a34a;
+            --accent-red: #f43f5e;
+            --accent-yellow: #facc15;
+            --accent-yellow-dark: #b45309;
+        }
+
+        html, body { 
+            height: 100%; margin: 0; padding: 0; 
+            font-family: 'Poppins', sans-serif; 
+            overflow: hidden; background-color: var(--bg-dark);
+        }
+
+        /* --- NEU: Startbildschirm --- */
+        #start-screen {
+            position: absolute;
+            width: 100%;
+            height: 100%;
+            z-index: 100;
+            background-color: var(--bg-dark);
+            display: flex;
+            flex-direction: column;
+            justify-content: center;
+            align-items: center;
+            text-align: center;
+            color: var(--text-primary);
+            transition: opacity 0.5s ease-out;
+        }
+        #start-screen.is-hidden {
+            opacity: 0;
+            pointer-events: none;
+        }
+        #start-screen h1 { font-size: 3rem; margin-bottom: 0.5rem; }
+        #start-screen p { font-size: 1.2rem; color: var(--text-secondary); margin-top: 0; margin-bottom: 2.5rem; }
+        .mode-selection button { margin: 0 1rem; width: 220px; }
+        
+
+        #pano {
+            position: absolute; top: 0; left: 0;
+            width: 100%; height: 100%; z-index: 5;
+        }
+
+        #map-container {
+            position: absolute;
+            bottom: 2rem;
+            right: 2rem;
+            width: clamp(350px, 30vw, 500px);
+            height: clamp(300px, 40vh, 400px);
+            z-index: 15;
+            background: var(--bg-panel);
+            backdrop-filter: blur(12px);
+            border: 1px solid var(--border-color);
+            border-radius: 16px;
+            box-shadow: 0 8px 32px rgba(0, 0, 0, 0.3);
+            transform: translateY(120%);
+            transition: transform 0.5s cubic-bezier(0.23, 1, 0.32, 1);
+            visibility: hidden; /* Standardmäßig versteckt */
+        }
+        #map-container.is-open { transform: translateY(0); }
+        #map { width: 100%; height: 100%; border-radius: 16px; }
+
+        #confirm-guess-button {
+            position: absolute; bottom: 1rem; left: 50%;
+            transform: translateX(-50%); z-index: 20; width: 80%;
+            visibility: hidden; opacity: 0;
+            transition: opacity 0.3s ease;
+            background: linear-gradient(45deg, var(--accent-yellow), var(--accent-yellow-dark));
+        }
+        #confirm-guess-button.visible { visibility: visible; opacity: 1; }
+
+        #ui-overlay {
+            position: absolute; bottom: 2rem; left: 2rem;
+            width: 380px; z-index: 10;
+            background: var(--bg-panel); backdrop-filter: blur(12px);
+            border: 1px solid var(--border-color); border-radius: 16px;
+            padding: 1.5rem; box-shadow: 0 8px 32px rgba(0, 0, 0, 0.3);
+            display: flex; flex-direction: column; gap: 1.5rem;
+            color: var(--text-primary);
+            visibility: hidden; /* Standardmäßig versteckt */
+        }
+        
+        .header { text-align: center; }
+        .header h1 { margin: 0; font-size: 1.5rem; font-weight: 700; }
+        .header h2 { margin: 0; font-size: 1rem; font-weight: 400; color: var(--text-secondary); }
+        .stats-grid { display: grid; grid-template-columns: 1fr 1fr; gap: 1rem; border-top: 1px solid var(--border-color); border-bottom: 1px solid var(--border-color); padding: 1rem 0; }
+        .stat-item { display: flex; flex-direction: column; align-items: center; }
+        .stat-item .label { font-size: 0.8rem; color: var(--text-secondary); margin-bottom: 0.25rem; }
+        .stat-item .value { font-size: 1.25rem; font-weight: 600; }
+        
+        #total-score, #round-score { color: var(--accent-green); }
+        #distance { color: var(--accent-red); }
+
+        .button-group { display: flex; flex-direction: column; gap: 0.75rem; }
+        button { padding: 1rem; font-size: 1rem; font-weight: 600; font-family: 'Poppins', sans-serif; cursor: pointer; border: none; border-radius: 8px; color: white; transition: all 0.3s ease; box-shadow: 0 4px 6px rgba(0, 0, 0, 0.1); }
+        #toggle-map-button, .mode-button-moving { background: linear-gradient(45deg, var(--accent-cyan), var(--accent-cyan-dark)); }
+        #toggle-map-button:hover:not(:disabled), .mode-button-moving:hover { transform: translateY(-2px); box-shadow: 0 7px 10px rgba(0, 0, 0, 0.15); }
+        #next-round-button, .mode-button-static { background: linear-gradient(45deg, var(--accent-green), var(--accent-green-dark)); }
+        #next-round-button:hover:not(:disabled), .mode-button-static:hover { transform: translateY(-2px); box-shadow: 0 7px 10px rgba(0, 0, 0, 0.15); }
+        button:disabled { opacity: 0.5; cursor: not-allowed; transform: none; box-shadow: none; }
+        .pano-loading-message { color: var(--text-primary); font-size: 1.5rem; text-align: center; padding: 2rem; }
+    </style>
+</head>
+<body>
+    <!-- Startbildschirm -->
+    <div id="start-screen">
+        <h1>Geo-Rater Pro</h1>
+        <p>Wähle deinen Spielmodus</p>
+        <div class="mode-selection">
+            <button class="mode-button-moving" data-mode="moving">Klassisch (Mit Bewegen)</button>
+            <button class="mode-button-static" data-mode="static">Herausforderung (Ohne Bewegen)</button>
+        </div>
+    </div>
+
+    <!-- Spiel-UI -->
+    <div id="pano"></div>
+    <div id="map-container"><div id="map"></div><button id="confirm-guess-button">Vermutung bestätigen</button></div>
+    <div id="ui-overlay">
+        <div class="header"><h1>Geo-Rater Pro</h1><h2 id="round-info">Runde 0 von 5</h2></div>
+        <div class="stats-grid">
+            <div class="stat-item"><span class="label">Gesamtpunktzahl</span><span id="total-score" class="value">0</span></div>
+            <div class="stat-item"><span class="label">Letztes Ergebnis</span><span id="round-score" class="value">0</span></div>
+            <div class="stat-item" style="grid-column: 1 / -1;"><span class="label">Distanz</span><span id="distance" class="value">---</span></div>
+        </div>
+        <div class="button-group">
+            <button id="toggle-map-button" disabled>Karte öffnen</button>
+            <button id="next-round-button" disabled>Nächste Runde</button>
+        </div>
+    </div>
+
+    <script>
+        const apiKey = '';
+
+        const startScreen = document.getElementById('start-screen');
+        const uiOverlay = document.getElementById('ui-overlay');
+        const panoElement = document.getElementById('pano');
+        const mapContainer = document.getElementById('map-container');
+        const mapElement = document.getElementById('map');
+        const toggleMapButton = document.getElementById('toggle-map-button');
+        const confirmGuessButton = document.getElementById('confirm-guess-button');
+        const nextRoundButton = document.getElementById('next-round-button');
+
+        let panorama, map, streetViewService;
+        let currentLocation, guessMarker, actualMarker, resultLine;
+        let totalScore = 0, currentRound = 0;
+        const maxRounds = 5;
+        let gameMode = null; // 'moving' or 'static'
+
+        function initGame() {
+            // KARTE IST JETZT WIEDER FARBIG (styles-Attribut entfernt)
+            const mapOptions = { center: { lat: 20, lng: 0 }, zoom: 2, streetViewControl: false, mapTypeControl: false, fullscreenControl: false };
+            map = new google.maps.Map(mapElement, mapOptions);
+            streetViewService = new google.maps.StreetViewService();
+            
+            document.querySelectorAll('.mode-selection button').forEach(button => {
+                button.addEventListener('click', () => selectGameModeAndStart(button.dataset.mode));
+            });
+            
+            map.addListener('click', handleMapClick);
+            toggleMapButton.addEventListener('click', toggleMap);
+            confirmGuessButton.addEventListener('click', processGuess);
+            nextRoundButton.addEventListener('click', () => {
+                if (currentRound >= maxRounds) { resetGame(); } 
+                else { startNewRound(); }
+            });
+        }
+
+        function selectGameModeAndStart(mode) {
+            gameMode = mode;
+            startScreen.classList.add('is-hidden');
+            uiOverlay.style.visibility = 'visible';
+            mapContainer.style.visibility = 'visible';
+            startNewRound();
+        }
+
+        function toggleMap() {
+            const isOpen = mapContainer.classList.toggle('is-open');
+            toggleMapButton.innerText = isOpen ? 'Karte schließen' : 'Karte öffnen';
+            if (isOpen) { google.maps.event.trigger(map, 'resize'); map.setCenter({ lat: 20, lng: 0 }); map.setZoom(2); }
+        }
+
+        async function startNewRound() {
+            if (currentRound >= maxRounds) { return; }
+            currentRound++;
+            resetRoundUI();
+            document.getElementById('round-info').innerText = `Runde ${currentRound} von ${maxRounds}`;
+            nextRoundButton.disabled = true;
+            panoElement.innerHTML = `<h1 class="pano-loading-message">Suche neuen Ort...</h1>`;
+            
+            try {
+                currentLocation = await findRandomLocation();
+                panoElement.innerHTML = '';
+                panorama = new google.maps.StreetViewPanorama(panoElement, {
+                    position: currentLocation, pov: { heading: 34, pitch: 10 },
+                    disableDefaultUI: true, addressControl: false, linksControl: gameMode === 'moving',
+                    clickToGo: gameMode === 'moving', // Modus-Abfrage hier
+                    panControl: true, panControlOptions: { position: google.maps.ControlPosition.RIGHT_BOTTOM },
+                    visible: true
+                });
+                toggleMapButton.disabled = false;
+            } catch (error) {
+                console.error(error);
+                panoElement.innerHTML = `<h1 class="pano-loading-message" style="color:var(--accent-red);">Fehler: Konnte keinen Ort finden.</h1>`;
+                nextRoundButton.disabled = false;
+                nextRoundButton.innerText = 'Erneut versuchen';
+            }
+        }
+        
+        function findRandomLocation() {
+            return new Promise(async (resolve, reject) => {
+                const maxAttempts = 25; 
+                for (let i = 0; i < maxAttempts; i++) {
+                    const lat = Math.random() * 170 - 85; const lng = Math.random() * 360 - 180;
+                    try {
+                        const { data } = await streetViewService.getPanorama({ location: { lat, lng }, radius: 100000, preference: google.maps.StreetViewPreference.NEAREST, source: google.maps.StreetViewSource.OUTDOOR });
+                        resolve(data.location.latLng); return; 
+                    } catch (e) {
+                         if (e && e.code === 'ZERO_RESULTS') { continue; } else { reject(e); return; }
+                    }
+                }
+                reject(new Error(`Konnte nach ${maxAttempts} Versuchen keinen Ort finden.`));
+            });
+        }
+
+        function handleMapClick(event) { 
+            if (nextRoundButton.disabled === false) return; 
+            if (guessMarker) { guessMarker.setPosition(event.latLng); } 
+            else { guessMarker = new google.maps.Marker({ position: event.latLng, map: map, animation: google.maps.Animation.DROP }); }
+            confirmGuessButton.classList.add('visible');
+        }
+
+        function processGuess() {
+            if (!guessMarker) return;
+            const guessPosition = guessMarker.getPosition();
+            guessMarker.setAnimation(null);
+            
+            const distanceInMeters = google.maps.geometry.spherical.computeDistanceBetween(guessPosition, currentLocation);
+            const distanceInKm = distanceInMeters / 1000;
+            const score = calculateScore(distanceInKm);
+            totalScore += score;
+            
+            document.getElementById('distance').innerText = `${distanceInKm.toFixed(0)} km`;
+            document.getElementById('round-score').innerText = score;
+            document.getElementById('total-score').innerText = totalScore;
+            
+            toggleMapButton.disabled = true;
+            nextRoundButton.disabled = false;
+            nextRoundButton.innerText = (currentRound === maxRounds) ? 'Neues Spiel' : 'Nächste Runde';
+            
+            confirmGuessButton.classList.remove('visible');
+            showResultOnMap(guessPosition);
+        }
+
+        function calculateScore(distanceKm) {
+            if (distanceKm < 0.05) return 5000;
+            const score = Math.round(5000 * Math.exp(-distanceKm / 1500));
+            return score < 0 ? 0 : score;
+        }
+
+        function showResultOnMap(guessPosition) {
+            actualMarker = new google.maps.Marker({ position: currentLocation, map: map, icon: 'http://maps.google.com/mapfiles/ms/icons/green-dot.png' });
+            resultLine = new google.maps.Polyline({ path: [guessPosition, currentLocation], geodesic: true, strokeColor: '#FF0000', strokeOpacity: 0.8, strokeWeight: 2, map: map });
+            const bounds = new google.maps.LatLngBounds();
+            bounds.extend(guessPosition);
+            bounds.extend(currentLocation);
+            map.fitBounds(bounds, {padding: 50});
+        }
+
+        function resetRoundUI() {
+            if (guessMarker) guessMarker.setMap(null);
+            if (actualMarker) actualMarker.setMap(null);
+            if (resultLine) resultLine.setMap(null);
+            guessMarker = actualMarker = resultLine = null;
+            document.getElementById('round-score').innerText = '0';
+            document.getElementById('distance').innerText = '---';
+            toggleMapButton.disabled = true;
+            toggleMapButton.innerText = 'Karte öffnen';
+            confirmGuessButton.classList.remove('visible');
+            if (mapContainer.classList.contains('is-open')) mapContainer.classList.remove('is-open');
+        }
+
+        function resetGame() {
+            currentRound = 0; totalScore = 0; gameMode = null;
+            resetRoundUI();
+            document.getElementById('total-score').innerText = '0';
+            document.getElementById('round-info').innerText = `Runde 0 von 5`;
+            nextRoundButton.disabled = true;
+            nextRoundButton.innerText = 'Nächste Runde';
+            uiOverlay.style.visibility = 'hidden';
+            mapContainer.style.visibility = 'hidden';
+            startScreen.classList.remove('is-hidden');
+            panoElement.innerHTML = '';
+        }
+
+        function loadGoogleMapsAPI() {
+            const script = document.createElement('script');
+            script.src = `https://maps.googleapis.com/maps/api/js?key=${apiKey}&callback=initGame&libraries=geometry&language=de`;
+            script.async = true;
+            document.head.appendChild(script);
+        }
+        
+        loadGoogleMapsAPI();
+    </script>
+</body>
+</html>
