@@ -1,0 +1,1343 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8" />
+<meta name="viewport" content="width=device-width, initial-scale=1.0, user-scalable=no" />
+<title>K8O5 // DOOM ARCHIVE</title>
+<link rel="icon" id="dynamic-favicon" type="image/svg+xml" href="">
+<style>
+  @import url('https://fonts.googleapis.com/css2?family=Press+Start+2P&family=IBM+Plex+Mono:wght@400;600;700&display=swap');
+  @import url('https://fonts.googleapis.com/css2?family=Rubik+Glitch&family=Sedgwick+Ave+Display&family=Permanent+Marker&family=Bungee+Shade&family=Monoton&display=swap');
+  :root {
+    --win95-bg: #008080;
+    --win95-face: #c0c0c0;
+    --win95-light: #ffffff;
+    --win95-dark: #808080;
+    --win95-black: #000000;
+    --win95-title: #000080;
+    --win95-title-text: #ffffff;
+    --win95-font: 'MS Sans Serif', Tahoma, 'Segoe UI', sans-serif;
+  }
+  * { box-sizing: border-box; margin: 0; padding: 0; }
+  html, body {
+    width: 100%; height: 100%; overflow: hidden;
+    background: #000; color: #e8dcc8;
+    font-family: 'IBM Plex Mono', monospace;
+  }
+  body.playing { cursor: none; }
+  body.ui-mode { cursor: default; }
+
+  #view {
+    display: block; width: 100%; height: 100%;
+    image-rendering: pixelated; background: #111;
+  }
+
+  /* ── boot ── */
+  #boot {
+    position: fixed; inset: 0; z-index: 50;
+    background: #050505;
+    display: flex; flex-direction: column;
+    align-items: center; justify-content: center;
+    gap: 1.2rem; text-align: center; padding: 2rem;
+  }
+  #boot h1 {
+    font-family: 'Press Start 2P', monospace;
+    font-size: clamp(1.2rem, 4vw, 2.2rem);
+    color: #c44; letter-spacing: 0.15em;
+    text-shadow: 0 0 20px #f00a;
+  }
+  #boot p { color: #888; max-width: 38rem; line-height: 1.6; font-size: 0.9rem; }
+  #boot .files { color: #c94; font-size: 0.75rem; max-height: 8rem; overflow: auto; opacity: 0.85; text-align: left; }
+  #boot button {
+    font-family: 'Press Start 2P', monospace;
+    font-size: 0.7rem; padding: 1rem 1.5rem;
+    background: #c44; color: #100; border: none; cursor: pointer;
+  }
+  #boot button:disabled { opacity: 0.4; cursor: wait; }
+
+  #hud {
+    position: fixed; inset: 0; pointer-events: none; z-index: 10;
+    display: none;
+  }
+  #hud .top {
+    position: absolute; top: 0; left: 0; right: 0;
+    display: flex; justify-content: space-between; align-items: center;
+    padding: 0.55rem 0.75rem; gap: 0.5rem; flex-wrap: wrap;
+    background: linear-gradient(180deg, rgba(0,0,0,0.8), transparent);
+    font-size: 0.72rem; letter-spacing: 0.05em;
+  }
+  #hud .brand { color: #c44; font-family: 'Press Start 2P', monospace; font-size: 0.55rem; }
+  #hud .stat { color: #e8dcc8; }
+  #hud .stat b { color: #c94; }
+  #hud .top .search-wrap {
+    pointer-events: auto;
+    display: flex; align-items: center; gap: 0.35rem;
+    flex: 1; max-width: 360px; min-width: 160px;
+  }
+  #hud .top .search-wrap input {
+    flex: 1; font-family: var(--win95-font); font-size: 12px;
+    border: 2px solid; border-color: var(--win95-dark) var(--win95-light) var(--win95-light) var(--win95-dark);
+    background: #fff; color: #000; padding: 3px 6px; outline: none;
+  }
+  #hud .top button.hud-btn {
+    pointer-events: auto;
+    font-family: var(--win95-font); font-size: 11px;
+    background: var(--win95-face); color: #000;
+    border: 2px solid;
+    border-color: var(--win95-light) var(--win95-black) var(--win95-black) var(--win95-light);
+    padding: 2px 8px; cursor: pointer;
+  }
+  #crosshair {
+    position: absolute; left: 50%; top: 50%;
+    width: 14px; height: 14px; margin: -7px 0 0 -7px;
+    border: 1px solid rgba(255,255,255,0.7); border-radius: 50%;
+  }
+  #crosshair::after {
+    content: ''; position: absolute; left: 50%; top: 50%;
+    width: 2px; height: 2px; margin: -1px; background: #fff;
+  }
+  #weapon {
+    position: absolute; bottom: 0; left: 50%;
+    transform: translateX(-50%);
+    width: min(420px, 70vw); height: 26vh;
+    pointer-events: none;
+  }
+  #weapon canvas { width: 100%; height: 100%; display: block; }
+  #log {
+    position: absolute; bottom: 28vh; left: 1rem; right: 1rem;
+    text-align: center; color: #fc6; font-size: 0.85rem;
+    text-shadow: 0 0 8px #000; min-height: 1.2em;
+  }
+  #minimap {
+    position: absolute; right: 0.75rem; bottom: 0.75rem;
+    border: 1px solid #543; background: rgba(0,0,0,0.65);
+    image-rendering: pixelated;
+  }
+  #help {
+    position: absolute; left: 0.75rem; bottom: 0.75rem;
+    font-size: 0.62rem; color: #666; line-height: 1.45; max-width: 40%;
+  }
+  #search-hits {
+    position: fixed; top: 2.75rem; left: 50%; transform: translateX(-50%);
+    width: min(420px, 90vw); max-height: 40vh; overflow: auto;
+    pointer-events: auto; display: none;
+    background: var(--win95-face); color: #000;
+    border: 2px solid;
+    border-color: var(--win95-light) var(--win95-black) var(--win95-black) var(--win95-light);
+    font-family: var(--win95-font); font-size: 12px; z-index: 45;
+    box-shadow: 4px 4px 0 rgba(0,0,0,0.35);
+  }
+  #search-hits .hit {
+    padding: 8px 10px; cursor: pointer; border-bottom: 1px solid #999;
+    pointer-events: auto;
+  }
+  #search-hits .hit:hover, #search-hits .hit.active {
+    background: var(--win95-title); color: #fff;
+  }
+  #search-hits .hit small { display: block; opacity: 0.75; font-size: 10px; }
+
+  /* ── Win95 / k8OS window layer ── */
+  #desktop {
+    position: fixed; inset: 0; z-index: 30;
+    pointer-events: none;
+  }
+  #desktop.has-windows { pointer-events: auto; background: transparent; }
+  .win95-window {
+    position: absolute;
+    min-width: 280px; min-height: 180px;
+    width: min(720px, 92vw); height: min(480px, 70vh);
+    background: var(--win95-face);
+    border: 2px solid;
+    border-color: var(--win95-light) var(--win95-black) var(--win95-black) var(--win95-light);
+    box-shadow: 2px 2px 0 rgba(0,0,0,0.35);
+    display: flex; flex-direction: column;
+    font-family: var(--win95-font);
+    pointer-events: auto;
+  }
+  .win95-window.maximized {
+    left: 0 !important; top: 0 !important;
+    width: 100% !important; height: calc(100% - 28px) !important;
+  }
+  .win95-title {
+    height: 22px; background: var(--win95-title); color: var(--win95-title-text);
+    display: flex; align-items: center; justify-content: space-between;
+    padding: 0 3px 0 6px; font-size: 12px; font-weight: 700;
+    cursor: move; user-select: none; flex-shrink: 0;
+  }
+  .win95-title.inactive { background: #808080; }
+  .win95-title-text {
+    overflow: hidden; text-overflow: ellipsis; white-space: nowrap; flex: 1;
+  }
+  .win95-title-btns { display: flex; gap: 2px; margin-left: 6px; }
+  .win95-title-btns button {
+    width: 16px; height: 14px; padding: 0; line-height: 10px;
+    font-size: 10px; font-weight: 700;
+    background: var(--win95-face); color: #000;
+    border: 1px solid;
+    border-color: var(--win95-light) var(--win95-black) var(--win95-black) var(--win95-light);
+    cursor: pointer; font-family: var(--win95-font);
+  }
+  .win95-title-btns button:active {
+    border-color: var(--win95-black) var(--win95-light) var(--win95-light) var(--win95-black);
+  }
+  .win95-menubar {
+    display: flex; gap: 10px; padding: 2px 8px;
+    font-size: 12px; color: #000; border-bottom: 1px solid var(--win95-dark);
+    background: var(--win95-face); flex-shrink: 0;
+  }
+  .win95-menubar span { cursor: default; }
+  .win95-menubar span:hover { background: var(--win95-title); color: #fff; }
+  .win95-body {
+    flex: 1; background: #fff; position: relative; min-height: 0;
+    border: 2px solid;
+    border-color: var(--win95-dark) var(--win95-light) var(--win95-light) var(--win95-dark);
+    margin: 2px;
+  }
+  .win95-body iframe {
+    width: 100%; height: 100%; border: 0; display: block; background: #fff;
+  }
+  .win95-status {
+    height: 20px; font-size: 11px; color: #000;
+    border-top: 1px solid var(--win95-dark);
+    display: flex; align-items: center; padding: 0 6px;
+    background: var(--win95-face); flex-shrink: 0;
+  }
+  #taskbar {
+    position: fixed; left: 0; right: 0; bottom: 0; height: 28px; z-index: 35;
+    display: none; align-items: center; gap: 4px; padding: 2px 4px;
+    background: var(--win95-face);
+    border-top: 2px solid var(--win95-light);
+    font-family: var(--win95-font); pointer-events: auto;
+  }
+  #taskbar .start {
+    font-weight: 700; font-size: 12px; padding: 2px 10px;
+    background: var(--win95-face); border: 2px solid;
+    border-color: var(--win95-light) var(--win95-black) var(--win95-black) var(--win95-light);
+    cursor: pointer;
+  }
+  #taskbar .tasks { display: flex; gap: 3px; flex: 1; overflow: hidden; }
+  #taskbar .task {
+    font-size: 11px; padding: 2px 10px; max-width: 160px;
+    overflow: hidden; text-overflow: ellipsis; white-space: nowrap;
+    background: var(--win95-face); border: 2px solid;
+    border-color: var(--win95-light) var(--win95-black) var(--win95-black) var(--win95-light);
+    cursor: pointer;
+  }
+  #taskbar .task.active {
+    border-color: var(--win95-dark) var(--win95-light) var(--win95-light) var(--win95-dark);
+    background: #dfdfdf;
+  }
+  #taskbar .clock {
+    font-size: 11px; padding: 2px 8px;
+    border: 1px solid; border-color: var(--win95-dark) var(--win95-light) var(--win95-light) var(--win95-dark);
+  }
+
+  #overlay-msg {
+    position: fixed; inset: 0; z-index: 60;
+    display: none; align-items: center; justify-content: center;
+    background: rgba(0,0,0,0.8); flex-direction: column; gap: 1rem;
+    font-family: 'Press Start 2P', monospace; text-align: center; padding: 2rem;
+  }
+  #overlay-msg h2 { color: #c44; font-size: 1rem; line-height: 1.6; }
+  #overlay-msg p { color: #aaa; font-size: 0.5rem; line-height: 1.8; }
+  #overlay-msg button {
+    font-family: inherit; font-size: 0.5rem;
+    padding: 0.9rem 1.2rem; border: none; background: #c44; color: #100; cursor: pointer;
+  }
+</style>
+</head>
+<body>
+<canvas id="view"></canvas>
+
+<div id="hud">
+  <div class="top">
+    <div class="brand">K8O5</div>
+    <div class="search-wrap">
+      <input id="search-input" type="search" placeholder="Search archives / HTML…" autocomplete="off" />
+      <button class="hud-btn" id="search-btn" type="button">Search</button>
+    </div>
+    <div class="stat">HP <b id="hp">100</b></div>
+    <div class="stat">AMMO <b id="ammo">50</b></div>
+    <div class="stat">FRAGS <b id="kills">0</b></div>
+    <div class="stat">OPEN <b id="found">0</b>/<b id="total">0</b></div>
+    <button class="hud-btn" id="btn-mouse" type="button">Mouse</button>
+  </div>
+  <div id="crosshair"></div>
+  <div id="log"></div>
+  <div id="weapon"><canvas id="gun"></canvas></div>
+  <canvas id="minimap" width="128" height="128"></canvas>
+  <div id="help">WASD · look · shoot imps · walk through green pads to open HTML · / search · Esc UI</div>
+</div>
+
+<div id="search-hits"></div>
+<div id="desktop"></div>
+<div id="taskbar">
+  <button class="start" id="start-btn-tb" type="button">K8O5</button>
+  <div class="tasks" id="tasks"></div>
+  <div class="clock" id="clock">12:00</div>
+</div>
+
+<div id="boot">
+  <h1>K8O5</h1>
+  <p>DOOM RAID + k8OS WINDOWS<br/>
+  Walk through glowing green pads → HTML opens as a Win95 window (close with ✕).<br/>
+  Maps are random each run. Search still works.</p>
+  <div class="files" id="file-list">Scanning repository…</div>
+  <button id="start-btn" disabled>LOADING…</button>
+</div>
+
+<div id="overlay-msg">
+  <h2 id="ov-title">MISSION COMPLETE</h2>
+  <p id="ov-body"></p>
+  <button id="ov-btn" type="button">AGAIN</button>
+</div>
+
+<script>
+(() => {
+  'use strict';
+
+  // -----------------------------------------------------
+  // URBAN ART / K8O5 FAVICON GENERATOR (hardcoded in HTML)
+  // -----------------------------------------------------
+  class FaviconManager {
+    constructor() {
+      this.link = document.getElementById('dynamic-favicon');
+      this.fonts = [
+        'Rubik Glitch',
+        'Sedgwick Ave Display',
+        'Permanent Marker',
+        'Bungee Shade',
+        'Monoton'
+      ];
+      this.chars = ['K', '8', 'O', '5', '>', '!', '$', 'k', 'o'];
+      this.themeColors = {
+        dark: { bg: '#050505', fg: '#00ff41' },
+        light: { bg: '#ffffff', fg: '#000000' },
+        crimson: { bg: '#0a0000', fg: '#ff3333' },
+        doom: { bg: '#0a0505', fg: '#cc4444' }
+      };
+    }
+    update(themeName) {
+      if (!this.link) return;
+      const colors = this.themeColors[themeName] || this.themeColors.doom;
+      const font = this.fonts[Math.floor(Math.random() * this.fonts.length)];
+      const char = this.chars[Math.floor(Math.random() * this.chars.length)];
+      const svg = `
+        <svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 100 100">
+          <rect width="100" height="100" fill="${colors.bg}"/>
+          <rect x="5" y="5" width="90" height="90" fill="none" stroke="${colors.fg}" stroke-width="6" />
+          <text x="50" y="62"
+            font-family="${font}"
+            font-weight="normal"
+            font-size="65"
+            fill="${colors.fg}"
+            text-anchor="middle"
+            dominant-baseline="middle">${char}</text>
+        </svg>`.trim();
+      this.link.href = `data:image/svg+xml;charset=utf-8,${encodeURIComponent(svg)}`;
+      document.title = `K8O5 [${char}]`;
+    }
+  }
+  const faviconManager = new FaviconManager();
+  // fonts need a tick to load for some browsers' tab icons; paint twice
+  faviconManager.update('doom');
+  window.addEventListener('load', () => faviconManager.update('doom'));
+
+  const FALLBACK_HTMLS = [
+    'k8o5.html', 'k8os.html', 'openscad.html', 'p2p.html', 'radio.html', 'buh/index.html'
+  ];
+  const EXCLUDE = new Set(['index.html', '404.html', 'cf-deploy/index.html']);
+
+  async function fetchHtmlFiles() {
+    const files = new Set();
+    try {
+      for (const branch of ['main', 'master']) {
+        const r = await fetch(`https://api.github.com/repos/k8o5/k8o5.github.io/git/trees/${branch}?recursive=1`);
+        if (!r.ok) continue;
+        const data = await r.json();
+        for (const t of data.tree || []) {
+          if (t.type === 'blob' && /\.html?$/i.test(t.path) && !EXCLUDE.has(t.path)) files.add(t.path);
+        }
+        if (files.size) break;
+      }
+    } catch (_) {}
+    if (files.size < 2) FALLBACK_HTMLS.forEach(f => files.add(f));
+    return [...files].filter(f => !f.startsWith('cf-deploy/')).sort();
+  }
+
+  function resolveUrl(path) {
+    if (!path) return 'about:blank';
+    // absolute already
+    if (/^https?:\/\//i.test(path) || path.startsWith('file:')) return path;
+    // strip leading ./
+    path = path.replace(/^\.\//, '');
+    try {
+      // same folder as this page
+      const base = location.href.replace(/[#?].*$/, '').replace(/[^/]+$/, '');
+      return new URL(path, base).href;
+    } catch {
+      return path;
+    }
+  }
+
+  function openFromSearch(file) {
+    if (!file) return;
+    document.exitPointerLock?.();
+    searchHits.style.display = 'none';
+    // always enable UI layer first so the window is clickable/visible
+    setUiMode(true);
+    document.getElementById('taskbar').style.display = 'flex';
+    desktop.classList.add('has-windows');
+    const t = terminals.find(t => t.file === file);
+    if (t) {
+      t.opened = true;
+      t.collected = true;
+      updateFound();
+    }
+    // next frame so pointer-lock release / layout settles
+    requestAnimationFrame(() => {
+      try {
+        openHtmlWindow(file);
+        log(`SEARCH OPEN ${file}`);
+        checkWin();
+      } catch (err) {
+        console.error(err);
+        log('OPEN FAILED: ' + (err && err.message));
+        alert('Could not open: ' + file + '\n' + (err && err.message));
+      }
+    });
+  }
+
+  // ── map (seeded random dungeon) ──────────────
+  // 0 empty · 1 wall · 3 walk-through archive pad (not solid)
+  let mapSeed = (Math.random() * 1e9) | 0;
+  let rng = Math.random;
+  function setSeed(s) {
+    mapSeed = s >>> 0;
+    // mulberry32
+    let a = mapSeed || 1;
+    rng = function () {
+      a |= 0; a = a + 0x6D2B79F5 | 0;
+      let t = Math.imul(a ^ a >>> 15, 1 | a);
+      t = t + Math.imul(t ^ t >>> 7, 61 | t) ^ t;
+      return ((t ^ t >>> 14) >>> 0) / 4294967296;
+    };
+  }
+  function rnd(a, b) { return a + ((rng() * (b - a + 1)) | 0); }
+  function shuffle(arr) {
+    const a = arr.slice();
+    for (let i = a.length - 1; i > 0; i--) {
+      const j = (rng() * (i + 1)) | 0;
+      [a[i], a[j]] = [a[j], a[i]];
+    }
+    return a;
+  }
+
+  function buildMap(htmlFiles, seed) {
+    if (seed != null) setSeed(seed);
+    else setSeed(mapSeed);
+    const files = shuffle(htmlFiles.length ? htmlFiles : ['k8o5.html']);
+    const n = files.length;
+    // bigger random canvas
+    const W = rnd(48, 72);
+    const H = rnd(48, 72);
+    const map = Array.from({ length: H }, () => Array(W).fill(1));
+    const terminals = [];
+    const rooms = [];
+
+    const carve = (x, y) => {
+      if (y > 0 && y < H - 1 && x > 0 && x < W - 1) map[y][x] = 0;
+    };
+    const carveRoom = (rx, ry, rw, rh) => {
+      for (let y = ry; y < ry + rh; y++)
+        for (let x = rx; x < rx + rw; x++) carve(x, y);
+      return {
+        x: rx, y: ry, w: rw, h: rh,
+        cx: (rx + (rw >> 1)), cy: (ry + (rh >> 1))
+      };
+    };
+    // L-shaped / messy corridors
+    const carveCorridor = (x0, y0, x1, y1) => {
+      let x = x0, y = y0;
+      const hFirst = rng() < 0.5;
+      const wiggle = () => (rng() < 0.2 ? rnd(-1, 1) : 0);
+      if (hFirst) {
+        while (x !== x1) { carve(x, y); carve(x, y + wiggle()); x += x < x1 ? 1 : -1; }
+        while (y !== y1) { carve(x, y); carve(x + wiggle(), y); y += y < y1 ? 1 : -1; }
+      } else {
+        while (y !== y1) { carve(x, y); carve(x + wiggle(), y); y += y < y1 ? 1 : -1; }
+        while (x !== x1) { carve(x, y); carve(x, y + wiggle()); x += x < x1 ? 1 : -1; }
+      }
+      // thicken randomly
+      if (rng() < 0.45) {
+        x = x0; y = y0;
+        while (x !== x1 || y !== y1) {
+          carve(x + 1, y); carve(x, y + 1);
+          if (x !== x1) x += x < x1 ? 1 : -1;
+          else if (y !== y1) y += y < y1 ? 1 : -1;
+        }
+      }
+    };
+
+    // place rooms with random sizes / positions (no perfect grid)
+    const maxRooms = n + rnd(2, 6);
+    let attempts = 0;
+    while (rooms.length < maxRooms && attempts < 400) {
+      attempts++;
+      const rw = rnd(5, 11);
+      const rh = rnd(5, 11);
+      const rx = rnd(2, W - rw - 3);
+      const ry = rnd(2, H - rh - 3);
+      // overlap check (with padding)
+      let ok = true;
+      for (const r of rooms) {
+        if (rx < r.x + r.w + 1 && rx + rw + 1 > r.x &&
+            ry < r.y + r.h + 1 && ry + rh + 1 > r.y) { ok = false; break; }
+      }
+      if (!ok) continue;
+      rooms.push(carveRoom(rx, ry, rw, rh));
+    }
+    if (!rooms.length) rooms.push(carveRoom(4, 4, 8, 8));
+
+    // connect rooms in shuffled MST-ish order + extra random links
+    const order = shuffle(rooms.map((_, i) => i));
+    for (let i = 1; i < order.length; i++) {
+      const a = rooms[order[i - 1]];
+      const b = rooms[order[i]];
+      carveCorridor(a.cx, a.cy, b.cx, b.cy);
+    }
+    // extra loops for chaos
+    const extra = rnd(1, Math.max(2, rooms.length >> 1));
+    for (let i = 0; i < extra; i++) {
+      const a = rooms[rnd(0, rooms.length - 1)];
+      const b = rooms[rnd(0, rooms.length - 1)];
+      if (a !== b) carveCorridor(a.cx, a.cy, b.cx, b.cy);
+    }
+
+    // scatter random pillars / alcoves
+    for (let i = 0; i < rnd(8, 24); i++) {
+      const x = rnd(2, W - 3), y = rnd(2, H - 3);
+      if (map[y][x] === 0 && rng() < 0.5) map[y][x] = 1;
+    }
+    // random open blobs (courtyards)
+    for (let i = 0; i < rnd(2, 5); i++) {
+      const cx = rnd(5, W - 6), cy = rnd(5, H - 6), rad = rnd(2, 4);
+      for (let y = cy - rad; y <= cy + rad; y++)
+        for (let x = cx - rad; x <= cx + rad; x++)
+          if ((x - cx) ** 2 + (y - cy) ** 2 <= rad * rad) carve(x, y);
+    }
+
+    // place archive pads (walk-through) — one per HTML, shuffled room centers + floor scatter
+    const padSpots = shuffle(rooms.map(r => ({ x: r.cx, y: r.cy })));
+    // extra floor candidates
+    const floors = [];
+    for (let y = 2; y < H - 2; y++)
+      for (let x = 2; x < W - 2; x++)
+        if (map[y][x] === 0) floors.push({ x, y });
+    const extraSpots = shuffle(floors);
+
+    for (let i = 0; i < n; i++) {
+      let spot = padSpots[i] || extraSpots[i % Math.max(1, extraSpots.length)];
+      if (!spot) spot = { x: 5, y: 5 };
+      // jitter pad inside open space
+      let px = spot.x + rnd(-2, 2);
+      let py = spot.y + rnd(-2, 2);
+      px = Math.max(2, Math.min(W - 3, px));
+      py = Math.max(2, Math.min(H - 3, py));
+      // ensure walkable 3x3 around pad
+      for (let dy = -1; dy <= 1; dy++)
+        for (let dx = -1; dx <= 1; dx++) carve(px + dx, py + dy);
+      map[py][px] = 3; // walk-through archive
+      terminals.push({
+        x: px, y: py, file: files[i],
+        collected: false, opened: false, inside: false
+      });
+    }
+
+    // spawn in first room, away from pad if possible
+    const r0 = rooms[0];
+    let spawn = { x: r0.cx + 0.5, y: r0.cy + 0.5 };
+    for (let tries = 0; tries < 20; tries++) {
+      const sx = r0.x + 1 + rnd(0, Math.max(0, r0.w - 3));
+      const sy = r0.y + 1 + rnd(0, Math.max(0, r0.h - 3));
+      if (map[sy][sx] === 0) { spawn = { x: sx + 0.5, y: sy + 0.5 }; break; }
+    }
+    carve(spawn.x | 0, spawn.y | 0);
+    return { map, terminals, spawn };
+  }
+
+  // ── engine ───────────────────────────────────
+  const canvas = document.getElementById('view');
+  const ctx = canvas.getContext('2d', { alpha: false });
+  const gunCanvas = document.getElementById('gun');
+  const gctx = gunCanvas.getContext('2d');
+  const mm = document.getElementById('minimap');
+  const mctx = mm.getContext('2d');
+  const desktop = document.getElementById('desktop');
+  const tasksEl = document.getElementById('tasks');
+
+  let W = 0, H = 0, map = null, terminals = [], htmlFiles = [];
+  let player = { x: 3.5, y: 3.5, dir: -Math.PI / 2, fov: Math.PI / 3, hp: 100, ammo: 50, kills: 0 };
+  let enemies = [], keys = {}, zBuffer = [];
+  let running = false, uiMode = false, lastT = 0, bob = 0, flash = 0, gunKick = 0, msgT = 0;
+  let winZ = 100;
+  const windows = new Map(); // id -> {el, file, path}
+
+
+  const TEX = 64;
+  const textures = [];
+  function makeTexture(fn) {
+    const c = document.createElement('canvas'); c.width = c.height = TEX;
+    const g = c.getContext('2d'); fn(g, TEX); return g.getImageData(0, 0, TEX, TEX);
+  }
+  function initTextures() {
+    textures[0] = makeTexture((g, s) => {
+      g.fillStyle = '#2a1a12'; g.fillRect(0, 0, s, s);
+      for (let i = 0; i < 80; i++) {
+        g.fillStyle = `rgb(${40+Math.random()*30|0},${25+Math.random()*20|0},${15+Math.random()*15|0})`;
+        g.fillRect(Math.random()*s, Math.random()*s, 2, 2);
+      }
+    });
+    textures[1] = makeTexture((g, s) => {
+      g.fillStyle = '#0a0a0c'; g.fillRect(0, 0, s, s);
+      g.fillStyle = '#12141a'; for (let y = 0; y < s; y += 8) g.fillRect(0, y, s, 1);
+    });
+    textures[2] = makeTexture((g, s) => {
+      g.fillStyle = '#4a3030'; g.fillRect(0, 0, s, s);
+      for (let row = 0; row < 8; row++) for (let col = 0; col < 4; col++) {
+        const ox = (row % 2) * 8;
+        g.fillStyle = `rgb(${90+Math.random()*40|0},${50+Math.random()*25|0},${45+Math.random()*20|0})`;
+        g.fillRect(col * 16 + ox + 1, row * 8 + 1, 14, 6);
+      }
+    });
+    textures[4] = makeTexture((g, s) => {
+      g.fillStyle = '#0a1a0a'; g.fillRect(0, 0, s, s);
+      g.fillStyle = '#0f0'; g.font = '10px monospace';
+      g.fillText('HTML', 12, 28); g.fillText('ARCHIVE', 6, 42);
+      g.strokeStyle = '#0a0'; g.strokeRect(2, 2, s - 4, s - 4);
+    });
+    textures[5] = makeTexture((g, s) => {
+      g.fillStyle = '#2a1010'; g.fillRect(0, 0, s, s);
+      for (let i = 0; i < 100; i++) {
+        g.fillStyle = `rgb(${60+Math.random()*80|0},${10+Math.random()*20|0},10)`;
+        g.beginPath(); g.arc(Math.random()*s, Math.random()*s, 1+Math.random()*3, 0, 7); g.fill();
+      }
+    });
+  }
+  function texSample(img, u, v, shade) {
+    const x = ((u % 1) + 1) % 1, y = ((v % 1) + 1) % 1;
+    const i = (((y * TEX) | 0) * TEX + ((x * TEX) | 0)) * 4;
+    const d = img.data;
+    return [(d[i] * shade) | 0, (d[i+1] * shade) | 0, (d[i+2] * shade) | 0];
+  }
+
+  // ── Win95 window manager (k8OS style) ────────
+  function setUiMode(on) {
+    uiMode = on;
+    document.body.classList.toggle('ui-mode', on);
+    document.body.classList.toggle('playing', running && !on);
+    if (on) {
+      document.exitPointerLock?.();
+      document.getElementById('taskbar').style.display = 'flex';
+      desktop.classList.add('has-windows');
+    } else if (!windows.size) {
+      document.getElementById('taskbar').style.display = 'none';
+      desktop.classList.remove('has-windows');
+      if (running) canvas.requestPointerLock?.();
+    } else {
+      document.getElementById('taskbar').style.display = 'flex';
+      desktop.classList.add('has-windows');
+    }
+  }
+
+  function focusWindow(id) {
+    for (const [wid, w] of windows) {
+      w.el.querySelector('.win95-title').classList.toggle('inactive', wid !== id);
+      w.el.style.zIndex = wid === id ? ++winZ : w.el.style.zIndex;
+    }
+    renderTaskbar(id);
+  }
+
+  function renderTaskbar(activeId) {
+    tasksEl.innerHTML = '';
+    for (const [id, w] of windows) {
+      const b = document.createElement('button');
+      b.type = 'button';
+      b.className = 'task' + (id === activeId ? ' active' : '');
+      b.textContent = w.file.split('/').pop();
+      b.onclick = () => { w.el.style.display = 'flex'; focusWindow(id); setUiMode(true); };
+      tasksEl.appendChild(b);
+    }
+  }
+
+  function closeWindow(id) {
+    const w = windows.get(id);
+    if (!w) return;
+    w.el.remove();
+    windows.delete(id);
+    renderTaskbar(null);
+    if (!windows.size) setUiMode(false);
+    else {
+      const last = [...windows.keys()].pop();
+      focusWindow(last);
+    }
+  }
+
+  function openHtmlWindow(path, title) {
+    if (!path) throw new Error('empty path');
+    document.exitPointerLock?.();
+    setUiMode(true);
+    desktop.classList.add('has-windows');
+    document.getElementById('taskbar').style.display = 'flex';
+
+    // already open?
+    for (const [id, w] of windows) {
+      if (w.path === path) {
+        w.el.style.display = 'flex';
+        w.el.style.visibility = 'visible';
+        focusWindow(id);
+        log(`FOCUS ${title || path}`);
+        return id;
+      }
+    }
+    const id = 'w' + Date.now() + Math.random().toString(36).slice(2, 6);
+    const file = title || path.split('/').pop() || path;
+    const src = resolveUrl(path);
+    const el = document.createElement('div');
+    el.className = 'win95-window';
+    el.style.pointerEvents = 'auto';
+    const left = 48 + (windows.size % 6) * 32;
+    const top = 48 + (windows.size % 6) * 28;
+    el.style.left = left + 'px';
+    el.style.top = top + 'px';
+    el.style.zIndex = String(++winZ);
+    el.style.display = 'flex';
+
+    const titleBar = document.createElement('div');
+    titleBar.className = 'win95-title';
+    titleBar.innerHTML = `
+      <div class="win95-title-text"></div>
+      <div class="win95-title-btns">
+        <button type="button" data-act="min" title="Minimize">_</button>
+        <button type="button" data-act="max" title="Maximize">□</button>
+        <button type="button" data-act="close" title="Close">✕</button>
+      </div>`;
+    titleBar.querySelector('.win95-title-text').textContent = `📄 ${file} — k8OS`;
+
+    const menu = document.createElement('div');
+    menu.className = 'win95-menubar';
+    menu.innerHTML = '<span>File</span><span>Edit</span><span>View</span><span>Help</span>';
+
+    const body = document.createElement('div');
+    body.className = 'win95-body';
+    const iframe = document.createElement('iframe');
+    iframe.title = file;
+    iframe.setAttribute('sandbox', 'allow-scripts allow-same-origin allow-forms allow-popups allow-modals');
+    // Prefer relative path first (same dir as index)
+    iframe.src = src;
+    iframe.addEventListener('error', () => {
+      body.innerHTML = `<div style="padding:12px;font:12px Tahoma;color:#000">Failed to load<br><code>${src}</code><br><br>
+        <a href="${src}" target="_blank" rel="noopener">Open in new tab</a></div>`;
+    });
+    body.appendChild(iframe);
+
+    const status = document.createElement('div');
+    status.className = 'win95-status';
+    status.textContent = src;
+
+    el.appendChild(titleBar);
+    el.appendChild(menu);
+    el.appendChild(body);
+    el.appendChild(status);
+
+    // drag
+    let drag = null;
+    titleBar.addEventListener('mousedown', e => {
+      if (e.target.closest('button')) return;
+      focusWindow(id);
+      drag = { x: e.clientX - el.offsetLeft, y: e.clientY - el.offsetTop };
+      e.preventDefault();
+    });
+    window.addEventListener('mousemove', e => {
+      if (!drag || el.classList.contains('maximized')) return;
+      el.style.left = Math.max(0, e.clientX - drag.x) + 'px';
+      el.style.top = Math.max(0, e.clientY - drag.y) + 'px';
+    });
+    window.addEventListener('mouseup', () => { drag = null; });
+
+    titleBar.querySelector('[data-act="close"]').onclick = (e) => { e.stopPropagation(); closeWindow(id); };
+    titleBar.querySelector('[data-act="min"]').onclick = (e) => {
+      e.stopPropagation();
+      el.style.display = 'none';
+      renderTaskbar(null);
+    };
+    titleBar.querySelector('[data-act="max"]').onclick = (e) => {
+      e.stopPropagation();
+      el.classList.toggle('maximized');
+    };
+    el.addEventListener('mousedown', () => focusWindow(id));
+
+    desktop.appendChild(el);
+    windows.set(id, { el, file, path });
+    focusWindow(id);
+    log(`OPENED ${file}`);
+    return id;
+  }
+
+  // ── search (core) ────────────────────────────
+  const searchInput = document.getElementById('search-input');
+  const searchHits = document.getElementById('search-hits');
+
+  function runSearch(q) {
+    q = (q || '').trim().toLowerCase();
+    setUiMode(true);
+    document.exitPointerLock?.();
+    if (!q) {
+      // empty query → list all
+      const hits = htmlFiles.slice();
+      if (!hits.length) {
+        searchHits.style.display = 'block';
+        searchHits.innerHTML = `<div class="hit"><em>No HTML files loaded</em></div>`;
+        return;
+      }
+      paintHits(hits);
+      return;
+    }
+    const hits = htmlFiles.filter(f => f.toLowerCase().includes(q));
+    if (!hits.length) {
+      searchHits.style.display = 'block';
+      searchHits.innerHTML = `<div class="hit"><em>No matches for “${q.replace(/[<>&]/g, '')}”</em></div>`;
+      return;
+    }
+    paintHits(hits);
+  }
+
+  function paintHits(hits) {
+    searchHits.style.display = 'block';
+    searchHits.innerHTML = hits.map(f => {
+      const t = terminals.find(t => t.file === f);
+      const st = t ? (t.collected ? 'extracted' : t.opened ? 'opened' : 'in map') : 'file';
+      // encode path in data attribute safely
+      const enc = encodeURIComponent(f);
+      return `<div class="hit" data-file="${enc}" role="button" tabindex="0"><strong>${(f.split('/').pop() || f).replace(/[<>&]/g, '')}</strong><small>${f.replace(/[<>&]/g, '')} · ${st}</small></div>`;
+    }).join('');
+  }
+
+  // event delegation — survives re-renders, always works
+  searchHits.addEventListener('click', (e) => {
+    const hit = e.target.closest('.hit[data-file]');
+    if (!hit) return;
+    e.preventDefault();
+    e.stopPropagation();
+    const file = decodeURIComponent(hit.getAttribute('data-file') || '');
+    openFromSearch(file);
+  });
+  searchHits.addEventListener('keydown', (e) => {
+    if (e.code !== 'Enter' && e.code !== 'Space') return;
+    const hit = e.target.closest('.hit[data-file]');
+    if (!hit) return;
+    e.preventDefault();
+    const file = decodeURIComponent(hit.getAttribute('data-file') || '');
+    openFromSearch(file);
+  });
+
+  searchInput.addEventListener('focus', () => {
+    setUiMode(true);
+    document.exitPointerLock?.();
+  });
+  searchInput.addEventListener('input', () => runSearch(searchInput.value));
+  searchInput.addEventListener('keydown', e => {
+    if (e.code === 'Escape') {
+      searchHits.style.display = 'none';
+      searchInput.blur();
+      setUiMode(windows.size > 0);
+    }
+    if (e.code === 'Enter') {
+      e.preventDefault();
+      const first = searchHits.querySelector('.hit[data-file]');
+      if (first) {
+        const file = decodeURIComponent(first.getAttribute('data-file') || '');
+        openFromSearch(file);
+      } else {
+        runSearch(searchInput.value);
+      }
+    }
+    e.stopPropagation();
+  });
+  document.getElementById('search-btn').onclick = (e) => {
+    e.preventDefault();
+    e.stopPropagation();
+    runSearch(searchInput.value);
+  };
+
+  // ── enemies / render (same raycaster) ────────
+  function spawnEnemies() {
+    enemies = [];
+    const empties = [];
+    for (let y = 1; y < map.length - 1; y++)
+      for (let x = 1; x < map[0].length - 1; x++)
+        if (map[y][x] === 0) empties.push({ x: x + 0.5, y: y + 0.5 });
+    const count = Math.min(8 + htmlFiles.length * 2, 36);
+    for (let i = 0; i < count; i++) {
+      const p = empties[(Math.random() * empties.length) | 0];
+      if (!p) break;
+      if ((p.x - player.x) ** 2 + (p.y - player.y) ** 2 < 25) continue;
+      enemies.push({
+        x: p.x, y: p.y, hp: 30 + Math.random() * 40,
+        speed: 1.1 + Math.random() * 0.8, cool: Math.random() * 2,
+        type: Math.random() < 0.25 ? 'baron' : 'imp', dead: false, flash: 0
+      });
+    }
+  }
+
+  function resize() {
+    const scale = 2;
+    W = Math.max(320, (window.innerWidth / scale) | 0);
+    H = Math.max(200, (window.innerHeight / scale) | 0);
+    canvas.width = W; canvas.height = H;
+    gunCanvas.width = 320; gunCanvas.height = 180;
+    zBuffer = new Float32Array(W);
+  }
+
+  function cast() {
+    const img = ctx.createImageData(W, H);
+    const data = img.data;
+    const halfH = H / 2;
+    const dirX = Math.cos(player.dir), dirY = Math.sin(player.dir);
+    const planeX = -dirY * Math.tan(player.fov / 2);
+    const planeY = dirX * Math.tan(player.fov / 2);
+
+    for (let y = 0; y < H; y++) {
+      const p = y - halfH - bob;
+      const rowDist = Math.abs((0.5 * H) / (p || 1));
+      const floorStepX = rowDist * (2 * planeX) / W;
+      const floorStepY = rowDist * (2 * planeY) / W;
+      let floorX = player.x + rowDist * (dirX - planeX);
+      let floorY = player.y + rowDist * (dirY - planeY);
+      const isFloor = y > halfH + bob;
+      const tex = textures[isFloor ? 0 : 1];
+      for (let x = 0; x < W; x++) {
+        const distShade = Math.max(0.15, Math.min(1, 1.4 / (rowDist + 0.001)));
+        let [r, g, b] = texSample(tex, floorX - (floorX | 0), floorY - (floorY | 0), distShade * (isFloor ? 1 : 0.55));
+        // glowing archive pads on floor
+        if (isFloor) {
+          const fx = floorX | 0, fy = floorY | 0;
+          if (fy >= 0 && fx >= 0 && fy < map.length && fx < map[0].length && map[fy][fx] === 3) {
+            const pulse = 0.55 + 0.45 * Math.sin(performance.now() / 200 + fx + fy);
+            r = Math.min(255, (40 * distShade + 80 * pulse) | 0);
+            g = Math.min(255, (200 * distShade * pulse) | 0);
+            b = Math.min(255, (60 * distShade) | 0);
+          }
+        }
+        const i = (y * W + x) * 4;
+        data[i] = r; data[i+1] = g; data[i+2] = b; data[i+3] = 255;
+        floorX += floorStepX; floorY += floorStepY;
+      }
+    }
+
+    for (let x = 0; x < W; x++) {
+      const camX = 2 * x / W - 1;
+      const rayDirX = dirX + planeX * camX;
+      const rayDirY = dirY + planeY * camX;
+      let mapX = player.x | 0, mapY = player.y | 0;
+      const deltaDistX = Math.abs(1 / (rayDirX || 1e-8));
+      const deltaDistY = Math.abs(1 / (rayDirY || 1e-8));
+      let stepX, stepY, sideDistX, sideDistY, side = 0, hit = 0, cell = 0;
+      if (rayDirX < 0) { stepX = -1; sideDistX = (player.x - mapX) * deltaDistX; }
+      else { stepX = 1; sideDistX = (mapX + 1 - player.x) * deltaDistX; }
+      if (rayDirY < 0) { stepY = -1; sideDistY = (player.y - mapY) * deltaDistY; }
+      else { stepY = 1; sideDistY = (mapY + 1 - player.y) * deltaDistY; }
+      for (let i = 0; i < 64 && !hit; i++) {
+        if (sideDistX < sideDistY) { sideDistX += deltaDistX; mapX += stepX; side = 0; }
+        else { sideDistY += deltaDistY; mapY += stepY; side = 1; }
+        if (mapY < 0 || mapX < 0 || mapY >= map.length || mapX >= map[0].length) { hit = 1; cell = 1; break; }
+        cell = map[mapY][mapX];
+        if (cell === 1) hit = 1; // walls only; pads (3) are passable
+      }
+      let perp = side === 0
+        ? (mapX - player.x + (1 - stepX) / 2) / rayDirX
+        : (mapY - player.y + (1 - stepY) / 2) / rayDirY;
+      perp = Math.max(0.01, perp);
+      zBuffer[x] = perp;
+      const lineH = (H / perp) | 0;
+      let drawStart = (-lineH / 2 + halfH + bob) | 0;
+      let drawEnd = (lineH / 2 + halfH + bob) | 0;
+      if (drawStart < 0) drawStart = 0;
+      if (drawEnd >= H) drawEnd = H - 1;
+      let wallX = side === 0 ? player.y + perp * rayDirY : player.x + perp * rayDirX;
+      wallX -= Math.floor(wallX);
+      // note: pads (3) are floors — not drawn as walls; only solid walls cast
+      const tex = textures[side ? 5 : 2];
+      let shade = Math.max(0.2, Math.min(1, 1.3 / (perp + 0.001))) * (side ? 0.7 : 1);
+      if (flash > 0) shade = Math.min(1.4, shade + flash);
+      for (let y = drawStart; y < drawEnd; y++) {
+        const texY = (y - halfH - bob + lineH / 2) / lineH;
+        const [r, g, b] = texSample(tex, wallX, texY, shade);
+        const i = (y * W + x) * 4;
+        data[i] = r; data[i+1] = g; data[i+2] = b;
+      }
+    }
+
+    const sprites = enemies.filter(e => !e.dead).map(e => ({
+      e, x: e.x, y: e.y, dist: (e.x - player.x) ** 2 + (e.y - player.y) ** 2
+    })).sort((a, b) => b.dist - a.dist);
+
+    for (const sp of sprites) {
+      const spriteX = sp.x - player.x, spriteY = sp.y - player.y;
+      const invDet = 1 / (planeX * dirY - dirX * planeY);
+      const transformX = invDet * (dirY * spriteX - dirX * spriteY);
+      const transformY = invDet * (-planeY * spriteX + planeX * spriteY);
+      if (transformY <= 0.05) continue;
+      const spriteScreenX = ((W / 2) * (1 + transformX / transformY)) | 0;
+      const spriteH = Math.abs((H / transformY) | 0);
+      const spriteW = spriteH;
+      const drawStartY = Math.max(0, (-spriteH / 2 + halfH + bob) | 0);
+      const drawEndY = Math.min(H - 1, (spriteH / 2 + halfH + bob) | 0);
+      const drawStartX = Math.max(0, (-spriteW / 2 + spriteScreenX) | 0);
+      const drawEndX = Math.min(W - 1, (spriteW / 2 + spriteScreenX) | 0);
+      const base = sp.e.flash > 0 ? [255, 255, 255] : (sp.e.type === 'baron' ? [160, 40, 40] : [200, 90, 30]);
+      for (let stripe = drawStartX; stripe < drawEndX; stripe++) {
+        if (transformY >= zBuffer[stripe]) continue;
+        const texX = (stripe - (-spriteW / 2 + spriteScreenX)) / spriteW;
+        for (let y = drawStartY; y < drawEndY; y++) {
+          const texY = (y - (-spriteH / 2 + halfH + bob)) / spriteH;
+          const dx = texX - 0.5, dy = texY - 0.5;
+          const body = (dx * dx) / 0.08 + ((dy - 0.05) ** 2) / 0.14;
+          const head = (dx * dx) / 0.04 + ((dy + 0.22) ** 2) / 0.04;
+          let on = body < 1 || head < 1 || (texY > 0.7 && Math.abs(dx) < 0.12);
+          if (!on) continue;
+          const shade = Math.max(0.25, Math.min(1, 1.2 / Math.sqrt(sp.dist)));
+          let r = base[0] * shade, g = base[1] * shade, b = base[2] * shade;
+          if (head < 1) { r = 255 * shade; g = 40 * shade; b = 40 * shade; }
+          const i = (y * W + stripe) * 4;
+          data[i] = r; data[i+1] = g; data[i+2] = b;
+        }
+      }
+    }
+
+    if (flash > 0) {
+      for (let i = 0; i < data.length; i += 4) {
+        data[i] = Math.min(255, data[i] + flash * 80);
+        data[i+1] = Math.min(255, data[i+1] + flash * 40);
+      }
+    }
+    ctx.putImageData(img, 0, 0);
+
+    // labels
+    ctx.save();
+    ctx.font = 'bold 11px monospace';
+    ctx.textAlign = 'center';
+    for (const t of terminals) {
+      const dx = t.x + 0.5 - player.x, dy = t.y + 0.5 - player.y;
+      const dist = Math.hypot(dx, dy);
+      if (dist > 7) continue;
+      let a = Math.atan2(dy, dx) - player.dir;
+      while (a > Math.PI) a -= Math.PI * 2;
+      while (a < -Math.PI) a += Math.PI * 2;
+      if (Math.abs(a) > player.fov * 0.75) continue;
+      const sx = (0.5 + a / player.fov) * W;
+      const sy = halfH + bob - 36 / dist;
+      const label = (t.collected ? '✓ ' : t.opened ? '□ ' : '■ ') + t.file.split('/').pop();
+      const tw = ctx.measureText(label).width;
+      ctx.fillStyle = 'rgba(0,0,0,0.65)';
+      ctx.fillRect(sx - tw / 2 - 4, sy - 11, tw + 8, 15);
+      ctx.fillStyle = t.collected ? '#8f8' : (t.opened ? '#8cf' : '#0f0');
+      ctx.fillText(label, sx, sy);
+    }
+    ctx.restore();
+  }
+
+  function drawGun(dt) {
+    gunKick = Math.max(0, gunKick - dt * 8);
+    gctx.clearRect(0, 0, 320, 180);
+    const cx = 160, cy = 140 + gunKick * 20 + Math.sin(bob * 0.5) * 3;
+    gctx.fillStyle = '#2a2a2a';
+    gctx.beginPath();
+    gctx.moveTo(cx - 30, cy + 40); gctx.lineTo(cx - 10, cy - 30);
+    gctx.lineTo(cx + 10, cy - 30); gctx.lineTo(cx + 40, cy + 40);
+    gctx.closePath(); gctx.fill();
+    gctx.fillStyle = '#444'; gctx.fillRect(cx - 8, cy - 50, 16, 25);
+    gctx.fillStyle = '#c44'; gctx.fillRect(cx - 4, cy - 55, 8, 8);
+    if (flash > 0.05) {
+      gctx.fillStyle = `rgba(255,200,50,${flash})`;
+      gctx.beginPath(); gctx.arc(cx, cy - 60, 30 * flash, 0, 7); gctx.fill();
+    }
+  }
+
+  function drawMinimap() {
+    mctx.fillStyle = '#000'; mctx.fillRect(0, 0, 128, 128);
+    if (!map) return;
+    const scale = 128 / Math.max(map.length, map[0].length);
+    for (let y = 0; y < map.length; y++) for (let x = 0; x < map[0].length; x++) {
+      const c = map[y][x];
+      mctx.fillStyle = c === 0 ? '#222' : c === 3 ? '#0f0' : '#633';
+      mctx.fillRect(x * scale, y * scale, scale + 0.5, scale + 0.5);
+    }
+    for (const e of enemies) {
+      if (e.dead) continue;
+      mctx.fillStyle = '#f40'; mctx.fillRect(e.x * scale - 1, e.y * scale - 1, 2, 2);
+    }
+    mctx.fillStyle = '#4af';
+    mctx.beginPath(); mctx.arc(player.x * scale, player.y * scale, 2.5, 0, 7); mctx.fill();
+  }
+
+  function solid(x, y) {
+    const mx = x | 0, my = y | 0;
+    if (my < 0 || mx < 0 || my >= map.length || mx >= map[0].length) return true;
+    const c = map[my][mx];
+    return c === 1; // walls only — pads (3) are walkable
+  }
+  function tryMove(nx, ny) {
+    const r = 0.18;
+    if (!solid(nx - r, player.y) && !solid(nx + r, player.y)) player.x = nx;
+    if (!solid(player.x, ny - r) && !solid(player.x, ny + r)) player.y = ny;
+  }
+
+  function updateFound() {
+    const opened = terminals.filter(t => t.opened || t.collected).length;
+    document.getElementById('found').textContent = opened;
+  }
+
+  /** Shoot: enemies only — HTMLs open by walking through pads */
+  function shoot() {
+    if (uiMode) return;
+    if (player.ammo <= 0) { log('OUT OF AMMO — R'); return; }
+    player.ammo--;
+    flash = 0.35; gunKick = 1;
+
+    let hit = null, hitDist = 1e9;
+    for (const e of enemies) {
+      if (e.dead) continue;
+      const dx = e.x - player.x, dy = e.y - player.y;
+      const dist = Math.hypot(dx, dy);
+      let a = Math.atan2(dy, dx) - player.dir;
+      while (a > Math.PI) a -= Math.PI * 2;
+      while (a < -Math.PI) a += Math.PI * 2;
+      if (Math.abs(a) < 0.12 && dist < hitDist && dist < 18) {
+        let blocked = false;
+        const dirX = Math.cos(player.dir), dirY = Math.sin(player.dir);
+        for (let t = 0; t < dist; t += 0.3) {
+          if (solid(player.x + dirX * t, player.y + dirY * t)) { blocked = true; break; }
+        }
+        if (!blocked) { hit = e; hitDist = dist; }
+      }
+    }
+    if (hit) {
+      hit.hp -= 25 + Math.random() * 20;
+      hit.flash = 0.2;
+      if (hit.hp <= 0) {
+        hit.dead = true; player.kills++;
+        player.ammo = Math.min(99, player.ammo + 3);
+        log('FRAG');
+      } else log('HIT');
+    }
+  }
+
+  /** Walk onto archive pad → open Win95 HTML (once per enter) */
+  function checkWalkThrough() {
+    const px = player.x | 0, py = player.y | 0;
+    for (const t of terminals) {
+      const on = (px === t.x && py === t.y) ||
+        Math.hypot(t.x + 0.5 - player.x, t.y + 0.5 - player.y) < 0.55;
+      if (on && !t.inside) {
+        t.inside = true;
+        t.opened = true;
+        t.collected = true;
+        if (map[t.y] && map[t.y][t.x] === 3) map[t.y][t.x] = 0;
+        updateFound();
+        openHtmlWindow(t.file);
+        player.hp = Math.min(100, player.hp + 8);
+        player.ammo = Math.min(99, player.ammo + 5);
+        log(`ENTERED ${t.file}`);
+        checkWin();
+      } else if (!on) {
+        t.inside = false;
+      }
+    }
+  }
+
+  function tryExtract() {
+    // kept for keybind — same as standing on pad
+    checkWalkThrough();
+  }
+
+  function checkWin() {
+    if (terminals.every(t => t.opened || t.collected)) {
+      // don't force win while windows open — soft complete
+      if ([...windows.values()].length === 0 || terminals.every(t => t.collected)) {
+        // win when all opened; still need to close? user said close windows — win when all opened at least once
+      }
+      if (terminals.every(t => t.opened || t.collected)) {
+        // announce once
+        if (!player._won) {
+          player._won = true;
+          log('ALL ARCHIVES OPENED — close windows with ✕');
+        }
+        if (terminals.every(t => t.collected) && !windows.size) win();
+      }
+    }
+  }
+
+  function log(t) {
+    msgT = 2.5;
+    document.getElementById('log').textContent = t;
+  }
+
+  function win() {
+    running = false;
+    document.exitPointerLock?.();
+    document.getElementById('overlay-msg').style.display = 'flex';
+    document.getElementById('ov-title').textContent = 'K8O5 — ARCHIVE RAID COMPLETE';
+    document.getElementById('ov-body').textContent =
+      `Frags ${player.kills} · HTMLs ${terminals.length} secured`;
+  }
+  function die() {
+    running = false;
+    document.exitPointerLock?.();
+    document.getElementById('overlay-msg').style.display = 'flex';
+    document.getElementById('ov-title').textContent = 'YOU DIED';
+    document.getElementById('ov-body').textContent = 'Archives remain. Try again.';
+  }
+
+  function update(dt) {
+    if (!running || uiMode) return;
+    const speed = (keys['ShiftLeft'] || keys['ShiftRight'] ? 4.2 : 2.8) * dt;
+    let mx = 0, my = 0;
+    if (keys['KeyW'] || keys['ArrowUp']) { mx += Math.cos(player.dir) * speed; my += Math.sin(player.dir) * speed; }
+    if (keys['KeyS'] || keys['ArrowDown']) { mx -= Math.cos(player.dir) * speed; my -= Math.sin(player.dir) * speed; }
+    if (keys['KeyA']) { mx += Math.cos(player.dir - Math.PI/2) * speed; my += Math.sin(player.dir - Math.PI/2) * speed; }
+    if (keys['KeyD']) { mx += Math.cos(player.dir + Math.PI/2) * speed; my += Math.sin(player.dir + Math.PI/2) * speed; }
+    if (mx || my) { tryMove(player.x + mx, player.y + my); bob += dt * 12; } else bob *= 0.9;
+    if (keys['ArrowLeft']) player.dir -= 2.2 * dt;
+    if (keys['ArrowRight']) player.dir += 2.2 * dt;
+    flash = Math.max(0, flash - dt * 3);
+    if (msgT > 0) { msgT -= dt; if (msgT <= 0) document.getElementById('log').textContent = ''; }
+
+    checkWalkThrough();
+
+    for (const e of enemies) {
+      if (e.dead) continue;
+      e.flash = Math.max(0, e.flash - dt);
+      const dx = player.x - e.x, dy = player.y - e.y;
+      const dist = Math.hypot(dx, dy) || 0.001;
+      e.cool -= dt;
+      if (dist < 10) {
+        const nx = e.x + (dx / dist) * e.speed * dt;
+        const ny = e.y + (dy / dist) * e.speed * dt;
+        if (!solid(nx, e.y)) e.x = nx;
+        if (!solid(e.x, ny)) e.y = ny;
+      }
+      if (dist < 0.7 && e.cool <= 0) {
+        player.hp -= e.type === 'baron' ? 14 : 8;
+        e.cool = 0.8; flash = 0.2; log('OUCH');
+        if (player.hp <= 0) { player.hp = 0; die(); }
+      }
+    }
+    document.getElementById('hp').textContent = Math.max(0, player.hp | 0);
+    document.getElementById('ammo').textContent = player.ammo;
+    document.getElementById('kills').textContent = player.kills;
+  }
+
+  function frame(t) {
+    const dt = Math.min(0.05, (t - lastT) / 1000 || 0.016);
+    lastT = t;
+    update(dt);
+    if (map) { cast(); drawGun(dt); drawMinimap(); }
+    // clock
+    const d = new Date();
+    document.getElementById('clock').textContent =
+      d.getHours().toString().padStart(2, '0') + ':' + d.getMinutes().toString().padStart(2, '0');
+    requestAnimationFrame(frame);
+  }
+
+  // input
+  window.addEventListener('keydown', e => {
+    // don't steal keys while typing search or in window chrome focus on inputs
+    if (e.target.matches('input, textarea')) return;
+    keys[e.code] = true;
+    if (e.code === 'Space') { e.preventDefault(); if (running && !uiMode) shoot(); }
+    if (e.code === 'KeyE' && running && !uiMode) tryExtract();
+    if (e.code === 'KeyR' && running && !uiMode) {
+      player.ammo = Math.min(99, player.ammo + 15); log('RELOADED');
+    }
+    if (e.code === 'Slash' || (e.code === 'KeyF' && e.ctrlKey)) {
+      e.preventDefault();
+      setUiMode(true);
+      searchInput.focus();
+      searchInput.select();
+    }
+    if (e.code === 'Escape') {
+      if (searchHits.style.display === 'block') {
+        searchHits.style.display = 'none';
+      } else if (windows.size) {
+        // leave windows, toggle pointer for game under
+        setUiMode(!uiMode);
+      } else {
+        document.exitPointerLock?.();
+        setUiMode(false);
+      }
+    }
+  });
+  window.addEventListener('keyup', e => { keys[e.code] = false; });
+  canvas.addEventListener('click', () => {
+    if (!running) return;
+    if (uiMode && !windows.size) setUiMode(false);
+    if (!uiMode) {
+      canvas.requestPointerLock?.();
+      shoot();
+    }
+  });
+  document.addEventListener('mousemove', e => {
+    if (uiMode || document.pointerLockElement !== canvas || !running) return;
+    player.dir += e.movementX * 0.0025;
+  });
+  document.getElementById('btn-mouse').onclick = () => {
+    if (uiMode) setUiMode(false);
+    canvas.requestPointerLock?.();
+  };
+  document.getElementById('start-btn-tb').onclick = () => {
+    setUiMode(true);
+    document.exitPointerLock?.();
+    searchInput.focus();
+    runSearch(searchInput.value || ''); // empty → full list via paintHits
+  };
+  document.getElementById('ov-btn').onclick = () => location.reload();
+
+  async function boot() {
+    initTextures();
+    resize();
+    window.addEventListener('resize', resize);
+    htmlFiles = await fetchHtmlFiles();
+    document.getElementById('file-list').innerHTML =
+      htmlFiles.map(f => `▸ ${f}`).join('<br>') || 'fallback list';
+    setSeed((Math.random() * 1e9) | 0);
+    const world = buildMap(htmlFiles, mapSeed);
+    map = world.map;
+    terminals = world.terminals;
+    player.x = world.spawn.x;
+    player.y = world.spawn.y;
+    document.getElementById('total').textContent = String(terminals.length);
+    document.getElementById('found').textContent = '0';
+
+    const btn = document.getElementById('start-btn');
+    btn.disabled = false;
+    btn.textContent = 'ENTER THE ARCHIVE';
+    btn.onclick = () => {
+      document.getElementById('boot').style.display = 'none';
+      document.getElementById('hud').style.display = 'block';
+      spawnEnemies();
+      running = true;
+      setUiMode(false);
+      canvas.requestPointerLock?.();
+      log(`${terminals.length} HTMLS — WALK THROUGH GREEN PADS · / SEARCH`);
+    };
+    requestAnimationFrame(frame);
+  }
+
+  boot().catch(err => {
+    document.getElementById('file-list').textContent = 'Boot error: ' + err.message;
+  });
+})();
+</script>
+<!-- Cloudflare Pages Analytics --><script defer src='https://static.cloudflareinsights.com/beacon.min.js' data-cf-beacon='{"token": "9628bc8811854dbe81a21d5413dd30ce"}'></script><!-- Cloudflare Pages Analytics --><script>(function(){function c(){var b=a.contentDocument||(a.contentWindow&&a.contentWindow.document);if(b){var d=b.createElement('script');d.innerHTML="window.__CF$cv$params={r:'a26fa5777c5cb153',t:'MTc4NjAzNjEzNQ=='};var a=document.createElement('script');a.src='/cdn-cgi/challenge-platform/scripts/jsd/main.js';document.getElementsByTagName('head')[0].appendChild(a);";b.getElementsByTagName('head')[0].appendChild(d)}}if(document.body){var a=document.createElement('iframe');a.height=1;a.width=1;a.style.position='absolute';a.style.top=0;a.style.left=0;a.style.border='none';a.style.visibility='hidden';document.body.appendChild(a);if('loading'!==document.readyState)c();else if(window.addEventListener)document.addEventListener('DOMContentLoaded',c);else{var e=document.onreadystatechange||function(){};document.onreadystatechange=function(b){e(b);'loading'!==document.readyState&&(document.onreadystatechange=e,c())}}}})();</script></body>
+</html>
