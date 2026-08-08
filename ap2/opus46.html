@@ -1,0 +1,1481 @@
+<!DOCTYPE html>
+<html lang="de">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>⚡ AutomatisierungsProfi – IHK AP2 Trainer</title>
+<style>
+:root {
+  --green: #58CC02; --green-dark: #46a302; --blue: #1CB0F6; --blue-dark: #1899d6;
+  --red: #FF4B4B; --red-dark: #ea2b2b; --gold: #FFC800; --orange: #FF9600;
+  --purple: #CE82FF; --pink: #FF86D0;
+  --bg: #131F24; --bg2: #1a2b32; --bg3: #223742; --bg4: #2b4450;
+  --text: #FFFFFF; --text2: #afafaf; --text3: #7a8b95;
+  --card: #1e3040; --card-hover: #243d4f;
+  --correct-bg: #1a3a1a; --wrong-bg: #3a1a1a;
+  --radius: 16px; --radius-sm: 12px;
+  --transition: all 0.3s cubic-bezier(0.4,0,0.2,1);
+}
+* { margin:0; padding:0; box-sizing:border-box; }
+body {
+  font-family: -apple-system, 'Segoe UI', Roboto, sans-serif;
+  background: var(--bg); color: var(--text);
+  min-height: 100vh; overflow-x: hidden;
+}
+.hidden { display:none !important; }
+
+/* Top Bar */
+.topbar {
+  position: sticky; top:0; z-index:100;
+  background: var(--bg2); border-bottom: 2px solid var(--bg3);
+  padding: 12px 20px; display:flex; align-items:center; justify-content:space-between;
+  backdrop-filter: blur(10px);
+}
+.topbar-left { display:flex; align-items:center; gap:8px; }
+.topbar-logo { font-size:24px; font-weight:800; color:var(--green); cursor:pointer; }
+.topbar-stats { display:flex; gap:16px; align-items:center; }
+.stat { display:flex; align-items:center; gap:5px; font-weight:700; font-size:15px; }
+.stat-icon { font-size:20px; }
+.stat.xp { color: var(--gold); }
+.stat.streak { color: var(--orange); }
+.stat.hearts { color: var(--red); }
+.stat.level { color: var(--blue); }
+
+/* Screens */
+.screen { max-width:700px; margin:0 auto; padding:20px; }
+
+/* Home Screen - Skill Tree */
+.skill-tree { display:flex; flex-direction:column; gap:0; align-items:center; padding:30px 20px; }
+.module-group { width:100%; max-width:400px; margin-bottom:8px; position:relative; }
+.module-header {
+  text-align:center; padding:16px 24px; border-radius:var(--radius);
+  font-weight:800; font-size:14px; text-transform:uppercase; letter-spacing:2px;
+  margin-bottom:16px; color: #fff; position:relative;
+}
+.module-connector {
+  width:4px; height:20px; background:var(--bg3); margin:0 auto;
+}
+
+.lesson-node-wrap { display:flex; flex-direction:column; align-items:center; margin-bottom:6px; position:relative; }
+.lesson-node-wrap::before {
+  content:''; position:absolute; top:-6px; left:50%; width:4px; height:6px;
+  background: var(--bg3); transform:translateX(-50%);
+}
+.lesson-node-wrap:first-child::before { display:none; }
+
+.lesson-node {
+  width:72px; height:72px; border-radius:50%; display:flex; align-items:center;
+  justify-content:center; font-size:28px; cursor:pointer;
+  border:4px solid transparent; transition: var(--transition);
+  position:relative; background: var(--bg3);
+}
+.lesson-node.available {
+  background: var(--green); border-color: var(--green-dark);
+  box-shadow: 0 6px 0 var(--green-dark), 0 8px 20px rgba(88,204,2,0.3);
+  transform: translateY(-3px);
+}
+.lesson-node.available:hover {
+  transform: translateY(-5px); box-shadow: 0 8px 0 var(--green-dark), 0 10px 30px rgba(88,204,2,0.4);
+}
+.lesson-node.available:active { transform: translateY(0); box-shadow: 0 2px 0 var(--green-dark); }
+.lesson-node.completed {
+  background: var(--gold); border-color: #d4a600;
+  box-shadow: 0 4px 0 #d4a600;
+}
+.lesson-node.locked {
+  background: var(--bg3); border-color: var(--bg4); opacity:0.5; cursor:not-allowed;
+}
+.lesson-node .crown { position:absolute; top:-14px; font-size:18px; }
+.lesson-title {
+  font-size:12px; color:var(--text2); text-align:center; margin-top:6px;
+  max-width:140px; font-weight:600;
+}
+.lesson-node.available .lesson-title { color:var(--text); }
+
+/* Lesson Start Modal */
+.modal-overlay {
+  position:fixed; top:0; left:0; width:100%; height:100%; z-index:200;
+  background:rgba(0,0,0,0.7); display:flex; align-items:center; justify-content:center;
+  animation: fadeIn 0.2s;
+}
+.modal {
+  background:var(--bg2); border-radius:var(--radius); padding:32px; max-width:380px;
+  width:90%; text-align:center; animation: scaleIn 0.3s;
+  border: 2px solid var(--bg3);
+}
+.modal h2 { margin-bottom:8px; font-size:22px; }
+.modal p { color:var(--text2); margin-bottom:24px; font-size:15px; }
+.modal-icon { font-size:48px; margin-bottom:16px; display:block; }
+
+/* Buttons */
+.btn {
+  padding:14px 32px; border-radius:var(--radius-sm); border:none; font-size:16px;
+  font-weight:700; cursor:pointer; transition:var(--transition); display:inline-block;
+  text-transform:uppercase; letter-spacing:1px;
+}
+.btn-primary {
+  background:var(--green); color:#fff;
+  box-shadow: 0 4px 0 var(--green-dark);
+}
+.btn-primary:hover { background:#62e002; transform:translateY(-2px); box-shadow:0 6px 0 var(--green-dark); }
+.btn-primary:active { transform:translateY(2px); box-shadow:0 1px 0 var(--green-dark); }
+.btn-secondary {
+  background:var(--bg3); color:var(--text);
+  box-shadow: 0 4px 0 var(--bg4);
+}
+.btn-secondary:hover { background:var(--bg4); }
+.btn-blue { background:var(--blue); box-shadow:0 4px 0 var(--blue-dark); color:#fff; }
+.btn-blue:hover { background:#2dc0ff; }
+.btn-blue:active { transform:translateY(2px); box-shadow:0 1px 0 var(--blue-dark); }
+.btn-block { width:100%; display:block; }
+.btn-sm { padding:10px 20px; font-size:14px; }
+
+/* Quiz Screen */
+.quiz-header {
+  display:flex; align-items:center; gap:16px; margin-bottom:32px; padding-top:8px;
+}
+.quiz-close { font-size:24px; cursor:pointer; color:var(--text3); background:none; border:none; }
+.quiz-close:hover { color:var(--text); }
+.progress-bar-wrap {
+  flex:1; height:16px; background:var(--bg3); border-radius:10px; overflow:hidden;
+}
+.progress-bar-fill {
+  height:100%; background:var(--green); border-radius:10px;
+  transition: width 0.5s cubic-bezier(0.4,0,0.2,1);
+}
+.quiz-hearts { display:flex; gap:4px; font-size:20px; }
+.quiz-content { animation: slideUp 0.4s; }
+.quiz-question {
+  font-size:22px; font-weight:700; margin-bottom:28px; line-height:1.4;
+}
+.quiz-hint {
+  background:var(--bg3); padding:14px 18px; border-radius:var(--radius-sm);
+  margin-bottom:24px; font-size:14px; color:var(--text2); border-left:4px solid var(--blue);
+}
+.quiz-options { display:flex; flex-direction:column; gap:12px; margin-bottom:24px; }
+.quiz-option {
+  padding:16px 20px; border-radius:var(--radius-sm); border:2px solid var(--bg3);
+  background:var(--bg2); cursor:pointer; font-size:16px; transition:var(--transition);
+  display:flex; align-items:center; gap:12px; text-align:left;
+}
+.quiz-option:hover { border-color:var(--blue); background:var(--card); }
+.quiz-option.selected { border-color:var(--blue); background:rgba(28,176,246,0.1); }
+.quiz-option.correct { border-color:var(--green); background:var(--correct-bg); }
+.quiz-option.wrong { border-color:var(--red); background:var(--wrong-bg); }
+.quiz-option-letter {
+  width:32px; height:32px; border-radius:8px; border:2px solid var(--bg4);
+  display:flex; align-items:center; justify-content:center; font-weight:700;
+  font-size:14px; flex-shrink:0;
+}
+.quiz-option.selected .quiz-option-letter { border-color:var(--blue); color:var(--blue); }
+.quiz-option.correct .quiz-option-letter { border-color:var(--green); color:var(--green); background:rgba(88,204,2,0.2); }
+.quiz-option.wrong .quiz-option-letter { border-color:var(--red); color:var(--red); background:rgba(255,75,75,0.2); }
+
+.quiz-input {
+  width:100%; padding:16px 20px; border-radius:var(--radius-sm); border:2px solid var(--bg3);
+  background:var(--bg2); color:var(--text); font-size:18px; outline:none;
+  transition:var(--transition); margin-bottom:24px;
+}
+.quiz-input:focus { border-color:var(--blue); }
+.quiz-input.correct { border-color:var(--green); background:var(--correct-bg); }
+.quiz-input.wrong { border-color:var(--red); background:var(--wrong-bg); }
+
+/* Feedback */
+.feedback-bar {
+  position:fixed; bottom:0; left:0; right:0; padding:20px 24px;
+  display:flex; align-items:center; justify-content:space-between; gap:16px;
+  z-index:50; animation: slideFromBottom 0.3s;
+}
+.feedback-bar.correct { background: #1a3a1a; border-top:2px solid var(--green); }
+.feedback-bar.wrong { background: #3a1a1a; border-top:2px solid var(--red); }
+.feedback-content { display:flex; align-items:center; gap:12px; flex:1; }
+.feedback-icon { font-size:32px; }
+.feedback-text h3 { font-size:16px; margin-bottom:2px; }
+.feedback-text p { font-size:13px; color:var(--text2); }
+.feedback-bar.correct h3 { color:var(--green); }
+.feedback-bar.wrong h3 { color:var(--red); }
+
+/* Results Screen */
+.results {
+  text-align:center; padding:40px 20px; animation:scaleIn 0.5s;
+}
+.results-icon { font-size:80px; margin-bottom:16px; display:block; }
+.results h1 { font-size:28px; margin-bottom:8px; }
+.results-subtitle { color:var(--text2); font-size:16px; margin-bottom:32px; }
+.results-stats {
+  display:grid; grid-template-columns:1fr 1fr 1fr; gap:16px; margin-bottom:32px;
+}
+.results-stat {
+  background:var(--bg2); border-radius:var(--radius-sm); padding:20px 16px;
+  border:2px solid var(--bg3);
+}
+.results-stat-value { font-size:28px; font-weight:800; display:block; }
+.results-stat-label { font-size:12px; color:var(--text2); text-transform:uppercase; margin-top:4px; }
+.results-stat.xp .results-stat-value { color:var(--gold); }
+.results-stat.acc .results-stat-value { color:var(--green); }
+.results-stat.time .results-stat-value { color:var(--blue); }
+
+/* XP Popup */
+.xp-popup {
+  position:fixed; top:50%; left:50%; transform:translate(-50%,-50%);
+  font-size:48px; font-weight:900; color:var(--gold); z-index:999;
+  pointer-events:none; animation: xpPop 1s forwards;
+  text-shadow: 0 0 30px rgba(255,200,0,0.5);
+}
+
+/* Profile */
+.profile-card {
+  background:var(--bg2); border-radius:var(--radius); padding:32px;
+  text-align:center; margin-bottom:20px; border:2px solid var(--bg3);
+}
+.profile-avatar { font-size:64px; margin-bottom:12px; display:block; }
+.profile-level {
+  display:inline-block; padding:6px 16px; border-radius:20px;
+  background:var(--blue); font-weight:700; font-size:14px; margin-bottom:12px;
+}
+.profile-xp-bar {
+  height:12px; background:var(--bg3); border-radius:8px; overflow:hidden; margin:12px 0;
+}
+.profile-xp-fill { height:100%; background:var(--gold); border-radius:8px; transition:width 0.5s; }
+
+.stats-grid { display:grid; grid-template-columns:1fr 1fr; gap:12px; margin-bottom:20px; }
+.stat-card {
+  background:var(--bg2); border-radius:var(--radius-sm); padding:20px;
+  border:2px solid var(--bg3); text-align:center;
+}
+.stat-card-icon { font-size:28px; margin-bottom:8px; display:block; }
+.stat-card-value { font-size:24px; font-weight:800; display:block; }
+.stat-card-label { font-size:12px; color:var(--text2); text-transform:uppercase; }
+
+/* Daily Goal */
+.daily-goal {
+  background: linear-gradient(135deg, var(--bg2), var(--bg3));
+  border-radius:var(--radius); padding:24px; margin-bottom:24px;
+  border:2px solid var(--bg3); text-align:center;
+}
+.daily-goal h3 { margin-bottom:12px; }
+.daily-progress { display:flex; gap:6px; justify-content:center; margin-top:12px; }
+.daily-dot {
+  width:36px; height:36px; border-radius:50%; background:var(--bg4);
+  display:flex; align-items:center; justify-content:center; font-size:16px;
+}
+.daily-dot.done { background:var(--green); }
+
+/* Nav */
+.bottom-nav {
+  position:fixed; bottom:0; left:0; right:0; background:var(--bg2);
+  border-top:2px solid var(--bg3); display:flex; z-index:100; padding:4px 0;
+}
+.nav-item {
+  flex:1; display:flex; flex-direction:column; align-items:center; gap:2px;
+  padding:10px 0; cursor:pointer; color:var(--text3); transition:var(--transition);
+  background:none; border:none; font-size:11px; font-weight:700;
+}
+.nav-item:hover, .nav-item.active { color:var(--blue); }
+.nav-item .nav-icon { font-size:24px; }
+.nav-item.active .nav-icon { transform:scale(1.1); }
+
+/* Scrollbar */
+::-webkit-scrollbar { width:8px; }
+::-webkit-scrollbar-track { background:var(--bg); }
+::-webkit-scrollbar-thumb { background:var(--bg3); border-radius:4px; }
+
+/* Animations */
+@keyframes fadeIn { from{opacity:0} to{opacity:1} }
+@keyframes scaleIn { from{opacity:0;transform:scale(0.9)} to{opacity:1;transform:scale(1)} }
+@keyframes slideUp { from{opacity:0;transform:translateY(20px)} to{opacity:1;transform:translateY(0)} }
+@keyframes slideFromBottom { from{transform:translateY(100%)} to{transform:translateY(0)} }
+@keyframes xpPop { 0%{opacity:1;transform:translate(-50%,-50%) scale(0.5)} 50%{transform:translate(-50%,-50%) scale(1.2)} 100%{opacity:0;transform:translate(-50%,-150%) scale(1)} }
+@keyframes shake { 0%,100%{transform:translateX(0)} 20%,60%{transform:translateX(-8px)} 40%,80%{transform:translateX(8px)} }
+@keyframes bounce { 0%,100%{transform:scale(1)} 50%{transform:scale(1.15)} }
+@keyframes heartBeat { 0%{transform:scale(1)} 15%{transform:scale(1.3)} 30%{transform:scale(1)} }
+.shake { animation: shake 0.5s; }
+.bounce { animation: bounce 0.4s; }
+
+/* Responsive */
+@media(max-width:500px) {
+  .quiz-question { font-size:18px; }
+  .results-stats { grid-template-columns:1fr; }
+  .topbar-stats { gap:10px; }
+  .stat { font-size:13px; }
+  .feedback-bar { flex-direction:column; text-align:center; }
+}
+
+/* Extra */
+.screen { padding-bottom:80px; }
+.glow-green { text-shadow:0 0 20px rgba(88,204,2,0.5); }
+.module-section-title {
+  text-align:center; font-size:18px; font-weight:800; padding:16px 24px;
+  color:var(--text); margin:24px 0 4px 0;
+  background: linear-gradient(135deg, var(--bg3), var(--bg2));
+  border-radius: var(--radius); border:2px solid var(--bg4);
+}
+.module-section-title .mod-icon { font-size:28px; display:block; margin-bottom:4px; }
+.module-section-title .mod-progress { font-size:12px; color:var(--text2); font-weight:600; margin-top:4px; }
+
+.explanation-box {
+  background: var(--bg3); border-radius: var(--radius-sm);
+  padding: 16px; margin-top: 16px; border-left: 4px solid var(--blue);
+}
+.explanation-box h4 { color: var(--blue); margin-bottom: 4px; font-size:14px; }
+.explanation-box p { font-size: 14px; color: var(--text2); line-height:1.5; }
+
+.tf-options { display:grid; grid-template-columns:1fr 1fr; gap:12px; margin-bottom:24px; }
+.tf-option {
+  padding:20px; border-radius:var(--radius-sm); border:2px solid var(--bg3);
+  background:var(--bg2); cursor:pointer; font-size:18px; font-weight:700;
+  text-align:center; transition:var(--transition);
+}
+.tf-option:hover { border-color:var(--blue); }
+.tf-option.selected { border-color:var(--blue); background:rgba(28,176,246,0.1); }
+.tf-option.correct { border-color:var(--green); background:var(--correct-bg); }
+.tf-option.wrong { border-color:var(--red); background:var(--wrong-bg); }
+
+.welcome-banner {
+  text-align:center; padding:24px; margin-bottom:24px;
+  background: linear-gradient(135deg, #1a3520, #132025);
+  border-radius: var(--radius); border:2px solid var(--green);
+}
+.welcome-banner h2 { color:var(--green); font-size:20px; margin-bottom:4px; }
+.welcome-banner p { color:var(--text2); font-size:14px; }
+</style>
+</head>
+<body>
+
+<!-- Top Bar -->
+<div class="topbar" id="topbar">
+  <div class="topbar-left">
+    <div class="topbar-logo" onclick="showScreen('home')">⚡ AP2</div>
+  </div>
+  <div class="topbar-stats">
+    <div class="stat streak"><span class="stat-icon">🔥</span><span id="topStreak">0</span></div>
+    <div class="stat xp"><span class="stat-icon">⭐</span><span id="topXP">0</span></div>
+    <div class="stat hearts"><span class="stat-icon">❤️</span><span id="topHearts">5</span></div>
+  </div>
+</div>
+
+<!-- Home Screen -->
+<div class="screen" id="homeScreen">
+  <div class="welcome-banner" id="welcomeBanner">
+    <h2>🎯 Willkommen zum AP2-Trainer!</h2>
+    <p>Elektroniker für Automatisierungstechnik – IHK Abschlussprüfung Teil 2</p>
+  </div>
+  <div class="skill-tree" id="skillTree"></div>
+</div>
+
+<!-- Quiz Screen -->
+<div class="screen hidden" id="quizScreen">
+  <div class="quiz-header">
+    <button class="quiz-close" onclick="quitQuiz()">✕</button>
+    <div class="progress-bar-wrap"><div class="progress-bar-fill" id="quizProgress"></div></div>
+    <div class="quiz-hearts" id="quizHearts"></div>
+  </div>
+  <div class="quiz-content" id="quizContent"></div>
+</div>
+
+<!-- Results Screen -->
+<div class="screen hidden" id="resultsScreen"></div>
+
+<!-- Profile Screen -->
+<div class="screen hidden" id="profileScreen"></div>
+
+<!-- Feedback Bar -->
+<div class="feedback-bar hidden" id="feedbackBar">
+  <div class="feedback-content">
+    <span class="feedback-icon" id="fbIcon"></span>
+    <div class="feedback-text">
+      <h3 id="fbTitle"></h3>
+      <p id="fbText"></p>
+    </div>
+  </div>
+  <button class="btn btn-primary btn-sm" id="fbBtn" onclick="nextQuestion()">WEITER</button>
+</div>
+
+<!-- Modal -->
+<div class="modal-overlay hidden" id="modalOverlay" onclick="closeModal()">
+  <div class="modal" onclick="event.stopPropagation()">
+    <span class="modal-icon" id="modalIcon"></span>
+    <h2 id="modalTitle"></h2>
+    <p id="modalDesc"></p>
+    <button class="btn btn-primary btn-block" id="modalBtn">LEKTION STARTEN</button>
+    <button class="btn btn-secondary btn-block btn-sm" style="margin-top:10px" onclick="closeModal()">Zurück</button>
+  </div>
+</div>
+
+<!-- Bottom Nav -->
+<div class="bottom-nav" id="bottomNav">
+  <button class="nav-item active" onclick="showScreen('home')"><span class="nav-icon">🏠</span>Lernen</button>
+  <button class="nav-item" onclick="showScreen('profile')"><span class="nav-icon">👤</span>Profil</button>
+</div>
+
+<script>
+// ============================================================
+// QUESTION DATABASE - IHK AP2 Elektroniker Automatisierungstechnik
+// ============================================================
+const MODULES = [
+{
+  id:1, title:"Elektrotechnische Grundlagen", icon:"⚡", color:"#58CC02",
+  lessons:[
+  {
+    id:101, title:"Ohmsches Gesetz & Grundgrößen",
+    questions:[
+      {type:"mc",q:"Wie lautet das Ohmsche Gesetz?",o:["U = R · I","U = R / I","U = I / R","U = R + I"],c:0,
+       e:"Das Ohmsche Gesetz lautet U = R · I. Die Spannung (U) ist das Produkt aus Widerstand (R) und Stromstärke (I)."},
+      {type:"mc",q:"Welche Einheit hat die elektrische Stromstärke?",o:["Ampere (A)","Volt (V)","Ohm (Ω)","Watt (W)"],c:0,
+       e:"Die Stromstärke wird in Ampere (A) gemessen, benannt nach André-Marie Ampère."},
+      {type:"fillin",q:"Ein Widerstand von 1000 Ω wird mit 24 V betrieben. Wie groß ist der Strom in mA?",a:["24","24mA","24 mA"],
+       e:"I = U/R = 24V / 1000Ω = 0,024A = 24mA"},
+      {type:"tf",q:"Die elektrische Leistung berechnet sich mit P = U · I.",c:true,
+       e:"Korrekt! P = U · I ist die Grundformel der elektrischen Leistung."},
+      {type:"mc",q:"Welche Formel berechnet den Widerstand?",o:["R = U / I","R = U · I","R = I / U","R = P / I"],c:0,
+       e:"Durch Umstellen des Ohmschen Gesetzes: R = U / I"},
+      {type:"fillin",q:"Wie groß ist die Leistung bei U = 230V und I = 10A? (nur Zahl in Watt)",a:["2300"],
+       e:"P = U · I = 230V · 10A = 2300W"}
+    ]
+  },
+  {
+    id:102, title:"Reihen- & Parallelschaltung",
+    questions:[
+      {type:"mc",q:"Wie verhält sich der Strom in einer Reihenschaltung?",o:["Er ist überall gleich","Er teilt sich auf","Er verdoppelt sich","Er ist null"],c:0,
+       e:"In der Reihenschaltung fließt durch alle Bauteile der gleiche Strom."},
+      {type:"mc",q:"Wie berechnet man den Gesamtwiderstand einer Parallelschaltung aus R1 und R2?",
+       o:["R = (R1·R2)/(R1+R2)","R = R1 + R2","R = R1 · R2","R = R1 - R2"],c:0,
+       e:"Für zwei parallele Widerstände: R_ges = (R1·R2)/(R1+R2). Dies ist die Produktsummenformel."},
+      {type:"tf",q:"In einer Parallelschaltung ist die Spannung über allen Zweigen gleich.",c:true,
+       e:"Richtig! In der Parallelschaltung liegt an jedem Zweig die gleiche Spannung an."},
+      {type:"fillin",q:"R1=100Ω und R2=200Ω in Reihe. Gesamtwiderstand in Ω? (nur Zahl)",a:["300"],
+       e:"Reihenschaltung: R_ges = R1 + R2 = 100Ω + 200Ω = 300Ω"},
+      {type:"mc",q:"Zwei gleiche Widerstände (je 100Ω) parallel geschaltet ergeben:",o:["50 Ω","200 Ω","100 Ω","25 Ω"],c:0,
+       e:"R_ges = (100·100)/(100+100) = 10000/200 = 50Ω. Bei zwei gleichen Widerständen parallel: R/2"}
+    ]
+  },
+  {
+    id:103, title:"Wechselstrom & Drehstrom",
+    questions:[
+      {type:"mc",q:"Welche Frequenz hat das europäische Stromnetz?",o:["50 Hz","60 Hz","100 Hz","25 Hz"],c:0,
+       e:"In Europa beträgt die Netzfrequenz 50 Hz (50 Schwingungen pro Sekunde)."},
+      {type:"fillin",q:"Wie groß ist die Scheitelspannung bei 230V Effektivspannung? (ganzzahlig in V)",a:["325"],
+       e:"û = U_eff · √2 = 230V · 1,414 = 325V (gerundet)"},
+      {type:"mc",q:"Welche Phasenverschiebung besteht zwischen den Leitern im Drehstromnetz?",o:["120°","90°","180°","60°"],c:0,
+       e:"Im Drehstromnetz sind die drei Phasen um jeweils 120° versetzt."},
+      {type:"mc",q:"Wie groß ist die verkettete Spannung bei 230V Strangspannung?",o:["400V","460V","230V","115V"],c:0,
+       e:"U_verkettet = U_Strang · √3 = 230V · 1,732 ≈ 400V"},
+      {type:"tf",q:"Bei einer ohmschen Last sind Strom und Spannung phasengleich.",c:true,
+       e:"Korrekt! Bei rein ohmscher Last gibt es keine Phasenverschiebung zwischen U und I."},
+      {type:"mc",q:"Was bewirkt eine Kapazität im Wechselstromkreis?",o:["Der Strom eilt der Spannung voraus","Die Spannung eilt dem Strom voraus","Strom und Spannung sind phasengleich","Der Strom wird zu null"],c:0,
+       e:"Am Kondensator eilt der Strom der Spannung um 90° voraus (kapazitives Verhalten)."}
+    ]
+  }]
+},
+{
+  id:2, title:"Digitaltechnik", icon:"🔢", color:"#1CB0F6",
+  lessons:[
+  {
+    id:201, title:"Zahlensysteme & Codes",
+    questions:[
+      {type:"mc",q:"Was ist der Dezimalwert der Binärzahl 1010?",o:["10","8","12","5"],c:0,
+       e:"1010₂ = 1·8 + 0·4 + 1·2 + 0·1 = 10₁₀"},
+      {type:"fillin",q:"Wandle die Dezimalzahl 255 in Hexadezimal um.",a:["FF","ff","0xFF"],
+       e:"255₁₀ = FF₁₆ (15·16 + 15 = 255)"},
+      {type:"mc",q:"Wie viele Zustände kann ein Byte darstellen?",o:["256","128","512","64"],c:0,
+       e:"Ein Byte = 8 Bit → 2⁸ = 256 verschiedene Zustände (0-255)."},
+      {type:"tf",q:"Im BCD-Code wird jede Dezimalziffer durch 4 Bit dargestellt.",c:true,
+       e:"Korrekt! BCD (Binary Coded Decimal) codiert jede Dezimalziffer 0-9 einzeln mit 4 Bit."},
+      {type:"fillin",q:"Wie viele Bit hat ein WORD in der SPS? (nur Zahl)",a:["16"],
+       e:"Ein WORD = 16 Bit = 2 Byte"}
+    ]
+  },
+  {
+    id:202, title:"Logische Verknüpfungen",
+    questions:[
+      {type:"mc",q:"Welches Gatter gibt nur dann 1 aus, wenn BEIDE Eingänge 1 sind?",o:["AND","OR","XOR","NAND"],c:0,
+       e:"Das AND-Gatter (UND-Verknüpfung) gibt nur bei beiden Eingängen = 1 eine 1 aus."},
+      {type:"mc",q:"Was ist das Ergebnis von: 1 OR 0?",o:["1","0","undefiniert","10"],c:0,
+       e:"OR (ODER): Mindestens ein Eingang = 1 → Ausgang = 1"},
+      {type:"tf",q:"Ein NAND-Gatter ist die Negation eines AND-Gatters.",c:true,
+       e:"Richtig! NAND = NOT AND. Der Ausgang ist das invertierte AND-Ergebnis."},
+      {type:"mc",q:"Welches Gatter wird als 'Exklusiv-ODER' bezeichnet?",o:["XOR","XNOR","NOR","AND"],c:0,
+       e:"XOR (Exklusiv-ODER) gibt 1 aus, wenn die Eingänge unterschiedlich sind."},
+      {type:"mc",q:"Das De Morgansche Gesetz besagt: NOT(A AND B) = ?",o:["NOT A OR NOT B","NOT A AND NOT B","A OR B","A AND B"],c:0,
+       e:"De Morgan: ¬(A ∧ B) = ¬A ∨ ¬B. Die Negation eines AND wird zu OR mit negierten Eingängen."},
+      {type:"mc",q:"Welches Grundgatter ist universell (alle anderen können daraus gebaut werden)?",o:["NAND","AND","OR","XOR"],c:0,
+       e:"Das NAND-Gatter ist universell. Man kann alle anderen Gatter ausschließlich aus NAND-Gattern aufbauen."}
+    ]
+  },
+  {
+    id:203, title:"Flip-Flops & Zähler",
+    questions:[
+      {type:"mc",q:"Welcher Flip-Flop-Typ hat die Eingänge S und R?",o:["SR-Flip-Flop","JK-Flip-Flop","D-Flip-Flop","T-Flip-Flop"],c:0,
+       e:"Der SR-Flip-Flop (Set-Reset) hat einen S(Set)- und einen R(Reset)-Eingang."},
+      {type:"tf",q:"Ein D-Flip-Flop übernimmt den Wert am D-Eingang bei der Taktflanke.",c:true,
+       e:"Korrekt! Der D-Flip-Flop speichert den Wert am D-Eingang bei der aktiven Taktflanke (Data-FF)."},
+      {type:"mc",q:"Was passiert beim SR-FF, wenn S=1 und R=1?",o:["Unbestimmter/verbotener Zustand","Q=1","Q=0","Keine Änderung"],c:0,
+       e:"S=R=1 ist der verbotene Zustand beim SR-Flip-Flop. Das Verhalten ist nicht definiert."},
+      {type:"mc",q:"Wie viele Flip-Flops braucht man für einen 4-Bit-Binärzähler?",o:["4","8","2","16"],c:0,
+       e:"Für n Bit braucht man n Flip-Flops. Also 4 Flip-Flops für 4 Bit (zählt 0-15)."},
+      {type:"mc",q:"Welcher Flip-Flop-Typ wechselt bei jedem Takt seinen Zustand (Toggle)?",o:["T-Flip-Flop","D-Flip-Flop","SR-Flip-Flop","RS-Flip-Flop"],c:0,
+       e:"Der T-Flip-Flop (Toggle) wechselt bei jedem Taktimpuls seinen Ausgangszustand."}
+    ]
+  }]
+},
+{
+  id:3, title:"SPS-Grundlagen", icon:"🖥️", color:"#CE82FF",
+  lessons:[
+  {
+    id:301, title:"SPS Aufbau & Arbeitsweise",
+    questions:[
+      {type:"mc",q:"Wofür steht die Abkürzung SPS?",o:["Speicherprogrammierbare Steuerung","Sicherheits-Programmier-System","Sensor-Prozessor-Steuerung","Signal-Programm-Schnittstelle"],c:0,
+       e:"SPS = Speicherprogrammierbare Steuerung (engl. PLC = Programmable Logic Controller)"},
+      {type:"mc",q:"In welcher Reihenfolge arbeitet die SPS zyklisch?",o:["Eingänge lesen → Programm verarbeiten → Ausgänge schreiben","Programm → Eingänge → Ausgänge","Ausgänge → Programm → Eingänge","Eingänge → Ausgänge → Programm"],c:0,
+       e:"Die SPS arbeitet zyklisch: 1. Prozessabbild der Eingänge lesen 2. Programm abarbeiten 3. Prozessabbild der Ausgänge schreiben"},
+      {type:"tf",q:"Die Zykluszeit einer SPS liegt typischerweise im Millisekundenbereich.",c:true,
+       e:"Korrekt! Typische Zykluszeiten liegen zwischen 1-100ms, abhängig von Programmgröße und CPU."},
+      {type:"mc",q:"Was versteht man unter dem 'Prozessabbild' der SPS?",o:["Kopie aller Ein-/Ausgangszustände im Speicher","Das HMI-Display","Der Programmcode","Die Netzwerkkonfiguration"],c:0,
+       e:"Das Prozessabbild ist eine Speicherkopie aller E/A-Zustände, die am Zyklusbeginn gelesen und am Ende geschrieben wird."},
+      {type:"mc",q:"Welcher Siemens-SPS-Typ gehört zur aktuellen Generation?",o:["S7-1500","S5-100","S7-200","S3-400"],c:0,
+       e:"Die SIMATIC S7-1500 ist die aktuelle High-End-SPS von Siemens (TIA Portal)."},
+      {type:"mc",q:"Was ist ein OB1 in einer Siemens S7-SPS?",o:["Der zyklische Hauptbaustein","Ein Datenbaustein","Ein Interrupt-Baustein","Ein Fehlerbaustein"],c:0,
+       e:"OB1 ist der Organisationsbaustein, der zyklisch vom Betriebssystem aufgerufen wird (Hauptprogramm)."}
+    ]
+  },
+  {
+    id:302, title:"Programmiersprachen nach IEC 61131",
+    questions:[
+      {type:"mc",q:"Welche SPS-Programmiersprache verwendet grafische Kontakte und Spulen?",o:["KOP (Kontaktplan)","FUP (Funktionsplan)","AWL (Anweisungsliste)","SCL (Structured Control Language)"],c:0,
+       e:"KOP (Kontaktplan/Ladder Diagram) verwendet Schließer, Öffner und Spulen - ähnlich wie Stromlaufpläne."},
+      {type:"mc",q:"Welche Sprache ist textbasiert und ähnelt Pascal/C?",o:["SCL/ST","KOP","FUP","GRAPH"],c:0,
+       e:"SCL (Structured Control Language) bzw. ST (Structured Text) ist eine Hochsprache ähnlich Pascal."},
+      {type:"tf",q:"FUP (Funktionsplan) stellt logische Verknüpfungen als grafische Blöcke dar.",c:true,
+       e:"Richtig! FUP verwendet AND/OR/NOT-Blöcke zur grafischen Darstellung der Logik."},
+      {type:"mc",q:"Wie viele Programmiersprachen definiert die IEC 61131-3?",o:["5","3","7","4"],c:0,
+       e:"IEC 61131-3 definiert 5 Sprachen: KOP, FUP, AWL, ST (SCL) und AS (Ablaufsprache/GRAPH)."},
+      {type:"mc",q:"Welche Sprache eignet sich besonders für Ablaufsteuerungen?",o:["GRAPH/AS (Ablaufsprache)","KOP","FUP","AWL"],c:0,
+       e:"GRAPH bzw. AS (Ablaufsprache/Sequential Function Chart) ist ideal für schrittweise Abläufe."},
+      {type:"mc",q:"Was ist ein FC (Function) in S7?",o:["Ein Baustein ohne eigenen Datenspeicher","Ein Baustein mit Instanzdaten","Ein Datenbaustein","Ein Organisationsbaustein"],c:0,
+       e:"FC (Funktion) hat keinen eigenen Datenspeicher. Im Gegensatz zum FB (Funktionsbaustein), der einen Instanz-DB nutzt."}
+    ]
+  },
+  {
+    id:303, title:"Datentypen & Operanden",
+    questions:[
+      {type:"mc",q:"Welcher Datentyp eignet sich für Analogwerte (z.B. 0-27648)?",o:["INT (Integer)","BOOL","BYTE","STRING"],c:0,
+       e:"INT (16-Bit-Ganzzahl) kann Werte von -32768 bis 32767 speichern, passend für Analogwerte."},
+      {type:"mc",q:"Was bedeutet der Operand 'E0.0' in einer S7-SPS?",o:["Eingang Byte 0, Bit 0","Ausgang 0.0","Merker 0.0","Zähler 0"],c:0,
+       e:"E = Eingang. E0.0 = Eingang Byte 0, Bit 0 (erster Eingang der SPS)."},
+      {type:"mc",q:"Welches Kürzel steht für einen Ausgang bei Siemens S7?",o:["A","E","M","T"],c:0,
+       e:"A = Ausgang (bei S7 deutsch). E = Eingang, M = Merker, T = Timer."},
+      {type:"tf",q:"Ein BOOL-Datentyp kann nur die Werte TRUE oder FALSE annehmen.",c:true,
+       e:"Korrekt! BOOL (1 Bit) kennt nur zwei Zustände: TRUE (1) oder FALSE (0)."},
+      {type:"mc",q:"Wofür wird ein DB (Datenbaustein) verwendet?",o:["Zum Speichern von Daten/Variablen","Zum Programmieren von Logik","Zum Starten des Programms","Zum Konfigurieren der Hardware"],c:0,
+       e:"Datenbausteine (DB) speichern strukturierte Daten, z.B. Rezepturen, Sollwerte, Prozessdaten."},
+      {type:"fillin",q:"Wie viele Bit hat der Datentyp DWORD? (nur Zahl)",a:["32"],
+       e:"DWORD = Double Word = 32 Bit = 4 Byte"}
+    ]
+  }]
+},
+{
+  id:4, title:"SPS-Programmierung", icon:"⚙️", color:"#FF9600",
+  lessons:[
+  {
+    id:401, title:"Verknüpfungssteuerungen",
+    questions:[
+      {type:"mc",q:"Wie wird eine Selbsthaltung in KOP realisiert?",o:["Parallelkontakt des Ausgangs zum Einschalttaster","Serienkontakt des Ausgangs","Zwei Spulen parallel","Timer mit Selbstreset"],c:0,
+       e:"Selbsthaltung: Der Ausgang wird parallel zum Taster als Schließer geschaltet und hält sich selbst."},
+      {type:"mc",q:"Was bewirkt eine SR-Flip-Flop-Box in der SPS?",o:["Setzen hat Vorrang vor Rücksetzen","Rücksetzen hat Vorrang","Togglen des Ausgangs","Verzögertes Setzen"],c:0,
+       e:"SR (Set dominant): Bei gleichzeitigem S und R gewinnt Setzen. Bei RS gewinnt Rücksetzen."},
+      {type:"tf",q:"Eine Speicherfunktion (Selbsthaltung) behält ihren Zustand auch nach Wegfall des Eingangssignals.",c:true,
+       e:"Richtig! Das ist der Sinn der Selbsthaltung/Speicherfunktion – der Ausgang bleibt aktiv."},
+      {type:"mc",q:"Wie heißt die Funktion, die einen Ausgang nur für einen Zyklus einschaltet?",o:["Flankenauswertung (positiv)","Selbsthaltung","Timer","Zähler"],c:0,
+       e:"Die positive Flankenauswertung (P-Trigger) erzeugt einen Impuls für genau einen SPS-Zyklus."},
+      {type:"mc",q:"Was ist der Unterschied zwischen positiver und negativer Flanke?",
+       o:["Positiv: 0→1, Negativ: 1→0","Positiv: 1→0, Negativ: 0→1","Kein Unterschied","Positiv=High, Negativ=Low"],c:0,
+       e:"Positive Flanke = steigende Flanke (0→1). Negative Flanke = fallende Flanke (1→0)."}
+    ]
+  },
+  {
+    id:402, title:"Timer & Zähler",
+    questions:[
+      {type:"mc",q:"Welcher Timer startet bei Aktivierung und schaltet den Ausgang nach Ablauf der Zeit EIN?",
+       o:["TON (Einschaltverzögerung)","TOF (Ausschaltverzögerung)","TP (Impuls)","TONR (Remanent)"],c:0,
+       e:"TON (Timer On-Delay) verzögert das Einschalten. Der Ausgang wird erst nach Ablauf der Zeit aktiv."},
+      {type:"mc",q:"Welcher Timer eignet sich für eine Nachlaufzeit (z.B. Lüfter läuft nach)?",
+       o:["TOF (Ausschaltverzögerung)","TON (Einschaltverzögerung)","TP (Impuls)","Kein Timer"],c:0,
+       e:"TOF (Timer Off-Delay) verzögert das Ausschalten. Der Ausgang bleibt nach Wegfall des Signals noch aktiv."},
+      {type:"mc",q:"Welcher Zählertyp kann nur aufwärts zählen?",o:["CTU (Count Up)","CTD (Count Down)","CTUD (Up/Down)","Keiner"],c:0,
+       e:"CTU = Count Up (Vorwärtszähler). CTD = Count Down (Rückwärtszähler). CTUD = Beide Richtungen."},
+      {type:"tf",q:"Ein TP-Timer (Impuls) erzeugt einen Ausgangsimpuls mit definierter Länge, unabhängig von der Eingangsdauer.",c:true,
+       e:"Richtig! TP gibt einen Impuls fester Dauer aus, sobald der Eingang aktiviert wird."},
+      {type:"fillin",q:"Welches Zeitformat wird bei S7-Timern häufig verwendet? (Abkürzung, 4 Buchstaben)",a:["TIME","time","Time"],
+       e:"Der Datentyp TIME wird für Zeitwerte verwendet, z.B. T#5s für 5 Sekunden."}
+    ]
+  },
+  {
+    id:403, title:"Ablaufsteuerungen (GRAPH)",
+    questions:[
+      {type:"mc",q:"Aus welchen Grundelementen besteht eine Ablaufsteuerung nach IEC 61131?",
+       o:["Schritte und Transitionen","Blöcke und Leitungen","Kontakte und Spulen","Timer und Zähler"],c:0,
+       e:"Eine Ablaufsteuerung (SFC/GRAPH) besteht aus Schritten (Aktionen) und Transitionen (Weiterschaltbedingungen)."},
+      {type:"mc",q:"Was ist eine Transition in einer Ablaufsteuerung?",
+       o:["Die Bedingung zum Weiterschalten zum nächsten Schritt","Ein Aktionsblock","Der Initialschritt","Eine Zeitverzögerung"],c:0,
+       e:"Transitionen sind Bedingungen (Weiterschaltbedingungen), die erfüllt sein müssen, um zum nächsten Schritt zu gelangen."},
+      {type:"tf",q:"In einer Ablaufsteuerung kann zu jedem Zeitpunkt nur ein Schritt aktiv sein (bei linearer Kette).",c:true,
+       e:"Richtig! Bei einer linearen Ablaufkette ist immer genau ein Schritt aktiv."},
+      {type:"mc",q:"Was ist eine Simultanverzweigung in GRAPH?",
+       o:["Mehrere Ketten werden gleichzeitig aktiv","Eine Auswahl zwischen Alternativen","Ein Sprung zurück","Ein Stoppzustand"],c:0,
+       e:"Bei der Simultanverzweigung (parallele Verzweigung) werden mehrere Ketten gleichzeitig aktiviert."},
+      {type:"mc",q:"Was ist eine Alternativverzweigung?",
+       o:["Nur eine von mehreren Ketten wird aktiviert (je nach Bedingung)","Alle Ketten gleichzeitig","Kein Schritt aktiv","Sprung zum Anfang"],c:0,
+       e:"Bei der Alternativverzweigung wird abhängig von der Transition nur EINE der Ketten durchlaufen."}
+    ]
+  }]
+},
+{
+  id:5, title:"Sensorik", icon:"📡", color:"#FF86D0",
+  lessons:[
+  {
+    id:501, title:"Binäre Sensoren",
+    questions:[
+      {type:"mc",q:"Welcher Sensor erkennt nur metallische Objekte berührungslos?",
+       o:["Induktiver Näherungsschalter","Kapazitiver Näherungsschalter","Optischer Sensor","Ultraschallsensor"],c:0,
+       e:"Induktive Sensoren arbeiten nach dem Wirbelstromprinzip und erkennen nur metallische (leitfähige) Objekte."},
+      {type:"mc",q:"Welcher Sensor kann auch nichtmetallische Materialien erkennen?",
+       o:["Kapazitiver Sensor","Induktiver Sensor","Magnetischer Sensor","Reed-Kontakt"],c:0,
+       e:"Kapazitive Sensoren erkennen alle Materialien, die die Kapazität beeinflussen (Metall, Kunststoff, Flüssigkeiten)."},
+      {type:"mc",q:"Was bedeutet 'PNP-Sensor'?",
+       o:["Plus-schaltend (Schaltausgang gibt +24V)","Minus-schaltend (Schaltausgang gibt 0V)","Push-Not-Pull","Passiver Näherungs-Prüfer"],c:0,
+       e:"PNP = Plus-schaltend. Der Lastkreis wird gegen +24V geschaltet. Standard in Europa!"},
+      {type:"mc",q:"Was ist der Unterschied zwischen einem Schließer (NO) und Öffner (NC) bei Sensoren?",
+       o:["NO: schaltet EIN bei Erkennung / NC: schaltet AUS bei Erkennung","Kein Unterschied","NO = normalerweise offen, NC = normalerweise geschlossen","Beide Antworten 1 und 3 sind richtig"],c:3,
+       e:"NO (Normally Open) = Schließer: Signal bei Objekterkennung. NC (Normally Closed) = Öffner: Signal fällt bei Erkennung ab."},
+      {type:"tf",q:"Ein induktiver Sensor hat eine größere Reichweite als ein kapazitiver Sensor gleicher Baugröße.",c:false,
+       e:"Falsch! Induktive Sensoren haben typischerweise eine KLEINERE Reichweite als kapazitive gleicher Baugröße."}
+    ]
+  },
+  {
+    id:502, title:"Analoge Sensoren & Messwertverarbeitung",
+    questions:[
+      {type:"mc",q:"Welchen Signalbereich liefert ein typischer analoger Sensor in der Automatisierungstechnik?",
+       o:["4-20 mA oder 0-10 V","0-5 V","0-100 mA","24 V DC"],c:0,
+       e:"Standard-Analogsignale: 4-20mA (Stromschleife, Drahtbrucherkennung möglich) oder 0-10V."},
+      {type:"mc",q:"Warum ist 4-20mA gegenüber 0-20mA vorteilhaft?",
+       o:["Drahtbrucherkennung möglich (0mA = Fehler)","Höhere Genauigkeit","Weniger Stromverbrauch","Schnellere Übertragung"],c:0,
+       e:"Bei 4-20mA bedeutet 0mA einen Fehler (Drahtbruch/Sensordefekt). Der Live-Zero ermöglicht Fehlererkennung."},
+      {type:"mc",q:"Welcher Sensortyp misst die Temperatur über den Widerstandseffekt?",
+       o:["PT100 / PT1000","Thermoelement","Pyrometer","Bimetall"],c:0,
+       e:"PT100/PT1000 sind Widerstandstemperaturfühler (RTD). PT100 hat 100Ω bei 0°C."},
+      {type:"fillin",q:"Welchen Widerstand hat ein PT100 bei 0°C? (nur Zahl in Ohm)",a:["100"],
+       e:"PT100 = 100 Ohm bei 0°C. Der Widerstand steigt mit der Temperatur (positiver Temperaturkoeffizient)."},
+      {type:"mc",q:"Was wandelt ein Encoder/Drehgeber um?",
+       o:["Drehbewegung in elektrische Signale","Spannung in Drehbewegung","Temperatur in Frequenz","Druck in Strom"],c:0,
+       e:"Encoder wandeln mechanische Drehbewegung in digitale Signale (Impulse) um – für Position/Geschwindigkeit."},
+      {type:"mc",q:"Was ist der Unterschied zwischen Inkremental- und Absolutwertgeber?",
+       o:["Absolutwertgeber kennt die Position sofort, Inkrementalgeber zählt nur Impulse","Kein Unterschied","Inkrementalgeber ist genauer","Absolutwertgeber ist billiger"],c:0,
+       e:"Absolutwertgeber gibt die aktuelle Position direkt aus. Inkrementalgeber zählt Änderungen – braucht Referenzfahrt."}
+    ]
+  }]
+},
+{
+  id:6, title:"Antriebstechnik", icon:"🔄", color:"#FF4B4B",
+  lessons:[
+  {
+    id:601, title:"Elektrische Antriebe",
+    questions:[
+      {type:"mc",q:"Wie berechnet sich die synchrone Drehzahl eines Drehstrommotors?",
+       o:["n = (f · 60) / p","n = f · p","n = U / I","n = P / M"],c:0,
+       e:"n_sync = (f · 60) / p. f = Frequenz in Hz, p = Polpaarzahl. Bei 50Hz und 2 Polpaaren: n = 1500 min⁻¹"},
+      {type:"fillin",q:"Synchrondrehzahl bei 50Hz und 2 Polpaaren (4 Pole)? (nur Zahl in min⁻¹)",a:["1500"],
+       e:"n = (50 · 60) / 2 = 1500 min⁻¹"},
+      {type:"mc",q:"Was ist der 'Schlupf' bei einem Asynchronmotor?",
+       o:["Differenz zwischen Synchrondrehzahl und tatsächlicher Drehzahl","Die Anlaufzeit","Die Bremszeit","Der Wirkungsgrad"],c:0,
+       e:"Schlupf s = (n_sync - n) / n_sync. Ein Asynchronmotor dreht immer etwas langsamer als die Synchrondrehzahl."},
+      {type:"mc",q:"Welche Schaltung verdoppelt die Polpaarzahl und halbiert die Drehzahl?",
+       o:["Dahlander-Schaltung","Stern-Dreieck-Umschaltung","Sanftanlauf","Frequenzumrichter"],c:0,
+       e:"Die Dahlander-Schaltung ermöglicht polumschaltbare Motoren mit zwei festen Drehzahlen."},
+      {type:"mc",q:"Was ist der Zweck einer Stern-Dreieck-Schaltung?",
+       o:["Reduzierung des Anlaufstroms","Erhöhung der Drehzahl","Bremsung des Motors","Drehrichtungsumkehr"],c:0,
+       e:"Stern-Dreieck: Anlauf in Stern (reduzierter Strom auf 1/3), dann Umschaltung auf Dreieck (volle Leistung)."}
+    ]
+  },
+  {
+    id:602, title:"Frequenzumrichter",
+    questions:[
+      {type:"mc",q:"Welche Hauptkomponenten hat ein Frequenzumrichter?",
+       o:["Gleichrichter → Zwischenkreis → Wechselrichter","Motor → Getriebe → Abtrieb","Sensor → Regler → Aktor","Trafo → Filter → Last"],c:0,
+       e:"FU-Aufbau: 1. Gleichrichter (AC→DC) 2. Zwischenkreis (Glättung) 3. Wechselrichter (DC→AC variabel)"},
+      {type:"mc",q:"Welches Modulationsverfahren nutzen moderne Frequenzumrichter?",
+       o:["PWM (Pulsweitenmodulation)","AM (Amplitudenmodulation)","FM (Frequenzmodulation)","PAM (Pulsamplitudenmodulation)"],c:0,
+       e:"PWM (Pulsweitenmodulation) erzeugt durch schnelles Schalten eine quasi-sinusförmige Ausgangsspannung."},
+      {type:"tf",q:"Mit einem Frequenzumrichter kann man die Drehzahl stufenlos regeln.",c:true,
+       e:"Richtig! Der FU ändert die Ausgangsfrequenz stufenlos → stufenlose Drehzahlverstellung."},
+      {type:"mc",q:"Was bedeutet U/f-Kennlinie beim Frequenzumrichter?",
+       o:["Konstantes Verhältnis von Spannung zu Frequenz für konstantes Drehmoment","Die Ausgangskennlinie des Motors","Die Bremscharakteristik","Der Wirkungsgrad"],c:0,
+       e:"U/f = const. hält das Drehmoment konstant über den Drehzahlbereich. Bei halber Frequenz → halbe Spannung."},
+      {type:"mc",q:"Was ist Vektorsteuerung/FOC bei einem Frequenzumrichter?",
+       o:["Hochdynamische Regelung mit getrennter Steuerung von Drehmoment und Fluss","Einfache U/f-Steuerung","Bremsmodus","Positionsregelung"],c:0,
+       e:"FOC (Field Oriented Control) regelt Drehmoment und Magnetfluss unabhängig → hochdynamisches Verhalten, auch bei niedrigen Drehzahlen."}
+    ]
+  }]
+},
+{
+  id:7, title:"Regelungstechnik", icon:"📈", color:"#1CB0F6",
+  lessons:[
+  {
+    id:701, title:"Regelkreis Grundlagen",
+    questions:[
+      {type:"mc",q:"Welche Komponenten gehören zum geschlossenen Regelkreis?",
+       o:["Regler, Regelstrecke, Messglied, Vergleicher","Nur Regler und Motor","Sensor und Aktor","SPS und HMI"],c:0,
+       e:"Regelkreis: Vergleicher (Soll-Ist) → Regler → Stellglied → Regelstrecke → Messglied → zurück zum Vergleicher."},
+      {type:"mc",q:"Was ist die 'Führungsgröße w' im Regelkreis?",o:["Der Sollwert","Der Istwert","Die Störgröße","Die Stellgröße"],c:0,
+       e:"w = Führungsgröße = Sollwert. Das ist der gewünschte Wert der Regelgröße."},
+      {type:"mc",q:"Was ist die 'Regelgröße x'?",o:["Der Istwert der zu regelnden Größe","Der Sollwert","Der Reglerausgang","Die Störung"],c:0,
+       e:"x = Regelgröße = Istwert. Die tatsächlich gemessene Größe (z.B. aktuelle Temperatur)."},
+      {type:"mc",q:"Was ist die 'Stellgröße y'?",o:["Das Ausgangssignal des Reglers an das Stellglied","Der Messwert","Der Sollwert","Die Abweichung"],c:0,
+       e:"y = Stellgröße = Reglerausgang, der auf die Strecke einwirkt (z.B. Ventilöffnung)."},
+      {type:"mc",q:"Was ist die 'Regelabweichung e'?",o:["e = w - x (Sollwert minus Istwert)","e = x - w","e = w · x","e = w / x"],c:0,
+       e:"Die Regelabweichung e = w - x ist die Differenz zwischen Soll- und Istwert."},
+      {type:"tf",q:"Eine Steuerung unterscheidet sich von einer Regelung dadurch, dass sie keine Rückführung hat.",c:true,
+       e:"Korrekt! Steuerung = offene Wirkungskette (kein Feedback). Regelung = geschlossener Wirkungskreis (mit Rückmeldung)."}
+    ]
+  },
+  {
+    id:702, title:"Reglertypen (P, PI, PID)",
+    questions:[
+      {type:"mc",q:"Welche Eigenschaft hat ein reiner P-Regler?",
+       o:["Schnelle Reaktion, aber bleibende Regelabweichung","Keine Regelabweichung, aber langsam","Oszilliert immer","Reagiert nur auf Änderungen"],c:0,
+       e:"P-Regler: proportionale Verstärkung. Schnell, aber es bleibt immer eine stationäre Regelabweichung."},
+      {type:"mc",q:"Welcher Regleranteil beseitigt die bleibende Regelabweichung?",
+       o:["I-Anteil (Integral)","P-Anteil (Proportional)","D-Anteil (Differential)","Keiner"],c:0,
+       e:"Der I-Anteil integriert die Regelabweichung über die Zeit auf und beseitigt so die bleibende Abweichung."},
+      {type:"mc",q:"Was bewirkt der D-Anteil eines PID-Reglers?",
+       o:["Reagiert auf die Änderungsgeschwindigkeit und wirkt dämpfend","Beseitigt stationäre Abweichung","Verstärkt proportional","Erzeugt Schwingungen"],c:0,
+       e:"D-Anteil (Differenzial): Reagiert auf Änderungsrate der Regelabweichung → vorausschauende/dämpfende Wirkung."},
+      {type:"mc",q:"Ein P-Regler hat Kp=3. Die Regelabweichung beträgt 4. Wie groß ist die Stellgröße?",
+       o:["12","7","1.33","0.75"],c:0,
+       e:"P-Regler: y = Kp · e = 3 · 4 = 12"},
+      {type:"mc",q:"Welcher Reglertyp wird am häufigsten in der Praxis eingesetzt?",
+       o:["PID-Regler","P-Regler","I-Regler","D-Regler"],c:0,
+       e:"Der PID-Regler vereint alle drei Anteile und bietet das beste Gesamtverhalten für die meisten Regelstrecken."},
+      {type:"tf",q:"Ein I-Regler alleine reagiert langsamer als ein P-Regler, ist dafür aber genauer.",c:true,
+       e:"Richtig! Der I-Regler ist langsamer (integriert langsam auf), erreicht aber den Sollwert ohne bleibende Abweichung."}
+    ]
+  }]
+},
+{
+  id:8, title:"Netzwerktechnik", icon:"🌐", color:"#58CC02",
+  lessons:[
+  {
+    id:801, title:"Netzwerkgrundlagen",
+    questions:[
+      {type:"mc",q:"Wie viele Schichten hat das OSI-Referenzmodell?",o:["7","5","4","6"],c:0,
+       e:"Das OSI-Modell hat 7 Schichten: Physical, Data Link, Network, Transport, Session, Presentation, Application."},
+      {type:"mc",q:"In welcher OSI-Schicht arbeitet ein Switch?",o:["Schicht 2 (Data Link)","Schicht 1 (Physical)","Schicht 3 (Network)","Schicht 4 (Transport)"],c:0,
+       e:"Ein Switch arbeitet auf Schicht 2 (Sicherungsschicht) und vermittelt Frames anhand von MAC-Adressen."},
+      {type:"mc",q:"Welche IP-Adressklasse hat den Bereich 192.168.x.x?",o:["Klasse C (privat)","Klasse A","Klasse B","Klasse D"],c:0,
+       e:"192.168.0.0/16 ist ein privater Adressbereich der Klasse C. Häufig in lokalen Netzwerken verwendet."},
+      {type:"fillin",q:"Welche Subnetzmaske hat ein /24-Netz? (in Dezimalschreibweise)",a:["255.255.255.0"],
+       e:"/24 = 24 Netz-Bits = 255.255.255.0"},
+      {type:"mc",q:"Was ist die Aufgabe von DHCP?",o:["Automatische IP-Adressvergabe","Namensauflösung","Dateispeicherung","Zeitynchronisation"],c:0,
+       e:"DHCP (Dynamic Host Configuration Protocol) vergibt automatisch IP-Adressen und Netzwerkparameter."},
+      {type:"mc",q:"Welches Protokoll löst Hostnamen in IP-Adressen auf?",o:["DNS","DHCP","FTP","HTTP"],c:0,
+       e:"DNS (Domain Name System) wandelt Domainnamen (z.B. google.com) in IP-Adressen um."}
+    ]
+  },
+  {
+    id:802, title:"Industrielle Kommunikation",
+    questions:[
+      {type:"mc",q:"Welches industrielle Protokoll basiert auf Ethernet und wird von Siemens bevorzugt?",
+       o:["PROFINET","PROFIBUS","Modbus","EtherCAT"],c:0,
+       e:"PROFINET ist der Industrial-Ethernet-Standard von Siemens/PI (PROFIBUS & PROFINET International)."},
+      {type:"mc",q:"Auf welchem physikalischen Medium basiert PROFIBUS DP?",
+       o:["RS-485 (geschirmte Zweidrahtleitung)","Ethernet (RJ45)","Glasfaser","WLAN"],c:0,
+       e:"PROFIBUS DP nutzt RS-485 mit geschirmter Zweidrahtleitung (lila Kabel), max. 12 MBit/s."},
+      {type:"mc",q:"Wie heißt das Bussystem für einfache Sensoren/Aktoren auf der untersten Feldebene?",
+       o:["AS-Interface (AS-i)","PROFINET","Industrial Ethernet","EtherNet/IP"],c:0,
+       e:"AS-Interface ist ein einfaches Sensor/Aktor-Bussystem für binäre Signale auf der untersten Ebene."},
+      {type:"mc",q:"Was ist die maximale Kabellänge bei PROFINET (100 Mbit/s, Kupfer)?",
+       o:["100 m","1000 m","50 m","500 m"],c:0,
+       e:"Wie bei Standard-Ethernet: max. 100m pro Kupfer-Segment (gemäß IEEE 802.3)."},
+      {type:"tf",q:"PROFINET kann Echtzeit-Kommunikation (RT und IRT) für zeitkritische Anwendungen bereitstellen.",c:true,
+       e:"Richtig! PROFINET RT (Real-Time) und IRT (Isochronous Real-Time) ermöglichen deterministische Kommunikation."},
+      {type:"mc",q:"Welche Topologie wird bei PROFINET typischerweise verwendet?",
+       o:["Stern- oder Linientopologie","Nur Ring","Nur Bus","Nur Stern"],c:0,
+       e:"PROFINET nutzt meist Stern- oder Linientopologie. Auch Ring ist möglich (Medienredundanz MRP)."}
+    ]
+  }]
+},
+{
+  id:9, title:"Sicherheitstechnik", icon:"🛡️", color:"#FFC800",
+  lessons:[
+  {
+    id:901, title:"Normen & Maschinenrichtlinie",
+    questions:[
+      {type:"mc",q:"Welche europäische Richtlinie regelt die Sicherheit von Maschinen?",
+       o:["Maschinenrichtlinie 2006/42/EG","Niederspannungsrichtlinie","EMV-Richtlinie","ATEX-Richtlinie"],c:0,
+       e:"Die Maschinenrichtlinie 2006/42/EG legt grundlegende Sicherheits- und Gesundheitsanforderungen für Maschinen in der EU fest."},
+      {type:"mc",q:"Welche Norm beschreibt die Sicherheit von Maschinensteuerungen (Performance Level)?",
+       o:["EN ISO 13849-1","EN 60204-1","EN ISO 12100","EN 61508"],c:0,
+       e:"EN ISO 13849-1 definiert sicherheitsbezogene Teile von Steuerungen und das Konzept der Performance Level (PL)."},
+      {type:"mc",q:"Wie viele Performance Level (PL) gibt es?",o:["5 (a bis e)","4 (1 bis 4)","3 (niedrig, mittel, hoch)","6 (0 bis 5)"],c:0,
+       e:"Es gibt 5 Performance Level: PL a (niedrigste Sicherheit) bis PL e (höchste Sicherheit)."},
+      {type:"mc",q:"Was muss vor dem Bau einer Maschine durchgeführt werden?",
+       o:["Risikobeurteilung nach EN ISO 12100","Nur CE-Kennzeichnung","Nur Betriebsanleitung","Nur elektrische Prüfung"],c:0,
+       e:"Eine Risikobeurteilung nach EN ISO 12100 ist der erste Schritt: Gefahren identifizieren → Risiko bewerten → Maßnahmen festlegen."},
+      {type:"tf",q:"Die CE-Kennzeichnung bestätigt, dass eine Maschine alle relevanten EU-Richtlinien erfüllt.",c:true,
+       e:"Korrekt! CE (Conformité Européenne) zeigt die Konformität mit allen zutreffenden EU-Richtlinien an."}
+    ]
+  },
+  {
+    id:902, title:"Schutzmaßnahmen & Not-Halt",
+    questions:[
+      {type:"mc",q:"Welche Farbe hat ein Not-Halt-Taster?",o:["Rot auf gelbem Hintergrund","Rot auf weißem Hintergrund","Gelb auf rotem Hintergrund","Grün"],c:0,
+       e:"Not-Halt: Roter Pilztaster auf gelbem Hintergrund. Definiert in EN ISO 13850."},
+      {type:"mc",q:"Was bewirkt ein Not-Halt (Stopp-Kategorie 0)?",
+       o:["Sofortiges Abschalten der Energiezufuhr","Kontrolliertes Abbremsen, dann Abschalten","Nur Warnung","Reduzierte Geschwindigkeit"],c:0,
+       e:"Stopp-Kategorie 0: Sofortige Abschaltung der Energiezufuhr (ungesteuertes Stillsetzen)."},
+      {type:"mc",q:"Was ist Stopp-Kategorie 1?",
+       o:["Kontrolliertes Stillsetzen, dann Energieabschaltung","Sofortige Abschaltung","Betriebsmäßiger Halt","Sicherer Betriebshalt"],c:0,
+       e:"Kategorie 1: Kontrolliertes Abbremsen/Stillsetzen, danach Abschaltung der Energie an den Aktoren."},
+      {type:"mc",q:"Was ist SIL?",o:["Safety Integrity Level","System Integration Level","Sensor Input Level","Standard Interface Link"],c:0,
+       e:"SIL = Safety Integrity Level nach IEC 61508. Stufen SIL 1 (niedrig) bis SIL 4 (höchste Sicherheit)."},
+      {type:"mc",q:"Welches Prinzip verlangt, dass ein sicherer Zustand bei Ausfall eintritt?",
+       o:["Fail-Safe-Prinzip","Fail-Operational","Redundanzprinzip","Diversitätsprinzip"],c:0,
+       e:"Fail-Safe: Bei Fehler/Ausfall geht das System in einen sicheren Zustand (z.B. Abschaltung)."},
+      {type:"tf",q:"Ein Sicherheitsrelais überwacht Not-Halt-Kreise und kann Fehler wie Querschlüsse erkennen.",c:true,
+       e:"Korrekt! Sicherheitsrelais prüfen zwangsgeführte Kontakte und erkennen Fehler wie Verschmelzungen und Querschlüsse."}
+    ]
+  }]
+},
+{
+  id:10, title:"WiSo & Fachkunde", icon:"📋", color:"#CE82FF",
+  lessons:[
+  {
+    id:1001, title:"Wirtschafts- und Sozialkunde",
+    questions:[
+      {type:"mc",q:"Welches Gesetz regelt das Ausbildungsverhältnis?",
+       o:["Berufsbildungsgesetz (BBiG)","BGB","Handwerksordnung","Arbeitszeitgesetz"],c:0,
+       e:"Das Berufsbildungsgesetz (BBiG) regelt die Berufsausbildung in Deutschland."},
+      {type:"mc",q:"Wie lange dauert die Probezeit in der Ausbildung mindestens und höchstens?",
+       o:["1-4 Monate","1-6 Monate","3-6 Monate","2-3 Monate"],c:0,
+       e:"Die Probezeit muss mindestens 1 Monat und darf höchstens 4 Monate betragen (§20 BBiG)."},
+      {type:"mc",q:"Welche Kündigungsfrist gilt nach der Probezeit für Auszubildende?",
+       o:["4 Wochen","2 Wochen","Sofort","6 Wochen"],c:0,
+       e:"Nach der Probezeit: Azubi kann mit 4 Wochen Frist kündigen. Betrieb nur aus wichtigem Grund (fristlos)."},
+      {type:"mc",q:"Was sind die 5 Säulen der Sozialversicherung?",
+       o:["Kranken-, Renten-, Arbeitslosen-, Pflege-, Unfallversicherung","Nur Kranken- und Rentenversicherung","Haftpflicht, Hausrat, KFZ, Leben, Unfall","Keine dieser Antworten"],c:0,
+       e:"Die 5 Säulen: Krankenversicherung, Rentenversicherung, Arbeitslosenversicherung, Pflegeversicherung, Unfallversicherung."},
+      {type:"tf",q:"Der Betriebsrat hat ein Mitbestimmungsrecht bei der Einführung neuer Arbeitszeitmodelle.",c:true,
+       e:"Richtig! Der Betriebsrat hat Mitbestimmungsrechte in sozialen Angelegenheiten wie Arbeitszeit (§87 BetrVG)."},
+      {type:"mc",q:"Was ist ein Tarifvertrag?",
+       o:["Vertrag zwischen Gewerkschaft und Arbeitgeberverband über Arbeitsbedingungen","Arbeitsvertrag","Ausbildungsvertrag","Kaufvertrag"],c:0,
+       e:"Tarifverträge werden zwischen Gewerkschaften und Arbeitgebern/Verbänden geschlossen und regeln Mindestarbeitsbedingungen."}
+    ]
+  },
+  {
+    id:1002, title:"Arbeitsschutz & Qualität",
+    questions:[
+      {type:"mc",q:"Welche Schutzkleinspannung gilt als berührungssicher?",
+       o:["SELV/PELV ≤ 50V AC / ≤ 120V DC","≤ 230V AC","≤ 400V DC","≤ 24V DC"],c:0,
+       e:"Schutzkleinspannung (SELV/PELV): ≤ 50V AC bzw. ≤ 120V DC gilt als berührungssicher."},
+      {type:"mc",q:"Welche Prüfung muss nach der Errichtung einer elektrischen Anlage durchgeführt werden?",
+       o:["Erstprüfung nach DIN VDE 0100-600","Keine Prüfung nötig","Nur Sichtprüfung","Nur Messung"],c:0,
+       e:"Nach DIN VDE 0100-600: Besichtigen, Erproben/Messen (Isolationswiderstand, Schleifenimpedanz, RCD, etc.)."},
+      {type:"mc",q:"Was bedeutet IP65?",
+       o:["Staubdicht und Schutz gegen Strahlwasser","Schutz gegen Untertauchen","Kein Berührungsschutz","Nur Tropfwasserschutz"],c:0,
+       e:"IP65: 6 = staubdicht, 5 = Schutz gegen Strahlwasser aus beliebigem Winkel."},
+      {type:"mc",q:"Welches Qualitätswerkzeug dient zur systematischen Fehlerursachenanalyse?",
+       o:["Ishikawa-Diagramm (Fischgrätendiagramm)","Gantt-Diagramm","Flussdiagramm","Pareto-Diagramm"],c:0,
+       e:"Das Ishikawa-Diagramm (Ursache-Wirkungs-Diagramm) ordnet mögliche Fehlerursachen nach Kategorien (Mensch, Maschine, Material, Methode, Mitwelt)."},
+      {type:"tf",q:"Die Unfallverhütungsvorschriften (UVV) werden von den Berufsgenossenschaften erlassen.",c:true,
+       e:"Richtig! Die Berufsgenossenschaften (BG) erlassen die UVV und überwachen deren Einhaltung."},
+      {type:"mc",q:"Welche Farbe hat der Schutzleiter?",o:["Grün-Gelb","Blau","Braun","Schwarz"],c:0,
+       e:"Schutzleiter (PE) = grün-gelb. Neutralleiter (N) = blau. Außenleiter (L) = braun/schwarz/grau."}
+    ]
+  },
+  {
+    id:1003, title:"Dokumentation & EMV",
+    questions:[
+      {type:"mc",q:"Nach welcher Norm werden Stromlaufpläne erstellt?",
+       o:["DIN EN 81346 / EN 61082","DIN 4102","ISO 9001","DIN EN 60617"],c:0,
+       e:"Stromlaufpläne: EN 61082 (Dokumente der Elektrotechnik), Betriebsmittelkennzeichnung nach DIN EN 81346."},
+      {type:"mc",q:"Wofür steht EMV?",o:["Elektromagnetische Verträglichkeit","Elektromotorische Verteilung","Einzelmessverfahren","Energiemanagementsystem"],c:0,
+       e:"EMV = Elektromagnetische Verträglichkeit. Geräte dürfen andere nicht stören und müssen störfest sein."},
+      {type:"mc",q:"Welche Maßnahme reduziert elektromagnetische Störungen bei langen Leitungen?",
+       o:["Geschirmte Kabel verwenden und Schirm einseitig/beidseitig auflegen","Dünnere Kabel verwenden","Leitungen verlängern","Keine Maßnahme nötig"],c:0,
+       e:"Geschirmte Leitungen mit korrekter Schirmauflage (meist beidseitig) reduzieren EMV-Störungen erheblich."},
+      {type:"tf",q:"Steuerleitungen und Leistungskabel sollten getrennt verlegt werden, um Störeinkopplungen zu vermeiden.",c:true,
+       e:"Korrekt! Getrennte Verlegung (Mindestabstand oder separate Kabelkanäle) minimiert induktive/kapazitive Einkopplungen."},
+      {type:"mc",q:"Was ist ein R&I-Fließschema?",
+       o:["Rohrleitungs- und Instrumentenfließschema einer Anlage","Ein Regelungsdiagramm","Ein Installationsplan","Ein Reparaturbericht"],c:0,
+       e:"R&I-Schema (P&ID) zeigt alle verfahrenstechnischen Komponenten, Rohrleitungen und MSR-Stellen einer Anlage."}
+    ]
+  }]
+}
+];
+
+// ============================================================
+// GAME STATE
+// ============================================================
+let state = {
+  xp: 0, level: 1, streak: 0, hearts: 5, maxHearts: 5,
+  lastPlayDate: null, totalCorrect: 0, totalAnswered: 0,
+  completedLessons: [], lessonScores: {},
+  currentModule: null, currentLesson: null,
+  currentQuestionIndex: 0, quizCorrect: 0, quizTotal: 0,
+  quizQuestions: [], answered: false, quizStartTime: null
+};
+
+function loadState() {
+  try {
+    const s = localStorage.getItem('ap2trainer_state');
+    if (s) {
+      const loaded = JSON.parse(s);
+      state = {...state, ...loaded};
+    }
+  } catch(e) {}
+  checkStreak();
+  checkHearts();
+}
+
+function saveState() {
+  localStorage.setItem('ap2trainer_state', JSON.stringify(state));
+}
+
+function checkStreak() {
+  const today = new Date().toDateString();
+  if (state.lastPlayDate) {
+    const last = new Date(state.lastPlayDate);
+    const diff = Math.floor((new Date(today) - last) / 86400000);
+    if (diff > 1) state.streak = 0;
+  }
+}
+
+function checkHearts() {
+  if (state.hearts < state.maxHearts) {
+    // Regenerate a heart every 30 minutes
+    const now = Date.now();
+    const lastTime = state.lastHeartLoss || now;
+    const elapsed = now - lastTime;
+    const regen = Math.floor(elapsed / (30 * 60 * 1000));
+    if (regen > 0) {
+      state.hearts = Math.min(state.maxHearts, state.hearts + regen);
+      saveState();
+    }
+  }
+}
+
+function updateTopBar() {
+  document.getElementById('topXP').textContent = state.xp;
+  document.getElementById('topStreak').textContent = state.streak;
+  document.getElementById('topHearts').textContent = state.hearts;
+}
+
+// ============================================================
+// SCREEN MANAGEMENT
+// ============================================================
+function showScreen(name) {
+  ['homeScreen','quizScreen','resultsScreen','profileScreen'].forEach(s => {
+    document.getElementById(s).classList.add('hidden');
+  });
+  document.getElementById('feedbackBar').classList.add('hidden');
+
+  const navItems = document.querySelectorAll('.nav-item');
+  navItems.forEach(n => n.classList.remove('active'));
+
+  switch(name) {
+    case 'home':
+      document.getElementById('homeScreen').classList.remove('hidden');
+      navItems[0].classList.add('active');
+      renderSkillTree();
+      document.getElementById('bottomNav').classList.remove('hidden');
+      break;
+    case 'quiz':
+      document.getElementById('quizScreen').classList.remove('hidden');
+      document.getElementById('bottomNav').classList.add('hidden');
+      break;
+    case 'results':
+      document.getElementById('resultsScreen').classList.remove('hidden');
+      document.getElementById('bottomNav').classList.remove('hidden');
+      break;
+    case 'profile':
+      document.getElementById('profileScreen').classList.remove('hidden');
+      navItems[1].classList.add('active');
+      renderProfile();
+      document.getElementById('bottomNav').classList.remove('hidden');
+      break;
+  }
+  updateTopBar();
+}
+
+// ============================================================
+// SKILL TREE
+// ============================================================
+function isLessonAvailable(lessonId) {
+  // First lesson of each module is available if previous module's first lesson is complete
+  // or it's the first module
+  const allLessons = [];
+  MODULES.forEach(m => m.lessons.forEach(l => allLessons.push(l.id)));
+  const idx = allLessons.indexOf(lessonId);
+  if (idx === 0) return true;
+  return state.completedLessons.includes(allLessons[idx - 1]);
+}
+
+function isLessonCompleted(lessonId) {
+  return state.completedLessons.includes(lessonId);
+}
+
+function getLessonById(lessonId) {
+  for (const m of MODULES) {
+    for (const l of m.lessons) {
+      if (l.id === lessonId) return {module: m, lesson: l};
+    }
+  }
+  return null;
+}
+
+function renderSkillTree() {
+  const tree = document.getElementById('skillTree');
+  let html = '';
+  
+  MODULES.forEach((mod, mi) => {
+    const completedInModule = mod.lessons.filter(l => isLessonCompleted(l.id)).length;
+    const totalInModule = mod.lessons.length;
+    
+    html += `<div class="module-group">`;
+    html += `<div class="module-section-title" style="border-color:${mod.color}40; background:linear-gradient(135deg, ${mod.color}15, var(--bg2))">
+      <span class="mod-icon">${mod.icon}</span>
+      ${mod.title}
+      <div class="mod-progress">${completedInModule}/${totalInModule} abgeschlossen</div>
+    </div>`;
+    
+    mod.lessons.forEach((lesson, li) => {
+      const completed = isLessonCompleted(lesson.id);
+      const available = isLessonAvailable(lesson.id);
+      const status = completed ? 'completed' : (available ? 'available' : 'locked');
+      const score = state.lessonScores[lesson.id];
+      
+      html += `<div class="lesson-node-wrap">
+        <div class="lesson-node ${status}" 
+             onclick="${status !== 'locked' ? `openLessonModal(${lesson.id})` : ''}"
+             style="${status === 'available' ? `background:${mod.color};border-color:${mod.color}cc;box-shadow:0 6px 0 ${mod.color}99,0 8px 20px ${mod.color}30` : ''}">
+          ${completed ? '<span class="crown">👑</span>' : ''}
+          ${completed ? '⭐' : (available ? (li === 0 ? mod.icon : '📝') : '🔒')}
+        </div>
+        <div class="lesson-title">${lesson.title}${score ? ` (${score}%)` : ''}</div>
+      </div>`;
+    });
+    
+    html += `</div>`;
+    if (mi < MODULES.length - 1) {
+      html += `<div class="module-connector"></div>`;
+    }
+  });
+  
+  tree.innerHTML = html;
+}
+
+// ============================================================
+// LESSON MODAL
+// ============================================================
+function openLessonModal(lessonId) {
+  const data = getLessonById(lessonId);
+  if (!data) return;
+  
+  const {module: mod, lesson} = data;
+  const completed = isLessonCompleted(lessonId);
+  const score = state.lessonScores[lessonId];
+  
+  document.getElementById('modalIcon').textContent = mod.icon;
+  document.getElementById('modalTitle').textContent = lesson.title;
+  document.getElementById('modalDesc').textContent = completed
+    ? `Bereits abgeschlossen${score ? ` mit ${score}%` : ''}. Nochmal üben?`
+    : `${lesson.questions.length} Fragen • ${mod.title}`;
+  
+  const btn = document.getElementById('modalBtn');
+  btn.textContent = completed ? '🔄 WIEDERHOLEN' : '▶ STARTEN';
+  btn.onclick = () => startLesson(lessonId);
+  
+  document.getElementById('modalOverlay').classList.remove('hidden');
+}
+
+function closeModal() {
+  document.getElementById('modalOverlay').classList.add('hidden');
+}
+
+// ============================================================
+// QUIZ LOGIC
+// ============================================================
+function startLesson(lessonId) {
+  if (state.hearts <= 0) {
+    alert('Keine Herzen mehr! ❤️ Warte 30 Minuten oder komm später wieder.');
+    return;
+  }
+  
+  closeModal();
+  const data = getLessonById(lessonId);
+  if (!data) return;
+  
+  state.currentLesson = lessonId;
+  state.currentModule = data.module.id;
+  state.quizQuestions = shuffleArray([...data.lesson.questions]);
+  state.currentQuestionIndex = 0;
+  state.quizCorrect = 0;
+  state.quizTotal = state.quizQuestions.length;
+  state.answered = false;
+  state.quizStartTime = Date.now();
+  
+  showScreen('quiz');
+  renderQuestion();
+}
+
+function renderQuestion() {
+  if (state.currentQuestionIndex >= state.quizQuestions.length) {
+    finishQuiz();
+    return;
+  }
+  
+  state.answered = false;
+  const q = state.quizQuestions[state.currentQuestionIndex];
+  const progress = ((state.currentQuestionIndex) / state.quizQuestions.length) * 100;
+  
+  document.getElementById('quizProgress').style.width = progress + '%';
+  
+  let heartsHtml = '';
+  for (let i = 0; i < state.maxHearts; i++) {
+    heartsHtml += i < state.hearts ? '❤️' : '🤍';
+  }
+  document.getElementById('quizHearts').innerHTML = heartsHtml;
+  
+  let html = `<div class="quiz-content" style="animation:slideUp 0.4s">`;
+  html += `<div class="quiz-question">${q.q}</div>`;
+  
+  if (q.hint) {
+    html += `<div class="quiz-hint">💡 ${q.hint}</div>`;
+  }
+  
+  if (q.type === 'mc') {
+    html += `<div class="quiz-options">`;
+    const letters = ['A','B','C','D'];
+    q.o.forEach((opt, i) => {
+      html += `<div class="quiz-option" data-index="${i}" onclick="selectOption(this, ${i})">
+        <span class="quiz-option-letter">${letters[i]}</span>
+        <span>${opt}</span>
+      </div>`;
+    });
+    html += `</div>`;
+    html += `<button class="btn btn-primary btn-block" id="checkBtn" onclick="checkAnswer()" disabled>PRÜFEN</button>`;
+  }
+  else if (q.type === 'tf') {
+    html += `<div class="tf-options">
+      <div class="tf-option" data-value="true" onclick="selectTF(this, true)">✅ Richtig</div>
+      <div class="tf-option" data-value="false" onclick="selectTF(this, false)">❌ Falsch</div>
+    </div>`;
+    html += `<button class="btn btn-primary btn-block" id="checkBtn" onclick="checkAnswer()" disabled>PRÜFEN</button>`;
+  }
+  else if (q.type === 'fillin') {
+    html += `<input type="text" class="quiz-input" id="fillinInput" placeholder="Deine Antwort..." 
+             onkeypress="if(event.key==='Enter')checkAnswer()" oninput="document.getElementById('checkBtn').disabled=!this.value.trim()">`;
+    html += `<button class="btn btn-primary btn-block" id="checkBtn" onclick="checkAnswer()" disabled>PRÜFEN</button>`;
+  }
+  
+  html += `</div>`;
+  document.getElementById('quizContent').innerHTML = html;
+  document.getElementById('feedbackBar').classList.add('hidden');
+}
+
+let selectedAnswer = null;
+
+function selectOption(el, index) {
+  if (state.answered) return;
+  document.querySelectorAll('.quiz-option').forEach(o => o.classList.remove('selected'));
+  el.classList.add('selected');
+  selectedAnswer = index;
+  document.getElementById('checkBtn').disabled = false;
+}
+
+function selectTF(el, value) {
+  if (state.answered) return;
+  document.querySelectorAll('.tf-option').forEach(o => o.classList.remove('selected'));
+  el.classList.add('selected');
+  selectedAnswer = value;
+  document.getElementById('checkBtn').disabled = false;
+}
+
+function checkAnswer() {
+  if (state.answered) return;
+  state.answered = true;
+  
+  const q = state.quizQuestions[state.currentQuestionIndex];
+  let isCorrect = false;
+  
+  if (q.type === 'mc') {
+    isCorrect = selectedAnswer === q.c;
+    document.querySelectorAll('.quiz-option').forEach((o, i) => {
+      if (i === q.c) o.classList.add('correct');
+      if (i === selectedAnswer && !isCorrect) o.classList.add('wrong');
+      o.style.pointerEvents = 'none';
+    });
+  }
+  else if (q.type === 'tf') {
+    isCorrect = selectedAnswer === q.c;
+    document.querySelectorAll('.tf-option').forEach(o => {
+      const val = o.dataset.value === 'true';
+      if (val === q.c) o.classList.add('correct');
+      if (val === selectedAnswer && !isCorrect) o.classList.add('wrong');
+      o.style.pointerEvents = 'none';
+    });
+  }
+  else if (q.type === 'fillin') {
+    const input = document.getElementById('fillinInput');
+    const userAnswer = input.value.trim();
+    isCorrect = q.a.some(a => a.toLowerCase() === userAnswer.toLowerCase());
+    input.classList.add(isCorrect ? 'correct' : 'wrong');
+    input.disabled = true;
+    if (!isCorrect) {
+      input.value = userAnswer + '  →  ' + q.a[0];
+    }
+  }
+  
+  document.getElementById('checkBtn').classList.add('hidden');
+  
+  if (isCorrect) {
+    state.quizCorrect++;
+    state.totalCorrect++;
+    showFeedback(true, q.e);
+    showXPPopup('+10 XP');
+  } else {
+    state.hearts = Math.max(0, state.hearts - 1);
+    state.lastHeartLoss = Date.now();
+    showFeedback(false, q.e);
+    updateTopBar();
+  }
+  
+  state.totalAnswered++;
+  saveState();
+}
+
+function showFeedback(correct, explanation) {
+  const bar = document.getElementById('feedbackBar');
+  bar.className = `feedback-bar ${correct ? 'correct' : 'wrong'}`;
+  document.getElementById('fbIcon').textContent = correct ? '🎉' : '😔';
+  document.getElementById('fbTitle').textContent = correct ? 'Richtig!' : 'Leider falsch';
+  document.getElementById('fbText').textContent = explanation || '';
+  bar.classList.remove('hidden');
+  
+  const btn = document.getElementById('fbBtn');
+  btn.textContent = 'WEITER';
+  btn.className = `btn btn-sm ${correct ? 'btn-primary' : 'btn-secondary'}`;
+  
+  if (state.hearts <= 0) {
+    btn.textContent = 'KEINE HERZEN';
+    btn.onclick = () => {
+      showScreen('home');
+      document.getElementById('feedbackBar').classList.add('hidden');
+    };
+  } else {
+    btn.onclick = nextQuestion;
+  }
+}
+
+function nextQuestion() {
+  document.getElementById('feedbackBar').classList.add('hidden');
+  selectedAnswer = null;
+  state.currentQuestionIndex++;
+  
+  if (state.hearts <= 0) {
+    finishQuiz();
+    return;
+  }
+  
+  renderQuestion();
+}
+
+function quitQuiz() {
+  if (confirm('Willst du die Lektion wirklich abbrechen?')) {
+    document.getElementById('feedbackBar').classList.add('hidden');
+    showScreen('home');
+  }
+}
+
+function finishQuiz() {
+  const percentage = Math.round((state.quizCorrect / state.quizTotal) * 100);
+  const xpEarned = state.quizCorrect * 10;
+  const timeSpent = Math.round((Date.now() - state.quizStartTime) / 1000);
+  const minutes = Math.floor(timeSpent / 60);
+  const seconds = timeSpent % 60;
+  
+  state.xp += xpEarned;
+  state.level = Math.floor(state.xp / 100) + 1;
+  
+  // Update streak
+  const today = new Date().toDateString();
+  if (state.lastPlayDate !== today) {
+    const last = state.lastPlayDate ? new Date(state.lastPlayDate) : null;
+    const diff = last ? Math.floor((new Date(today) - last) / 86400000) : 999;
+    if (diff === 1) state.streak++;
+    else if (diff > 1) state.streak = 1;
+    else state.streak = Math.max(state.streak, 1);
+    state.lastPlayDate = today;
+  }
+  
+  // Mark lesson
+  if (percentage >= 60 && !state.completedLessons.includes(state.currentLesson)) {
+    state.completedLessons.push(state.currentLesson);
+  }
+  state.lessonScores[state.currentLesson] = Math.max(
+    state.lessonScores[state.currentLesson] || 0, percentage
+  );
+  
+  saveState();
+  
+  // Render results
+  let icon, title, subtitle;
+  if (percentage === 100) { icon = '🏆'; title = 'Perfekt!'; subtitle = 'Alle Fragen richtig – du bist ein Profi!'; }
+  else if (percentage >= 80) { icon = '🌟'; title = 'Ausgezeichnet!'; subtitle = 'Hervorragende Leistung!'; }
+  else if (percentage >= 60) { icon = '👍'; title = 'Gut gemacht!'; subtitle = 'Lektion bestanden! Weiter so!'; }
+  else { icon = '📚'; title = 'Weiter üben!'; subtitle = 'Du brauchst mindestens 60% zum Bestehen.'; }
+  
+  document.getElementById('resultsScreen').innerHTML = `
+    <div class="results">
+      <span class="results-icon">${icon}</span>
+      <h1>${title}</h1>
+      <p class="results-subtitle">${subtitle}</p>
+      <div class="results-stats">
+        <div class="results-stat xp">
+          <span class="results-stat-value">+${xpEarned}</span>
+          <span class="results-stat-label">XP verdient</span>
+        </div>
+        <div class="results-stat acc">
+          <span class="results-stat-value">${percentage}%</span>
+          <span class="results-stat-label">Genauigkeit</span>
+        </div>
+        <div class="results-stat time">
+          <span class="results-stat-value">${minutes}:${seconds.toString().padStart(2,'0')}</span>
+          <span class="results-stat-label">Zeit</span>
+        </div>
+      </div>
+      <p style="color:var(--text2);margin-bottom:8px;font-size:14px">${state.quizCorrect} von ${state.quizTotal} Fragen richtig</p>
+      <button class="btn btn-primary btn-block" onclick="showScreen('home')" style="margin-top:20px">WEITER LERNEN</button>
+      ${percentage < 100 ? `<button class="btn btn-secondary btn-block" onclick="startLesson(${state.currentLesson})" style="margin-top:10px">🔄 WIEDERHOLEN</button>` : ''}
+    </div>`;
+  
+  showScreen('results');
+  document.getElementById('feedbackBar').classList.add('hidden');
+}
+
+// ============================================================
+// PROFILE
+// ============================================================
+function renderProfile() {
+  const totalLessons = MODULES.reduce((s, m) => s + m.lessons.length, 0);
+  const completed = state.completedLessons.length;
+  const accuracy = state.totalAnswered > 0 ? Math.round((state.totalCorrect / state.totalAnswered) * 100) : 0;
+  const xpForNext = (state.level * 100) - state.xp;
+  const xpProgress = ((state.xp % 100) / 100) * 100;
+  
+  document.getElementById('profileScreen').innerHTML = `
+    <div class="profile-card">
+      <span class="profile-avatar">⚡</span>
+      <h2>Automatisierungsprofi</h2>
+      <span class="profile-level">Level ${state.level}</span>
+      <div class="profile-xp-bar"><div class="profile-xp-fill" style="width:${xpProgress}%"></div></div>
+      <p style="font-size:13px;color:var(--text2)">${state.xp} XP • Noch ${xpForNext} XP bis Level ${state.level + 1}</p>
+    </div>
+    
+    <div class="daily-goal">
+      <h3>🎯 Tägliches Ziel</h3>
+      <p style="color:var(--text2);font-size:14px">Schließe jeden Tag mindestens eine Lektion ab!</p>
+      <div class="daily-progress">
+        ${[0,1,2,3,4,5,6].map(i => {
+          const d = new Date();
+          d.setDate(d.getDate() - (6-i));
+          const dayStr = d.toDateString();
+          const done = state.lastPlayDate === dayStr || (state.streak > (6-i) && i <= 6);
+          const labels = ['Mo','Di','Mi','Do','Fr','Sa','So'];
+          return `<div class="daily-dot ${i === 6 && state.lastPlayDate === new Date().toDateString() ? 'done' : ''}">${labels[d.getDay() === 0 ? 6 : d.getDay()-1]}</div>`;
+        }).join('')}
+      </div>
+    </div>
+    
+    <div class="stats-grid">
+      <div class="stat-card">
+        <span class="stat-card-icon">⭐</span>
+        <span class="stat-card-value" style="color:var(--gold)">${state.xp}</span>
+        <span class="stat-card-label">Gesamt-XP</span>
+      </div>
+      <div class="stat-card">
+        <span class="stat-card-icon">🔥</span>
+        <span class="stat-card-value" style="color:var(--orange)">${state.streak}</span>
+        <span class="stat-card-label">Tage-Streak</span>
+      </div>
+      <div class="stat-card">
+        <span class="stat-card-icon">✅</span>
+        <span class="stat-card-value" style="color:var(--green)">${completed}/${totalLessons}</span>
+        <span class="stat-card-label">Lektionen</span>
+      </div>
+      <div class="stat-card">
+        <span class="stat-card-icon">🎯</span>
+        <span class="stat-card-value" style="color:var(--blue)">${accuracy}%</span>
+        <span class="stat-card-label">Genauigkeit</span>
+      </div>
+      <div class="stat-card">
+        <span class="stat-card-icon">📝</span>
+        <span class="stat-card-value">${state.totalAnswered}</span>
+        <span class="stat-card-label">Fragen beantwortet</span>
+      </div>
+      <div class="stat-card">
+        <span class="stat-card-icon">❤️</span>
+        <span class="stat-card-value" style="color:var(--red)">${state.hearts}/${state.maxHearts}</span>
+        <span class="stat-card-label">Herzen</span>
+      </div>
+    </div>
+    
+    <h3 style="margin:24px 0 12px;font-size:16px">📊 Fortschritt nach Modulen</h3>
+    ${MODULES.map(m => {
+      const done = m.lessons.filter(l => isLessonCompleted(l.id)).length;
+      const total = m.lessons.length;
+      const pct = Math.round((done/total)*100);
+      return `<div style="background:var(--bg2);border-radius:var(--radius-sm);padding:16px;margin-bottom:8px;border:2px solid var(--bg3)">
+        <div style="display:flex;justify-content:space-between;align-items:center;margin-bottom:8px">
+          <span style="font-weight:700">${m.icon} ${m.title}</span>
+          <span style="font-size:13px;color:var(--text2)">${done}/${total}</span>
+        </div>
+        <div style="height:8px;background:var(--bg3);border-radius:4px;overflow:hidden">
+          <div style="height:100%;width:${pct}%;background:${m.color};border-radius:4px;transition:width 0.5s"></div>
+        </div>
+      </div>`;
+    }).join('')}
+    
+    <button class="btn btn-secondary btn-block" onclick="if(confirm('Fortschritt wirklich zurücksetzen?')){localStorage.removeItem('ap2trainer_state');location.reload()}" style="margin-top:24px">
+      🗑️ Fortschritt zurücksetzen
+    </button>`;
+}
+
+// ============================================================
+// UTILITIES
+// ============================================================
+function shuffleArray(arr) {
+  const a = [...arr];
+  for (let i = a.length - 1; i > 0; i--) {
+    const j = Math.floor(Math.random() * (i + 1));
+    [a[i], a[j]] = [a[j], a[i]];
+  }
+  return a;
+}
+
+function showXPPopup(text) {
+  const popup = document.createElement('div');
+  popup.className = 'xp-popup';
+  popup.textContent = text;
+  document.body.appendChild(popup);
+  setTimeout(() => popup.remove(), 1200);
+}
+
+// ============================================================
+// INIT
+// ============================================================
+loadState();
+showScreen('home');
+updateTopBar();
+</script>
+</body>
+</html>
