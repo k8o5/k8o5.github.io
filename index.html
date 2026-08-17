@@ -1043,7 +1043,7 @@ body.aqua-theme .context-menu-separator {
     <div class="desktop" id="desktop">
         <!-- Static App Icons -->
         <div class="desktop-icon" data-item-type="app" data-app-id="apiKeySettingsWindow"><div class="icon-placeholder">🔑</div><span>API Key</span></div>
-        <div class="desktop-icon" data-item-type="app" data-app-id="fileExplorerWindow" data-vfs-path-id="root"><div class="icon-placeholder">📁</div><span>Files</span></div>
+        <div class="desktop-icon" data-item-type="app" data-app-id="fileExplorerWindow" data-vfs-path-id="root"><div class="icon-placeholder">📁</div><span>My Files</span></div>
         <div class="desktop-icon" data-item-type="app" data-app-id="webBrowserLauncher"><div class="icon-placeholder">🌐</div><span>Browser</span></div>
         <div class="desktop-icon" data-item-type="app" data-app-id="vibeCreatorWindow"><div class="icon-placeholder">✨</div><span>Vibe Creator</span></div>
         <div class="desktop-icon" data-item-type="app" data-app-id="gifCreatorWindow"><div class="icon-placeholder">🎞️</div><span>GIF Creator</span></div>
@@ -1097,9 +1097,8 @@ body.aqua-theme .context-menu-separator {
         <div class="window-content">
             <div id="fe_folderNameDisplay">Loading folder...</div>
             <div id="fe_archiveBar">
-                <button id="fe_archiveUpButton" title="Go up one level">⤴️ Up</button>
-                <span class="fe-crumbs" id="fe_archiveCrumbs"></span>
-                <button id="fe_archiveRefreshButton" title="Re-fetch the archive index from GitHub">Refresh</button>
+                <button id="fe_archiveUpButton" title="Back to My Files">⤴️ Back</button>
+                <button id="fe_archiveRefreshButton" title="Re-fetch the file list">Refresh</button>
             </div>
             <input type="text" id="fe_fileSearchInput" placeholder="Search files...">
             <div id="fe_fileListContainer">
@@ -1244,6 +1243,12 @@ body.aqua-theme .context-menu-separator {
                 <div class="settings-tab" data-tab="about">About</div>
             </div>
             <div id="settingsContent_appearance" class="settings-tab-content">
+                <h3>Sparky (Desktop Assistant)</h3>
+                <label style="display: flex; align-items: center; gap: 6px;">
+                    <input type="checkbox" id="systemSettings_sparkyToggle" style="width: auto; margin: 0;">
+                    Show Sparky on the desktop
+                </label>
+                <p class="provider-caveat">You can turn Sparky off here at any time. This switch is always here in Settings.</p>
                 <h3>Desktop Background</h3>
                 <label for="systemSettings_appearance_bgColorPicker">Custom Background Color:</label>
                 <input type="color" id="systemSettings_appearance_bgColorPicker" value="#008080">
@@ -1274,9 +1279,15 @@ body.aqua-theme .context-menu-separator {
                 <label for="systemSettings_iconSizeSlider">Icon Scale: <span id="systemSettings_iconSizeSliderValue">1.0x</span></label>
                 <input type="range" id="systemSettings_iconSizeSlider" min="0.5" max="1.5" step="0.1" value="1.0">
                 <button id="systemSettings_iconSizeResetButton" style="margin-top: 5px;">Reset Icon Size</button>
+                <h3 style="margin-top: 15px;">Random Cat Background</h3>
+                <label style="display: flex; align-items: center; gap: 6px;">
+                    <input type="checkbox" id="systemSettings_catBgToggle" style="width: auto; margin: 0;">
+                    Use a random cat picture as background on load
+                </label>
+                <button id="systemSettings_catBgButton" style="margin-top: 5px;">Random cat now 🐱</button>
 
                 <div id="secretThemeSection" style="display: block; margin-top: 20px; padding-top: 10px; border-top: 1px dashed var(--win95-dark-gray);">
-                    <h3 style="color: #909;">Secret Themes</h3>
+                    <h3>Themes</h3>
                     <label for="themeSelect">Select Theme:</label>
                     <select id="themeSelect">
                         <option value="win95">Windows 95 (Default)</option>
@@ -1433,7 +1444,7 @@ body.aqua-theme .context-menu-separator {
             <!-- Taskbar buttons will be added here by JS -->
         </div>
         <div class="start-menu" id="startMenu" style="display: none;">
-            <div class="start-menu-item" id="startMenuArchives">Archives</div>
+            <div class="start-menu-item" id="startMenuArchives">My Files</div>
             <div class="start-menu-separator"></div>
             <div class="start-menu-item" id="startMenuUpdate">Update</div>
             <div class="start-menu-separator"></div>
@@ -1822,6 +1833,7 @@ Rewritten code:`;
     const startMenuReboot = document.getElementById('startMenuReboot');
     const startMenuFactoryReset = document.getElementById('startMenuFactoryReset');
     const startMenuShutdown = document.getElementById('startMenuShutdown');
+    const startMenuArchives = document.getElementById('startMenuArchives');
     const rebootOverlay = document.getElementById('rebootOverlay');
     const rebootProgressText = document.getElementById('rebootProgressText');
     const systemSettings_appearance_bgColorPicker = document.getElementById('systemSettings_appearance_bgColorPicker');
@@ -2013,17 +2025,18 @@ Rewritten code:`;
     function ensurePastedPicturesFolder() {
         if (PASTED_PICTURES_VFS_ID) {
             const existing = getVFSEntry(PASTED_PICTURES_VFS_ID);
-            if (existing && existing.name === PASTED_PICTURES_FOLDER_NAME && existing.parentId === 'root') {
+            if (existing && existing.name === PASTED_PICTURES_FOLDER_NAME) {
                 return PASTED_PICTURES_VFS_ID;
             }
         }
-        const rootChildren = getVFSChildren('root');
-        const existingFolder = rootChildren.find(item => item.type === 'folder' && item.name === PASTED_PICTURES_FOLDER_NAME);
+        const sparkyId = ensureSparkyCreationsFolder();
+        const sparkyChildren = getVFSChildren(sparkyId);
+        const existingFolder = sparkyChildren.find(item => item.type === 'folder' && item.name === PASTED_PICTURES_FOLDER_NAME);
         if (existingFolder) {
             PASTED_PICTURES_VFS_ID = existingFolder.id;
             return existingFolder.id;
         } else {
-            const newFolder = createVFSEntry({ type: 'folder', name: PASTED_PICTURES_FOLDER_NAME, parentId: 'root' });
+            const newFolder = createVFSEntry({ type: 'folder', name: PASTED_PICTURES_FOLDER_NAME, parentId: sparkyId });
             PASTED_PICTURES_VFS_ID = newFolder.id;
             return newFolder.id;
         }
@@ -2781,7 +2794,16 @@ Available commands:
         const storedVFSItems = localStorage.getItem('k8os_vfs_items');
         if (storedVFSItems) { try { VFS.items = JSON.parse(storedVFSItems); } catch (e) { console.error("Error parsing VFS from localStorage:", e); VFS.items = {}; } }
         else { VFS.items = {}; }
-        ensureSparkyCreationsFolder();
+
+        // "Sparky's Creations" has been removed: delete the folder and move its
+        // contents up into the main files so nothing is lost.
+        const sparkyFolder = Object.values(VFS.items).find(item => item && item.type === 'folder' && item.name === SPARKY_CREATIONS_FOLDER_NAME && item.parentId === 'root');
+        if (sparkyFolder) {
+            Object.values(VFS.items).forEach(item => { if (item && item.parentId === sparkyFolder.id) item.parentId = 'root'; });
+            delete VFS.items[sparkyFolder.id];
+            saveVFS();
+        }
+
         ensureTrashFolder();
         ensurePastedPicturesFolder();
         renderDesktopVFSIcons();
@@ -2867,22 +2889,8 @@ Available commands:
     }
 
     function ensureSparkyCreationsFolder() {
-        if (SPARKY_CREATIONS_VFS_ID) {
-            const existing = getVFSEntry(SPARKY_CREATIONS_VFS_ID);
-            if (existing && existing.name === SPARKY_CREATIONS_FOLDER_NAME && existing.parentId === 'root') {
-                return SPARKY_CREATIONS_VFS_ID;
-            }
-        }
-        const rootChildren = getVFSChildren('root');
-        const existingFolder = rootChildren.find(item => item.type === 'folder' && item.name === SPARKY_CREATIONS_FOLDER_NAME);
-        if (existingFolder) {
-            SPARKY_CREATIONS_VFS_ID = existingFolder.id;
-            return existingFolder.id;
-        } else {
-            const newFolder = createVFSEntry({ type: 'folder', name: SPARKY_CREATIONS_FOLDER_NAME, parentId: 'root' });
-            SPARKY_CREATIONS_VFS_ID = newFolder.id;
-            return newFolder.id;
-        }
+        // "Sparky's Creations" has been removed — saves go to the main files.
+        return 'root';
     }
 
     function ensureTrashFolder() {
@@ -2908,7 +2916,7 @@ Available commands:
         document.querySelectorAll('.desktop-icon[data-item-type="file"], .desktop-icon[data-item-type="folder"]').forEach(icon => icon.remove());
         const desktopItems = getVFSChildren('root');
         desktopItems.forEach(item => {
-            if ((item.name === SPARKY_CREATIONS_FOLDER_NAME || item.name === TRASH_FOLDER_NAME) && item.parentId === 'root') {
+            if ((item.name === SPARKY_CREATIONS_FOLDER_NAME || item.name === TRASH_FOLDER_NAME || item.name === PASTED_PICTURES_FOLDER_NAME) && item.parentId === 'root') {
                  if (item.name === SPARKY_CREATIONS_FOLDER_NAME && !SPARKY_CREATIONS_VFS_ID) SPARKY_CREATIONS_VFS_ID = item.id;
                  if (item.name === TRASH_FOLDER_NAME && !TRASH_VFS_ID) TRASH_VFS_ID = item.id;
                  return;
@@ -3024,7 +3032,7 @@ Available commands:
         const itemType = iconElement.dataset.itemType; const appId = iconElement.dataset.appId;
         const itemId = iconElement.dataset.itemId; const vfsPathId = iconElement.dataset.vfsPathId;
         if (itemType === 'app') {
-            if (appId === 'webBrowserLauncher') { openNewBrowserWindow(); }
+            if (appId === 'webBrowserLauncher') { openNewBrowserWindow('k8o5.html'); }
             else if (appId === 'fileExplorerWindow') { openWindow(appId, { vfsPathId: vfsPathId || 'root' }); }
             else if (appId === 'trashBin') { openWindow('fileExplorerWindow', { vfsPathId: TRASH_VFS_ID }); }
             else if (appId === 'archivesExplorer') { openArchivesExplorer(); }
@@ -3107,20 +3115,40 @@ Available commands:
 
         desktopElement.addEventListener('drop', (event) => {
             event.preventDefault();
-            const vfsItemId = event.dataTransfer.getData('text/vfs-item-id');
+            // A site file ("Files") was dragged onto the desktop → make a shortcut.
+            const archivePath = event.dataTransfer.getData('text/k8os-archive-path');
+            if (archivePath) {
+                const name = archivePath.split('/').pop() || 'file.html';
+                const shortcutContent = '<!doctype html><meta charset="utf-8"><title>' + name + '</title><script>location.replace(new URL(' + JSON.stringify(archivePath) + ', parent.location.href));<\/script>';
+                createVFSEntry({ type: 'file', name: name, mimeType: 'text/html', content: shortcutContent, parentId: 'root' });
+                renderDesktopVFSIcons();
+                logK8osActivity("Desktop", `Added shortcut: ${name}`);
+                return;
+            }
 
-            if (vfsItemId) {
-                // This is a VFS item being moved
-                const item = getVFSEntry(vfsItemId);
-                if (item && item.parentId !== 'root') {
-                    updateVFSEntry(vfsItemId, { parentId: 'root' });
-                    renderDesktopVFSIcons(); // Refresh desktop to show new icon
-                    // Refresh file explorer if it's open and showing the old parent folder
+            let vfsItemIds = (event.dataTransfer.getData('text/vfs-item-ids') || "").split(',').filter(id => id);
+            if (vfsItemIds.length === 0) {
+                const single = event.dataTransfer.getData('text/vfs-item-id');
+                if (single) vfsItemIds = [single];
+            }
+
+            if (vfsItemIds.length > 0) {
+                // One or more VFS items being moved to the desktop (root).
+                let movedAny = false;
+                vfsItemIds.forEach(id => {
+                    const item = getVFSEntry(id);
+                    if (item && item.parentId !== 'root') {
+                        updateVFSEntry(id, { parentId: 'root' });
+                        movedAny = true;
+                        logK8osActivity("VFS", `Moved '${item.name}' to desktop.`);
+                    }
+                });
+                if (movedAny) {
+                    renderDesktopVFSIcons(); // Refresh desktop to show new icon(s)
                     const fileExplorerWindow = document.getElementById('fileExplorerWindow');
-                    if(fileExplorerWindow && fileExplorerWindow.style.display === 'flex' && currentFEVfsPathId === item.parentId) {
+                    if (fileExplorerWindow && fileExplorerWindow.style.display === 'flex') {
                         renderVFSFileList(currentFEVfsPathId);
                     }
-                    logK8osActivity("VFS", `Moved '${item.name}' to desktop.`);
                 }
             } else {
                 // This is an external file drop
@@ -3142,10 +3170,10 @@ Available commands:
     let currentFEVfsPathId = 'root';
     let fe_currentSort = { key: 'name', dir: 'asc' };
 
-    // Re-renders whichever mode the File Explorer is currently in.
+    // Re-renders the VFS file explorer window.
     function fe_refresh() {
         const term = fe_searchInput ? fe_searchInput.value.toLowerCase().trim() : '';
-        if (currentFEVfsPathId === ARCHIVES_VFS_ID) renderArchiveList(term);
+        if (currentFEVfsPathId === ARCHIVES_VFS_ID) renderLocalFiles(currentArchiveDir, term);
         else renderVFSFileList(currentFEVfsPathId, term);
     }
 
@@ -3154,34 +3182,43 @@ Available commands:
         currentFEVfsPathId = options.vfsPathId || 'root';
         if (!fe_folderNameDisplayElement || !fe_searchInput || !fe_statusElement) { console.error("File Explorer UI missing for VFS!"); return; }
 
-        const isArchives = currentFEVfsPathId === ARCHIVES_VFS_ID;
         const fileExplorerWindowEl = document.getElementById('fileExplorerWindow');
-        if (fileExplorerWindowEl) fileExplorerWindowEl.classList.toggle('archives-mode', isArchives);
+        const isFiles = currentFEVfsPathId === ARCHIVES_VFS_ID;
 
-        if (isArchives) {
+        // Title + folder label (single window, two modes)
+        let titleText, folderLabel;
+        if (isFiles) {
             currentArchiveDir = typeof options.archiveDir === 'string' ? options.archiveDir : '';
-            const titleTextEl = fileExplorerWindowEl && fileExplorerWindowEl.querySelector('.title-bar-text');
-            if (titleTextEl) titleTextEl.textContent = '🗄️ Archives';
-            updateTaskbarButtonState('fileExplorerWindow', 'active');
-            const btn = taskbarButtonsContainer && taskbarButtonsContainer.querySelector('.taskbar-button[data-window-id="fileExplorerWindow"]');
-            if (btn) { btn.textContent = '🗄️ Archives'; btn.title = '🗄️ Archives'; }
-            fe_folderNameDisplayElement.textContent = `Archives: ${K8OS_REPO}`;
-            fe_searchInput.placeholder = 'Search every archived page...';
+            titleText = '📁 ' + (currentArchiveDir || 'Files');
+            folderLabel = currentArchiveDir || 'Files (root)';
         } else {
-            const currentArchiveDirWasSet = currentArchiveDir !== null;
             currentArchiveDir = null;
             const isRoot = currentFEVfsPathId === 'root';
             const currentFolder = getVFSEntry(currentFEVfsPathId);
-            const folderLabel = isRoot ? 'Files' : (currentFolder ? getVFSPathString(currentFEVfsPathId) : 'Unknown');
-            fe_folderNameDisplayElement.textContent = `Folder: ${folderLabel}`;
-            fe_searchInput.placeholder = 'Search files...';
-            if (currentArchiveDirWasSet && fileExplorerWindowEl) {
-                const label = `📁 ${isRoot ? 'Files' : (currentFolder ? currentFolder.name : 'File Explorer')}`;
-                const titleTextEl = fileExplorerWindowEl.querySelector('.title-bar-text');
-                if (titleTextEl) titleTextEl.textContent = label;
-                const btn = taskbarButtonsContainer && taskbarButtonsContainer.querySelector('.taskbar-button[data-window-id="fileExplorerWindow"]');
-                if (btn) { btn.textContent = label; btn.title = label; }
+            titleText = '📁 ' + (isRoot ? 'My Files' : (currentFolder ? currentFolder.name : 'File Explorer'));
+            folderLabel = isRoot ? 'Files' : (currentFolder ? getVFSPathString(currentFEVfsPathId) : 'Unknown');
+        }
+        fe_folderNameDisplayElement.textContent = `Folder: ${folderLabel}`;
+        fe_searchInput.placeholder = 'Search files...';
+        if (fileExplorerWindowEl) {
+            const titleTextEl = fileExplorerWindowEl.querySelector('.title-bar-text');
+            if (titleTextEl) titleTextEl.textContent = titleText;
+            const btn = taskbarButtonsContainer && taskbarButtonsContainer.querySelector('.taskbar-button[data-window-id="fileExplorerWindow"]');
+            if (btn) { btn.textContent = titleText; btn.title = titleText; }
+        }
+
+        // One single "go back" button for both modes: goes up one level.
+        const feBar = fileExplorerWindowEl ? fileExplorerWindowEl.querySelector('#fe_archiveBar') : null;
+        const feBack = fileExplorerWindowEl ? fileExplorerWindowEl.querySelector('#fe_archiveUpButton') : null;
+        const feRefreshBtn = fileExplorerWindowEl ? fileExplorerWindowEl.querySelector('#fe_archiveRefreshButton') : null;
+        const canGoBack = isFiles ? true : (currentFEVfsPathId !== 'root');
+        if (feBar) {
+            feBar.style.display = canGoBack ? 'flex' : 'none';
+            if (feBack) {
+                feBack.textContent = '⤴️ Back';
+                feBack.onclick = () => navigateBack();
             }
+            if (feRefreshBtn) feRefreshBtn.onclick = () => fe_refresh();
         }
 
         fe_searchInput.value = '';
@@ -3203,12 +3240,7 @@ Available commands:
                 });
             });
 
-            const fe_archiveUpButton = document.getElementById('fe_archiveUpButton');
-            if (fe_archiveUpButton) fe_archiveUpButton.addEventListener('click', () => navigateArchiveUp());
-            const fe_archiveRefreshButton = document.getElementById('fe_archiveRefreshButton');
-            if (fe_archiveRefreshButton) fe_archiveRefreshButton.addEventListener('click', () => refreshArchiveIndex());
-
-            const fe_fileListContainer = document.getElementById('fe_fileListContainer');
+            const fe_fileListContainer = fileExplorerWindow.querySelector('#fe_fileListContainer');
             if (fe_fileListContainer) {
                 fe_fileListContainer.addEventListener('click', (e) => {
                     // If the click is on the container itself (or the table, but not a row), clear selection.
@@ -3247,19 +3279,19 @@ Available commands:
 
         fe_fileListElement.innerHTML = ''; // Clear the table body
 
-        // Gateway into the published GitHub pages, sitting above the local files.
+        // Gateway into the local site files, sitting above the user's files.
         if (parentId === 'root' && !searchTerm) {
             const row = fe_fileListElement.insertRow();
             row.className = 'fe-shortcut-row';
             row.style.cursor = 'pointer';
-            row.title = `Browse every HTML page published at ${K8OS_REPO}`;
+            row.title = `Browse the folders and HTML files in this site`;
             bindRowActivation(row, () => openArchivesExplorer());
-            row.insertCell().innerHTML = `<span class="fe-item-icon">🗄️</span>Archives`;
-            row.insertCell().textContent = 'GitHub';
-            row.insertCell().textContent = K8OS_REPO;
+            row.insertCell().innerHTML = `<span class="fe-item-icon">📁</span>Files`;
+            row.insertCell().textContent = 'Local';
+            row.insertCell().textContent = 'apps · games';
         }
 
-        // "Up" directory row
+        // "Up" directory row (goes back one level — single or double click)
         if (parentId !== 'root') {
             const parentItem = getVFSEntry(parentId);
             if (parentItem && parentItem.parentId !== undefined) {
@@ -3267,7 +3299,9 @@ Available commands:
                 row.dataset.itemId = parentItem.parentId;
                 row.dataset.itemType = 'folder';
                 row.style.cursor = 'pointer';
-                row.addEventListener('dblclick', () => { initFileExplorerAppForVFS({ vfsPathId: parentItem.parentId }); });
+                const goUp = () => { initFileExplorerAppForVFS({ vfsPathId: parentItem.parentId }); };
+                row.addEventListener('dblclick', goUp);
+                row.addEventListener('click', goUp);
 
                 const nameCell = row.insertCell();
                 nameCell.innerHTML = `<span class="fe-item-icon">⤴️</span>..`;
@@ -3552,7 +3586,9 @@ Available commands:
         const initialBgImageUrl = localStorage.getItem('k8os_desktopBgImageUrl');
         const initialBgImageSize = localStorage.getItem('k8os_desktopBgImageSize') || 'cover';
         const initialBgImageRepeat = localStorage.getItem('k8os_desktopBgImageRepeat') || 'no-repeat';
-        if (initialBgImageUrl) { applyCustomImageBackground(initialBgImageUrl, initialBgImageSize, initialBgImageRepeat, false);  }
+        if (localStorage.getItem('k8os_catBgEnabled') === 'true') {
+            applyRandomCatBackground();
+        } else if (initialBgImageUrl) { applyCustomImageBackground(initialBgImageUrl, initialBgImageSize, initialBgImageRepeat, false);  }
         if (apiProviderSelect) apiProviderSelect.value = selectedApiProvider;
         updateApiKeyUI(); enableAppButtons(); initAllAiApps(); initSystemSettingsApp();
         loadVFS();
@@ -3724,7 +3760,32 @@ Available commands:
     }
     function stopAssistantSummaryTimer() { if (assistantSummaryIntervalId) { clearInterval(assistantSummaryIntervalId); assistantSummaryIntervalId = null; } }
 
+    // Sparky can be toggled on/off from System Settings. Defaults to on.
+    function isSparkyEnabled() {
+        return localStorage.getItem('k8os_sparkyEnabled') !== 'false';
+    }
+
+    function setSparkyEnabled(enabled) {
+        localStorage.setItem('k8os_sparkyEnabled', enabled ? 'true' : 'false');
+        if (enabled) {
+            if (localStorage.getItem('k8os_assistant_enabled') === 'true' &&
+                (window.GLOBAL_GEMINI_API_KEY || window.GLOBAL_GROQ_API_KEY || window.GLOBAL_OPENROUTER_API_KEY || window.GLOBAL_DEEPSEEK_API_KEY ||
+                 window.GLOBAL_HF_TOKEN || window.GLOBAL_TRANSFORMERSJS_MODEL_ID ||
+                 (window.GLOBAL_CUSTOM_API_KEY && getCurrentCustomEndpointUrl()))) {
+                initAndShowAssistant();
+                initSparkyDynamicBehavior();
+            }
+            if (systemSettings_status) systemSettings_status.textContent = 'Sparky enabled.';
+        } else {
+            hideAssistant();
+            stopAssistantSummaryTimer();
+            stopSparkyMovement();
+            if (systemSettings_status) systemSettings_status.textContent = 'Sparky disabled. You can turn him back on here anytime.';
+        }
+    }
+
     function initAndShowAssistant() {
+        if (!isSparkyEnabled()) return; // Sparky is turned off in Settings
         if (!assistantContainer) {
             assistantContainer = document.getElementById('k8osAssistant');
             assistantSpeechBubble = document.getElementById('k8osAssistant_speechBubble');
@@ -3763,7 +3824,7 @@ Available commands:
             assistantContainer.style.display = 'flex';
             assistantIsVisible = true;
             if (!localStorage.getItem('k8os_assistant_has_greeted')) {
-                updateAssistantSpeech("Sparky online!", false, false, true);
+                updateAssistantSpeech("Hi! I'm Sparky! Just so you know, you can turn me off anytime in Settings. 😉", false, false, true);
                 localStorage.setItem('k8os_assistant_has_greeted', 'true');
             }
             startAssistantSummaryTimer();
@@ -5792,6 +5853,13 @@ Output ONLY the raw HTML code, starting with <!DOCTYPE html> and ending with </h
         if (systemSettings_appearance_bgImageUrlInput) systemSettings_appearance_bgImageUrlInput.value = '';
     }
 
+    function applyRandomCatBackground() {
+        // Cat As A Service returns a random cat image on every request.
+        const catUrl = 'https://cataas.com/cat?width=1920&t=' + Date.now();
+        applyCustomImageBackground(catUrl, 'cover', 'no-repeat');
+        if (systemSettings_status) systemSettings_status.textContent = 'Random cat background applied! 🐱';
+    }
+
     function applyIconScale(scaleFactor) { document.documentElement.style.setProperty('--desktop-icon-scale-factor', scaleFactor); if (systemSettings_iconSizeSliderValue) systemSettings_iconSizeSliderValue.textContent = `${Number(scaleFactor).toFixed(1)}x`; }
 
     function applyTheme(themeName) {
@@ -5941,33 +6009,6 @@ Output ONLY the raw HTML code, starting with <!DOCTYPE html> and ending with </h
         const tabs = document.querySelectorAll('#systemSettingsWindow .settings-tab'); const tabContents = document.querySelectorAll('#systemSettingsWindow .settings-tab-content');
         tabs.forEach(tab => { tab.addEventListener('click', () => { tabs.forEach(t => t.classList.remove('active')); tab.classList.add('active'); const targetContentId = "settingsContent_" + tab.dataset.tab; tabContents.forEach(content => { content.classList.toggle('active', content.id === targetContentId); }); }); });
 
-        // --- Secret Theme Easter Egg ---
-        if (localStorage.getItem('k8os_themes_unlocked') === 'true') {
-            const secretSection = document.getElementById('secretThemeSection');
-            if (secretSection) secretSection.style.display = 'block';
-        }
-
-        const aboutVersionEl = document.getElementById('systemSettings_about_version');
-        if (aboutVersionEl) {
-            let clickCount = 0;
-            let clickTimer = null;
-            aboutVersionEl.addEventListener('click', () => {
-                clickCount++;
-                if (clickTimer) clearTimeout(clickTimer);
-                clickTimer = setTimeout(() => { clickCount = 0; }, 1000); // Reset after 1s
-                if (clickCount >= 5) {
-                    const secretSection = document.getElementById('secretThemeSection');
-                    if (secretSection) {
-                        secretSection.style.display = 'block';
-                        localStorage.setItem('k8os_themes_unlocked', 'true');
-                        if(systemSettings_status) systemSettings_status.textContent = "Secret themes unlocked!";
-                    }
-                    clickCount = 0;
-                    clearTimeout(clickTimer);
-                }
-            });
-        }
-
         const themeSelect = document.getElementById('themeSelect');
         if (themeSelect) {
             themeSelect.value = localStorage.getItem('k8os_theme') || 'win95';
@@ -5975,6 +6016,24 @@ Output ONLY the raw HTML code, starting with <!DOCTYPE html> and ending with </h
                 applyTheme(e.target.value);
             });
         }
+
+        const sparkyToggle = document.getElementById('systemSettings_sparkyToggle');
+        if (sparkyToggle) {
+            sparkyToggle.checked = isSparkyEnabled();
+            sparkyToggle.addEventListener('change', () => setSparkyEnabled(sparkyToggle.checked));
+        }
+
+        const catBgToggle = document.getElementById('systemSettings_catBgToggle');
+        if (catBgToggle) {
+            catBgToggle.checked = localStorage.getItem('k8os_catBgEnabled') === 'true';
+            catBgToggle.addEventListener('change', () => {
+                localStorage.setItem('k8os_catBgEnabled', catBgToggle.checked ? 'true' : 'false');
+                if (catBgToggle.checked) { applyRandomCatBackground(); }
+                else { clearCustomImageBackground(true); if (systemSettings_status) systemSettings_status.textContent = 'Random cat background disabled.'; }
+            });
+        }
+        const catBgButton = document.getElementById('systemSettings_catBgButton');
+        if (catBgButton) catBgButton.addEventListener('click', applyRandomCatBackground);
     }
     function setDesktopBackground(color) {
         clearCustomImageBackground(false, false); document.body.style.backgroundColor = color;
@@ -6365,8 +6424,8 @@ async function loadUrlInBrowserInstance(instanceId, url, addToHistory = true) {
         } else {
             let fetchUrl = url;
             const isLikelyExternal = url.startsWith('http://') || url.startsWith('https://');
-            const isFileProtocol = url.startsWith('file:///'); const isK8osLocal = window.location.protocol === 'file:';
-            if (isFileProtocol || (isK8osLocal && !isLikelyExternal)) {
+            const isFileProtocol = url.startsWith('file:///');
+            if (isFileProtocol || !isLikelyExternal) {
                 instance.status.textContent = `Attempting to load (direct): ${url}`; instance.iframe.src = url;
                 setTimeout(() => { if (instance.status.textContent.startsWith('Attempting')) { instance.status.textContent = `Attempted direct load: ${url}`; logK8osActivity(`Browser (${instanceId})`, `Navigated (direct): ${url.substring(0,50)}...`); } }, 1000);
             } else {
@@ -6411,6 +6470,7 @@ function webBrowserNavigateInstance(instanceId, direction) {
 function updateWebBrowserNavButtonsInstance(instanceId) { const instance = browserInstances[instanceId]; if (!instance) return; instance.backButton.disabled = instance.historyIndex <= 0; instance.forwardButton.disabled = instance.historyIndex >= instance.history.length - 1; }
 
 if(startButton) startButton.addEventListener('click', (e) => { e.stopPropagation(); startMenu.style.display = startMenu.style.display === 'flex' ? 'none' : 'flex'; hideContextMenu(); });
+if(startMenuArchives) startMenuArchives.addEventListener('click', () => { startMenu.style.display = 'none'; openWindow('fileExplorerWindow', { vfsPathId: 'root' }); });
 if(startMenuUpdate) startMenuUpdate.addEventListener('click', () => { startMenu.style.display = 'none'; if (confirm("Are you sure you want to update? This will fetch the latest version of k8OS and reload the page.")) { location.reload(true); } });
 if(startMenuShutdown) startMenuShutdown.addEventListener('click', () => { startMenu.style.display = 'none'; if (confirm("Are you sure you want to shut down k8OS?")) { document.body.innerHTML = '<div style="position:fixed;top:0;left:0;width:100%;height:100%;background:black;color:white;display:flex;justify-content:center;align-items:center;font-size:24px;">k8OS is shutting down...</div>'; setTimeout(() => { window.close(); }, 2000); } });
 if(startMenuReboot) startMenuReboot.addEventListener('click', () => { startMenu.style.display = 'none'; if (confirm("Are you sure you want to reboot k8OS?")) { rebootOverlay.style.display = 'flex'; rebootProgressText.textContent = "Closing applications..."; document.querySelectorAll('.window').forEach(w => closeWindow(w)); const rebootSteps = [ { delay: 700, text: "System integrity check..." }, { delay: 1200, text: "Loading kernel modules..." }, { delay: 1000, text: "Initializing desktop..." }, { delay: 800, text: "Mounting file systems..." }, { delay: 600, text: "Starting services..." }, { delay: 500, text: "Finalizing..." }, { delay: 400, text: "System ready." } ]; let currentStepIndex = 0; function processNextStep() { if (currentStepIndex < rebootSteps.length) { rebootProgressText.textContent = rebootSteps[currentStepIndex].text; setTimeout(processNextStep, rebootSteps[currentStepIndex].delay); currentStepIndex++; } else { rebootOverlay.style.display = 'none'; document.querySelectorAll('.desktop-icon.selected').forEach(i => i.classList.remove('selected')); k8osActivityLog = []; loadApiKey(); openWindow('apiKeySettingsWindow'); } } setTimeout(processNextStep, 500); } });
@@ -7090,25 +7150,21 @@ function initAllAiApps(){
         'k8o5_enhanced.html', 'k8o5_substantially_improved.html'
     ]);
 
-    // Used when the GitHub API is unreachable or rate limited.
+    // The local site files/folders shown in the Files browser.
     const ARCHIVE_FALLBACK_PATHS = [
-        'k8o5.html', 'gta.html', 'openscad.html', 'p2p.html', 'radio.html',
-        'buh/axiom.html', 'buh/brut.html',
-        'buh/apps/FORGECAD.html', 'buh/apps/LingoFlux.html', 'buh/apps/a09.html',
-        'buh/apps/beta.html', 'buh/apps/cadpro.html', 'buh/apps/chat.html',
-        'buh/apps/cool.html', 'buh/apps/gif31.html', 'buh/apps/giflite.html',
-        'buh/apps/luminastudio.html', 'buh/apps/mos.html', 'buh/apps/notes.html',
-        'buh/apps/o2o.html', 'buh/apps/omnizip.html', 'buh/apps/qrcode.html',
-        'buh/apps/s2p.html', 'buh/apps/terminal.html',
-        'buh/apps/SparkysCreations/cat.html', 'buh/apps/SparkysCreations/fml.html',
-        'buh/apps/SparkysCreations/mspaint.html', 'buh/apps/SparkysCreations/pid.html',
-        'buh/apps/SparkysCreations/shittybird.html',
-        'buh/apps/buh3000/muehle.html', 'buh/apps/buh3000/papes.html',
-        'buh/apps/buh3000/polyworld.html',
-        'buh/games/DarknessEternal.html', 'buh/games/birdgame.html', 'buh/games/bltro.html',
-        'buh/games/clash.html', 'buh/games/dash.html', 'buh/games/falapi.html',
-        'buh/games/fight.html', 'buh/games/fish.html', 'buh/games/georater.html',
-        'buh/games/mi.html', 'buh/games/neonarena.html', 'buh/games/nightfall.html'
+        'k8o5.html',
+        'apps/FORGECAD.html', 'apps/LingoFlux.html', 'apps/a09.html', 'apps/axiom.html',
+        'apps/beta.html', 'apps/brut.html', 'apps/cadpro.html', 'apps/cat.html',
+        'apps/chat.html', 'apps/cool.html', 'apps/fml.html', 'apps/gif31.html',
+        'apps/giflite.html', 'apps/k8os.html', 'apps/luminastudio.html', 'apps/mos.html',
+        'apps/mspaint.html', 'apps/muehle.html', 'apps/notes.html', 'apps/o2o.html',
+        'apps/omnizip.html', 'apps/openscad.html', 'apps/p2p.html', 'apps/papes.html',
+        'apps/pid.html', 'apps/polyworld.html', 'apps/qrcode.html', 'apps/radio.html',
+        'apps/s2p.html', 'apps/shittybird.html', 'apps/terminal.html',
+        'games/DarknessEternal.html', 'games/birdgame.html', 'games/bltro.html',
+        'games/clash.html', 'games/dash.html', 'games/falapi.html', 'games/fight.html',
+        'games/fish.html', 'games/georater.html', 'games/gta.html', 'games/mi.html',
+        'games/neonarena.html', 'games/nightfall.html'
     ];
 
     // First-party pages, so the frame gets the permissions they were built for.
@@ -7245,85 +7301,51 @@ function initAllAiApps(){
         return entries.sort((a, b) => a.path.localeCompare(b.path));
     }
 
-    async function fetchArchiveIndexFromGitHub() {
-        for (const branch of ['main', 'master']) {
-            let res;
-            try {
-                res = await fetch(`https://api.github.com/repos/${K8OS_REPO}/git/trees/${branch}?recursive=1`,
-                    { headers: { 'Accept': 'application/vnd.github+json' } });
-            } catch (e) { continue; }
-            if (!res.ok) continue;
-            const data = await res.json().catch(() => null);
-            if (!data || !Array.isArray(data.tree)) continue;
-            const entries = buildArchiveEntries(
-                data.tree.filter(t => t.type === 'blob').map(t => ({ path: t.path, size: t.size }))
-            );
-            if (entries.length) return entries;
-        }
-        return null;
-    }
-
-    function readArchiveCache() {
-        try {
-            const parsed = JSON.parse(localStorage.getItem(ARCHIVE_INDEX_CACHE_KEY) || 'null');
-            if (!parsed || !Array.isArray(parsed.entries) || !parsed.entries.length) return null;
-            if (Date.now() - (parsed.savedAt || 0) > ARCHIVE_INDEX_TTL_MS) return null;
-            return parsed.entries;
-        } catch (e) { return null; }
-    }
-
+    // The site is fully local: the file browser lists the folders and HTML
+    // files that live alongside index.html (apps/, games/, ...). No GitHub.
     function loadArchiveIndex(force = false) {
-        if (!force) {
-            if (archiveIndex) return Promise.resolve(archiveIndex);
-            if (archiveIndexPromise) return archiveIndexPromise;
-            const cached = readArchiveCache();
-            if (cached) {
-                archiveIndex = cached;
-                archiveIndexSource = 'cached';
-                return Promise.resolve(archiveIndex);
-            }
+        if (!archiveIndex || force) {
+            archiveIndex = buildArchiveEntries(ARCHIVE_FALLBACK_PATHS);
+            archiveIndexSource = 'local';
         }
-        archiveIndexPromise = (async () => {
-            const fetched = await fetchArchiveIndexFromGitHub();
-            if (fetched) {
-                // The deployed tree and the built-in list can each hold pages the
-                // other misses, so the catalog is the union. GitHub entries come
-                // first because they carry real file sizes.
-                archiveIndex = buildArchiveEntries([...fetched, ...ARCHIVE_FALLBACK_PATHS]);
-                archiveIndexSource = 'github';
-                try {
-                    localStorage.setItem(ARCHIVE_INDEX_CACHE_KEY, JSON.stringify({ savedAt: Date.now(), entries: archiveIndex }));
-                } catch (e) { /* quota or private mode; the in-memory copy still works */ }
-            } else if (!archiveIndex) {
-                archiveIndex = buildArchiveEntries(ARCHIVE_FALLBACK_PATHS);
-                archiveIndexSource = 'offline';
-            }
-            archiveIndexPromise = null;
-            return archiveIndex;
-        })();
-        return archiveIndexPromise;
+        return Promise.resolve(archiveIndex);
     }
 
     function refreshArchiveIndex() {
-        if (fe_statusElement) fe_statusElement.textContent = 'Status: refreshing archive index...';
-        loadArchiveIndex(true).then(() => { if (currentFEVfsPathId === ARCHIVES_VFS_ID) fe_refresh(); });
+        archiveIndex = buildArchiveEntries(ARCHIVE_FALLBACK_PATHS);
+        archiveIndexSource = 'local';
+        if (currentFEVfsPathId === ARCHIVES_VFS_ID) fe_refresh();
     }
 
-    // --- Archive browsing in the File Explorer --------------------------
+    // --- Files browser (single window, same as My Files) ----------------
 
     function openArchivesExplorer(dir = '') {
         openWindow('fileExplorerWindow', { vfsPathId: ARCHIVES_VFS_ID, archiveDir: dir });
     }
 
-    function navigateArchiveTo(dir) {
+    function localUpDir(dir) {
+        if (!dir) return '';
+        const idx = dir.lastIndexOf('/');
+        return idx === -1 ? '' : dir.slice(0, idx);
+    }
+
+    function navigateFilesTo(dir) {
         initFileExplorerAppForVFS({ vfsPathId: ARCHIVES_VFS_ID, archiveDir: dir });
     }
 
-    function navigateArchiveUp() {
-        if (currentArchiveDir === null) return;
-        if (!currentArchiveDir) { initFileExplorerAppForVFS({ vfsPathId: 'root' }); return; }
-        const slash = currentArchiveDir.lastIndexOf('/');
-        navigateArchiveTo(slash === -1 ? '' : currentArchiveDir.slice(0, slash));
+    // ONE go-back for everything: up one folder level. From the Files root it
+    // returns to My Files; from a My Files folder (e.g. Trash) it goes up one.
+    function navigateBack() {
+        if (currentFEVfsPathId === ARCHIVES_VFS_ID) {
+            if (currentArchiveDir) {
+                navigateFilesTo(localUpDir(currentArchiveDir));
+            } else {
+                initFileExplorerAppForVFS({ vfsPathId: 'root' });
+            }
+        } else if (currentFEVfsPathId !== 'root') {
+            const item = getVFSEntry(currentFEVfsPathId);
+            initFileExplorerAppForVFS({ vfsPathId: (item && item.parentId) ? item.parentId : 'root' });
+        }
     }
 
     // Rows created here are outside the VFS drag/multi-select system, so they
@@ -7344,137 +7366,81 @@ function initAllAiApps(){
         return (bytes / (1024 * 1024)).toFixed(1) + ' MB';
     }
 
-    function renderArchiveCrumbs() {
-        const crumbs = document.getElementById('fe_archiveCrumbs');
-        if (!crumbs) return;
-        crumbs.innerHTML = '';
-        const makeCrumb = (label, dir) => {
-            const span = document.createElement('span');
-            span.className = 'fe-crumb';
-            span.textContent = label;
-            span.addEventListener('click', () => navigateArchiveTo(dir));
-            return span;
-        };
-        crumbs.appendChild(makeCrumb('Archives', ''));
-        let acc = '';
-        (currentArchiveDir || '').split('/').filter(Boolean).forEach(part => {
-            acc = acc ? acc + '/' + part : part;
-            crumbs.appendChild(document.createTextNode(' / '));
-            crumbs.appendChild(makeCrumb(part, acc));
-        });
-    }
-
-    function renderArchiveList(searchTerm = '') {
+    function renderLocalFiles(dir = '', searchTerm = '') {
         if (!fe_fileListElement || !fe_statusElement) return;
-        if (currentArchiveDir === null) currentArchiveDir = '';
 
-        const headers = ['Name', 'Type', 'Size'];
+        const entries = buildArchiveEntries(ARCHIVE_FALLBACK_PATHS);
+        const prefix = dir ? dir + '/' : '';
+
+        fe_folderNameDisplayElement.textContent = `Folder: ${dir || 'Files (root)'}`;
         document.querySelectorAll('#fileExplorerWindow .fe-sortable-header').forEach((h, i) => {
-            let text = headers[i] || h.dataset.sortKey;
-            if (h.dataset.sortKey === fe_currentSort.key) {
-                text += fe_currentSort.dir === 'asc' ? ' \u25B2' : ' \u25BC';
-                h.classList.add('active-sort');
-            } else {
-                h.classList.remove('active-sort');
-            }
-            h.textContent = text;
+            h.textContent = ['Name', 'Type', 'Size'][i] || h.dataset.sortKey;
         });
 
-        renderArchiveCrumbs();
         fe_fileListElement.innerHTML = '';
 
-        if (!archiveIndex) {
-            const cell = fe_fileListElement.insertRow().insertCell();
-            cell.colSpan = 3;
-            cell.style.textAlign = 'center';
-            cell.style.padding = '10px';
-            cell.textContent = 'Reading the archive index from GitHub...';
-            fe_statusElement.textContent = 'Status: loading archives...';
-            loadArchiveIndex().then(() => { if (currentFEVfsPathId === ARCHIVES_VFS_ID) fe_refresh(); });
-            return;
+        // "up one folder" row — same go-back as everywhere else
+        if (dir) {
+            const row = fe_fileListElement.insertRow();
+            row.style.cursor = 'pointer';
+            row.title = 'Up one folder';
+            const up = () => navigateBack();
+            bindRowActivation(row, up);
+            row.addEventListener('click', up);
+            row.insertCell().innerHTML = '<span class="fe-item-icon">⤴️</span>..';
+            row.insertCell().textContent = 'Folder';
+            row.insertCell();
         }
 
-        const searching = !!searchTerm;
-        const prefix = currentArchiveDir ? currentArchiveDir + '/' : '';
         const folders = new Map();
         const files = [];
-
-        archiveIndex.forEach(entry => {
-            if (searching) {
-                if (entry.path.toLowerCase().includes(searchTerm)) files.push(entry);
+        entries.forEach(e => {
+            if (searchTerm) {
+                if (e.path.toLowerCase().includes(searchTerm.toLowerCase())) files.push(e);
                 return;
             }
-            if (entry.dir === currentArchiveDir) { files.push(entry); return; }
-            if (!entry.dir.startsWith(prefix)) return;
-            const child = entry.dir.slice(prefix.length).split('/')[0];
+            if (e.dir === dir) { files.push(e); return; }
+            if (!e.dir.startsWith(prefix)) return;
+            const child = e.dir.slice(prefix.length).split('/')[0];
             if (child) folders.set(child, (folders.get(child) || 0) + 1);
         });
 
-        const dirMul = fe_currentSort.dir === 'desc' ? -1 : 1;
-        const sortKey = fe_currentSort.key;
-        const folderRows = [...folders.entries()].sort((a, b) => a[0].localeCompare(b[0]) * dirMul);
-        files.sort((a, b) => {
-            if (sortKey === 'modified') return ((a.size || 0) - (b.size || 0)) * dirMul;
-            if (sortKey === 'type') {
-                const ea = a.name.split('.').pop(), eb = b.name.split('.').pop();
-                if (ea !== eb) return ea.localeCompare(eb) * dirMul;
-            }
-            return (searching ? a.path : a.name).localeCompare(searching ? b.path : b.name) * dirMul;
-        });
+        const folderNames = [...folders.keys()].sort((a, b) => a.localeCompare(b));
+        files.sort((a, b) => a.name.localeCompare(b.name));
 
-        if (!searching) {
-            const upRow = fe_fileListElement.insertRow();
-            upRow.style.cursor = 'pointer';
-            upRow.title = currentArchiveDir ? 'Up one folder' : 'Back to your local files';
-            bindRowActivation(upRow, () => navigateArchiveUp());
-            upRow.insertCell().innerHTML = '<span class="fe-item-icon">\u2934\uFE0F</span>..';
-            upRow.insertCell().textContent = currentArchiveDir ? 'Folder' : 'My Files';
-            upRow.insertCell();
-        }
-
-        folderRows.forEach(([name, count]) => {
-            const dir = prefix + name;
+        folderNames.forEach(name => {
+            const sub = dir ? dir + '/' + name : name;
             const row = fe_fileListElement.insertRow();
             row.style.cursor = 'pointer';
-            row.title = `${dir} — ${count} page${count === 1 ? '' : 's'}`;
-            bindRowActivation(row, () => navigateArchiveTo(dir));
-            row.insertCell().innerHTML = `<span class="fe-item-icon">\uD83D\uDCC1</span>${escapeArchiveText(name)}`;
+            row.title = sub;
+            bindRowActivation(row, () => navigateFilesTo(sub));
+            row.insertCell().innerHTML = `<span class="fe-item-icon">📁</span>${escapeArchiveText(name)}`;
             row.insertCell().textContent = 'Folder';
-            row.insertCell().textContent = `${count} page${count === 1 ? '' : 's'}`;
+            row.insertCell().textContent = `${folders.get(name)} file${folders.get(name) === 1 ? '' : 's'}`;
         });
 
         files.forEach(entry => {
             const row = fe_fileListElement.insertRow();
             row.style.cursor = 'pointer';
-            row.title = `${entry.path}\nDouble click to open in k8OS, middle click for a new tab`;
-            if (Number.isFinite(entry.size) && entry.size > ARCHIVE_HEAVY_BYTES) row.classList.add('fe-archive-heavy');
+            row.title = `${entry.path}\nDouble click to open`;
             bindRowActivation(row, () => openArchive(entry));
-            row.addEventListener('auxclick', (e) => {
-                if (e.button === 1) { e.preventDefault(); window.open(entry.path, '_blank', 'noopener'); }
-            });
-            row.addEventListener('click', (e) => {
-                if (e.ctrlKey || e.metaKey) { e.preventDefault(); window.open(entry.path, '_blank', 'noopener'); return; }
-                fe_fileListElement.querySelectorAll('tr.selected').forEach(r => r.classList.remove('selected'));
-                row.classList.add('selected');
-            });
-            const label = searching ? entry.path : entry.name;
-            row.insertCell().innerHTML = `<span class="fe-item-icon">\uD83C\uDF10</span>${escapeArchiveText(label)}`;
+            row.insertCell().innerHTML = `<span class="fe-item-icon">🌐</span>${escapeArchiveText(entry.name)}`;
             row.insertCell().textContent = 'HTML';
             row.insertCell().textContent = formatArchiveSize(entry.size);
         });
 
-        if (!folderRows.length && !files.length) {
-            const cell = fe_fileListElement.insertRow().insertCell();
+        if (!folderNames.length && !files.length) {
+            const row = fe_fileListElement.insertRow();
+            const cell = row.insertCell();
             cell.colSpan = 3;
             cell.style.textAlign = 'center';
             cell.style.padding = '10px';
-            cell.textContent = searching ? 'No archived page matches that.' : 'Nothing archived here.';
+            cell.textContent = searchTerm ? 'No file matches that.' : 'This folder is empty.';
         }
 
-        const sourceLabel = { github: 'live from GitHub', cached: 'cached index', offline: 'offline list' }[archiveIndexSource] || 'index';
-        fe_statusElement.textContent = searching
-            ? `Status: ${files.length} match(es) across ${archiveIndex.length} archived pages (${sourceLabel}).`
-            : `Status: ${folderRows.length} folder(s), ${files.length} page(s) — ${archiveIndex.length} archived in total (${sourceLabel}).`;
+        fe_statusElement.textContent = searchTerm
+            ? `Status: ${files.length} match(es)`
+            : `Status: ${folderNames.length} folder(s), ${files.length} file(s)`;
     }
 
     function escapeArchiveText(value) {
@@ -7487,7 +7453,6 @@ function initAllAiApps(){
 
     function generateAppIcons() {
         const launchers = K8OS_APPS.map(app => ({ appId: app.id, glyph: app.glyph, label: app.name }));
-        launchers.push({ appId: 'archivesExplorer', glyph: '\uD83D\uDDC4\uFE0F', label: 'Archives' });
 
         let added = false;
         launchers.forEach(launcher => {
@@ -7524,10 +7489,9 @@ function initAllAiApps(){
             { label: '\uD83E\uDDE9 All Programs...', run: () => openProgramsWindow('All') },
             { label: '\uD83C\uDFAE Games', run: () => openProgramsWindow('Games') },
             { label: '\uD83E\uDDE9 Apps', run: () => openProgramsWindow('Apps') },
-            { label: '\uD83D\uDDC4\uFE0F Archives', run: () => openArchivesExplorer() },
             { separator: true },
-            { label: '\uD83D\uDCC1 Files', run: () => openWindow('fileExplorerWindow', { vfsPathId: 'root' }) },
-            { label: '\uD83C\uDF10 Browser', run: () => openNewBrowserWindow() },
+            { label: '📁 My Files', run: () => openWindow('fileExplorerWindow', { vfsPathId: 'root' }) },
+            { label: '\uD83C\uDF10 Browser', run: () => openNewBrowserWindow('k8o5.html') },
             { label: '\uD83D\uDDD2\uFE0F Text Editor', run: () => openWindow('textEditorWindow') },
             { label: '\uD83D\uDCB2 Terminal', run: () => openWindow('terminalWindow') },
             { separator: true },
@@ -7570,7 +7534,7 @@ function initAllAiApps(){
             });
         }
         if (archivesItem) {
-            archivesItem.addEventListener('click', (e) => { e.stopPropagation(); closeStartMenu(); openArchivesExplorer(); });
+            archivesItem.addEventListener('click', (e) => { e.stopPropagation(); closeStartMenu(); openWindow('fileExplorerWindow', { vfsPathId: 'root' }); });
         }
         if (startButton) startButton.addEventListener('click', () => { if (programsItem) programsItem.classList.remove('open'); });
     }
@@ -7586,8 +7550,8 @@ function initAllAiApps(){
   programs [category]    - Open the Programs launcher (k8OS/Featured/Apps/Games)
   apps | games           - Jump straight to that category
   k8o5                   - Open the k8o5 universal search app
-  archives [dir]         - Browse the published GitHub pages
-  launch [path]          - Open an archived page (e.g. launch buh/games/fish.html)`,
+  files                  - Browse the site's files
+  launch [path]          - Open a file (e.g. launch games/fish.html)`,
                 success: true
             };
         },
@@ -7600,10 +7564,9 @@ function initAllAiApps(){
         apps: () => { openProgramsWindow('Apps'); return { output: 'Opening Programs (Apps)...', success: true }; },
         games: () => { openProgramsWindow('Games'); return { output: 'Opening Programs (Games)...', success: true }; },
         k8o5: () => { launchApp('app-k8o5'); return { output: 'Opening k8o5...', success: true }; },
-              archives: (args) => {
-            const dir = (args.join(' ').trim()).replace(/^\/+|\/+$/g, '');
-            openArchivesExplorer(dir);
-            return { output: `Opening Archives${dir ? ' at ' + dir : ''}...`, success: true };
+        files: () => {
+            openArchivesExplorer();
+            return { output: 'Opening Files...', success: true };
         },
         launch: (args) => {
             const target = args.join(' ').trim().replace(/^\/+/, '');
@@ -7623,14 +7586,15 @@ function initAllAiApps(){
     initSparkyEventListeners();
     generateAppIcons();
     buildStartMenuPrograms();
-    initProgramsApp();
-    // Warm the catalog so Programs and Archives open populated.
+    if (typeof initProgramsApp === 'function') initProgramsApp();
+    // Warm the catalog so Programs and Files open populated.
     loadArchiveIndex().then(() => {
-        if (document.getElementById('programsWindow').style.display === 'flex') renderPrograms();
+        const programsWindow = document.getElementById('programsWindow');
+        if (programsWindow && programsWindow.style.display === 'flex' && typeof renderPrograms === 'function') renderPrograms();
     });
 
     // Only nag about keys when none are configured; the AI apps are optional
-    // and the archives work without them.
+    // and the files browser works without them.
     const hasAnyApiKey = [
         'k8os_GlobalGeminiApiKey', 'k8os_GlobalGroqApiKey', 'k8os_GlobalOpenAIApiKey',
         'k8os_GlobalOpenRouterApiKey', 'k8os_GlobalXaiApiKey', 'k8os_GlobalDeepSeekApiKey',
