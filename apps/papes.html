@@ -1,0 +1,198 @@
+
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Sparky's Academic Paper Fetcher</title>
+    <style>
+        :root {
+            --primary: #ffcc00;
+            --secondary: #333;
+            --bg: #f4f4f9;
+            --card: #ffffff;
+        }
+        body {
+            font-family: 'Segoe UI', Tahoma, Geneva, Verdana, sans-serif;
+            background-color: var(--bg);
+            color: var(--secondary);
+            margin: 0;
+            padding: 20px;
+            display: flex;
+            flex-direction: column;
+            align-items: center;
+        }
+        .container {
+            max-width: 800px;
+            width: 100%;
+        }
+        header {
+            text-align: center;
+            margin-bottom: 30px;
+        }
+        h1 {
+            color: var(--secondary);
+            margin-bottom: 5px;
+        }
+        .sparky-logo {
+            font-size: 3rem;
+            margin: 0;
+        }
+        .search-box {
+            display: flex;
+            gap: 10px;
+            margin-bottom: 20px;
+        }
+        input[type="text"] {
+            flex-grow: 1;
+            padding: 12px;
+            border: 2px solid var(--primary);
+            border-radius: 8px;
+            outline: none;
+            font-size: 1rem;
+        }
+        button {
+            padding: 12px 24px;
+            background-color: var(--primary);
+            border: none;
+            border-radius: 8px;
+            font-weight: bold;
+            cursor: pointer;
+            transition: transform 0.1s;
+        }
+        button:active {
+            transform: scale(0.95);
+        }
+        #status {
+            text-align: center;
+            font-style: italic;
+            margin-bottom: 20px;
+            min-height: 24px;
+        }
+        .paper-card {
+            background: var(--card);
+            padding: 20px;
+            margin-bottom: 15px;
+            border-radius: 10px;
+            box-shadow: 0 4px 6px rgba(0,0,0,0.1);
+            border-left: 5px solid var(--primary);
+            animation: fadeIn 0.5s ease;
+        }
+        @keyframes fadeIn {
+            from { opacity: 0; transform: translateY(10px); }
+            to { opacity: 1; transform: translateY(0); }
+        }
+        .paper-title {
+            font-size: 1.2rem;
+            font-weight: bold;
+            margin-bottom: 8px;
+            color: #0056b3;
+            text-decoration: none;
+            display: block;
+        }
+        .paper-title:hover {
+            text-decoration: underline;
+        }
+        .paper-meta {
+            font-size: 0.9rem;
+            color: #666;
+            margin-bottom: 10px;
+        }
+        .paper-abstract {
+            font-size: 0.95rem;
+            line-height: 1.4;
+            display: -webkit-box;
+            -webkit-line-clamp: 3;
+            -webkit-box-orient: vertical;
+            overflow: hidden;
+        }
+        .badge {
+            display: inline-block;
+            background: #eee;
+            padding: 2px 8px;
+            border-radius: 4px;
+            font-size: 0.75rem;
+            margin-top: 10px;
+        }
+    </style>
+</head>
+<body>
+
+<div class="container">
+    <header>
+        <p class="sparky-logo">⚡</p>
+        <h1>Sparky's Paper Fetcher</h1>
+        <p>Retrieving Open Access academic papers via CrossRef & ArXiv</p>
+    </header>
+
+    <div class="search-box">
+        <input type="text" id="searchInput" placeholder="Enter topic (e.g. Quantum Physics, Machine Learning...)" onkeypress="if(event.key === 'Enter') fetchPapers()">
+        <button onclick="fetchPapers()">Fetch Papers</button>
+    </div>
+
+    <div id="status"></div>
+    <div id="results"></div>
+</div>
+
+<script>
+    async function fetchPapers() {
+        const query = document.getElementById('searchInput').value;
+        const resultsDiv = document.getElementById('results');
+        const statusDiv = document.getElementById('status');
+
+        if (!query) {
+            statusDiv.innerText = "Please enter a search term, friend!";
+            return;
+        }
+
+        resultsDiv.innerHTML = '';
+        statusDiv.innerText = "Sparky is scanning the digital libraries...";
+
+        try {
+            // Using CrossRef API - Open and no key required
+            const response = await fetch(`https://api.crossref.org/works?query=${encodeURIComponent(query)}&rows=20&select=title,author,DOI,container-title,published-print,URL`);
+            
+            if (!response.ok) throw new Error("Network response was not ok");
+            
+            const data = await response.json();
+            const items = data.message.items;
+
+            if (items.length === 0) {
+                statusDiv.innerText = "No papers found for that topic. Try another keyword!";
+                return;
+            }
+
+            statusDiv.innerText = `Success! I found ${items.length} academic works for you.`;
+
+            items.forEach(item => {
+                const title = item.title ? item.title[0] : "Untitled Paper";
+                const authors = item.author ? item.author.map(a => a.family).join(', ') : "Unknown Authors";
+                const journal = item['container-title'] ? item['container-title'][0] : "Academic Repository";
+                const year = item['published-print'] ? item['published-print']['date-parts'][0][0] : "N/A";
+                const link = item.URL || `https://doi.org/${item.DOI}`;
+
+                const card = document.createElement('div');
+                card.className = 'paper-card';
+                card.innerHTML = `
+                    <a href="${link}" target="_blank" class="paper-title">${title}</a>
+                    <div class="paper-meta">
+                        <strong>Authors:</strong> ${authors} <br>
+                        <strong>Source:</strong> ${journal} (${year})
+                    </div>
+                    <div class="badge">DOI: ${item.DOI}</div>
+                    <div style="margin-top:10px;">
+                        <a href="${link}" target="_blank" style="color: #ffcc00; font-weight: bold; text-decoration: none;">View Full Paper →</a>
+                    </div>
+                `;
+                resultsDiv.appendChild(card);
+            });
+
+        } catch (error) {
+            console.error(error);
+            statusDiv.innerText = "Oops! Something went wrong while fetching. The internet might be shy today.";
+        }
+    }
+</script>
+
+</body>
+</html>

@@ -1,0 +1,2231 @@
+<!DOCTYPE html>
+<html lang="en" class="h-full bg-slate-50 dark:bg-slate-950">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>LingoFlux</title>
+    <!-- Favicon: Canary Yellow Bird Icon -->
+    <link rel="icon" type="image/svg+xml" href="data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 100 100'%3E%3Crect width='100' height='100' rx='22' fill='%23ffd200'/%3E%3Cpath d='M 50,18 Q 42,2 35,8 Q 48,5 50,18 Z M 50,18 Q 58,2 65,8 Q 52,5 50,18 Z' fill='%23111827'/%3E%3Ccircle cx='35' cy='52' r='18' fill='white'/%3E%3Ccircle cx='65' cy='52' r='18' fill='white'/%3E%3Ccircle cx='35' cy='52' r='8' fill='%23111827'/%3E%3Ccircle cx='65' cy='52' r='8' fill='%23111827'/%3E%3Cpolygon points='50,60 42,72 58,72' fill='%23ff9600'/%3E%3C/svg%3E">
+    
+    <!-- Google Fonts for Typography -->
+    <link rel="preconnect" href="https://fonts.googleapis.com">
+    <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+    <link href="https://fonts.googleapis.com/css2?family=Plus+Jakarta+Sans:wght@300;400;500;600;700;800&family=Space+Grotesk:wght@500;700&display=swap" rel="stylesheet">
+    
+    <!-- Tailwind CSS -->
+    <script src="https://cdn.tailwindcss.com"></script>
+    <script>
+        tailwind.config = {
+            darkMode: 'class',
+            theme: {
+                extend: {
+                    fontFamily: {
+                        sans: ['Plus Jakarta Sans', 'sans-serif'],
+                        display: ['Space Grotesk', 'sans-serif'],
+                    },
+                    colors: {
+                        brand: {
+                            yellow: '#ffd200',
+                            darkYellow: '#cca300',
+                            blue: '#1cb0f6',
+                            orange: '#ff9600',
+                            rose: '#ea2b2b',
+                        }
+                    },
+                    boxShadow: {
+                        'premium-light': '0 8px 30px rgb(0 0 0 / 0.04)',
+                        'premium-dark': '0 8px 30px rgb(0 0 0 / 0.3)',
+                    }
+                }
+            }
+        }
+    </script>
+    <style>
+        /* Smooth Fade-in to prevent Flash of Unstyled Content (FOUC) */
+        body { 
+            opacity: 0;
+            transition: opacity 0.25s ease-in-out;
+            font-family: 'Plus Jakarta Sans', sans-serif;
+        }
+        body.loaded {
+            opacity: 1;
+        }
+        
+        .glass-panel {
+            background: rgba(255, 255, 255, 0.8);
+            backdrop-filter: blur(12px);
+            -webkit-backdrop-filter: blur(12px);
+        }
+        .dark .glass-panel {
+            background: rgba(15, 23, 42, 0.6);
+            backdrop-filter: blur(12px);
+            -webkit-backdrop-filter: blur(12px);
+        }
+
+        .ambient-grid {
+            background-size: 40px 40px;
+            background-image: radial-gradient(circle, rgba(0,0,0,0.03) 1px, transparent 1px);
+        }
+        .dark .ambient-grid {
+            background-image: radial-gradient(circle, rgba(255,255,255,0.03) 1px, transparent 1px);
+        }
+
+        .perspective-container {
+            perspective: 1000px;
+            width: 80px !important;
+            height: 80px !important;
+            min-width: 80px !important;
+            min-height: 80px !important;
+            max-width: 80px !important;
+            max-height: 80px !important;
+            display: flex;
+            align-items: center;
+            justify-content: center;
+        }
+        
+        .cube-shadow-container {
+            position: relative;
+            display: flex;
+            flex-direction: column;
+            align-items: center;
+            justify-content: center;
+            width: 80px !important;
+            height: 104px !important; /* Account for shadow offset */
+            flex-shrink: 0 !important;
+        }
+
+        /* Solid 3D Mascot Geometry - Sharp Edges with overlaps to prevent see-through slits */
+        .cube-3d {
+            width: 80px !important;
+            height: 80px !important;
+            position: relative;
+            transform-style: preserve-3d;
+            animation: spin3D 12s cubic-bezier(0.4, 0, 0.2, 1) infinite;
+        }
+
+        .face {
+            position: absolute;
+            border-radius: 0px !important; /* Sharp corners to resolve see-through edge slits */
+            display: flex;
+            align-items: center;
+            justify-content: center;
+            backface-visibility: visible;
+            box-shadow: inset 0 0 12px rgba(255,255,255,0.2);
+            outline: 1px solid transparent;
+        }
+
+        /* Solid yellow faces styling with micro outlines to block rendering gaps */
+        .front {
+            width: 80px;
+            height: 80px;
+            transform: rotateY(0deg) translateZ(12px);
+            background: #ffd200;
+            outline: 1.5px solid #ffd200;
+        }
+        .back {
+            width: 80px;
+            height: 80px;
+            transform: rotateY(180deg) translateZ(12px);
+            background: #ffd200;
+            outline: 1.5px solid #ffd200;
+        }
+        .right {
+            width: 25px; /* Sub-pixel overlap */
+            height: 80px;
+            left: 27.5px;
+            transform: rotateY(90deg) translateZ(40px);
+            background: #cca300;
+            outline: 1.5px solid #cca300;
+        }
+        .left {
+            width: 25px;
+            height: 80px;
+            left: 27.5px;
+            transform: rotateY(-90deg) translateZ(40px);
+            background: #cca300;
+            outline: 1.5px solid #cca300;
+        }
+        .top {
+            width: 80px;
+            height: 25px;
+            top: 27.5px;
+            transform: rotateX(90deg) translateZ(40px);
+            background: #ffeb60;
+            outline: 1.5px solid #ffeb60;
+        }
+        .bottom {
+            width: 80px;
+            height: 25px;
+            top: 27.5px;
+            transform: rotateX(-90deg) translateZ(40px);
+            background: #997300;
+            outline: 1.5px solid #997300;
+        }
+
+        .mascot-shadow {
+            width: 60px;
+            height: 8px;
+            background: rgba(0, 0, 0, 0.08);
+            border-radius: 50%;
+            margin-top: 16px;
+            filter: blur(4px);
+            animation: shadowScale 6s cubic-bezier(0.4, 0, 0.2, 1) infinite;
+        }
+        .dark .mascot-shadow {
+            background: rgba(0, 0, 0, 0.45);
+        }
+
+        @keyframes spin3D {
+            0% { transform: rotateX(-12deg) rotateY(0deg) translateY(0px); }
+            50% { transform: rotateX(-8deg) rotateY(180deg) translateY(-8px); }
+            100% { transform: rotateX(-12deg) rotateY(360deg) translateY(0px); }
+        }
+
+        @keyframes shadowScale {
+            0%, 100% { transform: scale(1); opacity: 1; }
+            50% { transform: scale(0.75); opacity: 0.4; }
+        }
+
+        .progress-shine {
+            background-image: linear-gradient(
+                45deg,
+                rgba(255, 255, 255, 0.15) 25%,
+                transparent 25%,
+                transparent 50%,
+                rgba(255, 255, 255, 0.15) 50%,
+                rgba(255, 255, 255, 0.15) 75%,
+                transparent 75%,
+                transparent
+            );
+            background-size: 1rem 1rem;
+            animation: progress-bar-stripes 1s linear infinite;
+        }
+
+        @keyframes progress-bar-stripes {
+            0% { background-position: 1rem 0; }
+            100% { background-position: 0 0; }
+        }
+
+        .glowing-trail {
+            filter: drop-shadow(0 0 8px rgba(252, 211, 77, 0.2));
+        }
+        .dark .glowing-trail {
+            filter: drop-shadow(0 0 12px rgba(254, 240, 138, 0.1));
+        }
+
+        .soundwave-bar {
+            width: 3px;
+            height: 15px;
+            background-color: #1cb0f6;
+            animation: bounceWave 0.8s ease-in-out infinite alternate;
+        }
+        .soundwave-bar:nth-child(2) { animation-delay: 0.15s; }
+        .soundwave-bar:nth-child(3) { animation-delay: 0.3s; }
+        .soundwave-bar:nth-child(4) { animation-delay: 0.45s; }
+
+        @keyframes bounceWave {
+            0% { height: 4px; }
+            100% { height: 24px; }
+        }
+
+        .interactive-token {
+            position: relative;
+            cursor: pointer;
+            transition: all 0.2s ease;
+            text-decoration: underline dotted #1cb0f6;
+            text-underline-offset: 4px;
+        }
+        .interactive-token:hover {
+            color: #1cb0f6;
+            background: rgba(28, 176, 246, 0.08);
+            border-radius: 4px;
+        }
+    </style>
+</head>
+<body class="h-full flex flex-col bg-slate-50/50 text-slate-900 dark:bg-slate-950 dark:text-slate-100 transition-colors duration-300 ambient-grid">
+
+    <!-- NAVIGATION HEADER -->
+    <header class="border-b border-slate-200/80 dark:border-slate-800/80 glass-panel px-6 py-4 sticky top-0 z-50 transition-all duration-300">
+        <div class="max-w-5xl mx-auto flex items-center justify-between flex-wrap gap-4">
+            <div class="flex items-center gap-3">
+                <div class="relative group cursor-pointer" onclick="showDashboard()">
+                    <div class="absolute inset-0 bg-yellow-400/20 blur-xl rounded-full opacity-0 group-hover:opacity-100 transition-opacity duration-300"></div>
+                    <svg class="w-11 h-11 relative z-10 drop-shadow-sm transform group-hover:scale-105 transition-transform" viewBox="0 0 100 100">
+                        <rect width="100" height="100" rx="26" fill="#ffd200"/>
+                        <path d="M 50,18 Q 42,2 35,8 Q 48,5 50,18 Z" fill="#1e293b"/>
+                        <circle cx="35" cy="52" r="18" fill="white"/>
+                        <circle cx="65" cy="52" r="18" fill="white"/>
+                        <circle cx="35" cy="52" r="8" fill="#1e293b"/>
+                        <circle cx="65" cy="52" r="8" fill="#1e293b"/>
+                        <polygon points="50,60 42,72 58,72" fill="#ff9600"/>
+                    </svg>
+                </div>
+                <div class="flex flex-col">
+                    <span class="font-display font-black text-2xl tracking-tight bg-gradient-to-r from-slate-900 to-slate-700 dark:from-white dark:to-slate-300 bg-clip-text text-transparent">LingoFlux</span>
+                    <span class="text-[10px] font-black uppercase tracking-widest text-brand-darkYellow dark:text-brand-yellow">Unified Platform</span>
+                </div>
+            </div>
+
+            <!-- Tab Switching Layout with translatable span fragments -->
+            <div class="flex items-center gap-1.5 bg-slate-100 dark:bg-slate-900 p-1 rounded-2xl border border-slate-200/50 dark:border-slate-800/50 order-3 md:order-2">
+                <button id="tab-map" class="px-3 py-2 text-xs font-black uppercase tracking-wider rounded-xl bg-white dark:bg-slate-800 text-slate-900 dark:text-white shadow-sm transition-all flex items-center gap-1.5" onclick="switchMainTab('map')">
+                    <span>🎯</span> <span data-ui-translate>Path Map</span>
+                </button>
+                <button id="tab-music" class="px-3 py-2 text-xs font-black uppercase tracking-wider rounded-xl text-slate-500 dark:text-slate-400 hover:text-slate-900 dark:hover:white transition-all flex items-center gap-1.5" onclick="switchMainTab('music')">
+                    <span>🎵</span> <span data-ui-translate>Music Room</span>
+                </button>
+                <button id="tab-settings" class="px-3 py-2 text-xs font-black uppercase tracking-wider rounded-xl text-slate-500 dark:text-slate-400 hover:text-slate-900 dark:hover:white transition-all flex items-center gap-1.5" onclick="switchMainTab('settings')">
+                    <span>⚙️</span> <span data-ui-translate>Settings</span>
+                </button>
+            </div>
+            
+            <div class="flex items-center gap-3 md:gap-5 order-2 md:order-3">
+                <div class="flex items-center gap-1.5 px-3 py-1.5 rounded-full bg-slate-100 dark:bg-slate-900 border border-slate-200/50 dark:border-slate-800/50 text-brand-orange hover:scale-105 transition-transform" title="Streak Duration">
+                    <svg class="w-5 h-5 fill-current" viewBox="0 0 24 24"><path d="M12 2.69c.14-.3.51-.43.8-.28.29.14.43.51.28.8C12 5.03 10 7.82 10 10.5c0 2.48 2.02 4.5 4.5 4.5s4.5-2.02 4.5-4.5c0-1.85-.92-3.48-2.31-4.46-.26-.18-.33-.54-.15-.8.18-.26.54-.33.8-.15C19.22 6.45 21 8.77 21 11.5c0 4.14-3.36 7.5-7.5 7.5S6 15.64 6 11.5c0-3.61 2.56-6.62 6-7.31z"/></svg>
+                    <span id="stat-streak" class="text-sm font-black tracking-tight">0</span>
+                </div>
+                
+                <div class="flex items-center gap-1.5 px-3 py-1.5 rounded-full bg-slate-100 dark:bg-slate-900 border border-slate-200/50 dark:border-slate-800/50 text-amber-500 hover:scale-105 transition-transform" title="XP Balance">
+                    <svg class="w-5 h-5 fill-current" viewBox="0 0 24 24"><path d="M12 2l3.09 6.26L22 9.27l-5 4.87 1.18 6.88L12 17.77l-6.18 3.25L7 14.14 2 9.27l6.91-1.01L12 2z"/></svg>
+                    <span id="stat-xp" class="text-sm font-black tracking-tight">0 XP</span>
+                </div>
+                
+                <div class="flex items-center gap-1.5 px-3 py-1.5 rounded-full bg-slate-100 dark:bg-slate-900 border border-slate-200/50 dark:border-slate-800/50 text-brand-rose hover:scale-105 transition-transform" title="Hearts Left">
+                    <svg class="w-5 h-5 fill-current" viewBox="0 0 24 24"><path d="M12 21.35l-1.45-1.32C5.4 15.36 2 12.28 2 8.5 2 5.42 4.42 3 7.5 3c1.74 0 3.41.81 4.5 2.09C13.09 3.81 14.76 3 16.5 3 19.58 3 22 5.42 22 8.5c0 3.78-3.4 6.86-8.55 11.54L12 21.35z"/></svg>
+                    <span id="stat-hearts" class="text-sm font-black tracking-tight">5</span>
+                </div>
+
+                <div class="h-6 w-px bg-slate-200 dark:bg-slate-800 hidden md:block"></div>
+
+                <button id="theme-toggle" class="p-2 rounded-xl hover:bg-slate-100 dark:hover:bg-slate-900 text-lg border border-transparent hover:border-slate-200 dark:hover:border-slate-800 transition-all duration-200" aria-label="Toggle Theme">
+                    <svg class="w-5 h-5 block dark:hidden fill-current text-slate-700" viewBox="0 0 24 24"><path d="M12,18C11.11,18 10.26,17.8 9.5,17.45C11.56,16.5 13,14.42 13,12C13,9.58 11.56,7.5 9.5,6.55C10.26,6.2 11.11,6 12,6A6,6 0 0,1 18,12A6,6 0 0,1 12,18M20,8.69V4H15.31L12,0.69L8.69,4H4V8.69L0.69,12L4,15.31V20H8.69L12,23.31L15.31,20H20V15.31L23.31,12L20,8.69Z"/></svg>
+                    <svg class="w-5 h-5 hidden dark:block fill-current text-yellow-400" viewBox="0 0 24 24"><path d="M12,18A6,6 0 0,1 6,12A6,6 0 0,1 12,6A6,6 0 0,1 18,12A6,6 0 0,1 12,18M20,8.69V4H15.31L12,0.69L8.69,4H4V8.69L0.69,12L4,15.31V20H8.69L12,23.31L15.31,20H20V15.31L23.31,12L20,8.69Z"/></svg>
+                </button>
+            </div>
+        </div>
+    </header>
+
+    <!-- MAIN APP CANVAS -->
+    <main class="flex-grow max-w-5xl w-full mx-auto p-4 md:p-8 flex flex-col justify-center transition-all duration-300">
+
+        <!-- DASHBOARD & WINDING PATH MAP -->
+        <section id="screen-dashboard" class="flex flex-col gap-8 w-full animate-[fadeIn_0.4s_ease-out]">
+            
+            <!-- Welcome Hero / Banner Card -->
+            <div class="relative overflow-hidden bg-white dark:bg-slate-900 p-6 md:p-8 rounded-3xl border border-slate-200/80 dark:border-slate-800/80 shadow-premium-light dark:shadow-premium-dark flex flex-col md:flex-row items-center gap-6 md:gap-8 transition-all">
+                <div class="absolute -right-24 -bottom-24 w-64 h-64 bg-brand-yellow/10 dark:bg-brand-yellow/5 rounded-full blur-3xl pointer-events-none"></div>
+                <div class="absolute -left-24 -top-24 w-64 h-64 bg-brand-blue/10 dark:bg-brand-blue/5 rounded-full blur-3xl pointer-events-none"></div>
+
+                <!-- Mascot with Floating Dynamics (Fully solid yellow side elements) -->
+                <div class="cube-shadow-container flex-shrink-0">
+                    <div class="perspective-container">
+                        <div class="cube-3d">
+                            <div class="face front">
+                                <svg viewBox="0 0 100 100" class="w-full h-full p-2" style="overflow: visible;">
+                                    <path d="M 50,18 Q 42,2 35,8 Q 48,5 50,18 Z" fill="#1e293b"/>
+                                    <circle cx="35" cy="52" r="18" fill="white"/>
+                                    <circle cx="65" cy="52" r="18" fill="white"/>
+                                    <circle cx="35" cy="52" r="8" fill="#1e293b"/>
+                                    <circle cx="65" cy="52" r="8" fill="#1e293b"/>
+                                    <polygon points="50,60 42,72 58,72" fill="#ff9600"/>
+                                </svg>
+                            </div>
+                            <div class="face back">
+                                <svg viewBox="0 0 100 100" class="w-full h-full p-2" style="overflow: visible;">
+                                    <path d="M 50,18 Q 42,2 35,8 Q 48,5 50,18 Z" fill="#1e293b"/>
+                                    <circle cx="35" cy="52" r="18" fill="white"/>
+                                    <circle cx="65" cy="52" r="18" fill="white"/>
+                                    <circle cx="35" cy="52" r="8" fill="#1e293b"/>
+                                    <circle cx="65" cy="52" r="8" fill="#1e293b"/>
+                                    <polygon points="50,60 42,72 58,72" fill="#ff9600"/>
+                                </svg>
+                            </div>
+                            <div class="face right" style="width: 25px; height: 80px; left: 27.5px; transform: rotateY(90deg) translateZ(40px); background: #cca300; border: 1px solid #cca300;"></div>
+                            <div class="face left" style="width: 25px; height: 80px; left: 27.5px; transform: rotateY(-90deg) translateZ(40px); background: #cca300; border: 1px solid #cca300;"></div>
+                            <div class="face top" style="width: 80px; height: 25px; top: 27.5px; transform: rotateX(90deg) translateZ(40px); background: #ffeb60; border: 1px solid #ffeb60;"></div>
+                            <div class="face bottom" style="width: 80px; height: 25px; top: 27.5px; transform: rotateX(-90deg) translateZ(40px); background: #997300; border: 1px solid #997300;"></div>
+                        </div>
+                    </div>
+                    <div class="mascot-shadow"></div>
+                </div>
+                
+                <div class="flex-grow text-center md:text-left relative z-10 max-w-xl">
+                    <h2 data-ui-translate class="text-2xl md:text-3xl font-display font-bold tracking-tight text-slate-900 dark:text-white leading-tight">Step-by-Step Language Acquisition</h2>
+                    <p data-ui-translate class="text-sm md:text-base text-slate-600 dark:text-slate-400 mt-2 leading-relaxed">Select active coordinates on the learning path. Choosing non-Latin alphabets will automatically provision the tactile canvas tracing panel.</p>
+                </div>
+            </div>
+
+            <!-- Subject & Config Grid -->
+            <div class="grid grid-cols-1 md:grid-cols-2 gap-6">
+                <!-- Select Language -->
+                <div class="bg-white dark:bg-slate-900 p-6 rounded-3xl border border-slate-200/80 dark:border-slate-800/80 shadow-premium-light dark:shadow-premium-dark flex flex-col gap-3">
+                    <div class="flex items-center gap-2">
+                        <span class="flex h-2 w-2 rounded-full bg-brand-yellow"></span>
+                        <label data-ui-translate class="text-[11px] font-black tracking-widest uppercase text-slate-400">Target Language</label>
+                    </div>
+                    <div class="relative w-full">
+                        <div class="absolute inset-y-0 left-3 flex items-center pointer-events-none">
+                            <svg class="w-5 h-5 text-slate-400" fill="none" viewBox="0 0 24 24" stroke="currentColor">
+                                <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M21 21l-6-6m2-5a7 7 0 11-14 0 7 7 0 0114 0z" />
+                            </svg>
+                        </div>
+                        <input type="text" id="lang-search-input" placeholder="Search language..." class="w-full bg-slate-50 dark:bg-slate-950 border border-slate-200 dark:border-slate-800 rounded-2xl pl-10 pr-4 py-3 font-semibold focus:outline-none focus:ring-2 focus:ring-brand-yellow/50 text-sm text-slate-900 dark:text-slate-100 transition-all">
+                        <div id="lang-dropdown-container" class="absolute left-0 right-0 top-full mt-2 max-h-60 overflow-y-auto bg-white/95 dark:bg-slate-900/95 backdrop-blur-md border border-slate-200 dark:border-slate-800 rounded-2xl shadow-xl hidden z-50 divide-y divide-slate-100 dark:divide-slate-800"></div>
+                    </div>
+                    <input type="hidden" id="select-target-lang" value="es">
+                    <input type="hidden" id="select-target-locale" value="es-ES">
+                    <div class="text-xs font-bold text-slate-400 flex items-center gap-1.5 mt-1">
+                        <span data-ui-translate>Current Target:</span>
+                        <span id="active-lang-display" class="text-brand-darkYellow dark:text-brand-yellow font-black">Spanish (Español)</span>
+                    </div>
+                </div>
+
+                <!-- Subject Topic Stream -->
+                <div class="bg-white dark:bg-slate-900 p-6 rounded-3xl border border-slate-200/80 dark:border-slate-800/80 shadow-premium-light dark:shadow-premium-dark flex flex-col gap-3">
+                    <div class="flex items-center gap-2">
+                        <span class="flex h-2 w-2 rounded-full bg-brand-blue"></span>
+                        <label data-ui-translate class="text-[11px] font-black tracking-widest uppercase text-slate-400">Context Domain Stream</label>
+                    </div>
+                    <div class="relative">
+                        <div class="absolute inset-y-0 left-3 flex items-center pointer-events-none">
+                            <svg class="w-5 h-5 text-slate-400" fill="none" viewBox="0 0 24 24" stroke="currentColor">
+                                <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M19.428 15.428a2 2 0 00-1.022-.547l-2.387-.477a6 6 0 00-3.86.517l-.318.158a6 6 0 01-3.86.517L6.05 15.21a2 2 0 00-1.806.547M8 4h8l-1 1v5.172a2 2 0 00.586 1.414l5 5c1.26 1.26.367 3.414-1.415 3.414H4.828c-1.782 0-2.674-2.154-1.414-3.414l5-5A2 2 0 009 10.172V5L8 4z" />
+                            </svg>
+                        </div>
+                        <input type="text" id="input-topic" value="Space Exploration" class="w-full bg-slate-50 dark:bg-slate-950 border border-slate-200 dark:border-slate-800 rounded-2xl pl-10 pr-4 py-3 font-semibold focus:outline-none focus:ring-2 focus:ring-brand-blue/50 text-sm text-slate-900 dark:text-slate-100 transition-all">
+                    </div>
+                    <div data-ui-translate class="text-xs font-bold text-slate-400 mt-1">
+                        Allows customized contextual paths on any thematic topic.
+                    </div>
+                </div>
+            </div>
+
+            <!-- THE WINDING GAME BOARD PATH -->
+            <div class="relative w-full py-16 bg-white dark:bg-slate-900 rounded-[32px] border border-slate-200/80 dark:border-slate-800/80 shadow-premium-light dark:shadow-premium-dark overflow-hidden flex flex-col items-center">
+                <div class="absolute inset-0 ambient-grid pointer-events-none opacity-40"></div>
+                
+                <!-- Dashed trail connection SVG line -->
+                <svg class="absolute inset-0 w-full h-full pointer-events-none glowing-trail" style="z-index: 1;">
+                    <path id="path-trail" d="" fill="none" stroke="url(#gradient-yellow-blue)" stroke-width="6" stroke-dasharray="14, 10" stroke-linecap="round"/>
+                    <defs>
+                        <linearGradient id="gradient-yellow-blue" x1="0%" y1="0%" x2="0%" y2="100%">
+                            <stop offset="0%" stop-color="#ffd200" />
+                            <stop offset="100%" stop-color="#1cb0f6" />
+                        </linearGradient>
+                    </defs>
+                </svg>
+                
+                <div id="map-nodes-container" class="relative z-10 flex flex-col items-center gap-20 w-full max-w-lg px-8">
+                    <!-- Dynamic game-islands generated here -->
+                </div>
+            </div>
+
+        </section>
+
+        <!-- MUSIC ROOM INTERACTIVE HUB -->
+        <section id="screen-music" class="hidden flex flex-col gap-6 w-full animate-[fadeIn_0.4s_ease-out]">
+            <div class="bg-gradient-to-r from-blue-600 to-indigo-700 p-8 rounded-3xl border border-blue-500/30 text-white relative overflow-hidden shadow-lg">
+                <div class="absolute -right-16 -bottom-16 w-48 h-48 bg-white/10 rounded-full blur-2xl pointer-events-none"></div>
+                <h2 data-ui-translate class="text-2xl md:text-3xl font-display font-black">LingoFlux Lyrics Laboratory</h2>
+                <p data-ui-translate class="text-sm text-blue-100 mt-2 max-w-xl">Harness original music tracks from global artists to acquire translations. Hover or click lyric tokens to dynamically review context vocabulary metrics.</p>
+                <div class="mt-6 flex flex-wrap gap-3">
+                    <input type="text" id="music-search" placeholder="Search artist, genre, track..." class="px-4 py-2.5 bg-white/10 hover:bg-white/15 focus:bg-white/20 border border-white/25 rounded-xl font-bold text-sm focus:outline-none placeholder-white/60 transition-all text-white max-w-xs">
+                    <button data-ui-translate onclick="querySongsForActiveLanguage()" class="px-5 py-2.5 bg-brand-yellow hover:bg-yellow-400 text-slate-950 font-black rounded-xl text-sm transition-all shadow-md">Find Songs</button>
+                </div>
+            </div>
+
+            <div class="grid grid-cols-1 md:grid-cols-3 gap-6">
+                <!-- Song List -->
+                <div class="bg-white dark:bg-slate-900 p-6 rounded-3xl border border-slate-200/80 dark:border-slate-800/80 shadow-sm flex flex-col gap-4">
+                    <h3 data-ui-translate class="font-display font-bold text-lg">Top Target Tracks</h3>
+                    <div id="itunes-song-list" class="flex flex-col gap-2.5 max-h-80 overflow-y-auto pr-1">
+                        <div data-ui-translate class="p-4 text-xs font-bold text-slate-400 text-center">Click "Find Songs" to load interactive previews for current target language.</div>
+                    </div>
+                </div>
+
+                <!-- Lyrics Player & Dynamic Translation Canvas -->
+                <div class="md:col-span-2 bg-white dark:bg-slate-900 p-6 rounded-3xl border border-slate-200/80 dark:border-slate-800/80 shadow-sm flex flex-col justify-between min-h-[400px]">
+                    <div>
+                        <div class="flex justify-between items-center border-b border-slate-100 dark:border-slate-800 pb-3 mb-4">
+                            <div>
+                                <h3 data-ui-translate class="font-display font-bold text-lg" id="active-track-title">Choose a track</h3>
+                                <p data-ui-translate class="text-xs text-slate-500" id="active-track-artist">Select one from list</p>
+                            </div>
+                            <!-- Live Media audio node -->
+                            <audio id="lyric-audio" controls class="hidden"></audio>
+                            <div class="flex items-center gap-2">
+                                <button id="btn-play-lyric" class="w-10 h-10 bg-brand-blue text-white rounded-full flex items-center justify-center shadow-md active:scale-95 transition-all hidden" onclick="toggleLyricAudio()">
+                                    ▶
+                                </button>
+                            </div>
+                        </div>
+
+                        <!-- Scrolled Karaoke Lyric Field -->
+                        <div id="karaoke-pane" class="flex flex-col gap-4 max-h-60 overflow-y-auto p-2 scroll-smooth">
+                            <div data-ui-translate class="text-sm font-bold text-slate-400 text-center py-10">Lyrics segment displays here. Hover individual words for dynamic tooltips.</div>
+                        </div>
+                    </div>
+
+                    <div class="mt-4 pt-4 border-t border-slate-100 dark:border-slate-800 flex justify-between items-center text-xs text-slate-400 font-bold">
+                        <span data-ui-translate>💡 Tip: Click any lyric word to load instant text-to-speech pronunciation!</span>
+                        <div class="flex items-center gap-2">
+                            <span data-ui-translate>Vocal Speed:</span>
+                            <select id="music-speech-rate" class="bg-slate-50 dark:bg-slate-950 border border-slate-200/80 dark:border-slate-800 rounded px-1.5 py-1 text-xs">
+                                <option value="1.0">⚡ 1.0x</option>
+                                <option value="0.75">🐢 0.75x</option>
+                            </select>
+                        </div>
+                    </div>
+                </div>
+            </div>
+        </section>
+
+        <!-- SETTINGS & SYNCHRONIZATION BACKUP PORTAL -->
+        <section id="screen-settings" class="hidden flex flex-col gap-6 w-full animate-[fadeIn_0.4s_ease-out]">
+            
+            <!-- Main Lang Select Config Row -->
+            <div class="bg-white dark:bg-slate-900 p-6 md:p-8 rounded-3xl border border-slate-200/80 dark:border-slate-800/80 shadow-premium-light dark:shadow-premium-dark flex flex-col gap-3">
+                <div class="flex items-center gap-2">
+                    <span class="flex h-2 w-2 rounded-full bg-brand-blue"></span>
+                    <label data-ui-translate class="text-[11px] font-black tracking-widest uppercase text-slate-400">App Interface Language (Main Language)</label>
+                </div>
+                <div class="relative w-full">
+                    <select id="select-main-lang" onchange="changeMainAppLanguage(this.value)" class="w-full bg-slate-50 dark:bg-slate-950 border border-slate-200 dark:border-slate-800 rounded-2xl px-4 py-3.5 font-semibold focus:outline-none focus:ring-2 focus:ring-brand-blue/50 text-sm text-slate-900 dark:text-slate-100 transition-all">
+                        <option value="en" selected>English</option>
+                        <!-- Options dynamically populated by Javascript -->
+                    </select>
+                </div>
+                <div data-ui-translate class="text-xs font-bold text-slate-400 mt-1">
+                    Select your native tongue. Interface tags, menus, instructions, and prompt translations dynamically localize to this language on the fly.
+                </div>
+            </div>
+
+            <div class="bg-white dark:bg-slate-900 p-6 md:p-8 rounded-3xl border border-slate-200/80 dark:border-slate-800/80 shadow-premium-light dark:shadow-premium-dark flex flex-col md:flex-row items-center gap-8 relative overflow-hidden">
+                <div class="absolute -right-24 -bottom-24 w-64 h-64 bg-brand-yellow/10 dark:bg-brand-yellow/5 rounded-full blur-3xl pointer-events-none"></div>
+                
+                <!-- QR Code Sync Field -->
+                <div class="flex flex-col items-center gap-3 bg-slate-50 dark:bg-slate-950 p-4 rounded-2xl border border-slate-200/50 dark:border-slate-800/50 flex-shrink-0">
+                    <img id="qr-backup-code" src="data:image/gif;base64,R0lGODlhAQABAAD/ACwAAAAAAQABAAACAA==" class="w-44 h-44 rounded-xl border border-slate-200 dark:border-slate-800 shadow-sm" alt="Sync QR Backup">
+                    <span data-ui-translate class="text-[10px] font-black tracking-widest uppercase text-slate-400">Scan to Sync Progress</span>
+                </div>
+
+                <div class="flex-grow flex flex-col gap-4 text-center md:text-left relative z-10">
+                    <div>
+                        <h2 data-ui-translate class="text-2xl font-display font-bold text-slate-900 dark:text-white leading-tight">Sync & Backup Portal</h2>
+                        <p data-ui-translate class="text-sm text-slate-500 dark:text-slate-400 mt-2 max-w-md">Scan this QR code with any secondary device or copy the dynamic state URL below. Your active stats, levels, languages, and XP remain preserved across environments.</p>
+                    </div>
+
+                    <div class="flex flex-col gap-2">
+                        <label data-ui-translate class="text-[10px] font-black uppercase tracking-widest text-slate-400 text-left">Dynamic Backup URL</label>
+                        <div class="flex gap-2">
+                            <input type="text" id="backup-url-input" readonly class="flex-grow bg-slate-50 dark:bg-slate-950 border border-slate-200 dark:border-slate-800 rounded-xl px-3.5 py-2.5 font-mono text-[11px] text-slate-500 select-all focus:outline-none">
+                            <button data-ui-translate onclick="copyBackupURLToClipboard()" class="px-4 py-2.5 bg-brand-blue hover:bg-sky-400 text-white font-black text-xs rounded-xl transition-all shadow-sm">Copy Link</button>
+                        </div>
+                    </div>
+                </div>
+            </div>
+            
+            <!-- Quick Reset Stats / Reset localstorage -->
+            <div class="bg-white dark:bg-slate-900 p-6 rounded-3xl border border-slate-200/80 dark:border-slate-800/80 shadow-premium-light dark:shadow-premium-dark flex flex-col md:flex-row items-center justify-between gap-4">
+                <div>
+                    <h3 data-ui-translate class="font-display font-bold text-base">Reset Learning Coordinates</h3>
+                    <p data-ui-translate class="text-xs text-slate-400 mt-1">Permanently clears your local streak metrics, languages, and level path unlocked. This action cannot be undone.</p>
+                </div>
+                <button data-ui-translate onclick="resetAppStateMetrics()" class="px-5 py-3 bg-brand-rose/10 hover:bg-brand-rose text-brand-rose hover:text-white border border-brand-rose/30 font-black text-xs rounded-xl transition-all">Clear All Data</button>
+            </div>
+        </section>
+
+        <!-- LOADING INDICATOR -->
+        <section id="screen-loading" class="hidden flex-grow flex flex-col items-center justify-center text-center gap-6 py-20 animate-[fadeIn_0.3s_ease-out]">
+            <div id="loading-mascot-container" class="perspective-container">
+                <!-- Loaded programmatically -->
+            </div>
+            <div class="flex flex-col gap-2 max-w-sm">
+                <h3 data-ui-translate class="text-xl font-display font-bold text-slate-900 dark:text-slate-100" id="loading-status-title">Assembling context...</h3>
+                <p data-ui-translate class="text-xs text-slate-500 dark:text-slate-400 leading-relaxed" id="loading-status-sub">Translating lexical items dynamically via global nodes.</p>
+                <div class="w-24 h-1.5 bg-slate-200 dark:bg-slate-800 rounded-full mx-auto mt-4 overflow-hidden">
+                    <div class="h-full bg-brand-yellow rounded-full w-2/3 animate-[pulse_1.5s_infinite]"></div>
+                </div>
+            </div>
+        </section>
+
+        <!-- ACTIVE LESSON VIEW -->
+        <section id="screen-lesson" class="hidden flex-grow flex flex-col justify-between py-2 animate-[fadeIn_0.3s_ease-out]">
+            
+            <div class="flex items-center gap-5 mb-6">
+                <button id="btn-exit" class="text-slate-400 hover:text-slate-600 dark:hover:text-slate-200 text-2xl font-black p-2 rounded-xl transition-all" aria-label="Exit current unit">✕</button>
+                <div class="flex-grow bg-slate-200 dark:bg-slate-800 h-3.5 rounded-full overflow-hidden relative">
+                    <div id="lesson-progress-bar" class="bg-gradient-to-r from-brand-yellow to-yellow-400 h-full progress-shine rounded-full transition-all duration-300 shadow-[0_0_12px_rgba(252,211,77,0.4)]" style="width: 0%"></div>
+                </div>
+                <div class="flex items-center gap-1.5 font-bold text-brand-rose px-3 py-1.5 bg-brand-rose/10 rounded-full border border-brand-rose/25">
+                    <svg class="w-5 h-5 fill-current" viewBox="0 0 24 24"><path d="M12 21.35l-1.45-1.32C5.4 15.36 2 12.28 2 8.5 2 5.42 4.42 3 7.5 3c1.74 0 3.41.81 4.5 2.09C13.09 3.81 14.76 3 16.5 3 19.58 3 22 5.42 22 8.5c0 3.78-3.4 6.86-8.55 11.54L12 21.35z"/></svg>
+                    <span id="lesson-hearts" class="text-sm font-black">5</span>
+                </div>
+            </div>
+
+            <!-- Dynamic Question Container Card Grid -->
+            <div class="flex-grow bg-white dark:bg-slate-900 border border-slate-200/80 dark:border-slate-800/80 shadow-premium-light dark:shadow-premium-dark rounded-[32px] p-6 md:p-8 flex flex-col justify-between min-h-[500px] relative overflow-hidden">
+                <div class="absolute -right-32 -bottom-32 w-80 h-80 bg-brand-blue/5 rounded-full blur-3xl pointer-events-none"></div>
+
+                <div class="flex flex-col md:flex-row gap-8 items-start w-full relative z-10">
+                    <div class="flex flex-row md:flex-col items-center gap-4 flex-shrink-0 w-full md:w-auto">
+                        <div id="lesson-mascot-container" class="w-20 h-20 md:w-24 md:h-24 flex-shrink-0 flex items-center justify-center bg-slate-50 dark:bg-slate-950 rounded-2xl p-2 border border-slate-200 dark:border-slate-800/50 shadow-inner">
+                            <!-- Loaded dynamically with 3D cube model -->
+                        </div>
+                        <div class="md:hidden text-left">
+                            <h4 class="text-xs font-black tracking-widest text-brand-blue uppercase">Instructor</h4>
+                            <p class="text-sm font-bold text-slate-500">Milo the Canary</p>
+                        </div>
+                    </div>
+                    
+                    <div id="exercise-body" class="flex-grow flex flex-col gap-6 w-full text-slate-900 dark:text-slate-100">
+                        <!-- Dynamic questions load here -->
+                    </div>
+                </div>
+
+                <!-- Footer controllers -->
+                <div class="mt-8 border-t border-slate-100 dark:border-slate-800/80 pt-6 flex flex-col md:flex-row items-center justify-between gap-4 relative z-10">
+                    <div id="feedback-message" class="text-base font-bold flex items-center gap-2.5 transition-all"></div>
+                    <div class="flex gap-4 w-full md:w-auto">
+                        <button id="btn-skip" class="flex-1 md:flex-none border border-slate-300 dark:border-slate-700 bg-transparent hover:bg-slate-50 dark:hover:bg-slate-800 font-bold px-6 py-3.5 rounded-2xl transition-all text-sm tracking-tight text-slate-600 dark:text-slate-300 active:scale-95">Skip</button>
+                        <button id="btn-submit" class="flex-1 md:flex-none bg-brand-yellow hover:bg-yellow-400 text-slate-950 font-black px-8 py-3.5 rounded-2xl transition-all text-sm tracking-tight shadow-[0_4px_0_#b38f00] active:translate-y-0.5 active:shadow-[0_2px_0_#b38f00] hover:brightness-105">Check Answer</button>
+                    </div>
+                </div>
+            </div>
+        </section>
+
+        <!-- SUMMARY REPORT -->
+        <section id="screen-summary" class="hidden text-center flex flex-col items-center justify-center gap-8 py-12 animate-[fadeIn_0.3s_ease-out]">
+            <div id="summary-mascot-container" class="perspective-container">
+                <!-- Large 3D Spinning model -->
+            </div>
+            
+            <div class="flex flex-col gap-2 max-w-md">
+                <h2 data-ui-translate class="text-3xl font-display font-black text-slate-900 dark:text-white" id="summary-title">Unit Accomplished!</h2>
+                <p data-ui-translate class="text-slate-500 dark:text-slate-400 text-sm leading-relaxed" id="summary-sub">You processed dynamic translations from direct custom subject structures.</p>
+            </div>
+            
+            <div class="grid grid-cols-2 gap-4 w-full max-w-sm">
+                <div class="bg-white dark:bg-slate-900 p-5 border border-slate-200/80 dark:border-slate-800/80 shadow-premium-light dark:shadow-premium-dark rounded-3xl">
+                    <div data-ui-translate class="text-[10px] font-black text-slate-400 uppercase tracking-widest">XP Gained</div>
+                    <div class="text-2xl font-black text-amber-500 mt-1" id="summary-xp">+25 XP</div>
+                </div>
+                <div class="bg-white dark:bg-slate-900 p-5 border border-slate-200/80 dark:border-slate-800/80 shadow-premium-light dark:shadow-premium-dark rounded-3xl">
+                    <div data-ui-translate class="text-[10px] font-black text-slate-400 uppercase tracking-widest">Streak Count</div>
+                    <div class="text-2xl font-black text-brand-orange mt-1" id="summary-streak">1 Day</div>
+                </div>
+            </div>
+
+            <button onclick="showDashboard()" class="bg-brand-yellow hover:bg-yellow-400 text-slate-950 font-black py-4 px-10 rounded-2xl shadow-[0_4px_0_#b38f00] active:translate-y-1 active:shadow-none transition-all text-sm tracking-tight">
+                Continue Path
+            </button>
+        </section>
+
+    </main>
+
+    <!-- FLOATING INTERACTIVE DICTIONARY POPUP -->
+    <div id="dictionary-tooltip" class="absolute hidden z-[100] max-w-xs bg-slate-900/95 dark:bg-slate-950/95 text-white p-4 rounded-2xl shadow-xl border border-slate-700/50 backdrop-blur-md transition-all duration-200 text-xs flex flex-col gap-2">
+        <div class="flex justify-between items-center gap-3">
+            <span id="dict-original" class="font-black text-base text-brand-yellow text-left">Word</span>
+            <button id="dict-tts-slow" class="p-1.5 bg-slate-800 hover:bg-slate-700 rounded-lg text-sm" title="Slow voice pronunciation">🐢</button>
+        </div>
+        <div class="h-px bg-slate-800"></div>
+        <p class="text-[11px] font-medium text-slate-300 leading-relaxed text-left" id="dict-definition">Translation Loading...</p>
+        <span class="text-[9px] font-black tracking-widest uppercase text-slate-500 text-left" id="dict-pronunciation">Pronunciation</span>
+    </div>
+
+    <!-- TOAST ALERTS -->
+    <div id="toast" class="fixed bottom-6 left-1/2 -translate-x-1/2 bg-slate-900/90 dark:bg-slate-800/90 backdrop-blur-md text-white text-xs font-bold tracking-tight px-5 py-3.5 rounded-2xl opacity-0 pointer-events-none transition-all duration-300 shadow-xl border border-white/10 z-50 flex items-center gap-2"></div>
+
+    <script>
+        // High-Quality Isometric Extruded Canary Yellow Mascot with solid yellow side faces
+        const MASCOT_3D_MARKUP = `<div class="cube-shadow-container">
+            <div class="cube-3d">
+                <div class="face front">
+                    <svg viewBox="0 0 100 100" class="w-full h-full p-2" style="overflow: visible;">
+                        <path d="M 50,18 Q 42,2 35,8 Q 48,5 50,18 Z" fill="#1e293b"/>
+                        <circle cx="35" cy="52" r="18" fill="white"/>
+                        <circle cx="65" cy="52" r="18" fill="white"/>
+                        <circle cx="35" cy="52" r="8" fill="#1e293b"/>
+                        <circle cx="65" cy="52" r="8" fill="#1e293b"/>
+                        <polygon points="50,60 42,72 58,72" fill="#ff9600"/>
+                    </svg>
+                </div>
+                <div class="face back">
+                    <svg viewBox="0 0 100 100" class="w-full h-full p-2" style="overflow: visible;">
+                        <path d="M 50,18 Q 42,2 35,8 Q 48,5 50,18 Z" fill="#1e293b"/>
+                        <circle cx="35" cy="52" r="18" fill="white"/>
+                        <circle cx="65" cy="52" r="18" fill="white"/>
+                        <circle cx="35" cy="52" r="8" fill="#1e293b"/>
+                        <circle cx="65" cy="52" r="8" fill="#1e293b"/>
+                        <polygon points="50,60 42,72 58,72" fill="#ff9600"/>
+                    </svg>
+                </div>
+                <div class="face right" style="width: 25px; height: 80px; left: 27.5px; transform: rotateY(90deg) translateZ(40px); background: #cca300; border: 1px solid #cca300;"></div>
+                <div class="face left" style="width: 25px; height: 80px; left: 27.5px; transform: rotateY(-90deg) translateZ(40px); background: #cca300; border: 1px solid #cca300;"></div>
+                <div class="face top" style="width: 80px; height: 25px; top: 27.5px; transform: rotateX(90deg) translateZ(40px); background: #ffeb60; border: 1px solid #ffeb60;"></div>
+                <div class="face bottom" style="width: 80px; height: 25px; top: 27.5px; transform: rotateX(-90deg) translateZ(40px); background: #997300; border: 1px solid #997300;"></div>
+            </div>
+            <div class="mascot-shadow"></div>
+        </div>`;
+
+        // Packed string of international languages
+        const COMPACT_LANGS = "Afrikaans|af|af-ZA,Arabic|ar|ar-SA,Chinese Simplified|zh-CN|zh-CN,Chinese Traditional|zh-TW|zh-TW,Croatian|hr|hr-HR,Czech|cs|cs-CZ,Danish|da|da-DK,Dutch|nl|nl-NL,Esperanto|eo|eo,Estonian|et|et-EE,Finnish|fi|fi-FI,French|fr|fr-FR,German|de|de-DE,Greek|el|el-GR,Hebrew|he|he-IL,Hindi|hi|hi-IN,Hungarian|hu|hu-HU,Icelandic|is|is-IS,Indonesian|id|id-ID,Irish|ga|ga-IE,Italian|it|it-IT,Japanese|ja|ja-JP,Korean|ko|ko-KR,Latin|la|la,Latvian|lv|lv-LV,Lithuanian|lt|lt-LT,Norwegian|no|no-NO,Polish|pl|pl-PL,Portuguese|pt|pt-PT,Romanian|ro|ro-RO,Russian|ru|ru-RU,Slovak|sk|sk-SK,Spanish|es|es-ES,Swahili|sw|sw-KE,Swedish|sv|sv-SE,Thai|th|th-TH,Turkish|tr|tr-TR,Ukrainian|uk|uk-UA,Vietnamese|vi|vi-VN,Welsh|cy|cy-GB";
+        
+        const GLOBAL_LANG_LIST = COMPACT_LANGS.split(',').map(item => {
+            const [name, code, locale] = item.split('|');
+            return { name, code, locale };
+        });
+
+        let appState = {
+            streak: 0,
+            xp: 0,
+            hearts: {},
+            unlockedLevel: 0, 
+            targetLang: 'es',
+            targetLocale: 'es-ES',
+            mainLang: 'en', // Default Main Interface/Prompts Anchor is English
+            mainLocale: 'en-US',
+            lastActiveDate: null
+        };
+
+        let activeLesson = {
+            currentIndex: 0,
+            questions: [],
+            userAnswer: '',
+            isSkipTest: false,
+            drawPoints: []
+        };
+
+        // Initialize App on DOMContentLoaded with smooth opacity fade-in to prevent FOUC
+        window.addEventListener('DOMContentLoaded', () => {
+            document.body.classList.add('loaded');
+            restoreStateFromURL();
+            loadPersistedState();
+            setupCoreListeners();
+            setupCombobox();
+            injectMascots();
+            renderMapBoard();
+            setupInteractiveDictionaryEngine();
+            populateMainLangSelector();
+            
+            window.addEventListener('resize', drawPathConnectors);
+        });
+
+        function injectMascots() {
+            document.getElementById('loading-mascot-container').innerHTML = MASCOT_3D_MARKUP;
+        }
+
+        function setupCoreListeners() {
+            document.getElementById('theme-toggle').addEventListener('click', () => {
+                document.documentElement.classList.toggle('dark');
+                localStorage.setItem('theme', document.documentElement.classList.contains('dark') ? 'dark' : 'light');
+            });
+            document.getElementById('btn-exit').addEventListener('click', () => {
+                if (confirm("Exit session? Unfinished progress won't be saved.")) showDashboard();
+            });
+            document.getElementById('btn-skip').addEventListener('click', skipQuestion);
+            document.getElementById('btn-submit').addEventListener('click', submitOrNext);
+        }
+
+        function setupCombobox() {
+            const searchInput = document.getElementById('lang-search-input');
+            const dropdown = document.getElementById('lang-dropdown-container');
+
+            renderDropdownList(GLOBAL_LANG_LIST);
+
+            searchInput.addEventListener('focus', () => dropdown.classList.remove('hidden'));
+            searchInput.addEventListener('blur', () => setTimeout(() => dropdown.classList.add('hidden'), 250));
+
+            searchInput.addEventListener('input', (e) => {
+                const term = e.target.value.toLowerCase();
+                const filtered = GLOBAL_LANG_LIST.filter(l => l.name.toLowerCase().includes(term) || l.code.toLowerCase().includes(term));
+                renderDropdownList(filtered);
+            });
+        }
+
+        function renderDropdownList(list) {
+            const dropdown = document.getElementById('lang-dropdown-container');
+            dropdown.innerHTML = '';
+            if (list.length === 0) {
+                dropdown.innerHTML = `<div class="p-3.5 text-xs text-slate-400 font-semibold">No matching languages</div>`;
+                return;
+            }
+            list.forEach(item => {
+                const opt = document.createElement('div');
+                opt.className = "p-3.5 hover:bg-slate-50 dark:hover:bg-slate-800/80 cursor-pointer font-bold text-xs md:text-sm text-slate-700 dark:text-slate-300 transition-colors flex justify-between items-center";
+                opt.innerHTML = `<span>${item.name}</span> <span class="text-xs text-slate-400 font-normal uppercase">${item.code}</span>`;
+                opt.addEventListener('mousedown', () => {
+                    document.getElementById('select-target-lang').value = item.code;
+                    document.getElementById('select-target-locale').value = item.locale;
+                    document.getElementById('lang-search-input').value = item.name;
+                    
+                    appState.targetLang = item.code;
+                    appState.targetLocale = item.locale;
+
+                    if (appState.hearts[item.code] === undefined || appState.hearts[item.code] <= 0) {
+                        appState.hearts[item.code] = 5;
+                    }
+                    savePersistedState();
+                    renderMapBoard();
+                    showToast(`Switched target to ${item.name}. Active hearts: ${appState.hearts[item.code]}`);
+                });
+                dropdown.appendChild(opt);
+            });
+        }
+
+        function populateMainLangSelector() {
+            const select = document.getElementById('select-main-lang');
+            if (select) {
+                select.innerHTML = '<option value="en">English</option>';
+                GLOBAL_LANG_LIST.forEach(l => {
+                    if (l.code !== 'en') {
+                        const opt = document.createElement('option');
+                        opt.value = l.code;
+                        opt.textContent = l.name;
+                        if (appState.mainLang === l.code) {
+                            opt.selected = true;
+                        }
+                        select.appendChild(opt);
+                    }
+                });
+            }
+        }
+
+        async function changeMainAppLanguage(newLangCode) {
+            const matched = GLOBAL_LANG_LIST.find(l => l.code === newLangCode) || { code: 'en', locale: 'en-US' };
+            appState.mainLang = matched.code;
+            appState.mainLocale = matched.locale;
+            savePersistedState();
+            
+            showToast(`Main language switched to ${matched.name || 'English'}. Interface localizing...`);
+            await translateUserInterface(appState.mainLang);
+        }
+
+        function loadPersistedState() {
+            if (localStorage.getItem('lingoflux_state')) {
+                try {
+                    appState = JSON.parse(localStorage.getItem('lingoflux_state'));
+                } catch(e) {}
+            }
+            if (localStorage.theme === 'dark' || (!('theme' in localStorage) && window.matchMedia('(prefers-color-scheme: dark)').matches)) {
+                document.documentElement.classList.add('dark');
+            } else {
+                document.documentElement.classList.remove('dark');
+            }
+            
+            if (typeof appState.hearts !== 'object' || appState.hearts === null) {
+                appState.hearts = {};
+            }
+            if (appState.unlockedLevel === undefined) {
+                appState.unlockedLevel = 0;
+            }
+            if (!appState.mainLang) {
+                appState.mainLang = 'en';
+                appState.mainLocale = 'en-US';
+            }
+
+            const activeMatch = GLOBAL_LANG_LIST.find(l => l.code === appState.targetLang);
+            if (activeMatch) {
+                document.getElementById('select-target-lang').value = activeMatch.code;
+                document.getElementById('select-target-locale').value = activeMatch.locale;
+                document.getElementById('lang-search-input').value = activeMatch.name;
+                document.getElementById('active-lang-display').textContent = `${activeMatch.name} (${activeMatch.code.toUpperCase()})`;
+            }
+
+            if (appState.hearts[appState.targetLang] === undefined) {
+                appState.hearts[appState.targetLang] = 5;
+            }
+
+            updateStatUI();
+            generateDynamicQRBackup();
+            translateUserInterface(appState.mainLang);
+        }
+
+        function savePersistedState() {
+            localStorage.setItem('lingoflux_state', JSON.stringify(appState));
+            updateStatUI();
+            generateDynamicQRBackup();
+            translateUserInterface(appState.mainLang);
+        }
+
+        function updateStatUI() {
+            const currentHearts = appState.hearts[appState.targetLang] !== undefined ? appState.hearts[appState.targetLang] : 5;
+            document.getElementById('stat-streak').textContent = appState.streak;
+            document.getElementById('stat-xp').textContent = `${appState.xp} XP`;
+            document.getElementById('stat-hearts').textContent = currentHearts;
+            document.getElementById('lesson-hearts').textContent = currentHearts;
+        }
+
+        function showDashboard() {
+            document.getElementById('screen-dashboard').classList.remove('hidden');
+            document.getElementById('screen-lesson').classList.add('hidden');
+            document.getElementById('screen-summary').classList.add('hidden');
+            document.getElementById('screen-loading').classList.add('hidden');
+            document.getElementById('screen-music').classList.add('hidden');
+            document.getElementById('screen-settings').classList.add('hidden');
+            injectMascots();
+            renderMapBoard();
+        }
+
+        function switchMainTab(tab) {
+            document.getElementById('tab-map').className = "px-3 py-2 text-xs font-black uppercase tracking-wider rounded-xl text-slate-500 dark:text-slate-400 hover:text-slate-900 dark:hover:white transition-all flex items-center gap-1.5";
+            document.getElementById('tab-music').className = "px-3 py-2 text-xs font-black uppercase tracking-wider rounded-xl text-slate-500 dark:text-slate-400 hover:text-slate-900 dark:hover:white transition-all flex items-center gap-1.5";
+            document.getElementById('tab-settings').className = "px-3 py-2 text-xs font-black uppercase tracking-wider rounded-xl text-slate-500 dark:text-slate-400 hover:text-slate-900 dark:hover:white transition-all flex items-center gap-1.5";
+
+            if (tab === 'map') {
+                document.getElementById('tab-map').className = "px-3 py-2 text-xs font-black uppercase tracking-wider rounded-xl bg-white dark:bg-slate-800 text-slate-900 dark:text-white shadow-sm transition-all flex items-center gap-1.5";
+                document.getElementById('screen-dashboard').classList.remove('hidden');
+                document.getElementById('screen-music').classList.add('hidden');
+                document.getElementById('screen-settings').classList.add('hidden');
+                document.getElementById('screen-lesson').classList.add('hidden');
+                document.getElementById('screen-summary').classList.add('hidden');
+                document.getElementById('screen-loading').classList.add('hidden');
+                setTimeout(drawPathConnectors, 100);
+            } else if (tab === 'music') {
+                document.getElementById('tab-music').className = "px-3 py-2 text-xs font-black uppercase tracking-wider rounded-xl bg-white dark:bg-slate-800 text-slate-900 dark:text-white shadow-sm transition-all flex items-center gap-1.5";
+                document.getElementById('screen-dashboard').classList.add('hidden');
+                document.getElementById('screen-music').classList.remove('hidden');
+                document.getElementById('screen-settings').classList.add('hidden');
+                document.getElementById('screen-lesson').classList.add('hidden');
+                document.getElementById('screen-summary').classList.add('hidden');
+                document.getElementById('screen-loading').classList.add('hidden');
+                querySongsForActiveLanguage();
+            } else if (tab === 'settings') {
+                document.getElementById('tab-settings').className = "px-3 py-2 text-xs font-black uppercase tracking-wider rounded-xl bg-white dark:bg-slate-800 text-slate-900 dark:text-white shadow-sm transition-all flex items-center gap-1.5";
+                document.getElementById('screen-dashboard').classList.add('hidden');
+                document.getElementById('screen-music').classList.add('hidden');
+                document.getElementById('screen-settings').classList.remove('hidden');
+                document.getElementById('screen-lesson').classList.add('hidden');
+                document.getElementById('screen-summary').classList.add('hidden');
+                document.getElementById('screen-loading').classList.add('hidden');
+                generateDynamicQRBackup();
+            }
+        }
+
+        // DYNAMIC INTERFACE LOCALIZATION ENGINE
+        async function translateUserInterface(targetLang) {
+            const elements = document.querySelectorAll('[data-ui-translate]');
+            for (let el of elements) {
+                let original = el.getAttribute('data-original-text');
+                if (!original) {
+                    original = el.textContent.trim();
+                    el.setAttribute('data-original-text', original);
+                }
+                
+                if (targetLang.startsWith('en')) {
+                    el.textContent = original;
+                    continue;
+                }
+                
+                try {
+                    const translated = await translateTextWithGoogle(original, targetLang);
+                    if (translated && translated !== original) {
+                        el.textContent = translated;
+                    }
+                } catch (e) {
+                    console.error("UI Translation failed", e);
+                }
+            }
+        }
+
+        // DYNAMIC STATE BACKUP & DESERIALIZATION GENERATORS
+        function generateDynamicQRBackup() {
+            const stateStr = btoa(JSON.stringify(appState));
+            const baseUrl = window.location.href.split('?')[0];
+            const backupUrl = `${baseUrl}?state=${stateStr}`;
+            
+            const qrImage = document.getElementById('qr-backup-code');
+            const urlInput = document.getElementById('backup-url-input');
+            
+            if (qrImage && urlInput) {
+                urlInput.value = backupUrl;
+                qrImage.src = `https://api.qrserver.com/v1/create-qr-code/?size=200x200&data=${encodeURIComponent(backupUrl)}`;
+            }
+        }
+
+        function restoreStateFromURL() {
+            const params = new URLSearchParams(window.location.search);
+            const stateParam = params.get('state');
+            if (stateParam) {
+                try {
+                    const decoded = atob(stateParam);
+                    const parsed = JSON.parse(decoded);
+                    if (parsed && typeof parsed === 'object') {
+                        appState = parsed;
+                        localStorage.setItem('lingoflux_state', JSON.stringify(appState));
+                        setTimeout(() => {
+                            showToast("Progress restored cleanly from QR backup!");
+                        }, 1000);
+                        // Clean parameter out of URL cleanly
+                        window.history.replaceState({}, document.title, window.location.pathname);
+                    }
+                } catch (e) {
+                    console.error("Progress restore failed", e);
+                }
+            }
+        }
+
+        function copyBackupURLToClipboard() {
+            const urlInput = document.getElementById('backup-url-input');
+            if (urlInput) {
+                urlInput.select();
+                document.execCommand('copy');
+                showToast("Backup link copied to clipboard!");
+            }
+        }
+
+        function resetAppStateMetrics() {
+            if (confirm("Reset everything? Your unlocked path levels and collected XP will be lost forever.")) {
+                localStorage.removeItem('lingoflux_state');
+                appState = {
+                    streak: 0,
+                    xp: 0,
+                    hearts: {},
+                    unlockedLevel: 0, 
+                    targetLang: 'es',
+                    targetLocale: 'es-ES',
+                    mainLang: 'en',
+                    mainLocale: 'en-US',
+                    lastActiveDate: null
+                };
+                savePersistedState();
+                showDashboard();
+                showToast("System metrics reset successfully.");
+            }
+        }
+
+        // GENERATE MAP AND NODES DYNAMICALLY
+        function renderMapBoard() {
+            const container = document.getElementById('map-nodes-container');
+            container.innerHTML = '';
+            
+            const totalNodes = 8;
+
+            for (let i = 0; i < totalNodes; i++) {
+                const nodeItem = document.createElement('div');
+                
+                const isSkipGate = (i > 0 && i % 3 === 0);
+                const isCompleted = i < appState.unlockedLevel;
+                const isActive = i === appState.unlockedLevel;
+                const isLocked = i > appState.unlockedLevel;
+
+                let horizontalOffset = "self-center";
+                if (i % 4 === 1) horizontalOffset = "self-start md:-translate-x-16";
+                if (i % 4 === 3) horizontalOffset = "self-end md:translate-x-16";
+
+                nodeItem.className = `relative flex flex-col items-center ${horizontalOffset}`;
+
+                let stateClasses = "";
+                if (isCompleted) {
+                    stateClasses = "bg-brand-yellow hover:bg-yellow-400 text-slate-950 shadow-[0_6px_0_#cca300] hover:-translate-y-0.5";
+                } else if (isActive) {
+                    stateClasses = "bg-brand-yellow text-slate-950 shadow-[0_6px_0_#cca300] ring-4 ring-offset-4 ring-yellow-400/50 dark:ring-offset-slate-900 animate-[bounce_2s_infinite] hover:-translate-y-0.5";
+                } else {
+                    stateClasses = "bg-slate-200 dark:bg-slate-800 text-slate-400 dark:text-slate-600 shadow-[0_6px_0_#cbd5e1] dark:shadow-[0_6px_0_#1e293b] cursor-not-allowed";
+                }
+
+                const buttonSize = isSkipGate ? "w-20 h-20" : "w-16 h-16";
+                const innerIcon = isSkipGate 
+                    ? (isCompleted ? getCheckmarkIcon() : getStarIcon())
+                    : (isCompleted ? getCheckmarkIcon() : (isLocked ? getLockIcon() : getCanaryHeadIcon()));
+
+                nodeItem.innerHTML = `
+                    <button class="${buttonSize} ${stateClasses} rounded-full flex items-center justify-center font-black text-xl transition-all cursor-pointer relative" id="node-btn-${i}" ${isLocked ? 'disabled' : ''}>
+                        ${innerIcon}
+                    </button>
+                    <span class="text-[10px] font-black mt-3.5 uppercase tracking-widest text-slate-400 dark:text-slate-500">
+                        ${isSkipGate ? 'Checkpoint' : `Level ${i + 1}`}
+                    </span>
+                `;
+
+                if (!isLocked) {
+                    nodeItem.querySelector('button').addEventListener('click', () => {
+                        triggerBoardNodeLesson(i, isSkipGate);
+                    });
+                }
+
+                container.appendChild(nodeItem);
+            }
+
+            setTimeout(drawPathConnectors, 150);
+        }
+
+        function drawPathConnectors() {
+            const pathEl = document.getElementById('path-trail');
+            const container = document.getElementById('map-nodes-container');
+            const btns = container.querySelectorAll('button');
+            if (btns.length === 0) return;
+
+            let pathD = "";
+            btns.forEach((btn, idx) => {
+                const rect = btn.getBoundingClientRect();
+                const containerRect = container.parentNode.getBoundingClientRect();
+                const x = rect.left + rect.width / 2 - containerRect.left;
+                const y = rect.top + rect.height / 2 - containerRect.top;
+
+                if (idx === 0) {
+                    pathD += `M ${x} ${y}`;
+                } else {
+                    const prevRect = btns[idx - 1].getBoundingClientRect();
+                    const prevX = prevRect.left + prevRect.width / 2 - containerRect.left;
+                    const prevY = prevRect.top + prevRect.height / 2 - containerRect.top;
+                    
+                    const midY = (prevY + y) / 2;
+                    pathD += ` C ${prevX} ${midY}, ${x} ${midY}, ${x} ${y}`;
+                }
+            });
+
+            pathEl.setAttribute('d', pathD);
+        }
+
+        function getCheckmarkIcon() {
+            return `<svg class="w-6 h-6 fill-current" viewBox="0 0 24 24"><path d="M9 16.17L4.83 12l-1.42 1.41L9 19 21 7l-1.41-1.41z"/></svg>`;
+        }
+        function getLockIcon() {
+            return `<svg class="w-5 h-5 fill-current opacity-60" viewBox="0 0 24 24"><path d="M18 8h-1V6c0-2.76-2.24-5-5-5S7 3.24 7 6v2H6c-1.1 0-2 .9-2 2v10c0 1.1.9 2 2 2h12c1.1 0 2-.9 2-2V10c0-1.1-.9-2-2-2zm-6 9c-1.1 0-2-.9-2-2s.9-2 2-2 2 .9 2 2-.9 2-2 2zm3.1-9H8.9V6c0-1.71 1.39-3.1 3.1-3.1 1.71 0 3.1 1.39 3.1 3.1v2z"/></svg>`;
+        }
+        function getStarIcon() {
+            return `<svg class="w-7 h-7 fill-current text-slate-800 dark:text-slate-100" viewBox="0 0 24 24"><path d="M12 2l3.09 6.26L22 9.27l-5 4.87 1.18 6.88L12 17.77l-6.18 3.25L7 14.14 2 9.27l6.91-1.01L12 2z"/></svg>`;
+        }
+        function getCanaryHeadIcon() {
+            return `<svg class="w-9 h-9" viewBox="0 0 100 100">
+                <circle cx="50" cy="50" r="40" fill="#ffd200"/>
+                <circle cx="35" cy="45" r="12" fill="white"/>
+                <circle cx="65" cy="45" r="12" fill="white"/>
+                <circle cx="35" cy="45" r="5" fill="#1e293b"/>
+                <circle cx="65" cy="45" r="5" fill="#1e293b"/>
+                <polygon points="50,52 42,65 58,65" fill="#ff9600"/>
+            </svg>`;
+        }
+
+        function triggerBoardNodeLesson(levelIdx, isSkipGate) {
+            if (isSkipGate) {
+                if (confirm(`Do you wish to launch the Checkpoint Challenge? Bypass Unit ${levelIdx} instantly!`)) {
+                    launchPracticeModule(levelIdx, true);
+                }
+            } else {
+                launchPracticeModule(levelIdx, false);
+            }
+        }
+
+        // SOUND SYNTHESIS
+        function playTone(freqs, type = 'sine', dur = 0.15, interval = 0) {
+            try {
+                const AudioContext = window.AudioContext || window.webkitAudioContext;
+                if (!AudioContext) return;
+                const ctx = new AudioContext();
+                freqs.forEach((freq, i) => {
+                    const osc = ctx.createOscillator();
+                    const gain = ctx.createGain();
+                    osc.type = type;
+                    osc.frequency.setValueAtTime(freq, ctx.currentTime + (i * interval));
+                    gain.gain.setValueAtTime(0.12, ctx.currentTime + (i * interval));
+                    gain.gain.exponentialRampToValueAtTime(0.0001, ctx.currentTime + (i * interval) + dur);
+                    osc.connect(gain);
+                    gain.connect(ctx.destination);
+                    osc.start(ctx.currentTime + (i * interval));
+                    osc.stop(ctx.currentTime + (i * interval) + dur);
+                });
+            } catch(e){}
+        }
+
+        function playCorrectSound() { playTone([523, 659, 783], 'sine', 0.25, 0.08); }
+        function playWrongSound() { playTone([220, 180], 'triangle', 0.3, 0.06); }
+
+        // TEXT TO SPEECH SPEECH ENGINE
+        function speak(text, langCode, rate = 1.0) {
+            if ('speechSynthesis' in window) {
+                window.speechSynthesis.cancel();
+                const u = new SpeechSynthesisUtterance(text);
+                u.lang = langCode;
+                u.rate = parseFloat(rate);
+                
+                const voices = window.speechSynthesis.getVoices();
+                const matchingVoice = voices.find(v => v.lang.startsWith(langCode));
+                if (matchingVoice) u.voice = matchingVoice;
+
+                const wave = document.getElementById('vocal-wave-indicator');
+                if (wave) wave.classList.remove('hidden');
+
+                u.onend = () => {
+                    if (wave) wave.classList.add('hidden');
+                };
+                window.speechSynthesis.speak(u);
+            }
+        }
+
+        // FREE GOOGLE TRANSLATE API FETCH
+        async function translateTextWithGoogle(text, targetLang) {
+            try {
+                const res = await fetch(`https://translate.googleapis.com/translate_a/single?client=gtx&sl=en&tl=${targetLang}&dt=t&q=${encodeURIComponent(text)}`);
+                if (res.ok) {
+                    const data = await res.json();
+                    if (data && data[0]) {
+                        return data[0].map(segment => segment[0]).join('').trim();
+                    }
+                }
+            } catch (e) {
+                console.error("Translation engine failed", e);
+            }
+            return text;
+        }
+
+        // Google Translate targetLang to English translation
+        async function translateForeignToEnglish(text, foreignLang) {
+            try {
+                const res = await fetch(`https://translate.googleapis.com/translate_a/single?client=gtx&sl=${foreignLang}&tl=en&dt=t&q=${encodeURIComponent(text)}`);
+                if (res.ok) {
+                    const data = await res.json();
+                    if (data && data[0]) {
+                        return data[0].map(segment => segment[0]).join('').trim();
+                    }
+                }
+            } catch (e) {
+                console.error("Translation segment lookup failed", e);
+            }
+            return text;
+        }
+
+        function sanitizeWordTranslation(translated, originalEnglish) {
+            if (!translated) return "";
+            if (translated.toLowerCase().replace(/\s+/g,'') === originalEnglish.toLowerCase().replace(/\s+/g,'')) {
+                return "";
+            }
+            let cleaned = translated.split(/[,;\/()]/)[0].trim();
+            cleaned = cleaned.replace(/\.$/, "");
+            return cleaned;
+        }
+
+        function segmentSentence(sentence, langCode) {
+            if (typeof Intl !== 'undefined' && Intl.Segmenter) {
+                const segmenter = new Intl.Segmenter(langCode, { granularity: 'word' });
+                return Array.from(segmenter.segment(sentence))
+                    .map(seg => seg.segment.trim())
+                    .filter(val => val.length > 0 && !/^[.,\/#!$%\^&\*;:{}=\-_~()?¿¡"'\s]+$/.test(val));
+            } else {
+                const clean = sentence.replace(/[.,\/#!$%\^&\*;:{}=\-_`~()?¿¡"'\s。、！？]/g, "");
+                if (langCode.startsWith('zh') || langCode.startsWith('ja') || langCode.startsWith('th')) {
+                    return clean.split('');
+                }
+                return sentence.split(/\s+/)
+                    .map(w => w.replace(/[.,\/#!$%\^&\*;:{}=\-_`~()?¿¡"']/g, ""))
+                    .filter(w => w.length > 0);
+            }
+        }
+
+        // Programmatic lyric/clause trimmer to cap scramble tiles at a maximum of 10 words
+        function cleanAndTruncateSentence(s) {
+            let cleaned = s.replace(/\[\d+\]/g, "")
+                           .replace(/\([^)]*\)/g, "")
+                           .replace(/\s+/g, " ")
+                           .trim();
+            
+            // Split by clause to avoid massive segments (escaped correctly)
+            const parts = cleaned.split(/[,;:]| and | und | but | aber | 對外 | 探索 /i);
+            const firstPartWords = parts[0].split(/\s+/);
+            
+            if (firstPartWords.length >= 4 && firstPartWords.length <= 10) {
+                return parts[0].trim();
+            }
+            
+            const words = cleaned.split(/\s+/);
+            if (words.length > 10) {
+                return words.slice(0, 10).join(" ").trim() + ".";
+            }
+            return cleaned;
+        }
+
+        async function fetchDynamicTopicSentences(topic) {
+            let cleanTopic = topic.trim() || "Language learning";
+            
+            try {
+                const searchUrl = `https://en.wikipedia.org/w/api.php?action=query&list=search&srsearch=${encodeURIComponent(cleanTopic)}&format=json&origin=*`;
+                const searchRes = await fetch(searchUrl);
+                if (searchRes.ok) {
+                    const searchData = await searchRes.json();
+                    if (searchData.query && searchData.query.search && searchData.query.search.length > 0) {
+                        const titles = searchData.query.search.slice(0, 3).map(item => item.title);
+                        let fetchedSentences = [];
+                        
+                        for (let title of titles) {
+                            const pageUrl = `https://en.wikipedia.org/api/rest_v1/page/summary/${encodeURIComponent(title.replace(/\s+/g, '_'))}`;
+                            const pageRes = await fetch(pageUrl);
+                            if (pageRes.ok) {
+                                const pageData = await pageRes.json();
+                                if (pageData.extract) {
+                                    const parsed = pageData.extract
+                                        .split(/[.!?]+/)
+                                        .map(s => cleanAndTruncateSentence(s))
+                                        .filter(s => s.length > 10 && s.length < 90);
+                                    fetchedSentences.push(...parsed);
+                                }
+                            }
+                        }
+                        
+                        if (fetchedSentences.length >= 3) {
+                            return fetchedSentences.slice(0, 5);
+                        }
+                    }
+                }
+            } catch (e) {
+                console.warn("Wikipedia lookup failed, trying direct summary endpoint", e);
+            }
+
+            try {
+                const pageUrl = `https://en.wikipedia.org/api/rest_v1/page/summary/${encodeURIComponent(cleanTopic.replace(/\s+/g, '_'))}`;
+                const res = await fetch(pageUrl);
+                if (res.ok) {
+                    const data = await res.json();
+                    if (data.extract) {
+                        return data.extract
+                            .split(/[.!?]+/)
+                            .map(s => cleanAndTruncateSentence(s))
+                            .filter(s => s.length > 10 && s.length < 90)
+                            .slice(0, 5);
+                    }
+                }
+            } catch (e) {
+                console.warn("Direct Wikipedia REST lookup failed", e);
+            }
+
+            try {
+                const randomUrl = `https://en.wikipedia.org/api/rest_v1/page/random/summary`;
+                const res = await fetch(randomUrl);
+                if (res.ok) {
+                    const data = await res.json();
+                    if (data.extract) {
+                        return data.extract
+                            .split(/[.!?]+/)
+                            .map(s => cleanAndTruncateSentence(s))
+                            .filter(s => s.length > 10 && s.length < 90)
+                            .slice(0, 5);
+                    }
+                }
+            } catch (e) {
+                console.error("Wikipedia Random API summary lookup failed", e);
+            }
+
+            return [
+                `The concepts behind ${cleanTopic} have evolved significantly throughout historical research.`,
+                `Modern studies on ${cleanTopic} demonstrate clear practical applications for global users.`,
+                `Analyzing ${cleanTopic} helps establish foundational theoretical models for future systems.`,
+                `An integrated approach to ${cleanTopic} is essential to maximize overall operational performance.`,
+                `Researchers continue to investigate ${cleanTopic} to discover hidden correlations.`
+            ].map(s => cleanAndTruncateSentence(s));
+        }
+
+        // DYNAMIC ACQUISITION ENGINE (With fully protected try-catch wrappers)
+        async function launchPracticeModule(levelIdx, isSkipTest) {
+            try {
+                const currentHearts = appState.hearts[appState.targetLang] !== undefined ? appState.hearts[appState.targetLang] : 5;
+                if (currentHearts <= 0 && !isSkipTest) {
+                    showToast("Your hearts are depleted! Checkpoint Challenges do not require active life tokens.");
+                    return;
+                }
+
+                const rawTopic = document.getElementById('input-topic').value.trim();
+                const targetLang = document.getElementById('select-target-lang').value;
+                const targetLocale = document.getElementById('select-target-locale').value;
+                const mainLang = appState.mainLang || 'en';
+
+                // Toggle dynamic loading visibility
+                document.getElementById('screen-dashboard').classList.add('hidden');
+                document.getElementById('screen-music').classList.add('hidden');
+                document.getElementById('screen-settings').classList.add('hidden');
+                const loadingScreen = document.getElementById('screen-loading');
+                loadingScreen.classList.remove('hidden');
+
+                const statusTitle = document.getElementById('loading-status-title');
+                const statusSub = document.getElementById('loading-status-sub');
+
+                statusTitle.textContent = isSkipTest ? "Initializing Checkpoint Challenge..." : `Streaming contextual path for "${rawTopic}"...`;
+                statusSub.textContent = "Analyzing structure maps and validating lexicon structures.";
+
+                let rawSentences = await fetchDynamicTopicSentences(rawTopic);
+
+                statusTitle.textContent = "Generating lexical nodes...";
+                let candidateWords = [];
+                rawSentences.forEach(s => {
+                    s.split(/\s+/).forEach(w => {
+                        let clean = w.replace(/[\s.,\/#!$%\^&\*;:{}=\-_~()?¿¡"']/g, "").trim();
+                        if (clean.length > 5 && !candidateWords.includes(clean)) {
+                            candidateWords.push(clean);
+                        }
+                    });
+                });
+
+                let vocabPairs = [];
+                for (let word of candidateWords) {
+                    if (vocabPairs.length >= 3) break;
+                    const rawTranslated = await translateTextWithGoogle(word, targetLang);
+                    const cleaned = sanitizeWordTranslation(rawTranslated, word);
+                    if (cleaned && cleaned.length > 0) {
+                        // Translate standard English vocabulary to user's native tongue
+                        let nativeWord = word;
+                        if (mainLang !== 'en') {
+                            nativeWord = await translateTextWithGoogle(word, mainLang);
+                        }
+                        vocabPairs.push({ en: word, native: nativeWord, foreign: cleaned });
+                    }
+                }
+
+                if (vocabPairs.length === 0) {
+                    vocabPairs.push({ en: "Exercise", native: "Exercise", foreign: targetLang === 'de' ? "Übung" : "Translation" });
+                }
+
+                statusTitle.textContent = "Translating text arrays...";
+                const processedSentences = [];
+                const level2Alignments = [];
+
+                for (let i = 0; i < rawSentences.length; i++) {
+                    const eng = rawSentences[i];
+                    try {
+                        const translatedText = await translateTextWithGoogle(eng, targetLang);
+                        
+                        let nativeSent = eng;
+                        if (mainLang !== 'en') {
+                            nativeSent = await translateTextWithGoogle(eng, mainLang);
+                        }
+                        processedSentences.push({ english: eng, native: nativeSent, foreign: translatedText });
+
+                        if (level2Alignments.length < 2) {
+                            const engWords = eng.split(/\s+/);
+                            if (engWords.length > 3) {
+                                const subEng = engWords.slice(0, 3).join(' ');
+                                const rawSubForeign = await translateTextWithGoogle(subEng, targetLang);
+                                const cleanedSub = sanitizeWordTranslation(rawSubForeign, subEng);
+                                if (cleanedSub && cleanedSub.length > 0) {
+                                    let nativeSub = subEng;
+                                    if (mainLang !== 'en') {
+                                        nativeSub = await translateTextWithGoogle(subEng, mainLang);
+                                    }
+                                    level2Alignments.push({ english: subEng, native: nativeSub, foreign: cleanedSub });
+                                }
+                            }
+                        }
+                    } catch(err) {
+                        console.error("Dynamic segment translation error", err);
+                    }
+                }
+
+                activeLesson.isSkipTest = isSkipTest;
+                activeLesson.questions = assembleHumanCurriculum(vocabPairs, level2Alignments, processedSentences, targetLang, targetLocale);
+                activeLesson.currentIndex = 0;
+
+                loadingScreen.classList.add('hidden');
+                document.getElementById('screen-lesson').classList.remove('hidden');
+                renderActiveQuestion();
+            } catch (err) {
+                console.error("Practice module failed to load", err);
+                showToast("Failed to initialize practice context. Please try again.");
+                showDashboard();
+            }
+        }
+
+        function assembleHumanCurriculum(vocabPairs, level2Alignments, sentencePairs, targetLang, locale) {
+            let questions = [];
+
+            const NON_LATIN_LANGS = ['zh', 'ja', 'ko', 'ru', 'el', 'ar', 'he', 'hi', 'th', 'uk', 'bg', 'sr'];
+            const isNonLatin = NON_LATIN_LANGS.some(lang => targetLang.startsWith(lang));
+
+            vocabPairs.forEach(pair => {
+                let options = [pair.foreign];
+                vocabPairs.forEach(p => { if (p.foreign !== pair.foreign && options.length < 3) options.push(p.foreign); });
+                while (options.length < 3) {
+                    options.push(targetLang === 'de' ? "Ablauf" : "Structure");
+                }
+                options.sort(() => 0.5 - Math.random());
+
+                questions.push({
+                    format: 'choice',
+                    prompt: `Match the concepts: "${pair.native || pair.en}"`,
+                    correctAnswer: pair.foreign,
+                    options: options,
+                    locale: locale
+                });
+
+                if (isNonLatin && pair.foreign && pair.foreign.length > 0) {
+                    const glyphToDraw = pair.foreign.charAt(0);
+                    questions.push({
+                        format: 'drawing',
+                        prompt: `Trace character: "${glyphToDraw}"`,
+                        targetChar: glyphToDraw,
+                        locale: locale
+                    });
+                }
+            });
+
+            level2Alignments.forEach(alignment => {
+                const scrambled = segmentSentence(alignment.foreign, targetLang);
+                questions.push({
+                    format: 'scramble',
+                    prompt: `Structure prefix of: "${alignment.native || alignment.english}..."`,
+                    englishSource: (alignment.native || alignment.english) + "...",
+                    correctSentence: alignment.foreign,
+                    scrambledChips: scrambled.sort(() => 0.5 - Math.random()),
+                    locale: locale
+                });
+            });
+
+            sentencePairs.slice(0, 3).forEach(pair => {
+                const scrambled = segmentSentence(pair.foreign, targetLang);
+                questions.push({
+                    format: 'scramble',
+                    prompt: "Translate complete sentence hierarchy",
+                    englishSource: pair.native || pair.english,
+                    correctSentence: pair.foreign,
+                    scrambledChips: scrambled.sort(() => 0.5 - Math.random()),
+                    locale: locale
+                });
+            });
+
+            sentencePairs.slice(1, 3).forEach(pair => {
+                questions.push({
+                    format: 'listening',
+                    prompt: "Synthesized audio dictation sequence",
+                    spokenText: pair.foreign,
+                    englishTranslation: pair.native || pair.english,
+                    locale: locale
+                });
+            });
+
+            sentencePairs.slice(2, 4).forEach((pair, idx) => {
+                let options = [pair.foreign];
+                sentencePairs.forEach(p => {
+                    if (p.foreign !== pair.foreign && options.length < 3) {
+                        options.push(p.foreign);
+                    }
+                });
+                while (options.length < 3) {
+                    options.push("Alternative translation pattern sequence");
+                }
+                options.sort(() => 0.5 - Math.random());
+
+                questions.push({
+                    format: 'choice',
+                    prompt: `Choose translation for: "${pair.native || pair.english}"`,
+                    correctAnswer: pair.foreign,
+                    options: options,
+                    locale: locale
+                });
+            });
+
+            return questions;
+        }
+
+        function renderActiveQuestion() {
+            const q = activeLesson.questions[activeLesson.currentIndex];
+            const container = document.getElementById('exercise-body');
+            container.innerHTML = '';
+
+            document.getElementById('lesson-mascot-container').innerHTML = MASCOT_3D_MARKUP;
+
+            document.getElementById('feedback-message').className = "text-base font-bold flex items-center gap-2.5";
+            document.getElementById('feedback-message').innerHTML = "";
+            
+            const submitBtn = document.getElementById('btn-submit');
+            submitBtn.textContent = "Check Answer";
+            submitBtn.className = "flex-1 md:flex-none bg-brand-yellow hover:bg-yellow-400 text-slate-950 font-black px-8 py-3.5 rounded-2xl transition-all text-sm tracking-tight shadow-[0_4px_0_#b38f00] active:translate-y-0.5 active:shadow-[0_2px_0_#b38f00] hover:brightness-105";
+
+            const progress = (activeLesson.currentIndex / activeLesson.questions.length) * 100;
+            document.getElementById('lesson-progress-bar').style.width = `${progress}%`;
+
+            const header = document.createElement('div');
+            header.className = "flex flex-col gap-1.5";
+            header.innerHTML = `
+                <div class="flex items-center gap-3">
+                    <span class="text-[10px] font-black tracking-widest uppercase text-brand-blue">Active Component ${activeLesson.currentIndex + 1} of ${activeLesson.questions.length}</span>
+                    <div id="vocal-wave-indicator" class="hidden flex items-end gap-0.5 h-6">
+                        <span class="soundwave-bar"></span>
+                        <span class="soundwave-bar"></span>
+                        <span class="soundwave-bar"></span>
+                        <span class="soundwave-bar"></span>
+                    </div>
+                </div>
+                <h2 class="text-xl md:text-2xl font-display font-bold text-slate-900 dark:text-white leading-tight">
+                    ${tokenizeTextToHTML(q.prompt, appState.mainLang)}
+                </h2>
+            `;
+            container.appendChild(header);
+            
+            // Bind active hovers to headers so translation is always active
+            bindTokensInContainer(header);
+
+            activeLesson.userAnswer = '';
+
+            if (q.format === 'scramble') {
+                renderScrambleWorkspace(q, container);
+            } else if (q.format === 'listening') {
+                renderListeningWorkspace(q, container);
+            } else if (q.format === 'choice') {
+                renderChoiceWorkspace(q, container);
+            } else if (q.format === 'drawing') {
+                renderDrawingWorkspace(q, container);
+            }
+        }
+
+        function renderScrambleWorkspace(q, container) {
+            const contextCard = document.createElement('div');
+            contextCard.className = "p-5 bg-slate-50 dark:bg-slate-950/60 border border-slate-200/80 dark:border-slate-800/80 rounded-2xl text-sm md:text-base font-medium italic text-slate-500 dark:text-slate-400 leading-relaxed";
+            contextCard.textContent = `"${q.englishSource}"`;
+            container.appendChild(contextCard);
+
+            const workspace = document.createElement('div');
+            workspace.className = "flex flex-wrap gap-2.5 min-h-[64px] p-4 bg-slate-50/50 dark:bg-slate-950/20 border-b-2 border-dashed border-slate-200 dark:border-slate-800 rounded-2xl mb-2";
+            workspace.id = "workspace-chips";
+            container.appendChild(workspace);
+
+            const bank = document.createElement('div');
+            bank.className = "flex flex-wrap gap-2.5 justify-center mt-6";
+            
+            q.scrambledChips.forEach((word, idx) => {
+                const btn = document.createElement('button');
+                btn.className = "px-4 py-2.5 border border-slate-200 dark:border-slate-800 bg-white dark:bg-slate-900 font-bold rounded-xl hover:border-slate-300 dark:hover:border-slate-700 active:translate-y-0.5 transition-all text-xs md:text-sm text-slate-800 dark:text-slate-200 shadow-sm";
+                btn.textContent = word;
+                btn.dataset.id = idx;
+                
+                attachDictionaryTooltip(btn, word);
+
+                btn.addEventListener('click', () => {
+                    if (btn.classList.contains('opacity-35')) {
+                        btn.classList.remove('opacity-35');
+                        const targetItem = workspace.querySelector(`[data-bank-id="${idx}"]`);
+                        if (targetItem) targetItem.remove();
+                    } else {
+                        btn.classList.add('opacity-35');
+                        const added = document.createElement('span');
+                        added.className = "px-4 py-2 bg-brand-blue text-white rounded-xl font-bold cursor-pointer hover:bg-opacity-95 text-xs md:text-sm shadow-sm flex items-center gap-1 animate-[fadeIn_0.2s_ease-out] interactive-token";
+                        added.textContent = word;
+                        added.dataset.bankId = idx;
+                        added.dataset.clean = word.replace(/[\s.,\/#!$%\^&\*;:{}=\-_~()?¿¡"']/g, "");
+                        
+                        // Bind active real-time tooltip to workspace tokens
+                        attachDictionaryTooltip(added, added.dataset.clean);
+
+                        added.addEventListener('click', () => {
+                            btn.classList.remove('opacity-35');
+                            added.remove();
+                            rebuildAnswersFromWorkspace();
+                        });
+                        workspace.appendChild(added);
+                    }
+                    rebuildAnswersFromWorkspace();
+                });
+                bank.appendChild(btn);
+            });
+            container.appendChild(bank);
+        }
+
+        function rebuildAnswersFromWorkspace() {
+            const targetLang = document.getElementById('select-target-lang').value;
+            const list = Array.from(document.getElementById('workspace-chips').querySelectorAll('span')).map(el => el.textContent);
+            if (targetLang.startsWith('zh') || targetLang.startsWith('ja') || targetLang.startsWith('th')) {
+                activeLesson.userAnswer = list.join('');
+            } else {
+                activeLesson.userAnswer = list.join(' ');
+            }
+        }
+
+        function renderListeningWorkspace(q, container) {
+            const audioWrapper = document.createElement('div');
+            audioWrapper.className = "flex flex-col items-center justify-center py-4 gap-3";
+
+            const btnSpeak = document.createElement('button');
+            btnSpeak.className = "w-20 h-20 bg-brand-blue text-white rounded-full flex items-center justify-center stroke-none shadow-[0_5px_0_#0f8ecb] hover:brightness-105 active:translate-y-1 active:shadow-none transition-all";
+            btnSpeak.innerHTML = `<svg viewBox="0 0 24 24" class="w-10 h-10 fill-current"><path d="M14,3.23V5.29C16.89,6.15 19,8.83 19,12C19,15.17 16.89,17.85 14,18.71V20.77C18.01,19.86 21,16.28 21,12C21,7.72 18.01,4.14 14,3.23M16.5,12C16.5,10.23 15.5,8.71 14,7.97V16C15.5,15.29 16.5,13.77 16.5,12M11,2H9C7.89,2 7,2.89 7,4V9H4C2.89,9 2,9.89 2,11V13C2,14.11 2.89,15 4,15H7V20C7,21.11 7.89,22 9,22H11C11.55,22 12,21.55 12,21V3C12,2.45 11.55,2 11,2M10,20H9V4H10V20Z"/></svg>`;
+            btnSpeak.addEventListener('click', () => speak(q.spokenText, q.locale));
+            audioWrapper.appendChild(btnSpeak);
+
+            const hint = document.createElement('span');
+            hint.className = "text-xs font-black text-slate-400 uppercase tracking-widest";
+            hint.textContent = "Tap sound to play context audio";
+            audioWrapper.appendChild(hint);
+
+            const inputField = document.createElement('input');
+            inputField.type = "text";
+            inputField.placeholder = "Write context transcription...";
+            inputField.className = "w-full max-w-lg mt-4 px-4 py-3 border-2 border-slate-200 dark:border-slate-800 bg-slate-50 dark:bg-slate-950 rounded-xl font-bold focus:outline-none focus:border-brand-darkYellow text-center text-slate-900 dark:text-slate-100";
+            inputField.addEventListener('input', (e) => {
+                activeLesson.userAnswer = e.target.value.trim();
+            });
+            audioWrapper.appendChild(inputField);
+
+            container.appendChild(audioWrapper);
+            setTimeout(() => speak(q.spokenText, q.locale), 400);
+        }
+
+        function renderChoiceWorkspace(q, container) {
+            const listWrapper = document.createElement('div');
+            listWrapper.className = "flex flex-col gap-3 mt-4";
+
+            q.options.forEach(opt => {
+                const btn = document.createElement('button');
+                btn.className = "w-full text-left p-4 rounded-xl border-2 border-b-4 border-slate-200 dark:border-slate-800 hover:border-brand-yellow hover:bg-slate-50 dark:hover:bg-slate-900 font-bold select-choice transition-all text-slate-800 dark:text-slate-200 bg-white dark:bg-slate-900 text-sm md:text-base leading-relaxed animate-[fadeIn_0.2s_ease-out]";
+                
+                btn.innerHTML = tokenizeTextToHTML(opt, appState.targetLang);
+                bindTokensInContainer(btn);
+
+                btn.addEventListener('click', (e) => {
+                    if (e.target.classList.contains('interactive-token')) return;
+
+                    document.querySelectorAll('.select-choice').forEach(b => {
+                        b.classList.remove(
+                            'border-brand-yellow', 'dark:border-brand-yellow', 
+                            'bg-yellow-500/10', 'dark:bg-yellow-500/20', 
+                            'ring-2', 'ring-brand-yellow', 'scale-[1.01]'
+                        );
+                    });
+                    btn.classList.add(
+                        'border-brand-yellow', 'dark:border-brand-yellow', 
+                        'bg-yellow-500/10', 'dark:bg-yellow-500/20', 
+                        'ring-2', 'ring-brand-yellow', 'scale-[1.01]'
+                    );
+                    activeLesson.userAnswer = opt;
+                });
+                listWrapper.appendChild(btn);
+            });
+            container.appendChild(listWrapper);
+        }
+
+        function renderDrawingWorkspace(q, container) {
+            const canvasWrapper = document.createElement('div');
+            canvasWrapper.className = "flex flex-col items-center gap-4 mt-2 w-full animate-[fadeIn_0.2s_ease-out]";
+
+            const infoNode = document.createElement('p');
+            infoNode.className = "text-sm text-slate-500 dark:text-slate-400 font-bold text-center";
+            infoNode.textContent = "Trace directly inside the drawing pad following the ghost shape guide.";
+            canvasWrapper.appendChild(infoNode);
+
+            const canvas = document.createElement('canvas');
+            canvas.width = 280;
+            canvas.height = 280;
+            canvas.className = "bg-slate-50 dark:bg-slate-900 border-4 border-dashed border-slate-200 dark:border-slate-800 rounded-3xl cursor-crosshair shadow-inner";
+            
+            const ctx = canvas.getContext('2d');
+            canvasWrapper.appendChild(canvas);
+
+            function drawCanvasGrid() {
+                ctx.clearRect(0,0,280,280);
+                
+                ctx.strokeStyle = '#cbd5e1';
+                if (document.documentElement.classList.contains('dark')) ctx.strokeStyle = '#334155';
+                ctx.lineWidth = 1.5;
+                ctx.setLineDash([5, 5]);
+                
+                ctx.beginPath();
+                ctx.moveTo(140, 0); ctx.lineTo(140, 280);
+                ctx.moveTo(0, 140); ctx.lineTo(280, 140);
+                ctx.stroke();
+                ctx.setLineDash([]); 
+
+                ctx.fillStyle = '#cbd5e1';
+                if (document.documentElement.classList.contains('dark')) ctx.fillStyle = '#334155';
+                ctx.font = "190px sans-serif, 'Noto Sans', Arial";
+                ctx.textAlign = 'center';
+                ctx.textBaseline = 'middle';
+                ctx.fillText(q.targetChar, 140, 140);
+            }
+
+            drawCanvasGrid();
+
+            let drawing = false;
+            ctx.lineWidth = 12;
+            ctx.lineCap = 'round';
+            ctx.strokeStyle = '#cca300'; 
+
+            function startDraw(e) {
+                drawing = true;
+                ctx.beginPath();
+                const pos = getPos(e);
+                ctx.moveTo(pos.x, pos.y);
+                activeLesson.drawPoints.push(pos);
+            }
+
+            function draw(e) {
+                if (!drawing) return;
+                const pos = getPos(e);
+                ctx.lineTo(pos.x, pos.y);
+                ctx.stroke();
+                activeLesson.drawPoints.push(pos);
+                activeLesson.userAnswer = "drawn_active";
+            }
+
+            function stopDraw() {
+                drawing = false;
+                ctx.closePath();
+            }
+
+            function getPos(e) {
+                const rect = canvas.getBoundingClientRect();
+                const clientX = e.touches ? e.touches[0].clientX : e.clientX;
+                const clientY = e.touches ? e.touches[0].clientY : e.clientY;
+                return {
+                    x: clientX - rect.left,
+                    y: clientY - rect.top
+                };
+            }
+
+            canvas.addEventListener('mousedown', startDraw);
+            canvas.addEventListener('mousemove', draw);
+            canvas.addEventListener('mouseup', stopDraw);
+            canvas.addEventListener('mouseleave', stopDraw);
+
+            canvas.addEventListener('touchstart', (e) => { e.preventDefault(); startDraw(e); });
+            canvas.addEventListener('touchmove', (e) => { e.preventDefault(); draw(e); });
+            canvas.addEventListener('touchend', stopDraw);
+
+            const clearBtn = document.createElement('button');
+            clearBtn.className = "px-4 py-2 border-2 border-b-4 border-slate-300 dark:border-slate-800 hover:bg-slate-100 dark:hover:bg-slate-800 rounded-xl font-bold text-xs transition-all";
+            clearBtn.textContent = "Clear Sheet";
+            clearBtn.addEventListener('click', () => {
+                drawCanvasGrid();
+                activeLesson.drawPoints = [];
+                activeLesson.userAnswer = '';
+            });
+            canvasWrapper.appendChild(clearBtn);
+
+            container.appendChild(canvasWrapper);
+
+            activeLesson.activeCanvas = canvas;
+            activeLesson.activeChar = q.targetChar;
+        }
+
+        // ==========================================
+        // AAA DYNAMIC INTERACTIVE DICTIONARY POPUP
+        // ==========================================
+        let dictDebounceTimeout = null;
+
+        function setupInteractiveDictionaryEngine() {
+            const tooltip = document.getElementById('dictionary-tooltip');
+            const slowBtn = document.getElementById('dict-tts-slow');
+
+            slowBtn.addEventListener('click', () => {
+                const word = document.getElementById('dict-original').textContent;
+                speak(word, appState.targetLang, 0.6); 
+            });
+
+            document.addEventListener('click', (e) => {
+                if (!tooltip.contains(e.target) && !e.target.classList.contains('interactive-token')) {
+                    tooltip.classList.add('hidden');
+                }
+            });
+        }
+
+        // Segment text string into clean word segments dynamically based on target language
+        function tokenizeTextToHTML(text, langCode) {
+            if (!text) return "";
+            
+            // Han characters & Japanese layouts split beautifully via native Intl.Segmenter
+            if (typeof Intl !== 'undefined' && Intl.Segmenter) {
+                try {
+                    const segmenter = new Intl.Segmenter(langCode || 'en', { granularity: 'word' });
+                    const segments = Array.from(segmenter.segment(text));
+                    return segments.map(seg => {
+                        const word = seg.segment;
+                        if (/^\s+$/.test(word) || /^[.,\/#!$%\^&\*;:{}=\-_~()?¿¡"']+$/.test(word)) {
+                            return word;
+                        }
+                        return `<span class="interactive-token" data-clean="${word.replace(/[\s.,\/#!$%\^&\*;:{}=\-_~()?¿¡"']/g, "")}">${word}</span>`;
+                    }).join('');
+                } catch (e) {}
+            }
+            
+            // Standard space division fallback
+            const words = text.split(/(\s+)/);
+            return words.map(chunk => {
+                if (chunk.trim().length === 0) return chunk;
+                const clean = chunk.replace(/[\s.,\/#!$%\^&\*;:{}=\-_~()?¿¡"']/g, "").trim();
+                return `<span class="interactive-token" data-clean="${clean}">${chunk}</span>`;
+            }).join('');
+        }
+
+        function bindTokensInContainer(container) {
+            container.querySelectorAll('.interactive-token').forEach(token => {
+                attachDictionaryTooltip(token, token.dataset.clean);
+            });
+        }
+
+        function attachDictionaryTooltip(element, cleanWord) {
+            element.addEventListener('mouseenter', (e) => {
+                clearTimeout(dictDebounceTimeout);
+                dictDebounceTimeout = setTimeout(() => {
+                    positionAndShowTooltip(e.target, cleanWord);
+                }, 350); 
+            });
+
+            element.addEventListener('click', (e) => {
+                e.stopPropagation();
+                clearTimeout(dictDebounceTimeout);
+                positionAndShowTooltip(e.target, cleanWord);
+                speak(cleanWord, appState.targetLang, 1.0); 
+            });
+        }
+
+        async function positionAndShowTooltip(targetEl, word) {
+            const tooltip = document.getElementById('dictionary-tooltip');
+            const originalField = document.getElementById('dict-original');
+            const defField = document.getElementById('dict-definition');
+            const prField = document.getElementById('dict-pronunciation');
+
+            originalField.textContent = word;
+            defField.textContent = "Loading translation...";
+            prField.textContent = "Loading IPA...";
+
+            const rect = targetEl.getBoundingClientRect();
+            
+            // Mathematically exact absolute coordinates to prevent offset errors
+            const tooltipWidth = tooltip.offsetWidth || 240;
+            const tooltipHeight = tooltip.offsetHeight || 120;
+            const top = rect.top + window.scrollY - tooltipHeight - 12; 
+            const left = rect.left + window.scrollX - (tooltipWidth / 2) + (rect.width / 2);
+
+            tooltip.style.top = `${Math.max(10, top)}px`;
+            tooltip.style.left = `${Math.max(10, left)}px`;
+            tooltip.classList.remove('hidden');
+
+            try {
+                // Step 1: Query the Google Translation to find the direct main language meaning
+                const translation = await translateForeignToEnglish(word, appState.targetLang);
+                
+                // Translate word translation to app main language if different from English
+                let mainTranslation = translation;
+                if (appState.mainLang !== 'en') {
+                    mainTranslation = await translateTextWithGoogle(translation, appState.mainLang);
+                }
+
+                // Step 2: Query the Free Dictionary API to get the dictionary definition of the translated word
+                let dictionaryDetail = "";
+                try {
+                    const dictRes = await fetch(`https://api.dictionaryapi.dev/api/v2/entries/en/${encodeURIComponent(translation.toLowerCase())}`);
+                    if (dictRes.ok) {
+                        const dictData = await dictRes.json();
+                        if (dictData && dictData[0] && dictData[0].meanings && dictData[0].meanings[0]) {
+                            const firstDefinition = dictData[0].meanings[0].definitions[0].definition;
+                            dictionaryDetail = firstDefinition;
+                            
+                            // Translate English definition back to user main language if different
+                            if (appState.mainLang !== 'en') {
+                                dictionaryDetail = await translateTextWithGoogle(dictionaryDetail, appState.mainLang);
+                            }
+                        }
+                    }
+                } catch (e) {
+                    console.warn("Free Dictionary API lookup failed", e);
+                }
+
+                // Step 3: Render beautifully with both translation and descriptive explanation
+                if (dictionaryDetail) {
+                    defField.innerHTML = `
+                        <div class="flex flex-col gap-1 text-[11px]">
+                            <span class="font-extrabold text-white text-xs">"${mainTranslation}"</span>
+                            <span class="text-slate-400 italic font-medium leading-relaxed mt-0.5">${dictionaryDetail}</span>
+                        </div>
+                    `;
+                } else {
+                    defField.innerHTML = `<span class="font-extrabold text-white">"${mainTranslation}"</span>`;
+                }
+                
+                if (appState.targetLang === 'zh-CN' || appState.targetLang === 'zh-TW') {
+                    prField.textContent = "Hanyu Pinyin system lookup";
+                } else if (appState.targetLang === 'ja') {
+                    prField.textContent = "Kana phonetic syllabary";
+                } else {
+                    prField.textContent = `${appState.targetLang.toUpperCase()} Phonetic Matrix`;
+                }
+            } catch (err) {
+                defField.textContent = "Dynamic query offline.";
+            }
+        }
+
+        // ==========================================
+        // INTERACTIVE MUSIC LYRICS LAB ENGINE
+        // ==========================================
+        async function querySongsForActiveLanguage() {
+            const activeLangObj = GLOBAL_LANG_LIST.find(l => l.code === appState.targetLang);
+            const queryName = activeLangObj ? activeLangObj.name : "Spanish";
+            const customQuery = document.getElementById('music-search').value.trim();
+            const searchQuery = customQuery || `top pop ${queryName}`;
+
+            const container = document.getElementById('itunes-song-list');
+            container.innerHTML = `
+                <div class="p-6 flex flex-col items-center justify-center gap-2">
+                    <div class="w-6 h-6 border-2 border-brand-blue border-t-transparent rounded-full animate-spin"></div>
+                    <span class="text-xs font-bold text-slate-400">Searching iTunes catalog...</span>
+                </div>
+            `;
+
+            try {
+                const res = await fetch(`https://itunes.apple.com/search?term=${encodeURIComponent(searchQuery)}&media=music&limit=6&origin=*`);
+                if (res.ok) {
+                    const data = await res.json();
+                    container.innerHTML = '';
+                    
+                    if (data.results && data.results.length > 0) {
+                        data.results.forEach(track => {
+                            const item = document.createElement('div');
+                            item.className = "p-3 bg-slate-50 dark:bg-slate-950 border border-slate-100 dark:border-slate-800 rounded-2xl hover:border-brand-blue cursor-pointer transition-all flex items-center gap-3";
+                            item.innerHTML = `
+                                <img src="${track.artworkUrl60}" class="w-10 h-10 rounded-xl" alt="Artwork">
+                                <div class="flex-grow min-w-0">
+                                    <h4 class="font-bold text-xs text-slate-800 dark:text-slate-100 truncate">${track.trackName}</h4>
+                                    <p class="text-[10px] font-medium text-slate-500 truncate">${track.artistName}</p>
+                                </div>
+                            `;
+                            item.addEventListener('click', () => loadInteractiveTrack(track));
+                            container.appendChild(item);
+                        });
+                    } else {
+                        container.innerHTML = `<div class="p-4 text-xs font-bold text-slate-400 text-center">No track results found. Try alternative keywords.</div>`;
+                    }
+                }
+            } catch (e) {
+                container.innerHTML = `<div class="p-4 text-xs font-bold text-slate-400 text-center">Network search offline.</div>`;
+            }
+        }
+
+        async function loadInteractiveTrack(track) {
+            document.getElementById('active-track-title').textContent = track.trackName;
+            document.getElementById('active-track-artist').textContent = track.artistName;
+
+            const playBtn = document.getElementById('btn-play-lyric');
+            const audioNode = document.getElementById('lyric-audio');
+
+            audioNode.src = track.previewUrl;
+            playBtn.classList.remove('hidden');
+            playBtn.textContent = "▶";
+
+            const lyricPane = document.getElementById('karaoke-pane');
+            lyricPane.innerHTML = `
+                <div class="p-6 flex flex-col items-center justify-center gap-2">
+                    <div class="w-6 h-6 border-2 border-brand-yellow border-t-transparent rounded-full animate-spin"></div>
+                    <span class="text-xs font-bold text-slate-400">Synthesizing dynamic foreign translation arrays...</span>
+                </div>
+            `;
+
+            const lyricsData = await generateProgrammaticTrackLyrics(track.trackName, track.artistName);
+            lyricPane.innerHTML = '';
+
+            lyricsData.forEach((line, index) => {
+                const block = document.createElement('div');
+                block.className = "p-3 bg-slate-50/50 dark:bg-slate-950/20 border border-slate-100 dark:border-slate-800 rounded-xl hover:bg-slate-50 dark:hover:bg-slate-800/50 transition-all cursor-pointer flex flex-col gap-1";
+                
+                block.innerHTML = `
+                    <p class="text-sm md:text-base font-black tracking-tight leading-relaxed select-none">${tokenizeTextToHTML(line.foreign, appState.targetLang)}</p>
+                    <span class="text-xs font-medium text-slate-400 italic">${line.english}</span>
+                `;
+                
+                bindTokensInContainer(block);
+
+                block.addEventListener('click', (e) => {
+                    if (e.target.classList.contains('interactive-token')) return;
+                    const speed = document.getElementById('music-speech-rate').value;
+                    speak(line.foreign, appState.targetLang, speed);
+                });
+
+                lyricPane.appendChild(block);
+            });
+        }
+
+        async function generateProgrammaticTrackLyrics(trackName, artistName) {
+            const englishBasePoem = [
+                `We walk under the shining stars together tonight.`,
+                `My heart beats with joy when you call my name.`,
+                `The river flows quietly towards the blue ocean.`,
+                `Time changes everything but this memory will remain forever.`,
+                `Let the music carry our dreams across the high mountains.`
+            ];
+
+            let translations = [];
+            for (let line of englishBasePoem) {
+                const foreignText = await translateTextWithGoogle(line, appState.targetLang);
+                
+                let nativeText = line;
+                if (appState.mainLang !== 'en') {
+                    nativeText = await translateTextWithGoogle(line, appState.mainLang);
+                }
+                translations.push({
+                    english: nativeText,
+                    foreign: foreignText
+                });
+            }
+            return translations;
+        }
+
+        function toggleLyricAudio() {
+            const audio = document.getElementById('lyric-audio');
+            const playBtn = document.getElementById('btn-play-lyric');
+
+            if (audio.paused) {
+                audio.play();
+                playBtn.textContent = "⏸";
+            } else {
+                audio.pause();
+                playBtn.textContent = "▶";
+            }
+        }
+
+        function skipQuestion() {
+            verifySubmission(false, "Skipped!");
+        }
+
+        function submitOrNext() {
+            const btn = document.getElementById('btn-submit');
+            if (btn.textContent === "Next Lesson Component") {
+                advanceToNext();
+                return;
+            }
+
+            const q = activeLesson.questions[activeLesson.currentIndex];
+            if (!activeLesson.userAnswer || activeLesson.userAnswer.trim() === '') {
+                showToast("Please provide your answer selection first!");
+                return;
+            }
+
+            let correct = false;
+
+            if (q.format === 'drawing') {
+                correct = checkHandwritingTrace();
+                verifySubmission(correct, correct ? "Excellent stroke accuracy!" : "Traced line-density mismatch. Try again.");
+                return;
+            }
+
+            let expected = (q.correctAnswer || q.correctSentence || q.spokenText).trim();
+
+            if (normalizeStr(activeLesson.userAnswer) === normalizeStr(expected)) {
+                correct = true;
+            }
+
+            verifySubmission(correct, correct ? "Correct! Good translation syntax." : `Incorrect. Correct: "${expected}"`);
+        }
+
+        // Helper string normalizer
+        function normalizeStr(val) {
+            if (!val) return '';
+            return val.toLowerCase()
+                .replace(/[\s.,\/#!$%\^&\*;:{}=\-_~()?¿¡"']/g, "")
+                .trim();
+        }
+
+        // Bounding box heuristic handwriting overlap calculator
+        function checkHandwritingTrace() {
+            const canvas = activeLesson.activeCanvas;
+            const targetChar = activeLesson.activeChar;
+            if (!canvas || !targetChar) return false;
+
+            const size = 32;
+            const tempCanvas = document.createElement('canvas');
+            tempCanvas.width = size;
+            tempCanvas.height = size;
+            const tempCtx = tempCanvas.getContext('2d');
+
+            tempCtx.fillStyle = 'black';
+            tempCtx.font = `${size * 0.8}px sans-serif, 'Noto Sans', Arial`;
+            tempCtx.textAlign = 'center';
+            tempCtx.textBaseline = 'middle';
+            tempCtx.fillText(targetChar, size/2, size/2);
+
+            const targetImg = tempCtx.getImageData(0,0,size,size);
+
+            tempCtx.clearRect(0,0,size,size);
+            tempCtx.drawImage(canvas, 0,0,size,size);
+            const userImg = tempCtx.getImageData(0,0,size,size);
+
+            let overlapMatch = 0;
+            let targetPoints = 0;
+            let userPoints = 0;
+
+            for (let i = 3; i < targetImg.data.length; i += 4) {
+                const isTarget = targetImg.data[i] > 30; 
+                const isUser = userImg.data[i] > 30;
+                if (isTarget) targetPoints++;
+                if (isUser) userPoints++;
+                if (isTarget && isUser) overlapMatch++;
+            }
+
+            if (userPoints < 10) return false;
+
+            const ratio = overlapMatch / targetPoints;
+            return ratio > 0.20;
+        }
+
+        function verifySubmission(correct, outputMessage) {
+            const feed = document.getElementById('feedback-message');
+            const submit = document.getElementById('btn-submit');
+            const mascotBox = document.getElementById('lesson-mascot-container');
+
+            if (correct) {
+                playCorrectSound();
+                mascotBox.querySelector('.cube-3d').style.animationPlayState = 'paused';
+                feed.className = "text-base font-extrabold text-green-600 dark:text-green-400 flex items-center gap-2";
+                feed.innerHTML = `
+                    <svg class="w-6 h-6 fill-current" viewBox="0 0 24 24"><path d="M9 16.17L4.83 12l-1.42 1.41L9 19 21 7l-1.41-1.41z"/></svg>
+                    <span>${outputMessage}</span>
+                `;
+            } else {
+                playWrongSound();
+                mascotBox.querySelector('.cube-3d').style.animationPlayState = 'paused';
+                feed.className = "text-base font-extrabold text-brand-rose flex items-center gap-2";
+                feed.innerHTML = `
+                    <svg class="w-6 h-6 fill-current text-brand-rose" viewBox="0 0 24 24"><path d="M19 6.41L17.59 5 12 10.59 6.41 5 5 6.41 10.59 12 5 17.59 6.41 19 12 13.41 17.59 19 19 17.59 13.41 12z"/></svg>
+                    <span>${outputMessage}</span>
+                `;
+                
+                if (!activeLesson.isSkipTest) {
+                    appState.hearts[appState.targetLang]--;
+                    if (appState.hearts[appState.targetLang] < 0) appState.hearts[appState.targetLang] = 0;
+                    savePersistedState();
+
+                    if (appState.hearts[appState.targetLang] <= 0) {
+                        setTimeout(() => {
+                            alert("No remaining life left. Returning to learning map.");
+                            showDashboard();
+                        }, 1200);
+                        return;
+                    }
+                }
+            }
+
+            submit.textContent = "Next Lesson Component";
+            submit.className = "flex-1 md:flex-none bg-slate-800 dark:bg-slate-200 text-white dark:text-slate-900 font-black px-8 py-3.5 rounded-2xl transition-all shadow-none active:translate-y-0.5";
+        }
+
+        function advanceToNext() {
+            activeLesson.currentIndex++;
+            if (activeLesson.currentIndex >= activeLesson.questions.length) {
+                finalizeLessonModule();
+            } else {
+                renderActiveQuestion();
+            }
+        }
+
+        function finalizeLessonModule() {
+            const todayStr = new Date().toDateString();
+            if (appState.lastActiveDate !== todayStr) {
+                appState.streak++;
+                appState.lastActiveDate = todayStr;
+            }
+            appState.xp += 25;
+
+            if (activeLesson.isSkipTest) {
+                appState.unlockedLevel = Math.min(8, appState.unlockedLevel + 3);
+                document.getElementById('summary-title').textContent = "Checkpoint Bypassed!";
+                document.getElementById('summary-sub').textContent = "Excellent job! Your Skip Challenge was successful. Next Unit modules are now fully unlocked.";
+            } else {
+                appState.unlockedLevel = Math.min(8, appState.unlockedLevel + 1);
+                document.getElementById('summary-title').textContent = "Level Unlocked!";
+                document.getElementById('summary-sub').textContent = "You processed dynamic translations on the map board successfully.";
+            }
+
+            savePersistedState();
+
+            document.getElementById('summary-xp').textContent = "+25 XP";
+            document.getElementById('summary-streak').textContent = `${appState.streak} Day${appState.streak !== 1 ? 's' : ''}`;
+            document.getElementById('summary-mascot-container').innerHTML = MASCOT_3D_MARKUP;
+
+            document.getElementById('screen-lesson').classList.add('hidden');
+            document.getElementById('screen-summary').classList.remove('hidden');
+        }
+    </script>
+</body>
+</html>

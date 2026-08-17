@@ -1,0 +1,800 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>P2P File Transfer</title>
+    <!-- Tailwind CSS for UI styling -->
+    <script src="https://cdn.tailwindcss.com"></script>
+    <!-- Lucide Icons -->
+    <script src="https://unpkg.com/lucide@latest"></script>
+    <!-- PeerJS for WebRTC abstraction -->
+    <script src="https://unpkg.com/peerjs@1.4.7/dist/peerjs.min.js"></script>
+    <!-- QRious for QR Code generation -->
+    <script src="https://cdnjs.cloudflare.com/ajax/libs/qrious/4.0.2/qrious.min.js"></script>
+    <!-- HTML5-QRCode for browser-based QR scanning -->
+    <script src="https://unpkg.com/html5-qrcode"></script>
+    <style>
+        .drag-over {
+            border-color: #6366f1 !important;
+            background-color: rgba(99, 102, 241, 0.05);
+        }
+    </style>
+</head>
+<body class="bg-slate-900 text-slate-100 min-h-screen flex flex-col justify-between font-sans">
+
+    <!-- Header -->
+    <header class="border-b border-slate-800 bg-slate-900/50 backdrop-blur-md sticky top-0 z-10">
+        <div class="max-w-4xl mx-auto px-4 py-4 flex justify-between items-center">
+            <div class="flex items-center gap-2">
+                <i data-lucide="shuffle" class="text-indigo-500 w-6 h-6"></i>
+                <span class="font-bold text-xl tracking-tight">P2P Share</span>
+            </div>
+            <span class="text-xs bg-slate-800 text-slate-400 px-2.5 py-1 rounded-full border border-slate-700 flex items-center gap-1.5">
+                <span class="w-2 h-2 rounded-full bg-emerald-500 animate-pulse"></span> Direct Connection
+            </span>
+        </div>
+    </header>
+
+    <!-- Main Content Area -->
+    <main class="max-w-xl w-full mx-auto px-4 py-8 flex-grow flex flex-col justify-center">
+        <div class="bg-slate-800/50 border border-slate-700/50 rounded-2xl p-6 shadow-xl backdrop-blur-sm min-h-[400px] flex flex-col justify-between">
+            
+            <!-- VIEW: Home (Choice) -->
+            <div id="view-home" class="space-y-6 my-auto">
+                <div class="text-center space-y-2">
+                    <h1 class="text-2xl font-semibold">Share Files Privately</h1>
+                    <p class="text-slate-400 text-sm max-w-sm mx-auto">Transfer files directly between devices without storing them on a third-party server.</p>
+                </div>
+                <div class="grid grid-cols-1 sm:grid-cols-2 gap-4">
+                    <button id="btn-choose-send" class="flex flex-col items-center justify-center p-6 bg-indigo-600 hover:bg-indigo-500 transition-colors rounded-xl gap-3 font-medium shadow-lg shadow-indigo-500/10">
+                        <i data-lucide="upload-cloud" class="w-8 h-8"></i>
+                        <span>Send Files</span>
+                    </button>
+                    <button id="btn-choose-receive" class="flex flex-col items-center justify-center p-6 bg-slate-700 hover:bg-slate-600 transition-colors rounded-xl gap-3 font-medium border border-slate-600/50">
+                        <i data-lucide="download-cloud" class="w-8 h-8"></i>
+                        <span>Receive Files</span>
+                    </button>
+                </div>
+            </div>
+
+            <!-- VIEW: Send - File Selection -->
+            <div id="view-send-select" class="hidden space-y-6">
+                <div class="flex items-center gap-2 text-slate-400 text-sm">
+                    <button class="btn-back hover:text-white flex items-center gap-1">
+                        <i data-lucide="arrow-left" class="w-4 h-4"></i> Back
+                    </button>
+                </div>
+                <h2 class="text-xl font-semibold">Select files to transfer</h2>
+                <div id="drop-zone" class="border-2 border-dashed border-slate-600 rounded-xl p-8 text-center cursor-pointer hover:border-indigo-500 transition-colors flex flex-col items-center justify-center gap-3">
+                    <i data-lucide="file-plus" class="w-12 h-12 text-slate-500"></i>
+                    <div>
+                        <p class="font-medium text-slate-200">Drag & drop files here</p>
+                        <p class="text-xs text-slate-400 mt-1">or click to browse your system (supports multiple files)</p>
+                    </div>
+                    <input type="file" id="file-input" class="hidden" multiple>
+                </div>
+                <div id="selected-file-info" class="hidden bg-slate-900/50 border border-slate-700/50 rounded-lg p-4 space-y-3">
+                    <p class="text-xs font-semibold uppercase tracking-wider text-slate-500">Selected Files</p>
+                    <div id="selected-files-list" class="max-h-40 overflow-y-auto space-y-1.5 pr-1">
+                        <!-- Dynamic items -->
+                    </div>
+                    <div class="flex items-center justify-between pt-2 border-t border-slate-800">
+                        <span id="selected-files-summary" class="text-xs text-slate-400">0 files • 0 Bytes</span>
+                        <button id="btn-start-share" class="bg-indigo-600 hover:bg-indigo-500 text-sm font-medium px-4 py-2 rounded-lg transition-colors flex items-center gap-1.5 flex-shrink-0">
+                            Next <i data-lucide="chevron-right" class="w-4 h-4"></i>
+                        </button>
+                    </div>
+                </div>
+            </div>
+
+            <!-- VIEW: Send - Share QR -->
+            <div id="view-send-share" class="hidden space-y-6 text-center">
+                <div class="flex items-center gap-2 text-slate-400 text-sm text-left">
+                    <button class="btn-back hover:text-white flex items-center gap-1">
+                        <i data-lucide="arrow-left" class="w-4 h-4"></i> Cancel
+                    </button>
+                </div>
+                <div class="space-y-2">
+                    <h2 class="text-xl font-semibold">Scan to Receive</h2>
+                    <p class="text-xs text-slate-400">Scan this QR code with the receiving device or share the link.</p>
+                </div>
+                <div class="bg-white p-4 rounded-xl inline-block mx-auto shadow-inner">
+                    <canvas id="qr-canvas"></canvas>
+                </div>
+                <div class="space-y-3">
+                    <div class="flex items-center gap-2 bg-slate-900/50 border border-slate-700/50 rounded-lg px-3 py-2 text-sm">
+                        <span class="text-slate-500 select-none text-xs uppercase font-semibold">Link</span>
+                        <input id="share-url-input" type="text" readonly class="bg-transparent border-none outline-none flex-grow text-slate-300 text-xs overflow-ellipsis">
+                        <button id="btn-copy-link" class="text-slate-400 hover:text-white transition-colors">
+                            <i data-lucide="copy" class="w-4 h-4"></i>
+                        </button>
+                    </div>
+                    <p class="text-xs text-indigo-400 animate-pulse flex items-center justify-center gap-1.5">
+                        <span class="w-1.5 h-1.5 rounded-full bg-indigo-400"></span> Waiting for receiver to connect...
+                    </p>
+                </div>
+            </div>
+
+            <!-- VIEW: Receive - Scanning/Setup -->
+            <div id="view-receive-setup" class="hidden space-y-6">
+                <div class="flex items-center gap-2 text-slate-400 text-sm">
+                    <button class="btn-back hover:text-white flex items-center gap-1">
+                        <i data-lucide="arrow-left" class="w-4 h-4"></i> Back
+                    </button>
+                </div>
+                <h2 class="text-xl font-semibold">Establish Connection</h2>
+                
+                <div class="space-y-4">
+                    <div id="scanner-container" class="hidden space-y-2">
+                        <div id="qr-reader" class="overflow-hidden rounded-xl border border-slate-700 bg-black"></div>
+                        <button id="btn-stop-scanner" class="w-full py-2 bg-rose-600/20 hover:bg-rose-600/30 text-rose-300 border border-rose-500/30 rounded-lg text-sm font-medium transition-colors">
+                            Stop Camera
+                        </button>
+                    </div>
+
+                    <div id="receive-options" class="grid grid-cols-1 gap-3">
+                        <button id="btn-start-scanner" class="flex items-center justify-center gap-2 p-4 bg-slate-700 hover:bg-slate-600 transition-colors rounded-xl font-medium border border-slate-600/50">
+                            <i data-lucide="camera" class="w-5 h-5 text-indigo-400"></i>
+                            Scan QR Code
+                        </button>
+                        
+                        <div class="relative flex py-2 items-center">
+                            <div class="flex-grow border-t border-slate-700"></div>
+                            <span class="flex-shrink mx-4 text-slate-500 text-xs uppercase">or manually enter code</span>
+                            <div class="flex-grow border-t border-slate-700"></div>
+                        </div>
+
+                        <div class="flex gap-2">
+                            <input id="input-peer-id" type="text" placeholder="Enter peer connection code" class="bg-slate-900 border border-slate-700 rounded-lg px-4 py-2.5 text-sm flex-grow focus:outline-none focus:border-indigo-500 text-slate-100">
+                            <button id="btn-connect-manual" class="bg-indigo-600 hover:bg-indigo-500 px-4 py-2.5 rounded-lg text-sm font-medium transition-colors">
+                                Connect
+                            </button>
+                        </div>
+                    </div>
+                </div>
+            </div>
+
+            <!-- VIEW: Receive - Peer Confirmation -->
+            <div id="view-receive-confirm" class="hidden space-y-6">
+                <div class="text-center space-y-2">
+                    <div class="inline-flex p-3 bg-amber-500/10 text-amber-400 rounded-full">
+                        <i data-lucide="file-warning" class="w-6 h-6"></i>
+                    </div>
+                    <h2 class="text-xl font-semibold">Incoming Request</h2>
+                    <p class="text-slate-400 text-sm">A peer wants to send you the following files:</p>
+                </div>
+                
+                <div class="space-y-3">
+                    <div id="confirm-files-list" class="max-h-40 overflow-y-auto space-y-1.5 bg-slate-900/50 p-3 rounded-lg border border-slate-750">
+                        <!-- Dynamic verification list -->
+                    </div>
+                    <div class="flex gap-3 pt-2">
+                        <button id="btn-decline-transfer" class="flex-1 py-2.5 bg-slate-700 hover:bg-slate-600 transition-colors rounded-xl font-medium border border-slate-600/50 text-sm">
+                            Decline
+                        </button>
+                        <button id="btn-accept-transfer" class="flex-1 py-2.5 bg-indigo-600 hover:bg-indigo-500 transition-colors rounded-xl font-medium text-sm text-white">
+                            Accept & Receive
+                        </button>
+                    </div>
+                </div>
+            </div>
+
+            <!-- VIEW: Active Transfer / Progress -->
+            <div id="view-transfer" class="hidden space-y-6 my-auto">
+                <div class="text-center space-y-2">
+                    <div class="inline-flex p-3 bg-indigo-500/10 text-indigo-400 rounded-full animate-pulse">
+                        <i data-lucide="arrow-up-down" class="w-6 h-6"></i>
+                    </div>
+                    <h2 id="transfer-status-title" class="text-xl font-semibold">Transferring</h2>
+                    <p id="transfer-file-name" class="text-slate-400 text-sm truncate max-w-sm mx-auto">filename.ext</p>
+                </div>
+
+                <div class="space-y-2">
+                    <div class="flex justify-between text-xs text-slate-400">
+                        <span id="transfer-progress-percent">0%</span>
+                        <span id="transfer-speed">0 KB/s</span>
+                    </div>
+                    <div class="w-full bg-slate-700 rounded-full h-2.5 overflow-hidden">
+                        <div id="transfer-progress-bar" class="bg-indigo-500 h-2.5 rounded-full transition-all duration-100" style="width: 0%"></div>
+                    </div>
+                    <div class="flex flex-col gap-1 text-xs text-slate-400">
+                        <div id="transfer-details" class="text-slate-300">0 MB / 0 MB</div>
+                        <span id="transfer-time">Estimating...</span>
+                    </div>
+                </div>
+            </div>
+
+            <!-- Footer log block inside card for contextual feedback -->
+            <div id="log-panel" class="mt-4 pt-3 border-t border-slate-700/50 text-left text-[10px] font-mono text-slate-500 flex justify-between items-center">
+                <span id="status-text">Status: Ready</span>
+                <span id="connection-indicator" class="hidden flex items-center gap-1.5">
+                    <span class="w-1.5 h-1.5 rounded-full bg-slate-600"></span> Connected
+                </span>
+            </div>
+
+        </div>
+    </main>
+
+    <!-- Footer -->
+    <footer class="text-center py-6 text-xs text-slate-500 border-t border-slate-800 bg-slate-900/30">
+        <p>Direct peer-to-peer transfer. File processing occurs exclusively on device.</p>
+    </footer>
+
+    <script>
+        // Initialize Lucide icons
+        lucide.createIcons();
+
+        // App States & Globals
+        let peer = null;
+        let connection = null;
+        
+        // Multiple Files Core States
+        let activeFiles = [];
+        let incomingManifest = [];
+        let currentFileMeta = null;
+        
+        let receivedChunks = [];
+        let receivedBytes = 0;
+        let totalBytesToReceive = 0;
+        let totalBytesReceivedAccumulator = 0;
+        let completedFilesCount = 0;
+
+        let html5QrCode = null;
+        let transferStartTime = null;
+        let lastLoggedBytes = 0;
+        let speedInterval = null;
+
+        // Buffer limits for backpressure
+        const CHUNK_SIZE = 64 * 1024; // 64KB
+        const MAX_BUFFERED_AMOUNT = 1024 * 1024; // 1MB buffer limit
+
+        // Navigation elements
+        const views = {
+            home: document.getElementById('view-home'),
+            sendSelect: document.getElementById('view-send-select'),
+            sendShare: document.getElementById('view-send-share'),
+            receiveSetup: document.getElementById('view-receive-setup'),
+            receiveConfirm: document.getElementById('view-receive-confirm'),
+            transfer: document.getElementById('view-transfer')
+        };
+
+        const statusText = document.getElementById('status-text');
+        const connectionIndicator = document.getElementById('connection-indicator');
+
+        function setStatus(text) {
+            statusText.textContent = `Status: ${text}`;
+        }
+
+        function switchView(viewName) {
+            Object.keys(views).forEach(key => {
+                if (key === viewName) {
+                    views[key].classList.remove('hidden');
+                } else {
+                    views[key].classList.add('hidden');
+                }
+            });
+            // Stop scanning if leaving the scanner view
+            if (viewName !== 'receiveSetup' && html5QrCode) {
+                stopScanner();
+            }
+        }
+
+        // --- Back Buttons Behavior ---
+        document.querySelectorAll('.btn-back').forEach(btn => {
+            btn.addEventListener('click', () => {
+                resetState();
+                switchView('home');
+            });
+        });
+
+        function resetState() {
+            if (connection) {
+                connection.close();
+            }
+            if (peer) {
+                peer.destroy();
+                peer = null;
+            }
+            if (speedInterval) {
+                clearInterval(speedInterval);
+            }
+            activeFiles = [];
+            incomingManifest = [];
+            currentFileMeta = null;
+            receivedChunks = [];
+            receivedBytes = 0;
+            totalBytesToReceive = 0;
+            totalBytesReceivedAccumulator = 0;
+            completedFilesCount = 0;
+
+            connectionIndicator.classList.add('hidden');
+            document.getElementById('selected-file-info').classList.add('hidden');
+            document.getElementById('file-input').value = '';
+            window.location.hash = '';
+            setStatus('Ready');
+        }
+
+        // --- View: Home Trigger Actions ---
+        document.getElementById('btn-choose-send').addEventListener('click', () => {
+            switchView('sendSelect');
+        });
+
+        document.getElementById('btn-choose-receive').addEventListener('click', () => {
+            switchView('receiveSetup');
+        });
+
+        // --- View: Send Select Logic ---
+        const dropZone = document.getElementById('drop-zone');
+        const fileInput = document.getElementById('file-input');
+
+        dropZone.addEventListener('click', () => fileInput.click());
+        
+        ['dragenter', 'dragover'].forEach(eventName => {
+            dropZone.addEventListener(eventName, (e) => {
+                e.preventDefault();
+                dropZone.classList.add('drag-over');
+            }, false);
+        });
+
+        ['dragleave', 'drop'].forEach(eventName => {
+            dropZone.addEventListener(eventName, (e) => {
+                e.preventDefault();
+                dropZone.classList.remove('drag-over');
+            }, false);
+        });
+
+        dropZone.addEventListener('drop', (e) => {
+            const dt = e.dataTransfer;
+            if (dt && dt.files.length > 0) {
+                handleFileSelection(dt.files);
+            }
+        });
+
+        fileInput.addEventListener('change', (e) => {
+            if (e.target.files.length > 0) {
+                handleFileSelection(e.target.files);
+            }
+        });
+
+        function handleFileSelection(filesList) {
+            activeFiles = Array.from(filesList);
+            const listContainer = document.getElementById('selected-files-list');
+            listContainer.innerHTML = '';
+            
+            let totalSize = 0;
+            activeFiles.forEach(file => {
+                totalSize += file.size;
+                const item = document.createElement('div');
+                item.className = "flex items-center justify-between bg-slate-900/40 p-2 rounded border border-slate-800 text-xs";
+                item.innerHTML = `
+                    <span class="truncate max-w-[70%] font-medium text-slate-300">${file.name}</span>
+                    <span class="text-slate-500 font-mono">${formatBytes(file.size)}</span>
+                `;
+                listContainer.appendChild(item);
+            });
+            
+            document.getElementById('selected-files-summary').textContent = `${activeFiles.length} file(s) • ${formatBytes(totalSize)}`;
+            document.getElementById('selected-file-info').classList.remove('hidden');
+        }
+
+        document.getElementById('btn-start-share').addEventListener('click', () => {
+            if (activeFiles.length === 0) return;
+            initializeSenderPeer();
+        });
+
+        // --- PeerJS Init Sender ---
+        function initializeSenderPeer() {
+            setStatus('Initializing network...');
+            peer = new Peer({
+                debug: 1
+            });
+
+            peer.on('open', (id) => {
+                setStatus('Awaiting recipient...');
+                switchView('sendShare');
+                
+                // Construct Share URL
+                const shareUrl = `${window.location.origin}${window.location.pathname}#${id}`;
+                document.getElementById('share-url-input').value = shareUrl;
+
+                // Create QR code
+                new QRious({
+                    element: document.getElementById('qr-canvas'),
+                    value: shareUrl,
+                    size: 200,
+                    background: '#ffffff',
+                    foreground: '#0f172a',
+                    level: 'H'
+                });
+            });
+
+            peer.on('connection', (conn) => {
+                connection = conn;
+                setupSenderConnection();
+            });
+
+            peer.on('error', (err) => {
+                setStatus(`Network error: ${err.type}`);
+            });
+        }
+
+        function setupSenderConnection() {
+            connectionIndicator.classList.remove('hidden');
+            setStatus('Connected');
+            
+            connection.on('open', () => {
+                // Sender-side confirmation: First transmit manifest to the receiver and await acceptance
+                const manifest = activeFiles.map((f, idx) => ({
+                    id: idx,
+                    name: f.name,
+                    size: f.size,
+                    mime: f.type
+                }));
+                
+                connection.send(JSON.stringify({
+                    type: 'manifest',
+                    files: manifest
+                }));
+                setStatus('Waiting for recipient confirmation...');
+            });
+
+            connection.on('data', (data) => {
+                if (typeof data === 'string') {
+                    try {
+                        const message = JSON.parse(data);
+                        if (message.type === 'accept_manifest') {
+                            startSequentialFileTransfer();
+                        } else if (message.type === 'decline_manifest') {
+                            setStatus('Transfer declined by recipient.');
+                            resetState();
+                        }
+                    } catch (e) {
+                        console.error("Signal parsing error:", e);
+                    }
+                }
+            });
+
+            connection.on('close', () => {
+                setStatus('Disconnected');
+                connectionIndicator.classList.add('hidden');
+            });
+        }
+
+        // --- Sender Transfer Execution ---
+        async function startSequentialFileTransfer() {
+            switchView('transfer');
+            
+            const totalBytesToSend = activeFiles.reduce((acc, f) => acc + f.size, 0);
+            let totalBytesSentAccumulator = 0;
+            transferStartTime = Date.now();
+            lastLoggedBytes = 0;
+
+            startSpeedTracker(() => totalBytesSentAccumulator + lastLoggedBytes, totalBytesToSend);
+
+            for (let i = 0; i < activeFiles.length; i++) {
+                if (!connection || connection.destroyed) break;
+                
+                const file = activeFiles[i];
+                document.getElementById('transfer-status-title').textContent = `Sending File ${i + 1} of ${activeFiles.length}`;
+                document.getElementById('transfer-file-name').textContent = file.name;
+
+                // Signal the start of this specific file
+                connection.send(JSON.stringify({
+                    type: 'file_start',
+                    id: i,
+                    name: file.name,
+                    size: file.size,
+                    mime: file.type
+                }));
+
+                let offset = 0;
+                const reader = new FileReader();
+
+                const sendFileChunks = () => {
+                    return new Promise((resolve, reject) => {
+                        reader.onload = async (event) => {
+                            if (!connection || connection.destroyed) {
+                                reject(new Error('Connection closed during read.'));
+                                return;
+                            }
+
+                            const buffer = event.target.result;
+                            
+                            // Backpressure implementation
+                            if (connection.bufferedAmount > MAX_BUFFERED_AMOUNT) {
+                                await new Promise(res => {
+                                    const checkBuffer = setInterval(() => {
+                                        if (!connection || connection.bufferedAmount < MAX_BUFFERED_AMOUNT / 2) {
+                                            clearInterval(checkBuffer);
+                                            res();
+                                        }
+                                    }, 40);
+                                });
+                            }
+
+                            connection.send(buffer);
+                            offset += buffer.byteLength;
+                            lastLoggedBytes = offset;
+
+                            updateProgressBar(offset, file.size, totalBytesSentAccumulator + offset, totalBytesToSend);
+
+                            if (offset < file.size) {
+                                readNextSlice();
+                            } else {
+                                resolve();
+                            }
+                        };
+
+                        reader.onerror = (err) => reject(err);
+
+                        const readNextSlice = () => {
+                            const slice = file.slice(offset, offset + CHUNK_SIZE);
+                            reader.readAsArrayBuffer(slice);
+                        };
+
+                        readNextSlice();
+                    });
+                };
+
+                try {
+                    await sendFileChunks();
+                    totalBytesSentAccumulator += file.size;
+                    lastLoggedBytes = 0;
+                    connection.send(JSON.stringify({ type: 'file_end', id: i }));
+                } catch (err) {
+                    console.error("Transfer loop exception:", err);
+                    setStatus("Transmission error.");
+                    break;
+                }
+            }
+
+            if (connection && !connection.destroyed) {
+                connection.send(JSON.stringify({ type: 'all_complete' }));
+                clearInterval(speedInterval);
+                setStatus('Finished sending');
+                document.getElementById('transfer-status-title').textContent = 'All Files Sent Successfully';
+                updateProgressBar(1, 1, totalBytesToSend, totalBytesToSend);
+            }
+        }
+
+        // --- PeerJS Init Receiver ---
+        document.getElementById('btn-connect-manual').addEventListener('click', () => {
+            const peerId = document.getElementById('input-peer-id').value.trim();
+            if (peerId) {
+                initializeReceiverPeer(peerId);
+            }
+        });
+
+        function initializeReceiverPeer(targetPeerId) {
+            setStatus('Connecting to sender...');
+            peer = new Peer({ debug: 1 });
+
+            peer.on('open', () => {
+                connection = peer.connect(targetPeerId);
+                setupReceiverConnection();
+            });
+
+            peer.on('error', (err) => {
+                setStatus(`Network error: ${err.type}`);
+            });
+        }
+
+        function setupReceiverConnection() {
+            connection.on('open', () => {
+                connectionIndicator.classList.remove('hidden');
+                setStatus('Receiving metadata handshake...');
+            });
+
+            connection.on('data', (data) => {
+                if (typeof data === 'string') {
+                    try {
+                        const message = JSON.parse(data);
+                        
+                        if (message.type === 'manifest') {
+                            incomingManifest = message.files;
+                            totalBytesToReceive = incomingManifest.reduce((acc, f) => acc + f.size, 0);
+                            showIncomingConfirmationView();
+                        } else if (message.type === 'file_start') {
+                            currentFileMeta = incomingManifest[message.id];
+                            receivedChunks = [];
+                            receivedBytes = 0;
+                            document.getElementById('transfer-file-name').textContent = currentFileMeta.name;
+                            document.getElementById('transfer-status-title').textContent = `Receiving File ${message.id + 1} of ${incomingManifest.length}`;
+                        } else if (message.type === 'file_end') {
+                            const finalBlob = new Blob(receivedChunks, { type: currentFileMeta.mime || 'application/octet-stream' });
+                            triggerDownload(finalBlob, currentFileMeta.name);
+                            totalBytesReceivedAccumulator += currentFileMeta.size;
+                            completedFilesCount++;
+                        } else if (message.type === 'all_complete') {
+                            clearInterval(speedInterval);
+                            document.getElementById('transfer-status-title').textContent = 'All Transfers Completed';
+                            setStatus('Download complete');
+                            updateProgressBar(1, 1, totalBytesToReceive, totalBytesToReceive);
+                        }
+                    } catch (e) {
+                        console.error("Metadata extraction error:", e);
+                    }
+                } else {
+                    // Binary Chunk Received
+                    receivedChunks.push(data);
+                    receivedBytes += data.byteLength;
+                    updateProgressBar(receivedBytes, currentFileMeta ? currentFileMeta.size : 0, totalBytesReceivedAccumulator + receivedBytes, totalBytesToReceive);
+                }
+            });
+
+            connection.on('close', () => {
+                setStatus('Disconnected');
+                connectionIndicator.classList.add('hidden');
+                clearInterval(speedInterval);
+            });
+        }
+
+        // --- Receiver Confirmation Screen Action ---
+        function showIncomingConfirmationView() {
+            switchView('receiveConfirm');
+            const listContainer = document.getElementById('confirm-files-list');
+            listContainer.innerHTML = '';
+
+            incomingManifest.forEach(file => {
+                const item = document.createElement('div');
+                item.className = "flex items-center justify-between text-xs py-1 px-1.5 border-b border-slate-800 last:border-0";
+                item.innerHTML = `
+                    <span class="truncate max-w-[70%] font-medium text-slate-300">${file.name}</span>
+                    <span class="text-slate-500 font-mono">${formatBytes(file.size)}</span>
+                `;
+                listContainer.appendChild(item);
+            });
+            setStatus('Awaiting your acceptance...');
+        }
+
+        document.getElementById('btn-accept-transfer').addEventListener('click', () => {
+            if (connection && connection.open) {
+                connection.send(JSON.stringify({ type: 'accept_manifest' }));
+                switchView('transfer');
+                document.getElementById('transfer-status-title').textContent = 'Waiting for file stream...';
+                totalBytesReceivedAccumulator = 0;
+                completedFilesCount = 0;
+                transferStartTime = Date.now();
+                lastLoggedBytes = 0;
+                startSpeedTracker(() => totalBytesReceivedAccumulator + receivedBytes, totalBytesToReceive);
+            }
+        });
+
+        document.getElementById('btn-decline-transfer').addEventListener('click', () => {
+            if (connection && connection.open) {
+                connection.send(JSON.stringify({ type: 'decline_manifest' }));
+            }
+            resetState();
+            switchView('home');
+        });
+
+        // --- Helper: Speed and Visuals Tracking ---
+        function updateProgressBar(currentFileBytes, totalFileBytes, accumBytes, globalBytes) {
+            const filePercent = totalFileBytes > 0 ? Math.min(100, Math.round((currentFileBytes / totalFileBytes) * 100)) : 0;
+            const overallPercent = globalBytes > 0 ? Math.min(100, Math.round((accumBytes / globalBytes) * 100)) : 0;
+            
+            document.getElementById('transfer-progress-bar').style.width = `${overallPercent}%`;
+            document.getElementById('transfer-progress-percent').textContent = `${overallPercent}%`;
+            document.getElementById('transfer-details').textContent = 
+                `Current file: ${formatBytes(currentFileBytes)} / ${formatBytes(totalFileBytes)} (${filePercent}%) | Total: ${formatBytes(accumBytes)} / ${formatBytes(globalBytes)}`;
+        }
+
+        function startSpeedTracker(getProgressBytes, totalBytes) {
+            if (speedInterval) clearInterval(speedInterval);
+            transferStartTime = Date.now();
+            let baseBytes = getProgressBytes();
+
+            speedInterval = setInterval(() => {
+                const currentBytes = getProgressBytes();
+                const bytesInPeriod = currentBytes - baseBytes;
+                baseBytes = currentBytes;
+
+                const speed = bytesInPeriod; // bytes/sec (since interval is 1000ms)
+                document.getElementById('transfer-speed').textContent = `${formatBytes(speed)}/s`;
+
+                // ETA calculation
+                if (speed > 0) {
+                    const remainingBytes = totalBytes - currentBytes;
+                    const etaSeconds = Math.round(remainingBytes / speed);
+                    document.getElementById('transfer-time').textContent = `ETA: ${formatTime(etaSeconds)}`;
+                } else {
+                    document.getElementById('transfer-time').textContent = `ETA: Calculating...`;
+                }
+            }, 1000);
+        }
+
+        // --- Camera QR Code Scanning Logic ---
+        const btnStartScanner = document.getElementById('btn-start-scanner');
+        const btnStopScanner = document.getElementById('btn-stop-scanner');
+        const scannerContainer = document.getElementById('scanner-container');
+        const receiveOptions = document.getElementById('receive-options');
+
+        btnStartScanner.addEventListener('click', async () => {
+            scannerContainer.classList.remove('hidden');
+            receiveOptions.classList.add('hidden');
+            
+            html5QrCode = new Html5Qrcode("qr-reader");
+            const config = { fps: 10, qrbox: { width: 250, height: 250 } };
+
+            try {
+                await html5QrCode.start(
+                    { facingMode: "environment" }, 
+                    config, 
+                    (decodedText) => {
+                        stopScanner();
+                        // Parse target ID from url
+                        const hashIndex = decodedText.indexOf('#');
+                        if (hashIndex !== -1) {
+                            const targetId = decodedText.substring(hashIndex + 1);
+                            initializeReceiverPeer(targetId);
+                        }
+                    }
+                );
+            } catch (err) {
+                setStatus("Camera access failed.");
+                stopScanner();
+            }
+        });
+
+        btnStopScanner.addEventListener('click', stopScanner);
+
+        function stopScanner() {
+            if (html5QrCode) {
+                html5QrCode.stop().then(() => {
+                    html5QrCode.clear();
+                    html5QrCode = null;
+                }).catch(err => console.error(err));
+            }
+            scannerContainer.classList.add('hidden');
+            receiveOptions.classList.remove('hidden');
+        }
+
+        // --- Generic Helpers ---
+        function triggerDownload(blob, filename) {
+            const url = URL.createObjectURL(blob);
+            const a = document.createElement('a');
+            a.href = url;
+            a.download = filename;
+            document.body.appendChild(a);
+            a.click();
+            document.body.removeChild(a);
+            URL.revokeObjectURL(url);
+        }
+
+        function formatBytes(bytes) {
+            if (bytes === 0) return '0 Bytes';
+            const k = 1024;
+            const sizes = ['Bytes', 'KB', 'MB', 'GB'];
+            const i = Math.floor(Math.log(bytes) / Math.log(k));
+            return parseFloat((bytes / Math.pow(k, i)).toFixed(2)) + ' ' + sizes[i];
+        }
+
+        function formatTime(seconds) {
+            if (seconds === Infinity || isNaN(seconds)) return "estimating";
+            if (seconds < 60) return `${seconds}s`;
+            const minutes = Math.floor(seconds / 60);
+            return `${minutes}m ${seconds % 60}s`;
+        }
+
+        // URL Clipboard Copy Logic
+        document.getElementById('btn-copy-link').addEventListener('click', () => {
+            const copyText = document.getElementById('share-url-input');
+            copyText.select();
+            copyText.setSelectionRange(0, 99999);
+            navigator.clipboard.writeText(copyText.value)
+                .then(() => setStatus('Link copied to clipboard'))
+                .catch(() => setStatus('Copy failed'));
+        });
+
+        // Auto-connect if URL Hash present
+        window.addEventListener('DOMContentLoaded', () => {
+            if (window.location.hash) {
+                const targetId = window.location.hash.substring(1);
+                switchView('receiveSetup');
+                initializeReceiverPeer(targetId);
+            }
+        });
+    </script>
+</body>
+</html>

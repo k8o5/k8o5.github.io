@@ -1,0 +1,658 @@
+
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>DUNGEON RAID: No Cards Allowed</title>
+    <style>
+        @import url('https://fonts.googleapis.com/css2?family=Press+Start+2P&display=swap');
+
+        :root {
+            --bg: #111;
+            --ui-bg: #222;
+            --hp-red: #e74c3c;
+            --mana-blue: #3498db;
+            --gold: #f1c40f;
+            --dmg: #e67e22;
+            --crit: #9b59b6;
+        }
+
+        body {
+            background-color: var(--bg);
+            color: white;
+            font-family: 'Press Start 2P', cursive;
+            margin: 0;
+            height: 100vh;
+            display: flex;
+            flex-direction: column;
+            align-items: center;
+            overflow: hidden;
+            user-select: none;
+            text-transform: uppercase;
+        }
+
+        /* DUNGEON SCENE */
+        #scene {
+            width: 100%;
+            max-width: 800px;
+            flex-grow: 1;
+            position: relative;
+            background: linear-gradient(to bottom, #000, #1a1a1a);
+            border-left: 4px solid #333;
+            border-right: 4px solid #333;
+            display: flex;
+            flex-direction: column;
+            align-items: center;
+        }
+
+        /* BOSS AREA */
+        #boss-area {
+            margin-top: 40px;
+            width: 100%;
+            display: flex;
+            flex-direction: column;
+            align-items: center;
+            position: relative;
+        }
+
+        #boss-sprite {
+            width: 120px;
+            height: 120px;
+            background: red; /* Placeholder for pixel art logic */
+            box-shadow: 0 0 20px red;
+            margin-bottom: 20px;
+            position: relative;
+            transition: transform 0.1s;
+        }
+        
+        /* CSS Art Boss */
+        #boss-sprite::after {
+            content: "BOSS";
+            position: absolute;
+            top: 40%; left: 10%;
+            color: black;
+            font-size: 20px;
+        }
+
+        #hp-bar-container {
+            width: 300px;
+            height: 30px;
+            background: #333;
+            border: 4px solid #555;
+            position: relative;
+        }
+
+        #hp-bar-fill {
+            height: 100%;
+            background: var(--hp-red);
+            width: 0%; /* Starts 0, fills up to show damage done? No, classic HP bar logic */
+            width: 100%;
+            transition: width 0.5s;
+        }
+
+        #hp-text {
+            position: absolute;
+            top: 5px; width: 100%; text-align: center;
+            font-size: 12px; text-shadow: 2px 2px #000;
+            z-index: 2;
+        }
+
+        /* HERO ROSTER (Hand) */
+        #roster-area {
+            position: absolute;
+            bottom: 20px;
+            width: 100%;
+            display: flex;
+            justify-content: center;
+            gap: 10px;
+            flex-wrap: wrap;
+            padding: 10px;
+        }
+
+        .unit {
+            width: 64px;
+            height: 64px;
+            background: #444;
+            border: 4px solid #222;
+            position: relative;
+            cursor: pointer;
+            transition: transform 0.1s;
+            display: flex;
+            flex-direction: column;
+            align-items: center;
+            justify-content: center;
+            image-rendering: pixelated;
+        }
+
+        .unit:hover { transform: translateY(-5px); }
+        .unit.selected { 
+            border-color: var(--gold); 
+            transform: translateY(-15px);
+            background: #555;
+            box-shadow: 0 0 10px var(--gold);
+        }
+
+        /* Class Colors */
+        .cls-warrior { background: #5a2e2e; } /* Swords */
+        .cls-mage { background: #2e3b5a; }    /* Magic */
+        .cls-rogue { background: #2e5a36; }   /* Daggers */
+        .cls-cleric { background: #5a5a2e; }  /* Holy */
+
+        .lvl-badge {
+            position: absolute;
+            bottom: -5px; right: -5px;
+            background: #000;
+            color: white;
+            font-size: 10px;
+            padding: 2px;
+            border: 1px solid white;
+        }
+        
+        .cls-icon { font-size: 24px; }
+
+        /* ACTION MENU */
+        #ui-panel {
+            background: var(--ui-bg);
+            width: 100%;
+            max-width: 800px;
+            padding: 15px;
+            border-top: 4px solid #444;
+            display: flex;
+            justify-content: space-between;
+            align-items: center;
+        }
+
+        .stat-block { font-size: 10px; line-height: 1.5; color: #aaa; }
+        .val-gold { color: var(--gold); }
+        .val-turns { color: var(--mana-blue); }
+
+        button {
+            font-family: 'Press Start 2P';
+            padding: 15px;
+            background: #333;
+            color: white;
+            border: 2px solid #555;
+            cursor: pointer;
+            font-size: 12px;
+        }
+        button:hover { background: #444; }
+        .btn-atk { background: var(--hp-red); border-color: #c0392b; }
+        .btn-roll { background: var(--mana-blue); border-color: #2980b9; }
+        button:disabled { filter: grayscale(1); opacity: 0.5; }
+
+        /* RELIC BAR (Jokers) */
+        #relic-bar {
+            position: absolute;
+            top: 10px; left: 10px;
+            display: flex;
+            gap: 10px;
+        }
+        .relic {
+            width: 40px; height: 40px;
+            background: #222;
+            border: 2px solid var(--crit);
+            border-radius: 50%;
+            display: flex; align-items: center; justify-content: center;
+            font-size: 20px;
+            cursor: help;
+        }
+        .relic:hover { border-color: white; }
+
+        /* DAMAGE POPUP */
+        #dmg-display {
+            position: absolute;
+            top: 30%; left: 50%;
+            transform: translate(-50%, -50%);
+            text-align: center;
+            display: none;
+            z-index: 100;
+        }
+        #dmg-val { font-size: 40px; color: var(--dmg); text-shadow: 4px 4px #000; }
+        #formation-name { font-size: 14px; color: #aaa; margin-bottom: 10px; }
+
+        /* SHOP */
+        #merchant {
+            position: fixed; top:0; left:0; width:100%; height:100%;
+            background: rgba(0,0,0,0.95);
+            display: none;
+            flex-direction: column;
+            align-items: center;
+            justify-content: center;
+            z-index: 200;
+        }
+        .shop-item {
+            display: inline-block;
+            width: 200px;
+            background: #222;
+            border: 2px solid var(--gold);
+            margin: 10px;
+            padding: 10px;
+            text-align: center;
+            cursor: pointer;
+        }
+        .shop-item:hover { background: #333; transform: scale(1.05); }
+
+        /* ANIMATIONS */
+        @keyframes shake { 0% {transform: translateX(0);} 25% {transform: translateX(-5px);} 75% {transform: translateX(5px);} 100% {transform: translateX(0);} }
+        .shake { animation: shake 0.2s; }
+        .hit { animation: shake 0.1s infinite; }
+    </style>
+</head>
+<body>
+
+    <div id="scene">
+        <!-- Relics -->
+        <div id="relic-bar"></div>
+
+        <!-- Boss -->
+        <div id="boss-area">
+            <div id="boss-sprite"></div>
+            <div id="hp-bar-container">
+                <div id="hp-bar-fill"></div>
+                <div id="hp-text"><span id="curr-hp">0</span> / <span id="max-hp">0</span></div>
+            </div>
+            <div style="margin-top:10px; font-size:10px; color:#666;">DUNGEON LEVEL <span id="lvl-txt">1-1</span></div>
+        </div>
+
+        <!-- DMG Popup -->
+        <div id="dmg-display">
+            <div id="formation-name">COMBO</div>
+            <div id="dmg-calc" style="font-size:12px; margin-bottom:5px;">
+                <span style="color:var(--dmg)">0</span> DMG x <span style="color:var(--crit)">0.0</span> CRIT
+            </div>
+            <div id="dmg-val">0</div>
+        </div>
+
+        <!-- Roster (Hand) -->
+        <div id="roster-area"></div>
+    </div>
+
+    <!-- UI Panel -->
+    <div id="ui-panel">
+        <div class="stat-block">
+            GOLD: <span id="gold" class="val-gold">0</span><br>
+            TURNS: <span id="turns" class="val-turns">4</span><br>
+            REROLLS: <span id="rerolls" style="color:red">3</span>
+        </div>
+        <div style="display:flex; gap:10px;">
+            <button class="btn-roll" id="btn-reroll" onclick="game.reroll()">DISMISS (Reroll)</button>
+            <button class="btn-atk" id="btn-atk" onclick="game.attack()">ATTACK</button>
+            <button onclick="game.sortRoster()">SORT</button>
+        </div>
+    </div>
+
+    <!-- Merchant -->
+    <div id="merchant">
+        <h1 style="color:var(--gold); margin-bottom:20px;">TRAVELING MERCHANT</h1>
+        <div style="margin-bottom:20px; color:white;" id="shop-gold">GOLD: 0</div>
+        <div id="wares"></div>
+        <button style="margin-top:30px; padding:20px;" onclick="game.nextLevel()">ENTER NEXT DUNGEON</button>
+    </div>
+
+    <script>
+        /* --- RPG DATA MAPPING --- */
+        // Suits -> Classes
+        const CLASSES = {
+            'warrior': { id:'warrior', icon:'⚔️', color:'cls-warrior' }, // Spades
+            'mage':    { id:'mage',    icon:'🔮', color:'cls-mage' },    // Hearts
+            'rogue':   { id:'rogue',   icon:'🗡️', color:'cls-rogue' },   // Clubs
+            'cleric':  { id:'cleric',  icon:'✝️', color:'cls-cleric' }   // Diamonds
+        };
+        const CLASS_KEYS = ['warrior','mage','rogue','cleric'];
+
+        // Ranks -> Levels (2-14)
+        // 11,12,13,14 = Commander, General, King, God
+        
+        // Poker Hands -> Battle Formations
+        const FORMATIONS = {
+            'Legendary Raid':   { dmg: 100, crit: 8 }, // Straight Flush
+            'Squadron':         { dmg: 60, crit: 7 },  // 4 of a Kind
+            'Phalanx':          { dmg: 40, crit: 4 },  // Full House
+            'Class Rush':       { dmg: 35, crit: 4 },  // Flush
+            'Chain Combo':      { dmg: 30, crit: 4 },  // Straight
+            'Triangle Attack':  { dmg: 30, crit: 3 },  // 3 of a Kind
+            'Flanking Op':      { dmg: 20, crit: 2 },  // 2 Pair
+            'Duo Strike':       { dmg: 10, crit: 2 },  // Pair
+            'Skirmish':         { dmg: 5, crit: 1 }    // High Card
+        };
+
+        // Jokers -> Relics
+        const RELICS = [
+            { id: 'r_ring', name: 'Ring of Power', desc: '+4 Crit Mult', cost: 4, type: 'add_crit', val: 4 },
+            { id: 'r_sword', name: 'Heavy Sword', desc: '+100 Base Dmg', cost: 5, type: 'add_dmg', val: 100 },
+            { id: 'r_banner', name: 'War Banner', desc: '+4 Crit if attacking with Warriors', cost: 5, type: 'class_crit', cls: 'warrior', val: 4 },
+            { id: 'r_staff', name: 'Elder Staff', desc: '+4 Crit if attacking with Mages', cost: 5, type: 'class_crit', cls: 'mage', val: 4 },
+            { id: 'r_cloak', name: 'Shadow Cloak', desc: '+4 Crit if attacking with Rogues', cost: 5, type: 'class_crit', cls: 'rogue', val: 4 },
+            { id: 'r_book', name: 'Holy Book', desc: '+4 Crit if attacking with Clerics', cost: 5, type: 'class_crit', cls: 'cleric', val: 4 },
+            { id: 'r_dagger', name: 'Assassin Blade', desc: 'x2 Crit Mult', cost: 10, type: 'x_crit', val: 2 },
+            { id: 'r_boots', name: 'Swift Boots', desc: '+15 Crit on Chain Combo', cost: 6, type: 'cond_crit', cond: 'Chain Combo', val: 15 },
+            { id: 'r_shield', name: 'Tower Shield', desc: '+50 Dmg on Duo Strike', cost: 4, type: 'cond_dmg', cond: 'Duo Strike', val: 50 },
+            { id: 'r_map', name: 'Old Map', desc: '+10 Dmg per remaining reroll', cost: 5, type: 'reroll_dmg', val: 10 }
+        ];
+
+        /* --- GAME ENGINE --- */
+        class DungeonGame {
+            constructor() {
+                this.pool = [];
+                this.roster = [];
+                this.selected = []; // Indices
+                this.relics = [];
+                
+                this.gold = 0;
+                this.level = 1; // Ante
+                this.stage = 0; // 0,1,2
+                
+                this.initStage();
+                this.recruitPool();
+                this.fillRoster();
+                this.updateUI();
+            }
+
+            initStage() {
+                this.turns = 4; // Hands
+                this.rerolls = 3; // Discards
+                this.damageDone = 0;
+
+                // Scaling HP
+                let baseHP = 300;
+                if (this.level > 1) baseHP = baseHP * Math.pow(1.5, this.level);
+                let mod = 1;
+                if(this.stage === 1) mod = 1.5;
+                if(this.stage === 2) mod = 2.5; // Boss
+                
+                this.maxHP = Math.floor(baseHP * mod);
+                this.currentBossHP = this.maxHP;
+            }
+
+            recruitPool() {
+                this.pool = [];
+                // Standard 52 unit deck logic
+                for(let c of CLASS_KEYS) {
+                    for(let l=2; l<=14; l++) {
+                        this.pool.push({ cls: c, lvl: l, uid: Math.random() });
+                    }
+                }
+                this.shuffle();
+            }
+
+            shuffle() {
+                for (let i = this.pool.length - 1; i > 0; i--) {
+                    const j = Math.floor(Math.random() * (i + 1));
+                    [this.pool[i], this.pool[j]] = [this.pool[j], this.pool[i]];
+                }
+            }
+
+            fillRoster() {
+                while(this.roster.length < 8 && this.pool.length > 0) {
+                    this.roster.push(this.pool.pop());
+                }
+                this.selected = [];
+                this.renderRoster();
+            }
+
+            toggleUnit(index) {
+                const pos = this.selected.indexOf(index);
+                if (pos > -1) this.selected.splice(pos, 1);
+                else if (this.selected.length < 5) this.selected.push(index);
+                this.renderRoster();
+            }
+
+            sortRoster() {
+                this.roster.sort((a,b) => b.lvl - a.lvl || a.cls.localeCompare(b.cls));
+                this.selected = [];
+                this.renderRoster();
+            }
+
+            reroll() {
+                if(this.rerolls <= 0 || this.selected.length === 0) return;
+                // Dismiss selected
+                this.roster = this.roster.filter((_, i) => !this.selected.includes(i));
+                this.rerolls--;
+                this.fillRoster();
+                this.updateUI();
+            }
+
+            async attack() {
+                if(this.turns <= 0 || this.selected.length === 0) return;
+
+                const squad = this.selected.map(i => this.roster[i]);
+                this.roster = this.roster.filter((_, i) => !this.selected.includes(i));
+
+                // 1. Identify Formation
+                const formation = this.getFormation(squad);
+                const stats = FORMATIONS[formation];
+
+                let dmg = stats.dmg;
+                let crit = stats.crit;
+
+                // 2. Add Unit Power
+                squad.forEach(u => {
+                    let pwr = u.lvl;
+                    if(pwr === 14) pwr = 11;
+                    else if(pwr > 10) pwr = 10;
+                    dmg += pwr;
+                });
+
+                // UI Animation Start
+                const popup = document.getElementById('dmg-display');
+                const txtName = document.getElementById('formation-name');
+                const txtCalc = document.getElementById('dmg-calc');
+                const txtVal = document.getElementById('dmg-val');
+                
+                popup.style.display = 'block';
+                txtName.innerText = formation;
+                txtCalc.innerHTML = `<span style="color:var(--dmg)">${dmg}</span> DMG x <span style="color:var(--crit)">${crit}</span> CRIT`;
+                txtVal.innerText = "...";
+
+                // Visual: Units jump up
+                document.getElementById('roster-area').innerHTML = ''; // Hide hand temporarily
+
+                await wait(500);
+
+                // 3. Relic Triggers
+                for(let r of this.relics) {
+                    let active = false;
+                    if(r.type === 'add_dmg') { dmg += r.val; active=true; }
+                    if(r.type === 'add_crit') { crit += r.val; active=true; }
+                    if(r.type === 'x_crit') { crit *= r.val; active=true; }
+                    if(r.type === 'class_crit' && squad.some(u => u.cls === r.cls)) { crit += r.val; active=true; }
+                    if(r.type === 'cond_dmg' && formation === r.cond) { dmg += r.val; active=true; }
+                    if(r.type === 'cond_crit' && formation === r.cond) { crit += r.val; active=true; }
+                    if(r.type === 'reroll_dmg') { dmg += (this.rerolls * r.val); active=true; }
+
+                    if(active) {
+                        // Shake Relic icon
+                        const rEl = document.getElementById(r.uid);
+                        if(rEl) rEl.classList.add('shake');
+                        txtCalc.innerHTML = `<span style="color:var(--dmg)">${Math.floor(dmg)}</span> DMG x <span style="color:var(--crit)">${crit.toFixed(1)}</span> CRIT`;
+                        await wait(400);
+                        if(rEl) rEl.classList.remove('shake');
+                    }
+                }
+
+                const totalDmg = Math.floor(dmg * crit);
+                txtVal.innerText = totalDmg;
+                txtVal.classList.add('shake');
+                
+                // Shake Boss
+                const boss = document.getElementById('boss-sprite');
+                boss.classList.add('hit');
+                
+                await wait(800);
+                
+                boss.classList.remove('hit');
+                txtVal.classList.remove('shake');
+                popup.style.display = 'none';
+
+                // Apply Damage
+                this.damageDone += totalDmg;
+                this.currentBossHP = Math.max(0, this.maxHP - this.damageDone);
+                this.turns--;
+
+                this.fillRoster();
+                this.updateUI();
+                this.checkState();
+            }
+
+            checkState() {
+                if (this.currentBossHP <= 0) {
+                    // Win
+                    setTimeout(() => this.openMerchant(), 500);
+                } else if (this.turns === 0) {
+                    alert("PARTY WIPED OUT. Game Over.");
+                    location.reload();
+                }
+            }
+
+            openMerchant() {
+                const shop = document.getElementById('merchant');
+                const wares = document.getElementById('wares');
+                const wallet = document.getElementById('shop-gold');
+                
+                this.gold += 5; // Loot
+                this.gold += this.turns; // Speed bonus
+                
+                shop.style.display = 'flex';
+                wallet.innerText = `GOLD: ${this.gold}`;
+                wares.innerHTML = '';
+
+                // Generate Items
+                for(let i=0; i<3; i++) {
+                    const tpl = RELICS[Math.floor(Math.random() * RELICS.length)];
+                    const el = document.createElement('div');
+                    el.className = 'shop-item';
+                    el.innerHTML = `
+                        <div style="color:var(--gold)">${tpl.name}</div>
+                        <div style="font-size:10px; color:#aaa; margin:10px 0;">${tpl.desc}</div>
+                        <div style="background:#000; padding:5px;">${tpl.cost} G</div>
+                    `;
+                    el.onclick = () => {
+                        if(this.gold >= tpl.cost && this.relics.length < 5) {
+                            this.gold -= tpl.cost;
+                            this.addRelic(tpl);
+                            el.style.visibility = 'hidden';
+                            wallet.innerText = `GOLD: ${this.gold}`;
+                            this.updateUI();
+                        }
+                    };
+                    wares.appendChild(el);
+                }
+            }
+
+            nextLevel() {
+                document.getElementById('merchant').style.display = 'none';
+                this.stage++;
+                if(this.stage > 2) {
+                    this.stage = 0;
+                    this.level++;
+                }
+                this.pool = [];
+                this.roster = [];
+                this.recruitPool();
+                this.initStage();
+                this.fillRoster();
+                this.updateUI();
+            }
+
+            addRelic(tpl) {
+                const r = {...tpl, uid: 'relic_'+Date.now()+'_'+Math.random()};
+                this.relics.push(r);
+                this.renderRelics();
+            }
+
+            renderRelics() {
+                const bar = document.getElementById('relic-bar');
+                bar.innerHTML = '';
+                this.relics.forEach(r => {
+                    const el = document.createElement('div');
+                    el.className = 'relic';
+                    el.id = r.uid;
+                    el.innerText = '💍'; // Placeholder icon
+                    el.title = `${r.name}: ${r.desc}`;
+                    // Sell
+                    el.oncontextmenu = (e) => {
+                        e.preventDefault();
+                        this.gold += Math.floor(r.cost / 2);
+                        this.relics = this.relics.filter(x => x !== r);
+                        this.renderRelics();
+                        this.updateUI();
+                    };
+                    bar.appendChild(el);
+                });
+            }
+
+            getFormation(units) {
+                // Poker Logic disguised
+                const lvls = units.map(u => u.lvl).sort((a,b) => a-b);
+                const counts = {};
+                const classes = {};
+                
+                units.forEach(u => {
+                    counts[u.lvl] = (counts[u.lvl] || 0) + 1;
+                    classes[u.cls] = (classes[u.cls] || 0) + 1;
+                });
+
+                const freq = Object.values(counts).sort((a,b) => b-a);
+                const sameClass = Object.values(classes).some(v => v >= 5);
+                
+                let chain = false;
+                const uniq = [...new Set(lvls)];
+                if(uniq.length >= 5) {
+                    for(let i=0; i<=uniq.length-5; i++) {
+                        if(uniq[i+4] - uniq[i] === 4) chain = true;
+                    }
+                    if([14,2,3,4,5].every(r => uniq.includes(r))) chain = true;
+                }
+
+                if (chain && sameClass) return 'Legendary Raid';
+                if (freq[0] === 4) return 'Squadron';
+                if (freq[0] === 3 && freq[1] === 2) return 'Phalanx';
+                if (sameClass) return 'Class Rush';
+                if (chain) return 'Chain Combo';
+                if (freq[0] === 3) return 'Triangle Attack';
+                if (freq[0] === 2 && freq[1] === 2) return 'Flanking Op';
+                if (freq[0] === 2) return 'Duo Strike';
+                return 'Skirmish';
+            }
+
+            /* UI UPDATES */
+            renderRoster() {
+                const area = document.getElementById('roster-area');
+                area.innerHTML = '';
+                this.roster.forEach((u, i) => {
+                    const isSel = this.selected.includes(i);
+                    const el = document.createElement('div');
+                    el.className = `unit ${CLASSES[u.cls].color} ${isSel?'selected':''}`;
+                    el.innerHTML = `
+                        <div class="cls-icon">${CLASSES[u.cls].icon}</div>
+                        <div class="lvl-badge">L${u.lvl}</div>
+                    `;
+                    el.onclick = () => this.toggleUnit(i);
+                    area.appendChild(el);
+                });
+                this.updateUI();
+            }
+
+            updateUI() {
+                const hpPct = Math.max(0, (this.currentBossHP / this.maxHP) * 100);
+                document.getElementById('hp-bar-fill').style.width = hpPct + '%';
+                document.getElementById('curr-hp').innerText = this.currentBossHP;
+                document.getElementById('max-hp').innerText = this.maxHP;
+                document.getElementById('lvl-txt').innerText = `${this.level}-${this.stage+1}`;
+                
+                document.getElementById('gold').innerText = this.gold;
+                document.getElementById('turns').innerText = this.turns;
+                document.getElementById('rerolls').innerText = this.rerolls;
+
+                document.getElementById('btn-atk').disabled = this.selected.length === 0;
+                document.getElementById('btn-reroll').disabled = this.selected.length === 0 || this.rerolls <= 0;
+            }
+        }
+
+        const wait = (ms) => new Promise(r => setTimeout(r, ms));
+        const game = new DungeonGame();
+
+    </script>
+</body>
+</html>

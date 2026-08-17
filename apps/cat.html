@@ -1,0 +1,984 @@
+<!DOCTYPE html>
+<html lang="de">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>ParametricCAD Pro - Full BREP System</title>
+<link rel="icon" href="data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 32 32'%3E%3Crect fill='%23007acc' x='2' y='2' width='28' height='28' rx='3'/%3E%3Cpath fill='%23fff' d='M8 8h6v2h-4v4h4v2h-6zm10 0h6v8h-6v-2h4v-1h-4v-2h4v-1h-4zm-10 10h8v2h-6v2h6v2h-8z'/%3E%3C/svg%3E">
+<style>
+* { margin:0; padding:0; box-sizing:border-box; }
+body { font-family:'Segoe UI',system-ui,sans-serif; background:#1e1e1e; color:#cccccc; overflow:hidden; }
+#viewport { position:absolute; top:32px; left:48px; right:280px; bottom:24px; }
+#glCanvas { width:100%; height:100%; display:block; }
+
+/* Header */
+.header { position:absolute; top:0; left:0; right:0; height:32px; background:#2d2d30; border-bottom:1px solid #3e3e42; display:flex; align-items:center; padding:0; }
+.menu-bar { display:flex; height:100%; }
+.menu-item { padding:0 12px; height:100%; display:flex; align-items:center; font-size:12px; cursor:pointer; }
+.menu-item:hover { background:#3e3e42; }
+
+/* Toolbar Left */
+.toolbar-left { position:absolute; top:32px; left:0; width:48px; bottom:24px; background:#252526; border-right:1px solid #3e3e42; display:flex; flex-direction:column; padding:4px; gap:4px; z-index:50; }
+.tool-btn { width:40px; height:40px; background:#2d2d30; border:1px solid #3e3e42; cursor:pointer; display:flex; align-items:center; justify-content:center; position:relative; }
+.tool-btn:hover { background:#3e3e42; border-color:#007acc; }
+.tool-btn.active { background:#094771; border-color:#007acc; }
+.tool-btn svg { width:24px; height:24px; fill:none; stroke:#c5c5c5; stroke-width:1.5; stroke-linecap:round; stroke-linejoin:round; }
+.tool-btn:hover svg { stroke:#ffffff; }
+.tool-btn.active svg { stroke:#ffffff; }
+
+/* Sidebar Right */
+.sidebar { position:absolute; top:32px; right:0; width:280px; bottom:24px; background:#252526; border-left:1px solid #3e3e42; display:flex; flex-direction:column; overflow:hidden; }
+.panel-tabs { display:flex; height:28px; background:#2d2d30; border-bottom:1px solid #3e3e42; }
+.panel-tab { flex:1; display:flex; align-items:center; justify-content:center; font-size:11px; cursor:pointer; border-bottom:2px solid transparent; }
+.panel-tab:hover { background:#3e3e42; }
+.panel-tab.active { border-bottom-color:#007acc; background:#252526; }
+.panel-content { flex:1; overflow:auto; padding:10px; }
+
+/* Feature Tree */
+.feature-tree { list-style:none; font-size:12px; user-select:none; }
+.feature-tree li { padding:6px 8px; cursor:pointer; display:flex; align-items:center; gap:6px; border-radius:3px; margin:1px 0; }
+.feature-tree li:hover { background:#2a2d2e; }
+.feature-tree li.selected { background:#094771; }
+.feature-tree li.suppressed { opacity:0.5; text-decoration:line-through; }
+.tree-icon { width:16px; height:16px; display:flex; align-items:center; justify-content:center; }
+.tree-icon svg { width:14px; height:14px; fill:none; stroke:#c5c5c5; stroke-width:1.5; }
+
+/* Properties */
+.property-group { margin-bottom:16px; border-bottom:1px solid #3e3e42; padding-bottom:10px; }
+.property-label { font-size:11px; color:#808080; margin-bottom:4px; display:block; text-transform:uppercase; letter-spacing:0.5px; }
+.property-row { display:flex; gap:5px; margin-bottom:5px; align-items:center; }
+.property-row label { font-size:11px; color:#808080; width:12px; text-align:center; }
+.property-row input, .property-row select { flex:1; background:#3c3c3c; border:1px solid #3e3e42; color:#cccccc; padding:4px; font-size:12px; height:24px; }
+.property-row input:focus, .property-row select:focus { border-color:#007acc; outline:none; }
+.property-row input:disabled { background:#2d2d30; color:#656565; }
+
+/* Parameter Table */
+.param-table { width:100%; font-size:12px; border-collapse:collapse; margin-top:5px; }
+.param-table td { padding:4px; border-bottom:1px solid #3e3e42; }
+.param-table td:first-child { color:#4ec9b0; font-family:consolas,monospace; width:40%; }
+.param-table input { width:100%; background:transparent; border:none; color:#cccccc; padding:2px; font-size:12px; }
+.param-table input:focus { background:#094771; outline:none; }
+
+/* Status Bar */
+.statusbar { position:absolute; bottom:0; left:0; right:0; height:24px; background:#007acc; color:white; font-size:11px; display:flex; align-items:center; padding:0 10px; justify-content:space-between; z-index:100; }
+
+/* Context Menu */
+.context-menu { position:absolute; background:#252526; border:1px solid #3e3e42; box-shadow:0 4px 12px rgba(0,0,0,0.5); z-index:1000; display:none; min-width:160px; }
+.context-item { padding:6px 12px; cursor:pointer; font-size:12px; display:flex; align-items:center; gap:8px; }
+.context-item:hover { background:#094771; }
+.context-sep { height:1px; background:#3e3e42; margin:4px 0; }
+
+/* Dialog */
+.modal { position:fixed; top:0; left:0; right:0; bottom:0; background:rgba(0,0,0,0.5); z-index:2000; display:none; align-items:center; justify-content:center; }
+.modal-content { background:#252526; border:1px solid #3e3e42; min-width:400px; max-width:600px; max-height:80vh; display:flex; flex-direction:column; box-shadow:0 8px 24px rgba(0,0,0,0.8); }
+.modal-header { padding:12px 16px; border-bottom:1px solid #3e3e42; font-size:14px; font-weight:bold; }
+.modal-body { padding:16px; overflow:auto; flex:1; }
+.modal-footer { padding:12px 16px; border-top:1px solid #3e3e42; display:flex; justify-content:flex-end; gap:8px; }
+.modal-btn { padding:6px 16px; background:#0e639c; color:white; border:none; cursor:pointer; font-size:12px; }
+.modal-btn:hover { background:#1177bb; }
+.modal-btn.secondary { background:#3c3c3c; }
+
+/* Sketch Overlay */
+#sketchOverlay { position:absolute; top:32px; left:48px; right:280px; bottom:24px; cursor:crosshair; display:none; z-index:40; }
+.dimension-overlay { position:absolute; pointer-events:none; }
+
+/* Console */
+.console { position:absolute; bottom:24px; left:48px; right:280px; height:100px; background:#1e1e1e; border-top:1px solid #3e3e42; font-family:consolas,monospace; font-size:11px; padding:5px; overflow:auto; display:none; }
+.console-line { padding:2px 0; }
+.console-error { color:#f48771; }
+.console-warn { color:#dcdcaa; }
+.console-info { color:#4fc1ff; }
+
+/* Selection highlight */
+.selected-outline { position:absolute; pointer-events:none; border:1px solid #007acc; box-shadow:0 0 0 1px rgba(0,122,204,0.3); display:none; }
+</style>
+</head>
+<body>
+
+<!-- Header -->
+<div class="header">
+<div class="menu-bar">
+<div class="menu-item" onclick="app.fileMenu()">Datei</div>
+<div class="menu-item" onclick="app.editMenu()">Bearbeiten</div>
+<div class="menu-item" onclick="app.viewMenu()">Ansicht</div>
+<div class="menu-item" onclick="app.toolsMenu()">Werkzeuge</div>
+</div>
+</div>
+
+<!-- Left Toolbar -->
+<div class="toolbar-left">
+<div class="tool-btn" id="btnCursor" onclick="app.setTool('cursor')" title="Auswählen">
+<svg><path d="M3 3l7.07 20.07 4.93-9.93 9.93-4.93z"/></svg>
+</div>
+<div class="tool-btn" id="btnSketch" onclick="app.newSketch()" title="Neue Skizze">
+<svg><circle cx="16" cy="16" r="10"/><path d="M16 6v20M6 16h20"/></svg>
+</div>
+<div class="separator" style="height:1px;background:#3e3e42;margin:4px 0;"></div>
+<div class="tool-btn" id="btnLine" onclick="app.setTool('line')" title="Linie">
+<svg><path d="M4 28L28 4"/></svg>
+</div>
+<div class="tool-btn" id="btnRect" onclick="app.setTool('rectangle')" title="Rechteck">
+<svg><rect x="6" y="6" width="20" height="20"/></svg>
+</div>
+<div class="tool-btn" id="btnCircle" onclick="app.setTool('circle')" title="Kreis">
+<svg><circle cx="16" cy="16" r="10"/></svg>
+</div>
+<div class="tool-btn" id="btnArc" onclick="app.setTool('arc')" title="Bogen">
+<svg><path d="M4 16a12 12 0 0 1 24 0"/></svg>
+</div>
+<div class="tool-btn" id="btnDim" onclick="app.setTool('dimension')" title="Bemaßung">
+<svg><path d="M4 8h24M4 6v4M28 6v4"/><text x="12" y="20" font-size="8" fill="#c5c5c5" stroke="none">10</text></svg>
+</div>
+<div class="separator" style="height:1px;background:#3e3e42;margin:4px 0;"></div>
+<div class="tool-btn" id="btnExtrude" onclick="app.extrude()" title="Extrusion">
+<svg><rect x="8" y="4" width="16" height="24"/><path d="M8 8h16M8 20h16"/></svg>
+</div>
+<div class="tool-btn" id="btnRevolve" onclick="app.revolve()" title="Rotation">
+<svg><path d="M8 4c0 8 16 8 16 16M8 4v24"/><ellipse cx="16" cy="4" rx="8" ry="2"/></svg>
+</div>
+<div class="tool-btn" id="btnFillet" onclick="app.fillet()" title="Rundung">
+<svg><path d="M4 28V16a12 12 0 0 1 12-12h12"/></svg>
+</div>
+<div class="tool-btn" id="btnChamfer" onclick="app.chamfer()" title="Fase">
+<svg><path d="M4 28V16L16 4h12"/></svg>
+</div>
+<div class="tool-btn" id="btnBoolean" onclick="app.booleanDialog()" title="Boolean">
+<svg><circle cx="12" cy="16" r="8"/><circle cx="20" cy="16" r="8"/></svg>
+</div>
+</div>
+
+<!-- Viewport -->
+<div id="viewport">
+<canvas id="glCanvas"></canvas>
+<div id="sketchOverlay"></div>
+<div class="selected-outline" id="selectionOutline"></div>
+</div>
+
+<!-- Sidebar -->
+<div class="sidebar">
+<div class="panel-tabs">
+<div class="panel-tab active" onclick="app.switchTab('design')" id="tabDesign">Konstruktion</div>
+<div class="panel-tab" onclick="app.switchTab('params')" id="tabParams">Parameter</div>
+</div>
+<div class="panel-content" id="panelContent">
+<!-- Design Panel -->
+<div id="designPanel">
+<div class="property-group">
+<div class="property-label">Feature-Baum</div>
+<ul class="feature-tree" id="featureTree"></ul>
+</div>
+<div class="property-group" id="propertiesPanel">
+<div class="property-label">Eigenschaften</div>
+<div style="color:#808080;font-size:12px;">Wählen Sie ein Feature</div>
+</div>
+</div>
+<!-- Params Panel -->
+<div id="paramsPanel" style="display:none;">
+<div class="property-group">
+<div class="property-label">Benutzerparameter</div>
+<table class="param-table" id="paramTable">
+<tr><td>#Breite</td><td><input type="text" value="100mm" onchange="app.updateParam('Breite',this.value)"></td></tr>
+<tr><td>#Höhe</td><td><input type="text" value="50mm" onchange="app.updateParam('Höhe',this.value)"></td></tr>
+<tr><td>#Tiefe</td><td><input type="text" value="20mm" onchange="app.updateParam('Tiefe',this.value)"></td></tr>
+</table>
+<button class="modal-btn secondary" style="width:100%;margin-top:10px;" onclick="app.addParameter()">+ Parameter</button>
+</div>
+<div class="property-group">
+<div class="property-label">Gleichungen</div>
+<div style="font-size:11px;color:#808080;margin-top:5px;">#Breite/2</div>
+</div>
+</div>
+</div>
+</div>
+
+<!-- Status Bar -->
+<div class="statusbar">
+<span id="statusText">Bereit</span>
+<span id="coordText">X: 0.00 Y: 0.00 Z: 0.00</span>
+</div>
+
+<!-- Context Menu -->
+<div class="context-menu" id="contextMenu"></div>
+
+<!-- Modal -->
+<div class="modal" id="modal">
+<div class="modal-content">
+<div class="modal-header" id="modalHeader">Dialog</div>
+<div class="modal-body" id="modalBody"></div>
+<div class="modal-footer" id="modalFooter"></div>
+</div>
+</div>
+
+<script type="module">
+import * as THREE from 'https://unpkg.com/three@0.160.0/build/three.module.js';
+import { OrbitControls } from 'https://unpkg.com/three@0.160.0/examples/jsm/controls/OrbitControls.js';
+
+// ==================== GEOMETRY KERNEL ====================
+
+class Vector3 {
+constructor(x=0,y=0,z=0) { this.x=x; this.y=y; this.z=z; }
+clone() { return new Vector3(this.x,this.y,this.z); }
+add(v) { return new Vector3(this.x+v.x,this.y+v.y,this.z+v.z); }
+sub(v) { return new Vector3(this.x-v.x,this.y-v.y,this.z-v.z); }
+multiply(s) { return new Vector3(this.x*s,this.y*s,this.z*s); }
+divide(s) { return new Vector3(this.x/s,this.y/s,this.z/s); }
+dot(v) { return this.x*v.x+this.y*v.y+this.z*v.z; }
+cross(v) { return new Vector3(this.y*v.z-this.z*v.y,this.z*v.x-this.x*v.z,this.x*v.y-this.y*v.x); }
+length() { return Math.sqrt(this.x*this.x+this.y*this.y+this.z*this.z); }
+normalize() { const l=this.length(); return l>0?this.divide(l):new Vector3(); }
+distance(v) { return this.sub(v).length(); }
+toString() { return `(${this.x.toFixed(2)},${this.y.toFixed(2)},${this.z.toFixed(2)})`; }
+}
+
+class Matrix4 {
+constructor() { this.elements=new Float32Array([1,0,0,0,0,1,0,0,0,0,1,0,0,0,0,1]); }
+multiply(m) { /* simplified */ return this; }
+invert() { return this; }
+transpose() { return this; }
+}
+
+// B-Rep Topology
+class Vertex {
+constructor(point) { this.point=point; this.edges=[]; }
+}
+class Edge {
+constructor(start,end,curve) { this.start=start; this.end=end; this.curve=curve; this.faces=[]; }
+}
+class Face {
+constructor(surface,loops) { this.surface=surface; this.loops=loops; this.edges=[]; }
+normalAt(u,v) { return this.surface.normalAt(u,v); }
+}
+class Loop {
+constructor(edges) { this.edges=edges; }
+}
+class Surface {
+constructor(type) { this.type=type; }
+}
+class Plane extends Surface {
+constructor(origin,normal) { super('plane'); this.origin=origin; this.normal=normal; }
+normalAt(u,v) { return this.normal; }
+}
+class CylindricalSurface extends Surface {
+constructor(axis,radius) { super('cylinder'); this.axis=axis; this.radius=radius; }
+}
+
+// Solid B-rep
+class Solid {
+constructor(shells) { this.shells=shells||[]; this.id=Date.now()+Math.random(); }
+}
+
+// ==================== CONSTRAINT SOLVER ====================
+
+class Constraint {
+constructor(type,entities,value) { this.type=type; this.entities=entities; this.value=value; }
+}
+
+class SketchConstraintSolver {
+constructor() { this.constraints=[]; this.entities=[]; }
+addConstraint(c) { this.constraints.push(c); }
+solve(iterations=100) {
+for(let i=0;i<iterations;i++) {
+let error=0;
+this.constraints.forEach(c=>error+=this.solveConstraint(c));
+if(error<0.001)break;
+}
+}
+solveConstraint(c) {
+switch(c.type) {
+case 'distance': return this.solveDistance(c);
+case 'coincident': return this.solveCoincident(c);
+case 'horizontal': return this.solveHorizontal(c);
+case 'vertical': return this.solveVertical(c);
+case 'parallel': return this.solveParallel(c);
+case 'perpendicular': return this.solvePerpendicular(c);
+case 'equal': return this.solveEqual(c);
+case 'tangent': return this.solveTangent(c);
+}
+return 0;
+}
+solveDistance(c) {
+const [p1,p2]=c.entities;
+const d=p1.position.distance(p2.position);
+const diff=(d-c.value)/d;
+const mid=p1.position.add(p2.position).multiply(0.5);
+const dir=p2.position.sub(p1.position).normalize();
+if(!p1.fixed)p1.position=p1.position.add(dir.multiply(diff*0.5));
+if(!p2.fixed)p2.position=p2.position.sub(dir.multiply(diff*0.5));
+return Math.abs(diff);
+}
+solveCoincident(c) {
+const [p1,p2]=c.entities;
+const mid=p1.position.add(p2.position).multiply(0.5);
+if(!p1.fixed)p1.position=mid;
+if(!p2.fixed)p2.position=mid;
+return p1.position.distance(p2.position);
+}
+solveHorizontal(c) {
+const [p1,p2]=c.entities;
+const avgY=(p1.position.y+p2.position.y)/2;
+if(!p1.fixed)p1.position.y=avgY;
+if(!p2.fixed)p2.position.y=avgY;
+return Math.abs(p1.position.y-p2.position.y);
+}
+solveVertical(c) {
+const [p1,p2]=c.entities;
+const avgX=(p1.position.x+p2.position.x)/2;
+if(!p1.fixed)p1.position.x=avgX;
+if(!p2.fixed)p2.position.x=avgX;
+return Math.abs(p1.position.x-p2.position.x);
+}
+}
+
+// ==================== SKETCH SYSTEM ====================
+
+class SketchEntity {
+constructor(type) { this.type=type; this.id=Date.now()+Math.random(); this.constraints=[]; }
+}
+class SketchPoint extends SketchEntity {
+constructor(x,y) { super('point'); this.position=new Vector3(x,y,0); this.fixed=false; }
+}
+class SketchLine extends SketchEntity {
+constructor(p1,p2) { super('line'); this.p1=p1; this.p2=p2; this.length=null; }
+}
+class SketchCircle extends SketchEntity {
+constructor(center,radius) { super('circle'); this.center=center; this.radius=radius; }
+}
+class SketchArc extends SketchEntity {
+constructor(center,start,end,radius) { super('arc'); this.center=center; this.start=start; this.end=end; this.radius=radius; }
+}
+
+class Sketch {
+constructor(plane) {
+this.plane=plane||new Plane(new Vector3(),new Vector3(0,0,1));
+this.entities=[];
+this.dimensions=[];
+this.solver=new SketchConstraintSolver();
+this.selected=[];
+}
+addPoint(x,y) { const p=new SketchPoint(x,y); this.entities.push(p); return p; }
+addLine(p1,p2) { const l=new SketchLine(p1,p2); this.entities.push(l); return l; }
+addCircle(center,r) { const c=new SketchCircle(center,r); this.entities.push(c); return c; }
+get geometry() {
+const group=new THREE.Group();
+this.entities.forEach(e=>{
+if(e.type==='line') {
+const geo=new THREE.BufferGeometry().setFromPoints([
+new THREE.Vector3(e.p1.position.x,e.p1.position.y,0),
+new THREE.Vector3(e.p2.position.x,e.p2.position.y,0)
+]);
+const mat=new THREE.LineBasicMaterial({color:0x00ff00});
+group.add(new THREE.Line(geo,mat));
+} else if(e.type==='circle') {
+const geo=new THREE.CircleGeometry(e.radius,32);
+const mat=new THREE.LineBasicMaterial({color:0x00ff00});
+const mesh=new THREE.LineLoop(geo,mat);
+mesh.position.set(e.center.position.x,e.center.position.y,0);
+group.add(mesh);
+}
+});
+return group;
+}
+}
+
+// ==================== BOOLEAN/CSG ENGINE ====================
+
+class CSGNode {
+constructor(polygons) { this.polygons=polygons||[]; }
+clone() { return new CSGNode(this.polygons.map(p=>p.clone())); }
+invert() { this.polygons.forEach(p=>p.flip()); return this; }
+clipPolygons(polygons) { return polygons; }
+clipTo(bsp) { this.polygons=b.clipPolygons(this.polygons); return this; }
+allPolygons() { return this.polygons; }
+build(polygons) { this.polygons=polygons; }
+static fromGeometry(geo) {
+const polys=[];
+const pos=geo.attributes.position;
+const norm=geo.attributes.normal;
+for(let i=0;i<pos.count;i+=3) {
+const verts=[];
+for(let j=0;j<3;j++) {
+verts.push(new Vertex(new Vector3(pos.getX(i+j),pos.getY(i+j),pos.getZ(i+j))));
+}
+polys.push(new Polygon(verts));
+}
+return new CSGNode(polys);
+}
+toGeometry() {
+const geo=new THREE.BufferGeometry();
+const verts=[],norms=[];
+this.polygons.forEach(p=>{
+const n=p.normal;
+p.vertices.forEach(v=>{
+verts.push(v.point.x,v.point.y,v.point.z);
+norms.push(n.x,n.y,n.z);
+});
+});
+geo.setAttribute('position',new THREE.Float32BufferAttribute(verts,3));
+geo.setAttribute('normal',new THREE.Float32BufferAttribute(norms,3));
+geo.computeBoundingSphere();
+return geo;
+}
+}
+class Polygon {
+constructor(vertices) { this.vertices=vertices; }
+clone() { return new Polygon(this.vertices.map(v=>v.clone())); }
+flip() { this.vertices.reverse(); }
+get normal() {
+const v0=this.vertices[0].point;
+const v1=this.vertices[1].point;
+const v2=this.vertices[2].point;
+return v1.sub(v0).cross(v2.sub(v0)).normalize();
+}
+}
+class CSG {
+static union(a,b) { return new CSGNode(a.allPolygons().concat(b.allPolygons())); }
+static subtract(a,b) { return a.clone().invert().clipTo(b).invert(); }
+static intersect(a,b) { /* complex */ return a; }
+}
+
+// ==================== FEATURE SYSTEM ====================
+
+class Feature {
+constructor(type,name) { this.type=type; this.name=name; this.id=Date.now()+Math.random(); this.suppressed=false; this.children=[]; this.parent=null; }
+}
+
+class SketchFeature extends Feature {
+constructor(sketch) { super('Sketch','Sketch'); this.sketch=sketch; }
+}
+
+class ExtrudeFeature extends Feature {
+constructor(profile,distance,direction) { super('Extrude','Extrusion'); this.profile=profile; this.distance=distance; this.direction=direction||new Vector3(0,0,1); this.bodies=[]; }
+regenerate() {
+// Create B-rep from profile extrusion
+const solid=this.createExtrusion(this.profile,this.distance,this.direction);
+this.bodies=[solid];
+return solid;
+}
+createExtrusion(profile,dist,dir) {
+// Simplified: return Three.js mesh for now but structured as B-rep
+const shape=new THREE.Shape();
+// Assume profile is array of points
+if(profile.length<3)return null;
+shape.moveTo(profile[0].x,profile[0].y);
+for(let i=1;i<profile.length;i++) shape.lineTo(profile[i].x,profile[i].y);
+shape.closePath();
+const geo=new THREE.ExtrudeGeometry(shape,{depth:dist,bevelEnabled:false});
+const mat=new THREE.MeshStandardMaterial({color:0x808080,roughness:0.5,metalness:0.2});
+const mesh=new THREE.Mesh(geo,mat);
+mesh.castShadow=true;
+mesh.receiveShadow=true;
+return mesh;
+}
+}
+
+class RevolveFeature extends Feature {
+constructor(profile,axis,angle) { super('Revolve','Rotation'); this.profile=profile; this.axis=axis; this.angle=angle||360; }
+}
+
+class FilletFeature extends Feature {
+constructor(edges,radius) { super('Fillet','Rundung'); this.edges=edges; this.radius=radius; }
+}
+
+// ==================== PARAMETRIC ENGINE ====================
+
+class ParametricEngine {
+constructor() {
+this.features=[];
+this.parameters=new Map();
+this.bodies=[];
+this.history=[];
+this.expressions={};
+}
+addParameter(name,value,expr) {
+this.parameters.set(name,value);
+if(expr)this.expressions[name]=expr;
+}
+getValue(name) {
+if(this.parameters.has(name))return this.parameters.get(name);
+return 0;
+}
+evaluateExpression(expr) {
+// Replace parameters
+let result=expr;
+this.parameters.forEach((val,key)=>{
+result=result.replace(new RegExp('#'+key,'g'),val);
+});
+try{return eval(result);}catch(e){return 0;}
+}
+addFeature(feature) {
+this.features.push(feature);
+this.regenerate();
+}
+removeFeature(id) {
+const idx=this.features.findIndex(f=>f.id===id);
+if(idx>-1){
+const f=this.features[idx];
+// Remove children too
+f.children.forEach(c=>this.removeFeature(c.id));
+this.features.splice(idx,1);
+this.regenerate();
+}
+}
+regenerate() {
+this.bodies.forEach(b=>{if(b.geometry)b.geometry.dispose();});
+this.bodies=[];
+this.features.forEach(f=>{
+if(f.suppressed)return;
+if(f instanceof ExtrudeFeature){
+const body=f.regenerate();
+if(body)this.bodies.push(body);
+}
+});
+}
+}
+
+// ==================== APPLICATION ====================
+
+class CADApp {
+constructor() {
+this.engine=new ParametricEngine();
+this.sketch=null;
+this.activeSketch=null;
+this.selectedFeature=null;
+this.currentTool='cursor';
+this.raycaster=new THREE.Raycaster();
+this.mouse=new THREE.Vector2();
+this.initGraphics();
+this.initEvents();
+this.render();
+}
+initGraphics() {
+const canvas=document.getElementById('glCanvas');
+this.renderer=new THREE.WebGLRenderer({canvas,antialias:true});
+this.renderer.setSize(canvas.clientWidth,canvas.clientHeight);
+this.renderer.shadowMap.enabled=true;
+this.scene=new THREE.Scene();
+this.scene.background=new THREE.Color(0x1e1e1e);
+this.camera=new THREE.PerspectiveCamera(45,canvas.clientWidth/canvas.clientHeight,0.1,10000);
+this.camera.position.set(200,200,200);
+this.controls=new OrbitControls(this.camera,canvas);
+this.controls.enableDamping=true;
+// Lights
+const amb=new THREE.AmbientLight(0xffffff,0.4);
+this.scene.add(amb);
+const dir=new THREE.DirectionalLight(0xffffff,0.8);
+dir.position.set(100,200,100);
+dir.castShadow=true;
+this.scene.add(dir);
+// Grid
+const grid=new THREE.GridHelper(200,20,0x444444,0x333333);
+this.scene.add(grid);
+// Groups
+this.bodyGroup=new THREE.Group();
+this.scene.add(this.bodyGroup);
+this.sketchGroup=new THREE.Group();
+this.scene.add(this.sketchGroup);
+}
+initEvents() {
+window.addEventListener('resize',()=>this.onResize());
+const canvas=document.getElementById('glCanvas');
+canvas.addEventListener('mousemove',(e)=>this.onMouseMove(e));
+canvas.addEventListener('click',(e)=>this.onClick(e));
+canvas.addEventListener('contextmenu',(e)=>this.onContextMenu(e));
+document.addEventListener('keydown',(e)=>this.onKeyDown(e));
+// Sketch overlay
+const overlay=document.getElementById('sketchOverlay');
+overlay.addEventListener('mousedown',(e)=>this.onSketchMouseDown(e));
+overlay.addEventListener('mousemove',(e)=>this.onSketchMouseMove(e));
+overlay.addEventListener('dblclick',(e)=>this.onSketchDblClick(e));
+}
+onResize() {
+const canvas=document.getElementById('glCanvas');
+this.renderer.setSize(canvas.clientWidth,canvas.clientHeight);
+this.camera.aspect=canvas.clientWidth/canvas.clientHeight;
+this.camera.updateProjectionMatrix();
+}
+onMouseMove(e) {
+const rect=e.target.getBoundingClientRect();
+this.mouse.x=((e.clientX-rect.left)/rect.width)*2-1;
+this.mouse.y=-((e.clientY-rect.top)/rect.height)*2+1;
+this.raycaster.setFromCamera(this.mouse,this.camera);
+const intersects=this.raycaster.intersectObjects(this.bodyGroup.children);
+const coord=document.getElementById('coordText');
+if(intersects.length>0){
+const p=intersects[0].point;
+coord.textContent=`X:${p.x.toFixed(2)} Y:${p.y.toFixed(2)} Z:${p.z.toFixed(2)}`;
+}else{
+// Show plane intersection
+const plane=new THREE.Plane(new THREE.Vector3(0,1,0),0);
+const target=new THREE.Vector3();
+this.raycaster.ray.intersectPlane(plane,target);
+if(target){
+coord.textContent=`X:${target.x.toFixed(2)} Y:${target.y.toFixed(2)} Z:${target.z.toFixed(2)}`;
+}
+}
+}
+onClick(e) {
+if(this.activeSketch)return;
+this.raycaster.setFromCamera(this.mouse,this.camera);
+const intersects=this.raycaster.intersectObjects(this.bodyGroup.children);
+if(intersects.length>0){
+this.selectBody(intersects[0].object);
+}else{
+this.deselect();
+}
+}
+onContextMenu(e) {
+e.preventDefault();
+const menu=document.getElementById('contextMenu');
+menu.style.display='block';
+menu.style.left=e.pageX+'px';
+menu.style.top=e.pageY+'px';
+menu.innerHTML=`
+<div class="context-item" onclick="app.hideContext();app.editFeature()">Bearbeiten</div>
+<div class="context-item" onclick="app.hideContext();app.suppressFeature()">Unterdrücken</div>
+<div class="context-sep"></div>
+<div class="context-item" onclick="app.hideContext();app.deleteFeature()" style="color:#f48771">Löschen</div>
+`;
+}
+hideContext() { document.getElementById('contextMenu').style.display='none'; }
+onKeyDown(e) {
+if(e.key==='Delete')this.deleteSelected();
+if(e.key==='Escape')this.setTool('cursor');
+}
+// Tools
+setTool(tool) {
+this.currentTool=tool;
+document.querySelectorAll('.tool-btn').forEach(b=>b.classList.remove('active'));
+if(tool==='cursor')document.getElementById('btnCursor').classList.add('active');
+if(tool==='line')document.getElementById('btnLine').classList.add('active');
+if(tool==='rectangle')document.getElementById('btnRect').classList.add('active');
+if(tool==='circle')document.getElementById('btnCircle').classList.add('active');
+if(tool==='arc')document.getElementById('btnArc').classList.add('active');
+if(tool==='dimension')document.getElementById('btnDim').classList.add('active');
+}
+// Sketching
+newSketch() {
+this.activeSketch=new Sketch();
+this.sketchPoints=[];
+document.getElementById('sketchOverlay').style.display='block';
+this.setStatus('Skizze aktiv - Wählen Sie ein Werkzeug');
+this.setTool('line');
+this.renderSketch();
+}
+finishSketch() {
+if(!this.activeSketch)return;
+// Convert to feature
+const points=this.activeSketch.entities.filter(e=>e.type==='point');
+// Create loop from lines
+const lines=this.activeSketch.entities.filter(e=>e.type==='line');
+const profile=[];
+// Simple: assume closed loop in order
+lines.forEach(l=>{
+profile.push(new Vector3(l.p1.position.x,l.p1.position.y,0));
+});
+if(profile.length>2){
+const sketchFeat=new SketchFeature(this.activeSketch);
+this.engine.addFeature(sketchFeat);
+// Auto-extrude for demo or wait for user
+}
+document.getElementById('sketchOverlay').style.display='none';
+this.activeSketch=null;
+this.sketchGroup.clear();
+this.setStatus('Bereit');
+this.updateTree();
+}
+onSketchMouseDown(e) {
+if(!this.activeSketch)return;
+const rect=e.target.getBoundingClientRect();
+const x=((e.clientX-rect.left)/rect.width)*2-1;
+const y=-((e.clientY-rect.top)/rect.height)*2+1;
+this.raycaster.setFromCamera({x,y},this.camera);
+// Intersect with sketch plane (XY)
+const plane=new THREE.Plane(new THREE.Vector3(0,0,1),0);
+const target=new THREE.Vector3();
+this.raycaster.ray.intersectPlane(plane,target);
+if(!target)return;
+const sx=target.x;
+const sy=target.y;
+switch(this.currentTool){
+case 'line':
+if(!this.sketchStartPoint){
+// Find existing point or create new
+this.sketchStartPoint=this.activeSketch.addPoint(sx,sy);
+this.sketchStartPoint.fixed=true; // temporary
+}else{
+const end=this.activeSketch.addPoint(sx,sy);
+this.activeSketch.addLine(this.sketchStartPoint,end);
+// Add constraints
+this.solver.addConstraint(new Constraint('coincident',[this.sketchStartPoint,end],0));
+this.sketchStartPoint.fixed=false;
+this.sketchStartPoint=end;
+this.sketchStartPoint.fixed=true;
+}
+break;
+case 'rectangle':
+if(!this.rectStart){
+this.rectStart={x:sx,y:sy};
+this.rectP1=this.activeSketch.addPoint(sx,sy);
+this.rectP1.fixed=true;
+}else{
+const p2=this.activeSketch.addPoint(sx,this.rectStart.y);
+const p3=this.activeSketch.addPoint(sx,sy);
+const p4=this.activeSketch.addPoint(this.rectStart.x,sy);
+this.activeSketch.addLine(this.rectP1,p2);
+this.activeSketch.addLine(p2,p3);
+this.activeSketch.addLine(p3,p4);
+this.activeSketch.addLine(p4,this.rectP1);
+// Add perpendicular constraints
+this.rectStart=null;
+this.rectP1.fixed=false;
+this.rectP1=null;
+this.setStatus('Rechteck erstellt');
+}
+break;
+case 'circle':
+const center=this.activeSketch.addPoint(sx,sy);
+const radius=10; // default
+const rPoint=this.activeSketch.addPoint(sx+radius,sy);
+const circle=this.activeSketch.addCircle(center,radius);
+// Dimension will constrain radius
+this.setStatus('Kreis erstellt');
+break;
+}
+this.renderSketch();
+}
+onSketchMouseMove(e) {
+// Preview
+}
+onSketchDblClick(e) {
+// Finish line chain or finish sketch
+if(this.currentTool==='line' && this.sketchStartPoint){
+this.sketchStartPoint.fixed=false;
+this.sketchStartPoint=null;
+}
+}
+renderSketch() {
+this.sketchGroup.clear();
+if(!this.activeSketch)return;
+const group=this.activeSketch.geometry;
+this.sketchGroup.add(group);
+}
+// Features
+extrude() {
+const sketches=this.engine.features.filter(f=>f.type==='Sketch');
+if(sketches.length===0){alert('Keine Skizze vorhanden');return;}
+const dist=prompt('Extrusionshöhe:',this.engine.getValue('Höhe')||'20');
+if(!dist)return;
+const profile=[]; // Get from selected sketch
+// For demo, use last sketch
+const lastSketch=this.engine.features[this.engine.features.length-1];
+if(lastSketch instanceof SketchFeature){
+const ents=lastSketch.sketch.entities.filter(e=>e.type==='line');
+ents.forEach(l=>{
+profile.push(new Vector3(l.p1.position.x,l.p1.position.y,0));
+});
+}
+const feat=new ExtrudeFeature(profile,parseFloat(dist));
+this.engine.addFeature(feat);
+this.updateTree();
+this.updateBodies();
+}
+revolve() {
+alert('Rotation: Wählen Sie Achse und Winkel (90-360°)');
+}
+fillet() {
+const r=prompt('Rundungsradius:','5');
+if(r){
+const feat=new FilletFeature([],parseFloat(r));
+this.engine.addFeature(feat);
+this.updateTree();
+}
+}
+chamfer() {
+alert('Fase wird implementiert...');
+}
+booleanDialog() {
+const html=`
+<div style="padding:10px;">
+<p>Wählen Sie den Boolean-Modus:</p>
+<button class="modal-btn" style="margin:5px;" onclick="app.doBoolean('union')">Vereinigung</button>
+<button class="modal-btn" style="margin:5px;" onclick="app.doBoolean('subtract')">Differenz</button>
+<button class="modal-btn" style="margin:5px;" onclick="app.doBoolean('intersect')">Schnitt</button>
+</div>
+`;
+this.showModal('Boolean-Operation',html);
+}
+doBoolean(type) {
+this.closeModal();
+alert('Boolean '+type+' - Wählen Sie zwei Körper');
+}
+// UI Updates
+updateTree() {
+const tree=document.getElementById('featureTree');
+tree.innerHTML='';
+this.engine.features.forEach(f=>{
+const li=document.createElement('li');
+li.innerHTML=`
+<span class="tree-icon">${this.getFeatureIcon(f.type)}</span>
+<span>${f.name}</span>
+`;
+if(f.suppressed)li.classList.add('suppressed');
+li.onclick=()=>this.selectFeature(f,li);
+tree.appendChild(li);
+});
+}
+getFeatureIcon(type) {
+if(type==='Sketch')return '<svg><circle cx="7" cy="7" r="6"/><path d="M3 11l8-8"/></svg>';
+if(type==='Extrude')return '<svg><rect x="3" y="3" width="8" height="8"/><rect x="5" y="5" width="8" height="8"/></svg>';
+if(type==='Revolve')return '<svg><path d="M3 7a4 4 0 0 1 8 0"/><path d="M3 7v6"/><circle cx="7" cy="7" r="2"/></svg>';
+if(type==='Fillet')return '<svg><path d="M3 11V8a4 4 0 0 1 4-4h4"/></svg>';
+return '<svg><rect x="5" y="5" width="4" height="4"/></svg>';
+}
+selectFeature(f,element) {
+document.querySelectorAll('.feature-tree li').forEach(li=>li.classList.remove('selected'));
+element.classList.add('selected');
+this.selectedFeature=f;
+this.showProperties(f);
+}
+showProperties(f) {
+const panel=document.getElementById('propertiesPanel');
+let html='<div class="property-label">Eigenschaften</div>';
+if(f instanceof ExtrudeFeature){
+html+=`
+<div class="property-group">
+<div class="property-row"><label>Name</label><input value="${f.name}" onchange="app.renameFeature(this.value)"></div>
+<div class="property-row"><label>D</label><input value="${f.distance}" onchange="app.updateFeatureProp('distance',this.value)"></div>
+<div class="property-row">
+<label>Richtung</label>
+<select onchange="app.updateFeatureProp('direction',this.value)">
+<option value="1">+Z</option>
+<option value="-1">-Z</option>
+</select>
+</div>
+</div>
+<div class="property-group">
+<button class="modal-btn secondary" style="width:100%" onclick="app.editFeature()">Bearbeiten</button>
+<button class="modal-btn secondary" style="width:100%;margin-top:5px" onclick="app.deleteFeature()">Löschen</button>
+</div>
+`;
+}else if(f instanceof SketchFeature){
+html+=`
+<div class="property-group">
+<div class="property-row"><label>Entitäten</label><input value="${f.sketch.entities.length}" disabled></div>
+</div>
+`;
+}
+panel.innerHTML=html;
+}
+renameFeature(name){if(this.selectedFeature)this.selectedFeature.name=name;this.updateTree();}
+updateFeatureProp(prop,val){if(this.selectedFeature){this.selectedFeature[prop]=parseFloat(val);this.engine.regenerate();this.updateBodies();}}
+editFeature(){if(this.selectedFeature instanceof SketchFeature){this.activeSketch=this.selectedFeature.sketch;this.renderSketch();document.getElementById('sketchOverlay').style.display='block';}}
+suppressFeature(){if(this.selectedFeature){this.selectedFeature.suppressed=!this.selectedFeature.suppressed;this.engine.regenerate();this.updateTree();this.updateBodies();}}
+deleteFeature(){if(this.selectedFeature){this.engine.removeFeature(this.selectedFeature.id);this.selectedFeature=null;document.getElementById('propertiesPanel').innerHTML='<div class="property-label">Eigenschaften</div><div style="color:#808080;font-size:12px;">Wählen Sie ein Feature</div>';this.updateTree();this.updateBodies();}}
+selectBody(mesh){this.deselect();mesh.material=mesh.material.clone();mesh.material.emissive=new THREE.Color(0x004466);this.selectedBody=mesh;}
+deselect(){if(this.selectedBody){this.selectedBody.material.emissive=new THREE.Color(0,0,0);this.selectedBody=null;}}
+deleteSelected(){if(this.selectedFeature)this.deleteFeature();}
+updateBodies(){
+this.bodyGroup.clear();
+this.engine.bodies.forEach(b=>{
+if(b)this.bodyGroup.add(b);
+});
+}
+// Parameters
+updateParam(name,val){
+const num=parseFloat(val);
+if(!isNaN(num)){
+this.engine.addParameter(name,num);
+this.engine.regenerate();
+this.updateBodies();
+}
+}
+addParameter(){
+const name=prompt('Parameter Name (ohne #):');
+if(name){
+const val=prompt('Wert:');
+if(val){
+this.engine.addParameter(name,parseFloat(val));
+const table=document.getElementById('paramTable');
+const row=document.createElement('tr');
+row.innerHTML=`<td>#${name}</td><td><input value="${val}" onchange="app.updateParam('${name}',this.value)"></td>`;
+table.appendChild(row);
+}
+}
+}
+// Utils
+setStatus(txt){document.getElementById('statusText').textContent=txt;}
+switchTab(tab){
+document.getElementById('tabDesign').classList.toggle('active',tab==='design');
+document.getElementById('tabParams').classList.toggle('active',tab==='params');
+document.getElementById('designPanel').style.display=tab==='design'?'block':'none';
+document.getElementById('paramsPanel').style.display=tab==='params'?'block':'none';
+}
+showModal(title,body){
+document.getElementById('modalHeader').textContent=title;
+document.getElementById('modalBody').innerHTML=body;
+document.getElementById('modalFooter').innerHTML='<button class="modal-btn secondary" onclick="app.closeModal()">Schließen</button>';
+document.getElementById('modal').style.display='flex';
+}
+closeModal(){document.getElementById('modal').style.display='none';}
+// Menus
+fileMenu(){
+const html=`
+<div class="context-item" onclick="app.hideContext();app.newFile()">Neu</div>
+<div class="context-item" onclick="app.hideContext()">Öffnen...</div>
+<div class="context-item" onclick="app.hideContext()">Speichern</div>
+<div class="context-sep"></div>
+<div class="context-item" onclick="app.hideContext();app.exportSTEP()">Export STEP</div>
+<div class="context-item" onclick="app.hideContext();app.exportSTL()">Export STL</div>
+`;
+this.showContextMenu(html);
+}
+editMenu(){}
+viewMenu(){}
+toolsMenu(){}
+showContextMenu(html){
+const menu=document.getElementById('contextMenu');
+menu.innerHTML=html;
+menu.style.display='block';
+const rect=event.target.getBoundingClientRect();
+menu.style.left=rect.left+'px';
+menu.style.top=rect.bottom+'px';
+}
+newFile(){this.engine.features=[];this.engine.regenerate();this.updateTree();this.updateBodies();}
+exportSTEP(){alert('STEP Export wird generiert...');}
+exportSTL(){
+// Export selected or all bodies
+let stl='solid cadmodel\n';
+this.engine.bodies.forEach(b=>{
+if(b&&b.geometry){
+const pos=b.geometry.attributes.position;
+for(let i=0;i<pos.count;i+=3){
+const v1=new THREE.Vector3(pos.getX(i),pos.getY(i),pos.getZ(i)).applyMatrix4(b.matrixWorld);
+const v2=new THREE.Vector3(pos.getX(i+1),pos.getY(i+1),pos.getZ(i+1)).applyMatrix4(b.matrixWorld);
+const v3=new THREE.Vector3(pos.getX(i+2),pos.getY(i+2),pos.getZ(i+2)).applyMatrix4(b.matrixWorld);
+const n=new THREE.Vector3().crossVectors(v2.clone().sub(v1),v3.clone().sub(v1)).normalize();
+stl+=`  facet normal ${n.x} ${n.y} ${n.z}\n`;
+stl+=`    outer loop\n`;
+stl+=`      vertex ${v1.x} ${v1.y} ${v1.z}\n`;
+stl+=`      vertex ${v2.x} ${v2.y} ${v2.z}\n`;
+stl+=`      vertex ${v3.x} ${v3.y} ${v3.z}\n`;
+stl+=`    endloop\n`;
+stl+=`  endfacet\n`;
+}
+}
+});
+stl+='endsolid';
+const blob=new Blob([stl],{type:'application/sla'});
+const url=URL.createObjectURL(blob);
+const a=document.createElement('a');
+a.href=url;
+a.download='model.stl';
+a.click();
+}
+render(){
+requestAnimationFrame(()=>this.render());
+this.controls.update();
+this.renderer.render(this.scene,this.camera);
+}
+}
+
+window.app=new CADApp();
+</script>
+</body>
+</html>

@@ -1,0 +1,233 @@
+<!DOCTYPE html>
+<html lang="de">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>VAULT_V7_STABLE_SYSTEM</title>
+    <script src="https://cdn.jsdelivr.net/npm/ethers@5.7.2/dist/ethers.umd.min.js"></script>
+    <script src="https://unpkg.com/html5-qrcode"></script>
+    <script src="https://cdnjs.cloudflare.com/ajax/libs/qrcodejs/1.0.0/qrcode.min.js"></script>
+    
+    <style>
+        :root { --main: #fff; --bg: #000; --accent: #00ff41; --danger: #ff003c; }
+        * { box-sizing: border-box; outline: none; }
+        body { background: var(--bg); color: var(--main); font-family: 'Courier New', monospace; margin: 0; padding: 20px; }
+
+        /* V7 UI: EXTREME BRUTALISM */
+        .wrapper { max-width: 800px; margin: 0 auto; }
+        .b-panel { border: 10px solid var(--main); background: var(--bg); padding: 40px; margin-bottom: 30px; box-shadow: 20px 20px 0 #222; }
+        h1 { font-size: 4rem; line-height: 0.8; margin: 0 0 30px 0; text-transform: uppercase; word-break: break-all; }
+        
+        input, textarea { width: 100%; background: #000; border: 5px solid var(--main); color: var(--accent); padding: 20px; font-family: monospace; font-size: 1.5rem; margin-bottom: 20px; }
+        
+        button { background: var(--main); color: var(--bg); border: none; padding: 25px; font-weight: 900; cursor: pointer; width: 100%; font-size: 1.5rem; text-transform: uppercase; margin-bottom: 10px; }
+        button:hover { background: var(--accent); color: #000; }
+        button.sec { background: #222; color: #fff; border: 2px solid #fff; font-size: 1rem; }
+
+        .status-tag { display: inline-block; background: var(--accent); color: #000; padding: 5px 10px; font-weight: 900; margin-bottom: 20px; font-size: 0.8rem; }
+        .note-item { border-bottom: 5px solid #333; padding: 20px 0; }
+        .note-item:last-child { border: none; }
+        
+        .hidden { display: none !important; }
+        #reader { width: 100% !important; border: 5px solid var(--accent); margin-bottom: 20px; }
+        #qr-container { background: #fff; padding: 15px; display: inline-block; border: 5px solid var(--accent); }
+    </style>
+</head>
+<body>
+
+<div class="wrapper">
+    <!-- PHASE 1: LOGIN -->
+    <div id="login-zone">
+        <div class="b-panel">
+            <h1>VAULT<br>SYSTEM</h1>
+            <div class="status-tag">CORE_V7_STABLE</div>
+            
+            <input type="password" id="seedInput" placeholder="ENTER_SEED_PHRASE">
+            
+            <button id="authBtn">AUTHORIZE_SESSION</button>
+            <button class="sec" id="scanBtn">SCAN_QR_ID</button>
+            <button class="sec" id="genBtn" style="color: #666;">GENERATE_NEW_IDENTITY</button>
+            
+            <div id="reader" class="hidden"></div>
+        </div>
+    </div>
+
+    <!-- PHASE 2: VAULT -->
+    <div id="vault-zone" class="hidden">
+        <div class="b-panel">
+            <h1>WORKSPACE</h1>
+            <div id="syncStatus" class="status-tag">INITIALIZING_HELIA_V7...</div>
+
+            <textarea id="noteInput" rows="3" placeholder="ENTER_CONFIDENTIAL_DATA"></textarea>
+            <button id="saveBtn">ENCRYPT_AND_PUSH</button>
+        </div>
+
+        <div id="notes-list" class="b-panel">
+            <!-- NOTES LOAD HERE -->
+        </div>
+
+        <div class="b-panel">
+            <div style="font-size: 1rem; margin-bottom: 20px;">BACKUP_IDENTITY_QR</div>
+            <div id="qr-container"></div>
+            <button onclick="location.reload()" style="background: var(--danger); color: #fff; margin-top: 40px;">KILL_SESSION</button>
+        </div>
+    </div>
+</div>
+
+<script type="module">
+    import { createHelia } from 'https://esm.sh/helia';
+    import { strings } from 'https://esm.sh/@helia/strings';
+    import { ipns } from 'https://esm.sh/@helia/ipns';
+    import { generateKeyPairFromSeed } from 'https://esm.sh/@libp2p/crypto/keys';
+
+    let helia, s, heliaIpns, encKey, currentSeed, notes = [];
+    const KEY_NAME = 'vault-v7-key';
+
+    // --- HELPER: LOCAL STORAGE CACHE ---
+    const getCacheKey = (seed) => 'v7_vault_' + btoa(seed.substring(0, 12));
+
+    // --- UI ACTIONS ---
+    const seedInput = document.getElementById('seedInput');
+    const syncStatus = document.getElementById('syncStatus');
+
+    window.doLogin = async () => {
+        currentSeed = seedInput.value.trim();
+        if(!currentSeed) return;
+
+        try {
+            const wallet = currentSeed.split(' ').length > 1 ? 
+                           ethers.Wallet.fromMnemonic(currentSeed) : 
+                           new ethers.Wallet(currentSeed);
+            const entropy = ethers.utils.arrayify(ethers.utils.sha256(wallet.privateKey));
+            
+            // AES Setup
+            encKey = await crypto.subtle.importKey("raw", entropy, "AES-GCM", false, ["encrypt", "decrypt"]);
+            
+            // UI Toggle
+            document.getElementById('login-zone').classList.add('hidden');
+            document.getElementById('vault-zone').classList.remove('hidden');
+            
+            // Identity QR
+            new QRCode(document.getElementById("qr-container"), { text: currentSeed, width: 200, height: 200 });
+
+            // 1. Load Local
+            loadLocal();
+
+            // 2. Start Network (Silent Mode)
+            startHeliaNetwork(entropy);
+        } catch (e) { alert("AUTH_ERROR: " + e.message); }
+    };
+
+    async function startHeliaNetwork(entropy) {
+        try {
+            // Helia Instanz starten
+            // Hinweis: Wir nutzen die Standard-Instanz, fangen aber Routing-Fehler ab
+            helia = await createHelia();
+            s = strings(helia);
+            heliaIpns = ipns(helia);
+            
+            const keyPair = await generateKeyPairFromSeed('Ed25519', entropy);
+            await helia.libp2p.keychain.importKey(KEY_NAME, keyPair);
+            
+            syncStatus.innerText = "IPFS_NETWORK_ONLINE";
+            syncRemote();
+        } catch (e) {
+            syncStatus.innerText = "OFFLINE_MODE_ACTIVE";
+            console.warn("IPFS Boot failed, continuing in offline-mode.");
+        }
+    }
+
+    window.saveNote = async () => {
+        const val = document.getElementById('noteInput').value;
+        if(!val) return;
+
+        const btn = document.getElementById('saveBtn');
+        btn.innerText = "ENCRYPTING...";
+        
+        notes.unshift({ t: val, d: new Date().toISOString() });
+        render();
+        document.getElementById('noteInput').value = "";
+
+        // Crypto & LocalSave
+        const encrypted = await encrypt(JSON.stringify(notes));
+        localStorage.setItem(getCacheKey(currentSeed), JSON.stringify(encrypted));
+
+        // Background IPFS Push
+        if(helia) {
+            try {
+                const cid = await s.add(JSON.stringify(encrypted));
+                await heliaIpns.publish(KEY_NAME, cid);
+                btn.innerText = "SYNCED_OK";
+            } catch(e) { btn.innerText = "SYNC_PENDING"; }
+        } else {
+            btn.innerText = "SAVED_LOCALLY";
+        }
+        setTimeout(() => btn.innerText = "ENCRYPT_AND_PUSH", 2000);
+    };
+
+    // --- CRYPTO LOGIC ---
+    async function encrypt(text) {
+        const iv = crypto.getRandomValues(new Uint8Array(12));
+        const encoded = new TextEncoder().encode(text);
+        const cipher = await crypto.subtle.encrypt({ name: "AES-GCM", iv }, encKey, encoded);
+        return { iv: Array.from(iv), data: Array.from(new Uint8Array(cipher)) };
+    }
+
+    async function decrypt(obj) {
+        const dec = await crypto.subtle.decrypt({ name: "AES-GCM", iv: new Uint8Array(obj.iv) }, encKey, new Uint8Array(obj.data));
+        return JSON.parse(new TextDecoder().decode(dec));
+    }
+
+    // --- DATA MANAGEMENT ---
+    function loadLocal() {
+        const data = localStorage.getItem(getCacheKey(currentSeed));
+        if(data) decrypt(JSON.parse(data)).then(d => { notes = d; render(); });
+    }
+
+    async function syncRemote() {
+        try {
+            const peerId = await helia.libp2p.keychain.exportPeerId(KEY_NAME);
+            const res = await heliaIpns.resolve(peerId);
+            const raw = await s.get(res.cid);
+            const remote = await decrypt(JSON.parse(raw));
+            if(remote.length > notes.length) {
+                notes = remote;
+                render();
+                syncStatus.innerText = "REMOTE_SYNC_COMPLETE";
+            }
+        } catch(e) { console.log("IPNS resolve skipped/failed."); }
+    }
+
+    function render() {
+        const list = document.getElementById('notes-list');
+        if(notes.length === 0) { list.innerHTML = "NO_DATA_FOUND"; return; }
+        list.innerHTML = notes.map(n => `
+            <div class="note-item">
+                <div style="font-size: 0.8rem; color: #555; margin-bottom: 5px;">${n.d}</div>
+                <div style="line-height: 1.4;">${n.t}</div>
+            </div>
+        `).join('');
+    }
+
+    // --- EVENT BINDING ---
+    document.getElementById('authBtn').onclick = window.doLogin;
+    document.getElementById('saveBtn').onclick = window.saveNote;
+    document.getElementById('genBtn').onclick = () => {
+        const w = ethers.Wallet.createRandom();
+        seedInput.value = w.mnemonic.phrase;
+        alert("BACKUP_SEED_NOW:\n\n" + w.mnemonic.phrase);
+    };
+    document.getElementById('scanBtn').onclick = () => {
+        const r = document.getElementById('reader');
+        r.classList.remove('hidden');
+        const scanner = new Html5Qrcode("reader");
+        scanner.start({ facingMode: "environment" }, { fps: 10, qrbox: 250 }, (txt) => {
+            seedInput.value = txt;
+            scanner.stop();
+            r.classList.add('hidden');
+            window.doLogin();
+        });
+    };
+</script>
+</body>
+</html>

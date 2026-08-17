@@ -1,0 +1,707 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>fight</title>
+    <style>
+        * {
+            margin: 0;
+            padding: 0;
+            box-sizing: border-box;
+        }
+
+        body {
+            font-family: 'Arial', sans-serif;
+            background: linear-gradient(135deg, #667eea 0%, #764ba2 100%);
+            display: flex;
+            justify-content: center;
+            align-items: center;
+            min-height: 100vh;
+            overflow: hidden;
+        }
+
+        .game-container {
+            position: relative;
+            background: #1a1a2e;
+            border-radius: 20px;
+            padding: 20px;
+            box-shadow: 0 20px 60px rgba(0, 0, 0, 0.5);
+        }
+
+        canvas {
+            border: 3px solid #16213e;
+            border-radius: 10px;
+            display: block;
+            background: linear-gradient(to bottom, #87CEEB 0%, #98D8C8 50%, #8B7355 50%, #654321 100%);
+        }
+
+        .ui-overlay {
+            position: absolute;
+            top: 40px;
+            left: 40px;
+            right: 40px;
+            display: flex;
+            justify-content: space-between;
+            align-items: center;
+            pointer-events: none;
+        }
+
+        .health-bar-container {
+            width: 300px;
+            height: 30px;
+            background: rgba(0, 0, 0, 0.5);
+            border: 2px solid #fff;
+            border-radius: 15px;
+            overflow: hidden;
+            position: relative;
+        }
+
+        .health-bar {
+            height: 100%;
+            background: linear-gradient(90deg, #ff6b6b, #ee5a24);
+            transition: width 0.3s ease;
+            position: relative;
+            overflow: hidden;
+        }
+
+        .health-bar::after {
+            content: '';
+            position: absolute;
+            top: 0;
+            left: 0;
+            right: 0;
+            bottom: 0;
+            background: linear-gradient(90deg, transparent, rgba(255, 255, 255, 0.3), transparent);
+            animation: shine 2s infinite;
+        }
+
+        @keyframes shine {
+            0% { transform: translateX(-100%); }
+            100% { transform: translateX(100%); }
+        }
+
+        .player-name {
+            color: white;
+            font-weight: bold;
+            margin-bottom: 5px;
+            text-shadow: 2px 2px 4px rgba(0, 0, 0, 0.5);
+        }
+
+        .timer {
+            font-size: 48px;
+            color: white;
+            font-weight: bold;
+            text-shadow: 3px 3px 6px rgba(0, 0, 0, 0.7);
+        }
+
+        .game-menu {
+            position: absolute;
+            top: 50%;
+            left: 50%;
+            transform: translate(-50%, -50%);
+            text-align: center;
+            color: white;
+            z-index: 10;
+        }
+
+        .game-menu h1 {
+            font-size: 48px;
+            margin-bottom: 20px;
+            text-shadow: 3px 3px 6px rgba(0, 0, 0, 0.7);
+            animation: pulse 2s infinite;
+        }
+
+        @keyframes pulse {
+            0%, 100% { transform: scale(1); }
+            50% { transform: scale(1.05); }
+        }
+
+        .menu-button {
+            background: linear-gradient(135deg, #667eea 0%, #764ba2 100%);
+            color: white;
+            border: none;
+            padding: 15px 40px;
+            font-size: 20px;
+            border-radius: 30px;
+            cursor: pointer;
+            margin: 10px;
+            transition: all 0.3s ease;
+            box-shadow: 0 4px 15px rgba(0, 0, 0, 0.3);
+        }
+
+        .menu-button:hover {
+            transform: translateY(-3px);
+            box-shadow: 0 6px 20px rgba(0, 0, 0, 0.4);
+        }
+
+        .controls {
+            position: absolute;
+            bottom: -60px;
+            left: 50%;
+            transform: translateX(-50%);
+            color: white;
+            text-align: center;
+            font-size: 14px;
+            opacity: 0.8;
+        }
+
+        .combo-indicator {
+            position: absolute;
+            top: 100px;
+            left: 50%;
+            transform: translateX(-50%);
+            color: #FFD700;
+            font-size: 36px;
+            font-weight: bold;
+            text-shadow: 2px 2px 4px rgba(0, 0, 0, 0.8);
+            opacity: 0;
+            transition: opacity 0.3s ease;
+            pointer-events: none;
+        }
+
+        .combo-indicator.show {
+            opacity: 1;
+            animation: comboPopup 0.5s ease;
+        }
+
+        @keyframes comboPopup {
+            0% { transform: translateX(-50%) scale(0.5); }
+            50% { transform: translateX(-50%) scale(1.2); }
+            100% { transform: translateX(-50%) scale(1); }
+        }
+
+        .control-hint {
+            position: absolute;
+            top: 140px;
+            left: 50%;
+            transform: translateX(-50%);
+            color: rgba(255, 255, 255, 0.9);
+            font-size: 16px;
+            font-weight: bold;
+            text-shadow: 2px 2px 4px rgba(0, 0, 0, 0.7);
+            pointer-events: none;
+            background: rgba(0, 0, 0, 0.3);
+            padding: 8px 20px;
+            border-radius: 20px;
+        }
+    </style>
+</head>
+<body>
+    <div class="game-container">
+        <canvas id="gameCanvas" width="800" height="400"></canvas>
+        
+        <div class="ui-overlay">
+            <div>
+                <div class="player-name">PLAYER</div>
+                <div class="health-bar-container">
+                    <div class="health-bar" id="playerHealth" style="width: 100%"></div>
+                </div>
+            </div>
+            <div class="timer" id="timer">60</div>
+            <div>
+                <div class="player-name" style="text-align: right;">AI FIGHTER</div>
+                <div class="health-bar-container">
+                    <div class="health-bar" id="aiHealth" style="width: 100%"></div>
+                </div>
+            </div>
+        </div>
+
+        <div class="game-menu" id="gameMenu">
+            <h1>⚔️ fight ⚔️</h1>
+            <button class="menu-button" onclick="startGame()">START GAME</button>
+            <div style="margin-top: 30px; opacity: 0.8;">
+                <p>Controls:</p>
+                <p>← → Move | ↑ Jump | X Punch | C Kick | V Block</p>
+            </div>
+        </div>
+
+        <div class="combo-indicator" id="comboIndicator"></div>
+        <div class="control-hint" id="controlHint" style="display: none;">X: Punch | C: Kick | V: Block</div>
+
+        <div class="controls">
+            Use Arrow Keys to move • X to punch • C to kick • V to block
+        </div>
+    </div>
+
+    <script>
+        const canvas = document.getElementById('gameCanvas');
+        const ctx = canvas.getContext('2d');
+        const gameMenu = document.getElementById('gameMenu');
+        const playerHealthBar = document.getElementById('playerHealth');
+        const aiHealthBar = document.getElementById('aiHealth');
+        const timerDisplay = document.getElementById('timer');
+        const comboIndicator = document.getElementById('comboIndicator');
+        const controlHint = document.getElementById('controlHint');
+
+        // Game state
+        let gameState = 'menu'; // menu, playing, gameOver
+        let gameTime = 60;
+        let gameTimer = null;
+        let comboCount = 0;
+        let lastHitTime = 0;
+
+        // Fighter class
+        class Fighter {
+            constructor(x, y, color, isPlayer = true) {
+                this.x = x;
+                this.y = y;
+                this.width = 60;
+                this.height = 100;
+                this.color = color;
+                this.isPlayer = isPlayer;
+                this.velocityX = 0;
+                this.velocityY = 0;
+                this.health = 100;
+                this.maxHealth = 100;
+                this.isJumping = false;
+                this.isBlocking = false;
+                this.isAttacking = false;
+                this.attackType = '';
+                this.attackCooldown = 0;
+                this.stunned = 0;
+                this.facing = isPlayer ? 1 : -1;
+                this.animationFrame = 0;
+                this.punchDamage = 10;
+                this.kickDamage = 15;
+            }
+
+            update() {
+                // Apply gravity
+                if (this.y < canvas.height - 150 - this.height) {
+                    this.velocityY += 0.8;
+                } else {
+                    this.y = canvas.height - 150 - this.height;
+                    this.velocityY = 0;
+                    this.isJumping = false;
+                }
+
+                // Update position
+                this.x += this.velocityX;
+                this.y += this.velocityY;
+
+                // Boundaries
+                this.x = Math.max(0, Math.min(canvas.width - this.width, this.x));
+
+                // Friction
+                this.velocityX *= 0.9;
+
+                // Update cooldowns
+                if (this.attackCooldown > 0) this.attackCooldown--;
+                if (this.stunned > 0) this.stunned--;
+
+                // Animation
+                this.animationFrame = (this.animationFrame + 1) % 60;
+            }
+
+            draw() {
+                ctx.save();
+                
+                // Shadow
+                ctx.fillStyle = 'rgba(0, 0, 0, 0.3)';
+                ctx.ellipse(this.x + this.width/2, canvas.height - 140, this.width/2, 10, 0, 0, Math.PI * 2);
+                ctx.fill();
+
+                // Fighter body
+                ctx.fillStyle = this.color;
+                ctx.fillRect(this.x, this.y, this.width, this.height);
+
+                // Head
+                ctx.beginPath();
+                ctx.arc(this.x + this.width/2, this.y - 15, 20, 0, Math.PI * 2);
+                ctx.fill();
+
+                // Eyes
+                ctx.fillStyle = 'white';
+                ctx.beginPath();
+                ctx.arc(this.x + this.width/2 - 8 * this.facing, this.y - 15, 5, 0, Math.PI * 2);
+                ctx.arc(this.x + this.width/2 + 8 * this.facing, this.y - 15, 5, 0, Math.PI * 2);
+                ctx.fill();
+
+                ctx.fillStyle = 'black';
+                ctx.beginPath();
+                ctx.arc(this.x + this.width/2 - 8 * this.facing, this.y - 15, 2, 0, Math.PI * 2);
+                ctx.arc(this.x + this.width/2 + 8 * this.facing, this.y - 15, 2, 0, Math.PI * 2);
+                ctx.fill();
+
+                // Arms
+                ctx.strokeStyle = this.color;
+                ctx.lineWidth = 8;
+                ctx.lineCap = 'round';
+                
+                if (this.isAttacking) {
+                    // Attacking animation
+                    ctx.beginPath();
+                    ctx.moveTo(this.x + this.width/2, this.y + 20);
+                    if (this.attackType === 'punch') {
+                        ctx.lineTo(this.x + this.width/2 + 40 * this.facing, this.y + 20);
+                    } else {
+                        ctx.lineTo(this.x + this.width/2 + 35 * this.facing, this.y + 50);
+                    }
+                    ctx.stroke();
+                } else if (this.isBlocking) {
+                    // Blocking pose
+                    ctx.beginPath();
+                    ctx.moveTo(this.x + this.width/2, this.y + 20);
+                    ctx.lineTo(this.x + this.width/2 - 20 * this.facing, this.y);
+                    ctx.stroke();
+                } else {
+                    // Normal arms
+                    ctx.beginPath();
+                    ctx.moveTo(this.x + this.width/2, this.y + 20);
+                    ctx.lineTo(this.x + this.width/2 - 20, this.y + 40);
+                    ctx.moveTo(this.x + this.width/2, this.y + 20);
+                    ctx.lineTo(this.x + this.width/2 + 20, this.y + 40);
+                    ctx.stroke();
+                }
+
+                // Legs
+                ctx.beginPath();
+                ctx.moveTo(this.x + this.width/2 - 10, this.y + this.height);
+                ctx.lineTo(this.x + this.width/2 - 10, this.y + this.height + 30);
+                ctx.moveTo(this.x + this.width/2 + 10, this.y + this.height);
+                ctx.lineTo(this.x + this.width/2 + 10, this.y + this.height + 30);
+                ctx.stroke();
+
+                // Health bar above fighter
+                ctx.fillStyle = 'rgba(0, 0, 0, 0.5)';
+                ctx.fillRect(this.x - 10, this.y - 45, this.width + 20, 8);
+                
+                const healthPercent = this.health / this.maxHealth;
+                ctx.fillStyle = healthPercent > 0.5 ? '#4CAF50' : healthPercent > 0.25 ? '#FFC107' : '#F44336';
+                ctx.fillRect(this.x - 10, this.y - 45, (this.width + 20) * healthPercent, 8);
+
+                ctx.restore();
+            }
+
+            jump() {
+                if (!this.isJumping && this.stunned <= 0) {
+                    this.velocityY = -15;
+                    this.isJumping = true;
+                }
+            }
+
+            moveLeft() {
+                if (this.stunned <= 0) {
+                    this.velocityX = -5;
+                    this.facing = -1;
+                }
+            }
+
+            moveRight() {
+                if (this.stunned <= 0) {
+                    this.velocityX = 5;
+                    this.facing = 1;
+                }
+            }
+
+            punch(opponent) {
+                if (this.attackCooldown <= 0 && this.stunned <= 0) {
+                    this.isAttacking = true;
+                    this.attackType = 'punch';
+                    this.attackCooldown = 20;
+                    
+                    setTimeout(() => {
+                        this.isAttacking = false;
+                    }, 200);
+
+                    // Check hit
+                    const distance = Math.abs(this.x - opponent.x);
+                    if (distance < 80) {
+                        if (opponent.isBlocking) {
+                            opponent.stunned = 10;
+                        } else {
+                            opponent.takeDamage(this.punchDamage);
+                            opponent.stunned = 15;
+                            this.onHit();
+                        }
+                    }
+                }
+            }
+
+            kick(opponent) {
+                if (this.attackCooldown <= 0 && this.stunned <= 0) {
+                    this.isAttacking = true;
+                    this.attackType = 'kick';
+                    this.attackCooldown = 30;
+                    
+                    setTimeout(() => {
+                        this.isAttacking = false;
+                    }, 300);
+
+                    // Check hit
+                    const distance = Math.abs(this.x - opponent.x);
+                    if (distance < 90) {
+                        if (opponent.isBlocking) {
+                            opponent.stunned = 15;
+                        } else {
+                            opponent.takeDamage(this.kickDamage);
+                            opponent.stunned = 20;
+                            this.onHit();
+                        }
+                    }
+                }
+            }
+
+            block() {
+                if (this.stunned <= 0) {
+                    this.isBlocking = true;
+                }
+            }
+
+            stopBlocking() {
+                this.isBlocking = false;
+            }
+
+            takeDamage(damage) {
+                this.health = Math.max(0, this.health - damage);
+                this.velocityX = this.facing * 5;
+                
+                // Update health bar
+                if (this.isPlayer) {
+                    playerHealthBar.style.width = this.health + '%';
+                } else {
+                    aiHealthBar.style.width = this.health + '%';
+                }
+            }
+
+            onHit() {
+                const currentTime = Date.now();
+                if (currentTime - lastHitTime < 2000) {
+                    comboCount++;
+                    showCombo();
+                } else {
+                    comboCount = 1;
+                }
+                lastHitTime = currentTime;
+            }
+        }
+
+        // Create fighters
+        let player = new Fighter(100, 200, '#4A90E2', true);
+        let ai = new Fighter(600, 200, '#E24A4A', false);
+
+        // Input handling
+        const keys = {};
+        document.addEventListener('keydown', (e) => {
+            keys[e.key] = true;
+        });
+
+        document.addEventListener('keyup', (e) => {
+            keys[e.key] = false;
+            if (e.key === 'v' || e.key === 'V') {
+                player.stopBlocking();
+            }
+        });
+
+        // AI behavior
+        function updateAI() {
+            if (ai.stunned > 0) return;
+
+            const distance = Math.abs(player.x - ai.x);
+            const playerIsAttacking = player.isAttacking;
+
+            // Face the player
+            ai.facing = player.x > ai.x ? 1 : -1;
+
+            // Decision making
+            if (playerIsAttacking && distance < 100) {
+                // Block if player is attacking
+                ai.block();
+            } else if (distance < 80) {
+                // Attack if close
+                ai.stopBlocking();
+                if (Math.random() > 0.5) {
+                    ai.punch(player);
+                } else {
+                    ai.kick(player);
+                }
+            } else if (distance > 150) {
+                // Move closer if far
+                ai.stopBlocking();
+                if (player.x > ai.x) {
+                    ai.moveRight();
+                } else {
+                    ai.moveLeft();
+                }
+            } else {
+                // Random movement
+                ai.stopBlocking();
+                if (Math.random() > 0.7) {
+                    if (Math.random() > 0.5) {
+                        ai.moveLeft();
+                    } else {
+                        ai.moveRight();
+                    }
+                }
+                if (Math.random() > 0.9) {
+                    ai.jump();
+                }
+            }
+        }
+
+        // Show combo indicator
+        function showCombo() {
+            comboIndicator.textContent = `${comboCount}x COMBO!`;
+            comboIndicator.classList.add('show');
+            setTimeout(() => {
+                comboIndicator.classList.remove('show');
+            }, 1000);
+        }
+
+        // Handle player input
+        function handleInput() {
+            if (keys['ArrowLeft']) {
+                player.moveLeft();
+            }
+            if (keys['ArrowRight']) {
+                player.moveRight();
+            }
+            if (keys['ArrowUp']) {
+                player.jump();
+            }
+            if (keys['x'] || keys['X']) {
+                player.punch(ai);
+            }
+            if (keys['c'] || keys['C']) {
+                player.kick(ai);
+            }
+            if (keys['v'] || keys['V']) {
+                player.block();
+            }
+        }
+
+        // Game loop
+        function gameLoop() {
+            if (gameState !== 'playing') return;
+
+            // Clear canvas
+            ctx.clearRect(0, 0, canvas.width, canvas.height);
+
+            // Draw background
+            drawBackground();
+
+            // Handle input
+            handleInput();
+
+            // Update AI
+            updateAI();
+
+            // Update fighters
+            player.update();
+            ai.update();
+
+            // Draw fighters
+            player.draw();
+            ai.draw();
+
+            // Check win conditions
+            if (player.health <= 0 || ai.health <= 0 || gameTime <= 0) {
+                endGame();
+            }
+
+            requestAnimationFrame(gameLoop);
+        }
+
+        // Draw background
+        function drawBackground() {
+            // Sky gradient
+            const gradient = ctx.createLinearGradient(0, 0, 0, canvas.height);
+            gradient.addColorStop(0, '#87CEEB');
+            gradient.addColorStop(0.5, '#98D8C8');
+            gradient.addColorStop(0.5, '#8B7355');
+            gradient.addColorStop(1, '#654321');
+            ctx.fillStyle = gradient;
+            ctx.fillRect(0, 0, canvas.width, canvas.height);
+
+            // Ground
+            ctx.fillStyle = '#8B7355';
+            ctx.fillRect(0, canvas.height - 150, canvas.width, 150);
+
+            // Ground line
+            ctx.strokeStyle = '#654321';
+            ctx.lineWidth = 3;
+            ctx.beginPath();
+            ctx.moveTo(0, canvas.height - 150);
+            ctx.lineTo(canvas.width, canvas.height - 150);
+            ctx.stroke();
+
+            // Decorative elements
+            ctx.fillStyle = '#228B22';
+            for (let i = 0; i < 5; i++) {
+                const x = i * 200 + 50;
+                ctx.beginPath();
+                ctx.moveTo(x, canvas.height - 150);
+                ctx.lineTo(x - 20, canvas.height - 100);
+                ctx.lineTo(x + 20, canvas.height - 100);
+                ctx.closePath();
+                ctx.fill();
+            }
+        }
+
+        // Start game
+        function startGame() {
+            gameState = 'playing';
+            gameMenu.style.display = 'none';
+            controlHint.style.display = 'block';
+            
+            // Hide control hint after 3 seconds
+            setTimeout(() => {
+                controlHint.style.display = 'none';
+            }, 3000);
+            
+            // Reset fighters
+            player = new Fighter(100, 200, '#4A90E2', true);
+            ai = new Fighter(600, 200, '#E24A4A', false);
+            
+            // Reset UI
+            playerHealthBar.style.width = '100%';
+            aiHealthBar.style.width = '100%';
+            gameTime = 60;
+            comboCount = 0;
+
+            // Start timer
+            if (gameTimer) clearInterval(gameTimer);
+            gameTimer = setInterval(() => {
+                gameTime--;
+                timerDisplay.textContent = gameTime;
+                if (gameTime <= 0) {
+                    endGame();
+                }
+            }, 1000);
+
+            // Start game loop
+            gameLoop();
+        }
+
+        // End game
+        function endGame() {
+            gameState = 'gameOver';
+            clearInterval(gameTimer);
+            controlHint.style.display = 'none';
+
+            let winner = '';
+            if (player.health <= 0) {
+                winner = 'AI WINS!';
+            } else if (ai.health <= 0) {
+                winner = 'PLAYER WINS!';
+            } else {
+                winner = gameTime <= 0 ? (player.health > ai.health ? 'PLAYER WINS!' : 'AI WINS!') : 'DRAW!';
+            }
+
+            gameMenu.innerHTML = `
+                <h1>${winner}</h1>
+                <button class="menu-button" onclick="startGame()">PLAY AGAIN</button>
+                <button class="menu-button" onclick="location.reload()">MAIN MENU</button>
+                <div style="margin-top: 20px; opacity: 0.8;">
+                    <p>Controls: ← → Move | ↑ Jump | X Punch | C Kick | V Block</p>
+                </div>
+            `;
+            gameMenu.style.display = 'block';
+        }
+
+        // Initialize
+        drawBackground();
+    </script>
+</body>
+</html>

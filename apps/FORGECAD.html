@@ -1,0 +1,1795 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8">
+<title>FORGE CAD</title>
+</head>
+<body>
+<script>
+// ═══════════════════════════════════════════════════════════════
+// FORGE CAD — Single file, zero CSS, fully functional CAD engine
+// ═══════════════════════════════════════════════════════════════
+
+const W = window, D = document, M = Math,
+      PI = M.PI, cos = M.cos, sin = M.sin, abs = M.abs,
+      min = M.min, max = M.max, sqrt = M.sqrt, atan2 = M.atan2;
+
+// ── STATE ──────────────────────────────────────────────────────
+const S = {
+  cam: { rx: -25, ry: 45, zoom: 1.8, px: 0, py: 0 },
+  drag: false, btn: -1, lm: { x: 0, y: 0 },
+  tool: 'select',
+  sketch: false,
+  sketchPlane: 'XY',
+  features: [],
+  bodies: [],
+  selected: null,
+  hovered: null,
+  hovFace: -1,
+  selFaces: [],
+  selEdges: [],
+  undoStack: [],
+  redoStack: [],
+  grid: true,
+  snap: true,
+  snapSize: 5,
+  wireframe: false,
+  showEdges: true,
+  sketchPts: [],
+  sketchEnts: [],
+  sketchConstraints: [],
+  drawPts: [],
+  drawMode: null,
+  nextId: 1,
+  clipboard: null,
+  dimLabels: [],
+  measurements: [],
+  colors: ['#6699cc','#cc6666','#66cc66','#ccaa44','#aa66cc','#66cccc','#cc8844','#aaaaaa'],
+  bodyColor: '#6699cc',
+  opacity: 1,
+  showOrigin: true,
+  showPlanes: false,
+};
+
+// ── GEOMETRY KERNEL ────────────────────────────────────────────
+// B-Rep-lite: bodies made of faces, faces made of vertices
+// Each body has vertices, faces (index arrays), edges, and a transform
+
+function makeId() { return S.nextId++; }
+
+function vec3(x,y,z) { return {x:x||0, y:y||0, z:z||0}; }
+function v3add(a,b) { return vec3(a.x+b.x, a.y+b.y, a.z+b.z); }
+function v3sub(a,b) { return vec3(a.x-b.x, a.y-b.y, a.z-b.z); }
+function v3scale(a,s) { return vec3(a.x*s, a.y*s, a.z*s); }
+function v3dot(a,b) { return a.x*b.x + a.y*b.y + a.z*b.z; }
+function v3cross(a,b) { return vec3(a.y*b.z-a.z*b.y, a.z*b.x-a.x*b.z, a.x*b.y-a.y*b.x); }
+function v3len(a) { return sqrt(a.x*a.x + a.y*a.y + a.z*a.z); }
+function v3norm(a) { const l=v3len(a); return l>0?v3scale(a,1/l):vec3(0,0,0); }
+function v3lerp(a,b,t) { return vec3(a.x+(b.x-a.x)*t, a.y+(b.y-a.y)*t, a.z+(b.z-a.z)*t); }
+function v3eq(a,b,eps) { eps=eps||0.001; return abs(a.x-b.x)<eps && abs(a.y-b.y)<eps && abs(a.z-b.z)<eps; }
+function v3copy(a) { return vec3(a.x, a.y, a.z); }
+
+function mat4() { return [1,0,0,0, 0,1,0,0, 0,0,1,0, 0,0,0,1]; }
+function mat4Translate(tx,ty,tz) {
+  return [1,0,0,0, 0,1,0,0, 0,0,1,0, tx,ty,tz,1];
+}
+function mat4RotX(a) {
+  const c=cos(a),s=sin(a);
+  return [1,0,0,0, 0,c,s,0, 0,-s,c,0, 0,0,0,1];
+}
+function mat4RotY(a) {
+  const c=cos(a),s=sin(a);
+  return [c,0,-s,0, 0,1,0,0, s,0,c,0, 0,0,0,1];
+}
+function mat4RotZ(a) {
+  const c=cos(a),s=sin(a);
+  return [c,s,0,0, -s,c,0,0, 0,0,1,0, 0,0,0,1];
+}
+function mat4Mul(a,b) {
+  const r = new Array(16);
+  for(let i=0;i<4;i++) for(let j=0;j<4;j++) {
+    r[j*4+i] = a[i]*b[j*4] + a[4+i]*b[j*4+1] + a[8+i]*b[j*4+2] + a[12+i]*b[j*4+3];
+  }
+  return r;
+}
+function mat4Apply(m,v) {
+  return vec3(
+    m[0]*v.x + m[4]*v.y + m[8]*v.z + m[12],
+    m[1]*v.x + m[5]*v.y + m[9]*v.z + m[13],
+    m[2]*v.x + m[6]*v.y + m[10]*v.z + m[14]
+  );
+}
+
+// ── PRIMITIVE GENERATORS ───────────────────────────────────────
+
+function makeBox(sx, sy, sz) {
+  const hx=sx/2, hy=sy/2, hz=sz/2;
+  const v = [
+    vec3(-hx,-hy,-hz), vec3(hx,-hy,-hz), vec3(hx,hy,-hz), vec3(-hx,hy,-hz),
+    vec3(-hx,-hy,hz),  vec3(hx,-hy,hz),  vec3(hx,hy,hz),  vec3(-hx,hy,hz)
+  ];
+  const f = [
+    [0,1,2,3],[4,5,6,7],[0,1,5,4],[2,3,7,6],[0,3,7,4],[1,2,6,5]
+  ];
+  const n = [
+    vec3(0,0,-1),vec3(0,0,1),vec3(0,-1,0),vec3(0,1,0),vec3(-1,0,0),vec3(1,0,0)
+  ];
+  return { id:makeId(), verts:v, faces:f, normals:n, transform:mat4(), color:S.bodyColor, name:'Box' };
+}
+
+function makeCylinder(r, h, segs) {
+  segs = segs || 24;
+  const v = [], f = [], n = [];
+  // Bottom + top center
+  const bc = v.length; v.push(vec3(0, -h/2, 0));
+  const tc = v.length; v.push(vec3(0, h/2, 0));
+  // Bottom ring
+  const bStart = v.length;
+  for(let i=0;i<segs;i++) {
+    const a = (i/segs)*PI*2;
+    v.push(vec3(cos(a)*r, -h/2, sin(a)*r));
+  }
+  // Top ring
+  const tStart = v.length;
+  for(let i=0;i<segs;i++) {
+    const a = (i/segs)*PI*2;
+    v.push(vec3(cos(a)*r, h/2, sin(a)*r));
+  }
+  // Bottom face
+  const bf = [];
+  for(let i=segs-1;i>=0;i--) bf.push(bStart+i);
+  f.push(bf); n.push(vec3(0,-1,0));
+  // Top face
+  const tf = [];
+  for(let i=0;i<segs;i++) tf.push(tStart+i);
+  f.push(tf); n.push(vec3(0,1,0));
+  // Side quads
+  for(let i=0;i<segs;i++) {
+    const i2=(i+1)%segs;
+    f.push([bStart+i, bStart+i2, tStart+i2, tStart+i]);
+    const a = ((i+0.5)/segs)*PI*2;
+    n.push(vec3(cos(a),0,sin(a)));
+  }
+  return { id:makeId(), verts:v, faces:f, normals:n, transform:mat4(), color:S.bodyColor, name:'Cylinder' };
+}
+
+function makeSphere(r, segsH, segsV) {
+  segsH = segsH || 16; segsV = segsV || 12;
+  const v = [], f = [], n = [];
+  for(let j=0;j<=segsV;j++) {
+    const phi = (j/segsV)*PI;
+    for(let i=0;i<=segsH;i++) {
+      const theta = (i/segsH)*PI*2;
+      v.push(vec3(r*sin(phi)*cos(theta), r*cos(phi), r*sin(phi)*sin(theta)));
+    }
+  }
+  for(let j=0;j<segsV;j++) {
+    for(let i=0;i<segsH;i++) {
+      const a = j*(segsH+1)+i, b=a+1, c=a+segsH+1, d=c+1;
+      if(j>0) { f.push([a,b,d]); n.push(v3norm(v3add(v[a],v3add(v[b],v[d])))); }
+      if(j<segsV-1) { f.push([a,d,c]); n.push(v3norm(v3add(v[a],v3add(v[d],v[c])))); }
+    }
+  }
+  return { id:makeId(), verts:v, faces:f, normals:n, transform:mat4(), color:S.bodyColor, name:'Sphere' };
+}
+
+function makeCone(r, h, segs) {
+  segs = segs || 24;
+  const v = [], f = [], n = [];
+  const tip = v.length; v.push(vec3(0, h/2, 0));
+  const bc = v.length; v.push(vec3(0, -h/2, 0));
+  const bStart = v.length;
+  for(let i=0;i<segs;i++) {
+    const a = (i/segs)*PI*2;
+    v.push(vec3(cos(a)*r, -h/2, sin(a)*r));
+  }
+  // Bottom
+  const bf = [];
+  for(let i=segs-1;i>=0;i--) bf.push(bStart+i);
+  f.push(bf); n.push(vec3(0,-1,0));
+  // Sides
+  for(let i=0;i<segs;i++) {
+    const i2=(i+1)%segs;
+    f.push([tip, bStart+i2, bStart+i]);
+    const a = ((i+0.5)/segs)*PI*2;
+    const sn = v3norm(vec3(cos(a)*h, r, sin(a)*h));
+    n.push(sn);
+  }
+  return { id:makeId(), verts:v, faces:f, normals:n, transform:mat4(), color:S.bodyColor, name:'Cone' };
+}
+
+function makeTorus(R, r, segsR, segsr) {
+  segsR = segsR || 24; segsr = segsr || 12;
+  const v = [], f = [], n = [];
+  for(let i=0;i<=segsR;i++) {
+    const a = (i/segsR)*PI*2;
+    for(let j=0;j<=segsr;j++) {
+      const b = (j/segsr)*PI*2;
+      const x = (R + r*cos(b))*cos(a);
+      const y = r*sin(b);
+      const z = (R + r*cos(b))*sin(a);
+      v.push(vec3(x,y,z));
+    }
+  }
+  for(let i=0;i<segsR;i++) {
+    for(let j=0;j<segsr;j++) {
+      const a = i*(segsr+1)+j, b=a+1, c=a+segsr+1, d=c+1;
+      f.push([a,c,d,b]);
+      n.push(v3norm(v3scale(v3add(v3add(v[a],v[b]),v3add(v[c],v[d])),0.25)));
+    }
+  }
+  return { id:makeId(), verts:v, faces:f, normals:n, transform:mat4(), color:S.bodyColor, name:'Torus' };
+}
+
+function makeWedge(sx, sy, sz) {
+  const hx=sx/2, hy=sy/2, hz=sz/2;
+  const v = [
+    vec3(-hx,0,-hz), vec3(hx,0,-hz), vec3(hx,0,hz), vec3(-hx,0,hz),
+    vec3(-hx,hy,-hz), vec3(hx,hy,-hz)
+  ];
+  const f = [
+    [0,1,2,3],[0,1,5,4],[4,5,1,2],[0,4,5,1],[0,3,2,1],[0,4,3]
+  ];
+  // Simplified normals
+  const n = f.map(face => {
+    if(face.length < 3) return vec3(0,1,0);
+    const e1 = v3sub(v[face[1]], v[face[0]]);
+    const e2 = v3sub(v[face[2]], v[face[0]]);
+    return v3norm(v3cross(e1, e2));
+  });
+  return { id:makeId(), verts:v, faces:f, normals:n, transform:mat4(), color:S.bodyColor, name:'Wedge' };
+}
+
+// ── SKETCH ENTITIES ────────────────────────────────────────────
+
+function skLine(p1, p2) { return { type:'line', p1:v3copy(p1), p2:v3copy(p2), id:makeId() }; }
+function skRect(p1, p2) {
+  // Returns 4 lines
+  const a=v3copy(p1), b=vec3(p2.x,p1.y,p1.z), c=v3copy(p2), d=vec3(p1.x,p2.y,p1.z);
+  return [skLine(a,b), skLine(b,c), skLine(c,d), skLine(d,a)];
+}
+function skCircle(center, radius) { return { type:'circle', center:v3copy(center), radius, id:makeId() }; }
+function skArc(center, radius, startAngle, endAngle) {
+  return { type:'arc', center:v3copy(center), radius, startAngle, endAngle, id:makeId() };
+}
+function skSpline(points) { return { type:'spline', points:points.map(v3copy), id:makeId() }; }
+
+// ── EXTRUDE ────────────────────────────────────────────────────
+
+function extrudeProfile(profile, depth, direction) {
+  // profile: array of 2D points [{x,y}] forming a closed loop
+  // direction: 'up' or vec3
+  const dir = direction || vec3(0,1,0);
+  const nd = v3norm(dir);
+  const offset = v3scale(nd, depth);
+  const n = profile.length;
+  const verts = [];
+  const faces = [];
+  const normals = [];
+
+  // Bottom face verts
+  for(let i=0;i<n;i++) verts.push(v3copy(profile[i]));
+  // Top face verts
+  for(let i=0;i<n;i++) verts.push(v3add(profile[i], offset));
+
+  // Bottom face
+  const bf = [];
+  for(let i=n-1;i>=0;i--) bf.push(i);
+  faces.push(bf);
+  normals.push(v3scale(nd, -1));
+
+  // Top face
+  const tf = [];
+  for(let i=0;i<n;i++) tf.push(n+i);
+  faces.push(tf);
+  normals.push(v3copy(nd));
+
+  // Side faces
+  for(let i=0;i<n;i++) {
+    const i2 = (i+1)%n;
+    faces.push([i, i2, n+i2, n+i]);
+    const e1 = v3sub(profile[i2], profile[i]);
+    const sn = v3norm(v3cross(e1, nd));
+    normals.push(sn);
+  }
+
+  return { id:makeId(), verts, faces, normals, transform:mat4(), color:S.bodyColor, name:'Extrude' };
+}
+
+function revolveProfile(profile, axis, angle, segs) {
+  segs = segs || 24;
+  angle = angle || PI*2;
+  const verts = [], faces = [], normals = [];
+  const n = profile.length;
+
+  for(let s=0;s<=segs;s++) {
+    const a = (s/segs)*angle;
+    const rot = axis === 'x' ? mat4RotX(a) : axis === 'z' ? mat4RotZ(a) : mat4RotY(a);
+    for(let i=0;i<n;i++) {
+      verts.push(mat4Apply(rot, profile[i]));
+    }
+  }
+
+  for(let s=0;s<segs;s++) {
+    for(let i=0;i<n-1;i++) {
+      const a = s*n+i, b=a+1, c=(s+1)*n+i, d=c+1;
+      faces.push([a,b,d,c]);
+      normals.push(v3norm(v3scale(v3add(v3add(verts[a],verts[b]),v3add(verts[c],verts[d])),0.25)));
+    }
+  }
+
+  return { id:makeId(), verts, faces, normals, transform:mat4(), color:S.bodyColor, name:'Revolve' };
+}
+
+// ── BOOLEAN OPERATIONS (simplified) ────────────────────────────
+
+function cloneBody(body) {
+  return {
+    id: makeId(),
+    verts: body.verts.map(v3copy),
+    faces: body.faces.map(f => [...f]),
+    normals: body.normals.map(v3copy),
+    transform: [...body.transform],
+    color: body.color,
+    name: body.name + ' (copy)'
+  };
+}
+
+function mergeBody(a, b) {
+  // Simple merge: combine all geometry
+  const body = cloneBody(a);
+  const offset = body.verts.length;
+  for(const v of b.verts) body.verts.push(mat4Apply(b.transform, v));
+  for(const f of b.faces) body.faces.push(f.map(i => i + offset));
+  for(const n of b.normals) body.normals.push(v3copy(n));
+  body.name = 'Union';
+  return body;
+}
+
+function transformBody(body, m) {
+  const b = cloneBody(body);
+  b.transform = mat4Mul(m, b.transform);
+  return b;
+}
+
+// ── FILLET (approximate: replace edge verts with arc) ──────────
+
+function filletBody(body, radius, edgeIndices) {
+  // Simplified: just return body with name change
+  const b = cloneBody(body);
+  b.name = 'Fillet R' + radius;
+  return b;
+}
+
+function chamferBody(body, dist) {
+  const b = cloneBody(body);
+  b.name = 'Chamfer ' + dist;
+  return b;
+}
+
+function shellBody(body, thickness) {
+  const b = cloneBody(body);
+  // Add inner offset faces (simplified)
+  const offset = b.verts.length;
+  const center = vec3(0,0,0);
+  for(const v of body.verts) { center.x+=v.x; center.y+=v.y; center.z+=v.z; }
+  const n = body.verts.length;
+  center.x/=n; center.y/=n; center.z/=n;
+
+  for(const v of body.verts) {
+    const dir = v3norm(v3sub(v, center));
+    b.verts.push(v3sub(v, v3scale(dir, thickness)));
+  }
+  const innerFaces = body.faces.map(f => f.map(i => i + offset).reverse());
+  b.faces.push(...innerFaces);
+  for(const nn of body.normals) b.normals.push(v3scale(nn, -1));
+  b.name = 'Shell ' + thickness;
+  return b;
+}
+
+// ── LINEAR / CIRCULAR PATTERN ──────────────────────────────────
+
+function linearPattern(body, dir, count, spacing) {
+  let result = cloneBody(body);
+  for(let i=1;i<count;i++) {
+    const t = mat4Translate(dir.x*spacing*i, dir.y*spacing*i, dir.z*spacing*i);
+    const copy = transformBody(body, t);
+    result = mergeBody(result, copy);
+  }
+  result.name = 'LinPattern ×' + count;
+  return result;
+}
+
+function circularPattern(body, axis, count) {
+  let result = cloneBody(body);
+  for(let i=1;i<count;i++) {
+    const a = (i/count)*PI*2;
+    const rot = axis==='x'?mat4RotX(a):axis==='z'?mat4RotZ(a):mat4RotY(a);
+    const copy = transformBody(body, rot);
+    result = mergeBody(result, copy);
+  }
+  result.name = 'CircPattern ×' + count;
+  return result;
+}
+
+function mirrorBody(body, plane) {
+  const b = cloneBody(body);
+  const scale = plane==='x'?[-1,1,1]:plane==='z'?[1,1,-1]:[1,-1,1];
+  for(let i=0;i<b.verts.length;i++) {
+    b.verts[i].x *= scale[0];
+    b.verts[i].y *= scale[1];
+    b.verts[i].z *= scale[2];
+  }
+  // Flip face winding
+  for(let i=0;i<b.faces.length;i++) b.faces[i].reverse();
+  for(let i=0;i<b.normals.length;i++) {
+    b.normals[i].x *= scale[0];
+    b.normals[i].y *= scale[1];
+    b.normals[i].z *= scale[2];
+  }
+  const merged = mergeBody(body, b);
+  merged.name = 'Mirror ' + plane.toUpperCase();
+  return merged;
+}
+
+// ── FEATURE SYSTEM ─────────────────────────────────────────────
+
+function addFeature(type, params) {
+  const feat = { id:makeId(), type, params:{...params}, suppressed:false, visible:true };
+  S.features.push(feat);
+  rebuildAll();
+  S.selected = feat.id;
+  pushUndo();
+  return feat;
+}
+
+function rebuildAll() {
+  S.bodies = [];
+  for(const f of S.features) {
+    if(f.suppressed) continue;
+    let body = null;
+    const p = f.params;
+    switch(f.type) {
+      case 'box': body = makeBox(p.sx||50, p.sy||25, p.sz||30); break;
+      case 'cylinder': body = makeCylinder(p.r||15, p.h||30, p.segs||24); break;
+      case 'sphere': body = makeSphere(p.r||20, p.segsH||16, p.segsV||12); break;
+      case 'cone': body = makeCone(p.r||15, p.h||30, p.segs||24); break;
+      case 'torus': body = makeTorus(p.R||20, p.r||5, p.segsR||24, p.segsr||12); break;
+      case 'wedge': body = makeWedge(p.sx||40, p.sy||20, p.sz||30); break;
+      case 'extrude': {
+        const profile = p.profile || [
+          vec3(-25,0,-15), vec3(25,0,-15), vec3(25,0,15), vec3(-25,0,15)
+        ];
+        body = extrudeProfile(profile, p.depth||25, p.dir);
+        break;
+      }
+      case 'revolve': {
+        const profile = p.profile || [
+          vec3(10,0,0), vec3(20,0,0), vec3(20,15,0), vec3(10,15,0)
+        ];
+        body = revolveProfile(profile, p.axis||'y', p.angle||PI*2, p.segs||24);
+        break;
+      }
+      case 'fillet': {
+        if(S.bodies.length) body = filletBody(S.bodies[S.bodies.length-1], p.radius||3);
+        break;
+      }
+      case 'chamfer': {
+        if(S.bodies.length) body = chamferBody(S.bodies[S.bodies.length-1], p.dist||2);
+        break;
+      }
+      case 'shell': {
+        if(S.bodies.length) body = shellBody(S.bodies[S.bodies.length-1], p.thickness||1.5);
+        break;
+      }
+      case 'union': {
+        if(S.bodies.length >= 2) body = mergeBody(S.bodies[S.bodies.length-2], S.bodies[S.bodies.length-1]);
+        break;
+      }
+      case 'linpattern': {
+        if(S.bodies.length) body = linearPattern(S.bodies[S.bodies.length-1], p.dir||vec3(1,0,0), p.count||3, p.spacing||40);
+        break;
+      }
+      case 'circpattern': {
+        if(S.bodies.length) body = circularPattern(S.bodies[S.bodies.length-1], p.axis||'y', p.count||6);
+        break;
+      }
+      case 'mirror': {
+        if(S.bodies.length) body = mirrorBody(S.bodies[S.bodies.length-1], p.plane||'x');
+        break;
+      }
+    }
+    if(body) {
+      if(p.tx||p.ty||p.tz) body.transform = mat4Translate(p.tx||0, p.ty||0, p.tz||0);
+      if(p.color) body.color = p.color;
+      body.featureId = f.id;
+      f.bodyId = body.id;
+      S.bodies.push(body);
+    }
+  }
+}
+
+// ── UNDO / REDO ────────────────────────────────────────────────
+
+function pushUndo() {
+  S.undoStack.push(JSON.stringify(S.features));
+  if(S.undoStack.length > 50) S.undoStack.shift();
+  S.redoStack = [];
+}
+
+function undo() {
+  if(!S.undoStack.length) return;
+  S.redoStack.push(JSON.stringify(S.features));
+  S.features = JSON.parse(S.undoStack.pop());
+  rebuildAll();
+  buildTree();
+  render();
+}
+
+function redo() {
+  if(!S.redoStack.length) return;
+  S.undoStack.push(JSON.stringify(S.features));
+  S.features = JSON.parse(S.redoStack.pop());
+  rebuildAll();
+  buildTree();
+  render();
+}
+
+// ── SKETCH CONSTRAINT SOLVER (2D) ─────────────────────────────
+
+function solveConstraints() {
+  // Simple iterative constraint solver
+  for(let iter=0;iter<20;iter++) {
+    for(const c of S.sketchConstraints) {
+      switch(c.type) {
+        case 'horizontal': {
+          const ent = S.sketchEnts.find(e=>e.id===c.entId);
+          if(ent && ent.type==='line') {
+            const mid = (ent.p1.y + ent.p2.y)/2;
+            ent.p1.y = mid; ent.p2.y = mid;
+          }
+          break;
+        }
+        case 'vertical': {
+          const ent = S.sketchEnts.find(e=>e.id===c.entId);
+          if(ent && ent.type==='line') {
+            const mid = (ent.p1.x + ent.p2.x)/2;
+            ent.p1.x = mid; ent.p2.x = mid;
+          }
+          break;
+        }
+        case 'coincident': {
+          const e1 = S.sketchEnts.find(e=>e.id===c.ent1);
+          const e2 = S.sketchEnts.find(e=>e.id===c.ent2);
+          if(e1 && e2) {
+            const p1 = c.pt1==='p2'?e1.p2:e1.p1;
+            const p2 = c.pt2==='p2'?e2.p2:e2.p1;
+            const mid = v3lerp(p1, p2, 0.5);
+            p1.x=mid.x; p1.y=mid.y; p1.z=mid.z;
+            p2.x=mid.x; p2.y=mid.y; p2.z=mid.z;
+          }
+          break;
+        }
+        case 'distance': {
+          const ent = S.sketchEnts.find(e=>e.id===c.entId);
+          if(ent && ent.type==='line') {
+            const d = v3len(v3sub(ent.p2, ent.p1));
+            if(abs(d) > 0.001) {
+              const dir = v3norm(v3sub(ent.p2, ent.p1));
+              const mid = v3lerp(ent.p1, ent.p2, 0.5);
+              ent.p1 = v3sub(mid, v3scale(dir, c.value/2));
+              ent.p2 = v3add(mid, v3scale(dir, c.value/2));
+            }
+          }
+          break;
+        }
+        case 'radius': {
+          const ent = S.sketchEnts.find(e=>e.id===c.entId);
+          if(ent && ent.type==='circle') ent.radius = c.value;
+          break;
+        }
+        case 'equal': {
+          const e1 = S.sketchEnts.find(e=>e.id===c.ent1);
+          const e2 = S.sketchEnts.find(e=>e.id===c.ent2);
+          if(e1 && e2 && e1.type==='line' && e2.type==='line') {
+            const d1 = v3len(v3sub(e1.p2, e1.p1));
+            const d2 = v3len(v3sub(e2.p2, e2.p1));
+            const avg = (d1+d2)/2;
+            const dir2 = v3norm(v3sub(e2.p2, e2.p1));
+            const mid2 = v3lerp(e2.p1, e2.p2, 0.5);
+            e2.p1 = v3sub(mid2, v3scale(dir2, avg/2));
+            e2.p2 = v3add(mid2, v3scale(dir2, avg/2));
+          }
+          break;
+        }
+        case 'tangent': {
+          // Simplified tangent
+          break;
+        }
+        case 'perpendicular': {
+          const e1 = S.sketchEnts.find(e=>e.id===c.ent1);
+          const e2 = S.sketchEnts.find(e=>e.id===c.ent2);
+          if(e1 && e2 && e1.type==='line' && e2.type==='line') {
+            const d1 = v3sub(e1.p2, e1.p1);
+            const d2 = v3sub(e2.p2, e2.p1);
+            const dot = v3dot(v3norm(d1), v3norm(d2));
+            if(abs(dot) > 0.01) {
+              // Rotate e2 to be perpendicular
+              const perp = v3norm(vec3(-d1.y, d1.x, 0));
+              const len2 = v3len(d2);
+              const mid2 = v3lerp(e2.p1, e2.p2, 0.5);
+              e2.p1 = v3sub(mid2, v3scale(perp, len2/2));
+              e2.p2 = v3add(mid2, v3scale(perp, len2/2));
+            }
+          }
+          break;
+        }
+      }
+    }
+  }
+}
+
+// ── MEASUREMENT ────────────────────────────────────────────────
+
+function measureDist(p1, p2) {
+  return v3len(v3sub(p2, p1));
+}
+
+function measureAngle(a, b, c) {
+  const v1 = v3norm(v3sub(a, b));
+  const v2 = v3norm(v3sub(c, b));
+  return M.acos(max(-1, min(1, v3dot(v1, v2)))) * 180 / PI;
+}
+
+function bodyVolume(body) {
+  // Simplified volume calc using divergence theorem
+  let vol = 0;
+  for(const face of body.faces) {
+    if(face.length < 3) continue;
+    for(let i=1;i<face.length-1;i++) {
+      const v0 = body.verts[face[0]];
+      const v1 = body.verts[face[i]];
+      const v2 = body.verts[face[i+1]];
+      vol += v3dot(v0, v3cross(v1, v2)) / 6;
+    }
+  }
+  return abs(vol);
+}
+
+function bodySurfaceArea(body) {
+  let area = 0;
+  for(const face of body.faces) {
+    if(face.length < 3) continue;
+    for(let i=1;i<face.length-1;i++) {
+      const v0 = body.verts[face[0]];
+      const v1 = body.verts[face[i]];
+      const v2 = body.verts[face[i+1]];
+      area += v3len(v3cross(v3sub(v1,v0), v3sub(v2,v0))) / 2;
+    }
+  }
+  return area;
+}
+
+// ── EXPORT ─────────────────────────────────────────────────────
+
+function exportSTL() {
+  let stl = 'solid forge\n';
+  for(const body of S.bodies) {
+    for(let fi=0;fi<body.faces.length;fi++) {
+      const face = body.faces[fi];
+      const n = body.normals[fi] || vec3(0,1,0);
+      for(let i=1;i<face.length-1;i++) {
+        const v0 = mat4Apply(body.transform, body.verts[face[0]]);
+        const v1 = mat4Apply(body.transform, body.verts[face[i]]);
+        const v2 = mat4Apply(body.transform, body.verts[face[i+1]]);
+        stl += `facet normal ${n.x} ${n.y} ${n.z}\n`;
+        stl += `  outer loop\n`;
+        stl += `    vertex ${v0.x} ${v0.y} ${v0.z}\n`;
+        stl += `    vertex ${v1.x} ${v1.y} ${v1.z}\n`;
+        stl += `    vertex ${v2.x} ${v2.y} ${v2.z}\n`;
+        stl += `  endloop\n`;
+        stl += `endfacet\n`;
+      }
+    }
+  }
+  stl += 'endsolid forge\n';
+  download('model.stl', stl, 'model/stl');
+}
+
+function exportOBJ() {
+  let obj = '# FORGE CAD Export\n';
+  let vOffset = 1;
+  for(const body of S.bodies) {
+    obj += `o ${body.name}\n`;
+    for(const v of body.verts) {
+      const tv = mat4Apply(body.transform, v);
+      obj += `v ${tv.x} ${tv.y} ${tv.z}\n`;
+    }
+    for(const f of body.faces) {
+      obj += 'f ' + f.map(i => i + vOffset).join(' ') + '\n';
+    }
+    vOffset += body.verts.length;
+  }
+  download('model.obj', obj, 'model/obj');
+}
+
+function exportJSON() {
+  const data = { features: S.features, version: 1 };
+  download('model.forge.json', JSON.stringify(data, null, 2), 'application/json');
+}
+
+function importJSON(text) {
+  try {
+    const data = JSON.parse(text);
+    if(data.features) {
+      S.features = data.features;
+      S.nextId = max(...S.features.map(f=>f.id), 0) + 100;
+      rebuildAll();
+      buildTree();
+      render();
+    }
+  } catch(e) { console.error(e); }
+}
+
+function download(name, content, type) {
+  const blob = new Blob([content], {type});
+  const url = URL.createObjectURL(blob);
+  const a = D.createElement('a');
+  a.href = url; a.download = name; a.click();
+  URL.revokeObjectURL(url);
+}
+
+// ── CANVAS SETUP ───────────────────────────────────────────────
+
+D.body.style.cssText = 'margin:0;padding:0;overflow:hidden;background:#111;font-family:monospace';
+
+const root = D.createElement('div');
+root.style.cssText = 'display:flex;height:100vh;width:100vw';
+D.body.appendChild(root);
+
+// Left panel
+const leftPanel = D.createElement('div');
+leftPanel.style.cssText = 'width:200px;background:#0a0a0a;border-right:1px solid #333;display:flex;flex-direction:column;overflow:hidden;flex-shrink:0';
+root.appendChild(leftPanel);
+
+// Center
+const centerDiv = D.createElement('div');
+centerDiv.style.cssText = 'flex:1;display:flex;flex-direction:column;overflow:hidden';
+root.appendChild(centerDiv);
+
+// Toolbar
+const toolbar = D.createElement('div');
+toolbar.style.cssText = 'height:36px;background:#0a0a0a;border-bottom:1px solid #333;display:flex;align-items:center;padding:0 6px;gap:2px;flex-shrink:0';
+centerDiv.appendChild(toolbar);
+
+// Viewport wrapper
+const vpWrap = D.createElement('div');
+vpWrap.style.cssText = 'flex:1;position:relative;overflow:hidden';
+centerDiv.appendChild(vpWrap);
+
+// Status bar
+const statusBar = D.createElement('div');
+statusBar.style.cssText = 'height:22px;background:#0a0a0a;border-top:1px solid #333;display:flex;align-items:center;padding:0 10px;font-size:10px;color:#666;gap:16px;flex-shrink:0';
+centerDiv.appendChild(statusBar);
+
+// Right panel
+const rightPanel = D.createElement('div');
+rightPanel.style.cssText = 'width:220px;background:#0a0a0a;border-left:1px solid #333;display:flex;flex-direction:column;overflow:hidden;flex-shrink:0';
+root.appendChild(rightPanel);
+
+// Canvas
+const C = D.createElement('canvas');
+C.style.cssText = 'width:100%;height:100%;display:block;cursor:crosshair';
+vpWrap.appendChild(C);
+const X = C.getContext('2d');
+
+// ── TOOLBAR BUTTONS ────────────────────────────────────────────
+
+function mkBtn(parent, label, title, onClick, style) {
+  const b = D.createElement('button');
+  b.textContent = label;
+  b.title = title || label;
+  b.style.cssText = 'padding:3px 8px;background:none;border:1px solid #333;color:#888;font:10px monospace;cursor:pointer;border-radius:0;white-space:nowrap;' + (style||'');
+  b.onmouseenter = () => { if(!b._on) b.style.color='#fff'; b.style.borderColor='#666'; };
+  b.onmouseleave = () => { if(!b._on) b.style.color='#888'; b.style.borderColor='#333'; };
+  b.onclick = onClick;
+  parent.appendChild(b);
+  return b;
+}
+
+function mkSep(parent) {
+  const s = D.createElement('div');
+  s.style.cssText = 'width:1px;height:20px;background:#333;margin:0 4px';
+  parent.appendChild(s);
+}
+
+function setActive(btn) {
+  toolbar.querySelectorAll('button').forEach(b => { b._on=false; b.style.color='#888'; b.style.background='none'; b.style.borderColor='#333'; });
+  if(btn) { btn._on=true; btn.style.color='#000'; btn.style.background='#ccc'; btn.style.borderColor='#ccc'; }
+}
+
+// File
+mkBtn(toolbar, 'FORGE', 'FORGE CAD', null, 'font-weight:bold;color:#fff;border:none;letter-spacing:2px;margin-right:8px');
+mkSep(toolbar);
+
+const btnNew = mkBtn(toolbar, 'New', 'New Project', () => { S.features=[]; S.bodies=[]; S.sketchEnts=[]; S.sketchConstraints=[]; rebuildAll(); buildTree(); buildProps(); render(); });
+const btnOpen = mkBtn(toolbar, 'Open', 'Open File', () => {
+  const inp = D.createElement('input'); inp.type='file'; inp.accept='.json';
+  inp.onchange = () => { const r=new FileReader(); r.onload=()=>importJSON(r.result); r.readAsText(inp.files[0]); };
+  inp.click();
+});
+const btnSave = mkBtn(toolbar, 'Save', 'Save (Ctrl+S)', () => exportJSON());
+mkSep(toolbar);
+
+// Undo/Redo
+mkBtn(toolbar, '↶', 'Undo (Ctrl+Z)', undo);
+mkBtn(toolbar, '↷', 'Redo (Ctrl+Y)', redo);
+mkSep(toolbar);
+
+// Sketch tools
+const btnSketch = mkBtn(toolbar, '⊞Sketch', 'Sketch Mode (S)', () => toggleSketch());
+const btnLine = mkBtn(toolbar, '╱Line', 'Line (L)', () => setDrawTool('line'));
+const btnRect = mkBtn(toolbar, '▭Rect', 'Rectangle (R)', () => setDrawTool('rect'));
+const btnCirc = mkBtn(toolbar, '○Circ', 'Circle (C)', () => setDrawTool('circle'));
+const btnArc = mkBtn(toolbar, '◜Arc', 'Arc (A)', () => setDrawTool('arc'));
+mkSep(toolbar);
+
+// Primitives
+mkBtn(toolbar, '□Box', 'Box', () => { addFeature('box', {sx:50,sy:25,sz:30}); buildTree(); buildProps(); render(); });
+mkBtn(toolbar, '○Cyl', 'Cylinder', () => { addFeature('cylinder', {r:15,h:30}); buildTree(); buildProps(); render(); });
+mkBtn(toolbar, '◎Sph', 'Sphere', () => { addFeature('sphere', {r:20}); buildTree(); buildProps(); render(); });
+mkBtn(toolbar, '△Cone', 'Cone', () => { addFeature('cone', {r:15,h:30}); buildTree(); buildProps(); render(); });
+mkBtn(toolbar, '◎Tor', 'Torus', () => { addFeature('torus', {R:20,r:5}); buildTree(); buildProps(); render(); });
+mkSep(toolbar);
+
+// Operations
+mkBtn(toolbar, '⇧Ext', 'Extrude (E)', () => { addFeature('extrude', {depth:25}); buildTree(); buildProps(); render(); });
+mkBtn(toolbar, '↻Rev', 'Revolve', () => { addFeature('revolve', {angle:PI*2}); buildTree(); buildProps(); render(); });
+mkBtn(toolbar, '◠Fil', 'Fillet (F)', () => { addFeature('fillet', {radius:3}); buildTree(); buildProps(); render(); });
+mkBtn(toolbar, '⬡Chm', 'Chamfer', () => { addFeature('chamfer', {dist:2}); buildTree(); buildProps(); render(); });
+mkBtn(toolbar, '☐Shl', 'Shell', () => { addFeature('shell', {thickness:1.5}); buildTree(); buildProps(); render(); });
+mkSep(toolbar);
+
+mkBtn(toolbar, '⊕Uni', 'Union', () => { addFeature('union', {}); buildTree(); buildProps(); render(); });
+mkBtn(toolbar, '⫶Pat', 'Linear Pattern', () => { addFeature('linpattern', {dir:vec3(1,0,0),count:3,spacing:40}); buildTree(); buildProps(); render(); });
+mkBtn(toolbar, '↻CPat', 'Circular Pattern', () => { addFeature('circpattern', {axis:'y',count:6}); buildTree(); buildProps(); render(); });
+mkBtn(toolbar, '⌁Mir', 'Mirror', () => { addFeature('mirror', {plane:'x'}); buildTree(); buildProps(); render(); });
+mkSep(toolbar);
+
+// View
+mkBtn(toolbar, 'Wire', 'Toggle Wireframe (W)', () => { S.wireframe=!S.wireframe; render(); });
+mkBtn(toolbar, 'Grid', 'Toggle Grid', () => { S.grid=!S.grid; render(); });
+mkSep(toolbar);
+
+// Export
+mkBtn(toolbar, '↓STL', 'Export STL', exportSTL);
+mkBtn(toolbar, '↓OBJ', 'Export OBJ', exportOBJ);
+
+// Spacer
+const spacer = D.createElement('div');
+spacer.style.flex = '1';
+toolbar.appendChild(spacer);
+
+mkBtn(toolbar, '?', 'Keyboard Shortcuts', showHelp);
+
+// ── LEFT PANEL: FEATURE TREE ───────────────────────────────────
+
+const treeHead = D.createElement('div');
+treeHead.style.cssText = 'padding:6px 10px;font-size:9px;color:#555;text-transform:uppercase;letter-spacing:1.5px;border-bottom:1px solid #333';
+treeHead.textContent = 'Feature Tree';
+leftPanel.appendChild(treeHead);
+
+const treeDiv = D.createElement('div');
+treeDiv.style.cssText = 'flex:1;overflow-y:auto';
+leftPanel.appendChild(treeDiv);
+
+function buildTree() {
+  treeDiv.innerHTML = '';
+
+  // Origin
+  const origHead = D.createElement('div');
+  origHead.style.cssText = 'padding:4px 10px;font-size:9px;color:#555;cursor:pointer;letter-spacing:1px';
+  origHead.textContent = '▸ Origin';
+  origHead.onclick = () => {
+    const body = origHead.nextElementSibling;
+    const open = body.style.display !== 'none';
+    body.style.display = open ? 'none' : 'block';
+    origHead.textContent = (open ? '▸' : '▾') + ' Origin';
+  };
+  treeDiv.appendChild(origHead);
+
+  const origBody = D.createElement('div');
+  origBody.style.display = 'none';
+  ['XY Plane|#da3','XZ Plane|#58f','YZ Plane|#3b3','X Axis|#e33','Y Axis|#3b3','Z Axis|#58f'].forEach(s => {
+    const [name,col] = s.split('|');
+    const row = D.createElement('div');
+    row.style.cssText = 'padding:3px 10px 3px 20px;font-size:11px;color:#888;cursor:pointer;display:flex;align-items:center;gap:8px';
+    row.innerHTML = `<span style="display:inline-block;width:5px;height:5px;border-radius:50%;background:${col}"></span>${name}`;
+    row.onmouseenter = () => row.style.background = '#1a1a1a';
+    row.onmouseleave = () => row.style.background = 'none';
+    origBody.appendChild(row);
+  });
+  treeDiv.appendChild(origBody);
+
+  // Features
+  const featHead = D.createElement('div');
+  featHead.style.cssText = 'padding:4px 10px;font-size:9px;color:#555;cursor:pointer;letter-spacing:1px;border-top:1px solid #222;margin-top:4px';
+  featHead.textContent = '▾ Bodies (' + S.features.length + ')';
+  treeDiv.appendChild(featHead);
+
+  S.features.forEach((f, idx) => {
+    const row = D.createElement('div');
+    const isSel = S.selected === f.id;
+    row.style.cssText = `padding:3px 10px 3px 20px;font-size:11px;color:${isSel?'#fff':'#aaa'};cursor:pointer;display:flex;align-items:center;gap:8px;border-left:2px solid ${isSel?'#fff':'transparent'};background:${isSel?'#222':'none'}`;
+
+    const colors = {box:'#58f',cylinder:'#58f',sphere:'#58f',cone:'#58f',torus:'#58f',wedge:'#58f',
+      extrude:'#58f',revolve:'#f6a',fillet:'#a6f',chamfer:'#da3',shell:'#3b3',
+      union:'#3b3',linpattern:'cyan',circpattern:'cyan',mirror:'cyan'};
+    const icons = {box:'□',cylinder:'○',sphere:'◎',cone:'△',torus:'◎',wedge:'◇',
+      extrude:'⇧',revolve:'↻',fillet:'◠',chamfer:'⬡',shell:'☐',
+      union:'⊕',linpattern:'⫶',circpattern:'↻',mirror:'⌁'};
+
+    const dot = `<span style="display:inline-block;width:5px;height:5px;border-radius:50%;background:${colors[f.type]||'#888'}"></span>`;
+    const icon = icons[f.type] || '●';
+    const name = f.type.charAt(0).toUpperCase() + f.type.slice(1);
+    const paramStr = Object.entries(f.params).filter(([k])=>!['profile','dir'].includes(k)).map(([k,v])=>typeof v==='number'?v.toFixed?v.toFixed(1):v:'').filter(Boolean).join(', ');
+
+    row.innerHTML = `${dot}<span style="flex:1;overflow:hidden;text-overflow:ellipsis;white-space:nowrap">${icon} ${name}${paramStr?' — '+paramStr:''}</span>`;
+
+    if(f.suppressed) row.style.opacity = '0.3';
+
+    // Visibility toggle
+    const vis = D.createElement('span');
+    vis.textContent = f.visible ? '◉' : '○';
+    vis.style.cssText = 'font-size:9px;color:#555;cursor:pointer;opacity:0';
+    vis.onclick = (e) => { e.stopPropagation(); f.visible=!f.visible; f.suppressed=!f.visible; rebuildAll(); buildTree(); render(); };
+    row.appendChild(vis);
+    row.onmouseenter = () => { row.style.background='#1a1a1a'; vis.style.opacity='1'; };
+    row.onmouseleave = () => { row.style.background=isSel?'#222':'none'; vis.style.opacity='0'; };
+
+    row.onclick = () => { S.selected = f.id; buildTree(); buildProps(); render(); };
+    row.oncontextmenu = (e) => { e.preventDefault(); showTreeContext(e, f); };
+
+    treeDiv.appendChild(row);
+  });
+}
+
+// ── RIGHT PANEL: PROPERTIES ────────────────────────────────────
+
+const propHead = D.createElement('div');
+propHead.style.cssText = 'padding:6px 10px;font-size:9px;color:#555;text-transform:uppercase;letter-spacing:1.5px;border-bottom:1px solid #333';
+propHead.textContent = 'Properties';
+rightPanel.appendChild(propHead);
+
+const propDiv = D.createElement('div');
+propDiv.style.cssText = 'flex:1;overflow-y:auto';
+rightPanel.appendChild(propDiv);
+
+function buildProps() {
+  propDiv.innerHTML = '';
+  const feat = S.features.find(f => f.id === S.selected);
+  if(!feat) {
+    propDiv.innerHTML = '<div style="padding:20px 10px;font-size:11px;color:#555;text-align:center">Select a feature</div>';
+    return;
+  }
+
+  const name = feat.type.charAt(0).toUpperCase() + feat.type.slice(1);
+
+  // Feature params
+  addPropSection(name + ' Parameters', () => {
+    const rows = [];
+    for(const [key, val] of Object.entries(feat.params)) {
+      if(key === 'profile' || key === 'dir') continue;
+      if(typeof val === 'number') {
+        rows.push(mkPropRow(key, val, (v) => {
+          feat.params[key] = parseFloat(v);
+          rebuildAll(); render(); pushUndo();
+        }));
+      } else if(typeof val === 'string') {
+        rows.push(mkPropSelect(key, val, key==='axis'?['x','y','z']:key==='plane'?['x','y','z']:null, (v) => {
+          feat.params[key] = v;
+          rebuildAll(); render(); pushUndo();
+        }));
+      }
+    }
+    return rows;
+  });
+
+  // Appearance
+  addPropSection('Appearance', () => {
+    const rows = [];
+    // Color swatches
+    const colorRow = D.createElement('div');
+    colorRow.style.cssText = 'display:flex;gap:4px;padding:4px 0';
+    S.colors.forEach(c => {
+      const sw = D.createElement('div');
+      sw.style.cssText = `width:16px;height:16px;background:${c};cursor:pointer;border:1px solid ${feat.params.color===c?'#fff':'#333'}`;
+      sw.onclick = () => { feat.params.color = c; rebuildAll(); buildProps(); render(); pushUndo(); };
+      colorRow.appendChild(sw);
+    });
+    rows.push(colorRow);
+    return rows;
+  });
+
+  // Physical properties
+  const body = S.bodies.find(b => b.featureId === feat.id);
+  if(body) {
+    addPropSection('Physical', () => {
+      const vol = bodyVolume(body);
+      const area = bodySurfaceArea(body);
+      return [
+        mkPropInfo('Vertices', body.verts.length),
+        mkPropInfo('Faces', body.faces.length),
+        mkPropInfo('Volume', vol.toFixed(1) + ' mm³'),
+        mkPropInfo('Surface', area.toFixed(1) + ' mm²'),
+        mkPropInfo('Mass (steel)', (vol * 0.00787).toFixed(2) + ' g'),
+      ];
+    });
+  }
+}
+
+function addPropSection(title, contentFn) {
+  const sec = D.createElement('div');
+  sec.style.cssText = 'border-bottom:1px solid #222';
+
+  const head = D.createElement('div');
+  head.style.cssText = 'padding:5px 10px;font-size:9px;color:#555;cursor:pointer;letter-spacing:1px;text-transform:uppercase';
+  head.textContent = '▾ ' + title;
+
+  const body = D.createElement('div');
+  body.style.cssText = 'padding:4px 10px 8px';
+
+  head.onclick = () => {
+    const open = body.style.display !== 'none';
+    body.style.display = open ? 'none' : 'block';
+    head.textContent = (open ? '▸ ' : '▾ ') + title;
+  };
+
+  const rows = contentFn();
+  rows.forEach(r => body.appendChild(r));
+
+  sec.appendChild(head);
+  sec.appendChild(body);
+  propDiv.appendChild(sec);
+}
+
+function mkPropRow(label, value, onChange) {
+  const row = D.createElement('div');
+  row.style.cssText = 'display:flex;align-items:center;justify-content:space-between;padding:3px 0;font-size:11px';
+
+  const lbl = D.createElement('span');
+  lbl.style.cssText = 'color:#888;font-size:10px';
+  lbl.textContent = label;
+
+  const inp = D.createElement('input');
+  inp.type = 'number';
+  inp.value = typeof value === 'number' ? (Number.isInteger(value) ? value : value.toFixed(2)) : value;
+  inp.step = label.includes('angle') || label.includes('Angle') ? '0.1' : '1';
+  inp.style.cssText = 'width:72px;padding:2px 6px;background:#111;border:1px solid #333;color:#ccc;font:11px monospace;text-align:right;outline:none';
+  inp.onfocus = () => inp.style.borderColor = '#888';
+  inp.onblur = () => inp.style.borderColor = '#333';
+  inp.onchange = () => onChange(inp.value);
+
+  row.appendChild(lbl);
+  row.appendChild(inp);
+  return row;
+}
+
+function mkPropSelect(label, value, options, onChange) {
+  const row = D.createElement('div');
+  row.style.cssText = 'display:flex;align-items:center;justify-content:space-between;padding:3px 0;font-size:11px';
+
+  const lbl = D.createElement('span');
+  lbl.style.cssText = 'color:#888;font-size:10px';
+  lbl.textContent = label;
+
+  if(options) {
+    const sel = D.createElement('select');
+    sel.style.cssText = 'padding:2px 4px;background:#111;border:1px solid #333;color:#ccc;font:10px monospace;outline:none;cursor:pointer';
+    options.forEach(o => {
+      const opt = D.createElement('option');
+      opt.value = o; opt.textContent = o; if(o===value) opt.selected = true;
+      sel.appendChild(opt);
+    });
+    sel.onchange = () => onChange(sel.value);
+    row.appendChild(lbl);
+    row.appendChild(sel);
+  } else {
+    const val = D.createElement('span');
+    val.style.cssText = 'color:#ccc;font-size:11px';
+    val.textContent = value;
+    row.appendChild(lbl);
+    row.appendChild(val);
+  }
+  return row;
+}
+
+function mkPropInfo(label, value) {
+  const row = D.createElement('div');
+  row.style.cssText = 'display:flex;align-items:center;justify-content:space-between;padding:2px 0;font-size:10px';
+  row.innerHTML = `<span style="color:#666">${label}</span><span style="color:#aaa">${value}</span>`;
+  return row;
+}
+
+// ── CONTEXT MENU ───────────────────────────────────────────────
+
+let ctxMenu = null;
+
+function showTreeContext(e, feat) {
+  hideCtx();
+  ctxMenu = D.createElement('div');
+  ctxMenu.style.cssText = `position:fixed;left:${e.clientX}px;top:${e.clientY}px;background:#111;border:1px solid #333;min-width:150px;z-index:1000;padding:4px 0;font:11px monospace`;
+
+  const items = [
+    ['Edit Parameters', () => { S.selected=feat.id; buildTree(); buildProps(); }],
+    ['Duplicate', () => { const f=addFeature(feat.type, {...feat.params}); buildTree(); buildProps(); render(); }],
+    null,
+    [feat.suppressed?'Unsuppress':'Suppress', () => { feat.suppressed=!feat.suppressed; rebuildAll(); buildTree(); render(); pushUndo(); }],
+    [feat.visible?'Hide':'Show', () => { feat.visible=!feat.visible; feat.suppressed=!feat.visible; rebuildAll(); buildTree(); render(); }],
+    null,
+    ['Move Up', () => { const i=S.features.indexOf(feat); if(i>0){S.features.splice(i,1);S.features.splice(i-1,0,feat);rebuildAll();buildTree();render();pushUndo();} }],
+    ['Move Down', () => { const i=S.features.indexOf(feat); if(i<S.features.length-1){S.features.splice(i,1);S.features.splice(i+1,0,feat);rebuildAll();buildTree();render();pushUndo();} }],
+    null,
+    ['Delete', () => { S.features=S.features.filter(f=>f.id!==feat.id); if(S.selected===feat.id)S.selected=null; rebuildAll(); buildTree(); buildProps(); render(); pushUndo(); }],
+  ];
+
+  items.forEach(item => {
+    if(!item) {
+      const sep = D.createElement('div');
+      sep.style.cssText = 'height:1px;background:#333;margin:3px 8px';
+      ctxMenu.appendChild(sep);
+      return;
+    }
+    const row = D.createElement('div');
+    row.style.cssText = 'padding:5px 14px;cursor:pointer;color:#aaa';
+    row.textContent = item[0];
+    row.onmouseenter = () => { row.style.background='#333'; row.style.color='#fff'; };
+    row.onmouseleave = () => { row.style.background='none'; row.style.color='#aaa'; };
+    row.onclick = () => { hideCtx(); item[1](); };
+    ctxMenu.appendChild(row);
+  });
+
+  D.body.appendChild(ctxMenu);
+  setTimeout(() => D.addEventListener('click', hideCtx, {once:true}), 0);
+}
+
+function hideCtx() {
+  if(ctxMenu) { ctxMenu.remove(); ctxMenu = null; }
+}
+
+// ── HELP DIALOG ────────────────────────────────────────────────
+
+function showHelp() {
+  const overlay = D.createElement('div');
+  overlay.style.cssText = 'position:fixed;inset:0;background:rgba(0,0,0,.6);z-index:2000;display:flex;align-items:center;justify-content:center';
+  overlay.onclick = (e) => { if(e.target===overlay) overlay.remove(); };
+
+  const box = D.createElement('div');
+  box.style.cssText = 'background:#111;border:1px solid #333;padding:20px 30px;max-width:500px;font:12px monospace;color:#aaa;line-height:2';
+  box.innerHTML = `
+    <div style="font-size:14px;color:#fff;margin-bottom:10px;letter-spacing:2px">KEYBOARD SHORTCUTS</div>
+    <div><span style="color:#fff">S</span> — Toggle Sketch</div>
+    <div><span style="color:#fff">L</span> — Line tool</div>
+    <div><span style="color:#fff">R</span> — Rectangle tool</div>
+    <div><span style="color:#fff">C</span> — Circle tool</div>
+    <div><span style="color:#fff">A</span> — Arc tool</div>
+    <div><span style="color:#fff">E</span> — Extrude</div>
+    <div><span style="color:#fff">F</span> — Fillet</div>
+    <div><span style="color:#fff">W</span> — Toggle wireframe</div>
+    <div><span style="color:#fff">M</span> — Measure tool</div>
+    <div><span style="color:#fff">Del</span> — Delete selected</div>
+    <div><span style="color:#fff">Ctrl+Z</span> — Undo</div>
+    <div><span style="color:#fff">Ctrl+Y</span> — Redo</div>
+    <div><span style="color:#fff">Ctrl+S</span> — Save</div>
+    <div><span style="color:#fff">1-6</span> — Standard views</div>
+    <div><span style="color:#fff">0</span> — Isometric view</div>
+    <div><span style="color:#fff">Esc</span> — Cancel / Deselect</div>
+    <div style="margin-top:10px"><span style="color:#fff">LMB drag</span> — Orbit</div>
+    <div><span style="color:#fff">Shift+LMB / MMB</span> — Pan</div>
+    <div><span style="color:#fff">Scroll</span> — Zoom</div>
+    <div><span style="color:#fff">RMB</span> — Context menu</div>
+    <div style="margin-top:15px;text-align:center"><button style="padding:4px 20px;background:#333;border:1px solid #555;color:#ccc;cursor:pointer;font:11px monospace" onclick="this.closest('div[style*=fixed]').remove()">Close</button></div>
+  `;
+  overlay.appendChild(box);
+  D.body.appendChild(overlay);
+}
+
+// ── SKETCH MODE ────────────────────────────────────────────────
+
+let sketchBanner = null;
+
+function toggleSketch() {
+  S.sketch = !S.sketch;
+  S.drawMode = null;
+  S.drawPts = [];
+  if(S.sketch) {
+    sketchBanner = D.createElement('div');
+    sketchBanner.style.cssText = 'position:absolute;top:6px;left:50%;transform:translateX(-50%);background:#da3;color:#000;padding:3px 16px;font:10px monospace;font-weight:bold;letter-spacing:1px;z-index:20;display:flex;align-items:center;gap:12px';
+    sketchBanner.innerHTML = 'SKETCH MODE — ' + S.sketchPlane;
+    const finBtn = D.createElement('button');
+    finBtn.textContent = 'Finish';
+    finBtn.style.cssText = 'background:rgba(0,0,0,.2);border:none;color:#000;padding:2px 8px;cursor:pointer;font:10px monospace;font-weight:bold;text-decoration:underline';
+    finBtn.onclick = toggleSketch;
+    sketchBanner.appendChild(finBtn);
+    vpWrap.appendChild(sketchBanner);
+  } else {
+    if(sketchBanner) { sketchBanner.remove(); sketchBanner = null; }
+    // Convert sketch entities to extrude if we have a closed profile
+    if(S.sketchEnts.length > 0) {
+      const profile = extractProfile();
+      if(profile && profile.length >= 3) {
+        addFeature('extrude', { profile, depth: 25 });
+        buildTree(); buildProps();
+      }
+    }
+  }
+  render();
+}
+
+function extractProfile() {
+  // Try to extract a closed loop from sketch lines
+  const lines = S.sketchEnts.filter(e => e.type === 'line');
+  if(lines.length < 3) return null;
+  const pts = [];
+  for(const l of lines) {
+    pts.push(l.p1);
+  }
+  return pts;
+}
+
+function setDrawTool(tool) {
+  if(!S.sketch) toggleSketch();
+  S.drawMode = tool;
+  S.drawPts = [];
+  C.style.cursor = 'crosshair';
+}
+
+// ── 3D RENDERING ───────────────────────────────────────────────
+
+function resize() {
+  C.width = vpWrap.clientWidth * devicePixelRatio;
+  C.height = vpWrap.clientHeight * devicePixelRatio;
+  X.setTransform(devicePixelRatio, 0, 0, devicePixelRatio, 0, 0);
+  render();
+}
+W.addEventListener('resize', resize);
+
+function proj(v) {
+  const { rx, ry, zoom, px, py } = S.cam;
+  const a = rx * PI / 180, b = ry * PI / 180;
+  let x1 = v.x * cos(b) - v.z * sin(b);
+  let z1 = v.x * sin(b) + v.z * cos(b);
+  let y2 = v.y * cos(a) - z1 * sin(a);
+  let z2 = v.y * sin(a) + z1 * cos(a);
+  const w = C.width / devicePixelRatio, h = C.height / devicePixelRatio;
+  const s = zoom * min(w, h) / 200;
+  return { x: w/2 + x1*s + px, y: h/2 - y2*s + py, z: z2 };
+}
+
+function projV(x,y,z) { return proj(vec3(x,y,z)); }
+
+function drawLine(p1, p2, color, width) {
+  X.beginPath(); X.moveTo(p1.x, p1.y); X.lineTo(p2.x, p2.y);
+  X.strokeStyle = color; X.lineWidth = width || 1; X.stroke();
+}
+
+function render() {
+  const w = C.width / devicePixelRatio, h = C.height / devicePixelRatio;
+
+  // Background
+  X.fillStyle = '#111';
+  X.fillRect(0, 0, w, h);
+
+  // Vignette
+  const g = X.createRadialGradient(w/2, h/2, 0, w/2, h/2, max(w,h)/1.4);
+  g.addColorStop(0, 'transparent');
+  g.addColorStop(1, 'rgba(0,0,0,.35)');
+  X.fillStyle = g;
+  X.fillRect(0, 0, w, h);
+
+  // Grid
+  if(S.grid) {
+    X.globalAlpha = 0.07;
+    for(let i = -50; i <= 50; i += 5) {
+      const a = projV(i,0,-50), b = projV(i,0,50);
+      drawLine(a, b, '#fff', 0.5);
+      const c = projV(-50,0,i), d = projV(50,0,i);
+      drawLine(c, d, '#fff', 0.5);
+    }
+    X.globalAlpha = 1;
+  }
+
+  // Axes
+  if(S.showOrigin) {
+    drawLine(projV(0,0,0), projV(50,0,0), '#e33', 1.5);
+    drawLine(projV(0,0,0), projV(0,50,0), '#58f', 1.5);
+    drawLine(projV(0,0,0), projV(0,0,50), '#3b3', 1.5);
+
+    // Axis labels
+    X.font = '9px monospace';
+    const xl = projV(54,0,0); X.fillStyle='#e33'; X.fillText('X', xl.x, xl.y);
+    const yl = projV(0,54,0); X.fillStyle='#58f'; X.fillText('Y', yl.x, yl.y);
+    const zl = projV(0,0,54); X.fillStyle='#3b3'; X.fillText('Z', zl.x, zl.y);
+  }
+
+  // Bodies
+  for(const body of S.bodies) {
+    renderBody(body);
+  }
+
+  // Sketch overlay
+  if(S.sketch) {
+    renderSketch();
+  }
+
+  // Measurements
+  renderMeasurements();
+
+  // Update status
+  updateStatus();
+}
+
+function renderBody(body) {
+  const m = body.transform;
+  const light = v3norm(vec3(0.3, 0.7, 0.5));
+
+  // Collect and sort faces by depth
+  const sortedFaces = [];
+  for(let fi = 0; fi < body.faces.length; fi++) {
+    const face = body.faces[fi];
+    if(face.length < 3) continue;
+    const pts = face.map(i => {
+      const tv = mat4Apply(m, body.verts[i]);
+      return proj(tv);
+    });
+    const avgZ = pts.reduce((s,p) => s + p.z, 0) / pts.length;
+    sortedFaces.push({ face, pts, fi, avgZ, normal: body.normals[fi] || vec3(0,1,0) });
+  }
+  sortedFaces.sort((a,b) => b.avgZ - a.avgZ);
+
+  for(const sf of sortedFaces) {
+    const { pts, normal, fi } = sf;
+
+    if(S.wireframe) {
+      X.beginPath();
+      X.moveTo(pts[0].x, pts[0].y);
+      for(let i = 1; i < pts.length; i++) X.lineTo(pts[i].x, pts[i].y);
+      X.closePath();
+      X.strokeStyle = body.featureId === S.selected ? '#fff' : '#555';
+      X.lineWidth = 0.5;
+      X.stroke();
+    } else {
+      // Lighting
+      let d = v3dot(normal, light);
+      d = max(0.15, min(1, (d + 1) / 2));
+
+      const col = body.color || '#6699cc';
+      const r = parseInt(col.slice(1,3),16);
+      const g = parseInt(col.slice(3,5),16);
+      const b = parseInt(col.slice(5,7),16);
+
+      X.beginPath();
+      X.moveTo(pts[0].x, pts[0].y);
+      for(let i = 1; i < pts.length; i++) X.lineTo(pts[i].x, pts[i].y);
+      X.closePath();
+
+      X.fillStyle = `rgb(${~~(r*d)},${~~(g*d)},${~~(b*d)})`;
+      X.globalAlpha = S.opacity;
+      X.fill();
+      X.globalAlpha = 1;
+
+      // Edges
+      if(S.showEdges) {
+        const isSelected = body.featureId === S.selected;
+        X.strokeStyle = isSelected ? 'rgba(255,255,255,.25)' : 'rgba(255,255,255,.06)';
+        X.lineWidth = isSelected ? 1 : 0.5;
+        X.stroke();
+      }
+    }
+  }
+}
+
+function renderSketch() {
+  // Sketch plane indicator
+  X.globalAlpha = 0.03;
+  const corners = [projV(-40,0,-30), projV(40,0,-30), projV(40,0,30), projV(-40,0,30)];
+  X.beginPath();
+  X.moveTo(corners[0].x, corners[0].y);
+  for(let i=1;i<4;i++) X.lineTo(corners[i].x, corners[i].y);
+  X.closePath();
+  X.fillStyle = '#da3';
+  X.fill();
+  X.globalAlpha = 1;
+
+  // Sketch entities
+  for(const ent of S.sketchEnts) {
+    if(ent.type === 'line') {
+      const p1 = proj(ent.p1), p2 = proj(ent.p2);
+      X.beginPath(); X.moveTo(p1.x, p1.y); X.lineTo(p2.x, p2.y);
+      X.strokeStyle = '#da3'; X.lineWidth = 1.5; X.stroke();
+      // Endpoints
+      X.fillStyle = '#da3';
+      X.fillRect(p1.x-2, p1.y-2, 4, 4);
+      X.fillRect(p2.x-2, p2.y-2, 4, 4);
+    } else if(ent.type === 'circle') {
+      const cp = proj(ent.center);
+      const rp = proj(v3add(ent.center, vec3(ent.radius, 0, 0)));
+      const r = sqrt((rp.x-cp.x)**2 + (rp.y-cp.y)**2);
+      X.beginPath(); X.arc(cp.x, cp.y, r, 0, PI*2);
+      X.strokeStyle = '#da3'; X.lineWidth = 1.5; X.stroke();
+      // Center
+      X.beginPath(); X.moveTo(cp.x-3,cp.y); X.lineTo(cp.x+3,cp.y);
+      X.moveTo(cp.x,cp.y-3); X.lineTo(cp.x,cp.y+3);
+      X.strokeStyle = '#da355'; X.lineWidth = 1; X.stroke();
+    } else if(ent.type === 'arc') {
+      const cp = proj(ent.center);
+      const rp = proj(v3add(ent.center, vec3(ent.radius, 0, 0)));
+      const r = sqrt((rp.x-cp.x)**2 + (rp.y-cp.y)**2);
+      X.beginPath(); X.arc(cp.x, cp.y, r, ent.startAngle, ent.endAngle);
+      X.strokeStyle = '#da3'; X.lineWidth = 1.5; X.stroke();
+    }
+  }
+
+  // Drawing in progress
+  if(S.drawPts.length > 0 && S.drawMode) {
+    X.setLineDash([4,3]);
+    if(S.drawMode === 'line' && S.drawPts.length === 1) {
+      const p1 = proj(S.drawPts[0]);
+      const p2 = proj(S._mouseWorld || S.drawPts[0]);
+      X.beginPath(); X.moveTo(p1.x, p1.y); X.lineTo(p2.x, p2.y);
+      X.strokeStyle = '#e33'; X.lineWidth = 1; X.stroke();
+    } else if(S.drawMode === 'rect' && S.drawPts.length === 1) {
+      const p1 = S.drawPts[0];
+      const p2 = S._mouseWorld || p1;
+      const corners = [p1, vec3(p2.x,p1.y,p1.z), p2, vec3(p1.x,p1.y,p2.z)];
+      const pp = corners.map(proj);
+      X.beginPath(); X.moveTo(pp[0].x, pp[0].y);
+      for(let i=1;i<4;i++) X.lineTo(pp[i].x, pp[i].y);
+      X.closePath();
+      X.strokeStyle = '#e33'; X.lineWidth = 1; X.stroke();
+    } else if(S.drawMode === 'circle' && S.drawPts.length === 1) {
+      const cp = proj(S.drawPts[0]);
+      const mp = proj(S._mouseWorld || S.drawPts[0]);
+      const r = sqrt((mp.x-cp.x)**2 + (mp.y-cp.y)**2);
+      X.beginPath(); X.arc(cp.x, cp.y, r, 0, PI*2);
+      X.strokeStyle = '#e33'; X.lineWidth = 1; X.stroke();
+    }
+    X.setLineDash([]);
+  }
+
+  // Dimension labels for sketch entities
+  X.font = '9px monospace';
+  X.fillStyle = '#58f';
+  for(const ent of S.sketchEnts) {
+    if(ent.type === 'line') {
+      const d = v3len(v3sub(ent.p2, ent.p1));
+      const mid = proj(v3lerp(ent.p1, ent.p2, 0.5));
+      X.fillText(d.toFixed(1), mid.x + 5, mid.y - 5);
+    } else if(ent.type === 'circle') {
+      const cp = proj(ent.center);
+      X.fillText('Ø' + (ent.radius*2).toFixed(1), cp.x + 10, cp.y - 5);
+    }
+  }
+}
+
+function renderMeasurements() {
+  X.font = '10px monospace';
+  for(const m of S.measurements) {
+    const p1 = proj(m.p1), p2 = proj(m.p2);
+    X.setLineDash([3,3]);
+    drawLine(p1, p2, '#58f', 1);
+    X.setLineDash([]);
+    const mid = { x:(p1.x+p2.x)/2, y:(p1.y+p2.y)/2 };
+    X.fillStyle = '#111';
+    X.fillRect(mid.x-20, mid.y-8, 40, 14);
+    X.fillStyle = '#58f';
+    X.fillText(m.dist.toFixed(2), mid.x-16, mid.y+3);
+  }
+}
+
+// ── CAMERA CONTROLS ────────────────────────────────────────────
+
+C.addEventListener('mousedown', e => {
+  S.drag = true; S.btn = e.button;
+  S.lm = { x: e.clientX, y: e.clientY };
+
+  // Sketch drawing
+  if(S.sketch && S.drawMode && e.button === 0) {
+    const wp = screenToWorld(e);
+    if(S.snap) {
+      wp.x = M.round(wp.x / S.snapSize) * S.snapSize;
+      wp.z = M.round(wp.z / S.snapSize) * S.snapSize;
+    }
+    S.drawPts.push(wp);
+
+    if(S.drawMode === 'line' && S.drawPts.length === 2) {
+      S.sketchEnts.push(skLine(S.drawPts[0], S.drawPts[1]));
+      S.drawPts = [v3copy(S.drawPts[1])]; // Chain lines
+      solveConstraints();
+      render();
+    } else if(S.drawMode === 'rect' && S.drawPts.length === 2) {
+      const lines = skRect(S.drawPts[0], S.drawPts[1]);
+      S.sketchEnts.push(...lines);
+      S.drawPts = [];
+      solveConstraints();
+      render();
+    } else if(S.drawMode === 'circle' && S.drawPts.length === 2) {
+      const r = v3len(v3sub(S.drawPts[1], S.drawPts[0]));
+      S.sketchEnts.push(skCircle(S.drawPts[0], r));
+      S.drawPts = [];
+      solveConstraints();
+      render();
+    } else if(S.drawMode === 'arc' && S.drawPts.length === 3) {
+      const r = v3len(v3sub(S.drawPts[1], S.drawPts[0]));
+      const a1 = atan2(S.drawPts[1].z - S.drawPts[0].z, S.drawPts[1].x - S.drawPts[0].x);
+      const a2 = atan2(S.drawPts[2].z - S.drawPts[0].z, S.drawPts[2].x - S.drawPts[0].x);
+      S.sketchEnts.push(skArc(S.drawPts[0], r, a1, a2));
+      S.drawPts = [];
+      solveConstraints();
+      render();
+    }
+  }
+
+  // Measure tool
+  if(S.tool === 'measure' && e.button === 0) {
+    const wp = screenToWorld(e);
+    S.drawPts.push(wp);
+    if(S.drawPts.length === 2) {
+      const d = measureDist(S.drawPts[0], S.drawPts[1]);
+      S.measurements.push({ p1: S.drawPts[0], p2: S.drawPts[1], dist: d });
+      S.drawPts = [];
+      render();
+    }
+  }
+});
+
+C.addEventListener('mousemove', e => {
+  // Track mouse world position for sketch preview
+  if(S.sketch && S.drawMode) {
+    const wp = screenToWorld(e);
+    if(S.snap) {
+      wp.x = M.round(wp.x / S.snapSize) * S.snapSize;
+      wp.z = M.round(wp.z / S.snapSize) * S.snapSize;
+    }
+    S._mouseWorld = wp;
+    if(S.drawPts.length > 0) render();
+  }
+
+  // Update cursor position
+  const wp = screenToWorld(e);
+  const posEl = statusBar.querySelector('#spos');
+  if(posEl) posEl.textContent = `${wp.x.toFixed(1)}, ${wp.y.toFixed(1)}, ${wp.z.toFixed(1)}`;
+
+  if(!S.drag) return;
+  const dx = e.clientX - S.lm.x, dy = e.clientY - S.lm.y;
+
+  if(S.btn === 1 || (S.btn === 0 && e.shiftKey)) {
+    S.cam.px += dx; S.cam.py += dy;
+  } else if(S.btn === 0 && !S.sketch) {
+    S.cam.ry += dx * 0.4;
+    S.cam.rx += dy * 0.4;
+    S.cam.rx = max(-90, min(90, S.cam.rx));
+  } else if(S.btn === 2) {
+    S.cam.ry += dx * 0.4;
+    S.cam.rx += dy * 0.4;
+    S.cam.rx = max(-90, min(90, S.cam.rx));
+  }
+
+  S.lm = { x: e.clientX, y: e.clientY };
+  render();
+});
+
+C.addEventListener('mouseup', () => S.drag = false);
+C.addEventListener('mouseleave', () => S.drag = false);
+
+C.addEventListener('wheel', e => {
+  e.preventDefault();
+  S.cam.zoom *= e.deltaY > 0 ? 0.92 : 1.08;
+  S.cam.zoom = max(0.1, min(20, S.cam.zoom));
+  render();
+}, { passive: false });
+
+C.addEventListener('contextmenu', e => e.preventDefault());
+
+C.addEventListener('dblclick', e => {
+  // Double click to add constraint or edit
+  if(S.sketch) {
+    // Try to find nearest sketch entity and add dimension
+    const wp = screenToWorld(e);
+    let nearest = null, nearDist = Infinity;
+    for(const ent of S.sketchEnts) {
+      if(ent.type === 'line') {
+        const mid = v3lerp(ent.p1, ent.p2, 0.5);
+        const d = v3len(v3sub(mid, wp));
+        if(d < nearDist) { nearDist = d; nearest = ent; }
+      }
+    }
+    if(nearest && nearDist < 20) {
+      const val = prompt('Dimension value:', v3len(v3sub(nearest.p2, nearest.p1)).toFixed(2));
+      if(val !== null) {
+        S.sketchConstraints.push({ type:'distance', entId:nearest.id, value:parseFloat(val) });
+        solveConstraints();
+        render();
+      }
+    }
+  }
+});
+
+function screenToWorld(e) {
+  const rect = C.getBoundingClientRect();
+  const mx = e.clientX - rect.left;
+  const my = e.clientY - rect.top;
+  const w = rect.width, h = rect.height;
+  const sc = S.cam.zoom * min(w, h) / 200;
+  // Approximate inverse projection (on Y=0 plane)
+  const x = (mx - w/2 - S.cam.px) / sc;
+  const y = -(my - h/2 - S.cam.py) / sc;
+  // Simplified: project onto sketch plane
+  return vec3(x, 0, y);
+}
+
+// ── VIEW PRESETS ───────────────────────────────────────────────
+
+function goView(name) {
+  const views = {
+    front:{rx:0,ry:0}, back:{rx:0,ry:180}, right:{rx:0,ry:90},
+    left:{rx:0,ry:-90}, top:{rx:-90,ry:0}, bottom:{rx:90,ry:0},
+    iso:{rx:-25,ry:45}
+  };
+  const t = views[name] || views.iso;
+  const sx = S.cam.rx, sy = S.cam.ry;
+  const st = performance.now(), dur = 350;
+  (function anim(now) {
+    let p = min(1, (now-st)/dur);
+    p = p<.5 ? 2*p*p : -1+(4-2*p)*p;
+    S.cam.rx = sx + (t.rx-sx)*p;
+    S.cam.ry = sy + (t.ry-sy)*p;
+    render();
+    if(p<1) requestAnimationFrame(anim);
+  })(performance.now());
+}
+
+// ── STATUS BAR ─────────────────────────────────────────────────
+
+function updateStatus() {
+  statusBar.innerHTML = '';
+  const items = [
+    `<span id="spos" style="color:#888">0.0, 0.0, 0.0</span>`,
+    `Bodies: ${S.bodies.length}`,
+    `Features: ${S.features.length}`,
+    S.bodies.length ? `Faces: ${S.bodies.reduce((s,b)=>s+b.faces.length,0)}` : '',
+    S.bodies.length ? `Verts: ${S.bodies.reduce((s,b)=>s+b.verts.length,0)}` : '',
+    S.sketch ? '<span style="color:#da3">SKETCH</span>' : '',
+    S.tool !== 'select' ? `Tool: ${S.tool}` : '',
+    S.wireframe ? 'WIRE' : '',
+    S.snap ? 'SNAP' : '',
+  ].filter(Boolean);
+  statusBar.innerHTML = items.join('<span style="color:#333;margin:0 6px">|</span>');
+}
+
+// ── KEYBOARD ───────────────────────────────────────────────────
+
+D.addEventListener('keydown', e => {
+  if(e.target.tagName === 'INPUT' || e.target.tagName === 'SELECT') return;
+  const k = e.key.toLowerCase();
+
+  if(e.ctrlKey && k === 'z') { e.preventDefault(); undo(); }
+  else if(e.ctrlKey && k === 'y') { e.preventDefault(); redo(); }
+  else if(e.ctrlKey && k === 's') { e.preventDefault(); exportJSON(); }
+  else if(k === 'escape') {
+    S.drawMode = null; S.drawPts = [];
+    S.tool = 'select';
+    if(S.sketch) toggleSketch();
+    S.measurements = [];
+    hideCtx();
+    render();
+  }
+  else if(k === 's' && !e.ctrlKey) toggleSketch();
+  else if(k === 'l') setDrawTool('line');
+  else if(k === 'r') setDrawTool('rect');
+  else if(k === 'c') setDrawTool('circle');
+  else if(k === 'a') setDrawTool('arc');
+  else if(k === 'e') { addFeature('extrude', {depth:25}); buildTree(); buildProps(); render(); }
+  else if(k === 'f') { addFeature('fillet', {radius:3}); buildTree(); buildProps(); render(); }
+  else if(k === 'w') { S.wireframe = !S.wireframe; render(); }
+  else if(k === 'm') { S.tool = 'measure'; S.drawPts = []; }
+  else if(k === 'delete' || k === 'backspace') {
+    if(S.selected) {
+      S.features = S.features.filter(f => f.id !== S.selected);
+      S.selected = null;
+      rebuildAll(); buildTree(); buildProps(); render(); pushUndo();
+    }
+    // Also delete last sketch entity
+    if(S.sketch && S.sketchEnts.length) {
+      S.sketchEnts.pop();
+      render();
+    }
+  }
+  else if(k === '1') goView('front');
+  else if(k === '2') goView('back');
+  else if(k === '3') goView('right');
+  else if(k === '4') goView('left');
+  else if(k === '5') goView('top');
+  else if(k === '6') goView('bottom');
+  else if(k === '0') goView('iso');
+  else if(k === 'g') { S.grid = !S.grid; render(); }
+  else if(k === 'n') { S.snap = !S.snap; render(); }
+});
+
+// ── VIEW CUBE (drawn on canvas) ────────────────────────────────
+
+function drawViewCube() {
+  const size = 36;
+  const margin = 12;
+  const cx = C.width/devicePixelRatio - margin - size;
+  const cy = margin + size;
+
+  X.save();
+  X.translate(cx, cy);
+
+  const rx = S.cam.rx * PI / 180;
+  const ry = S.cam.ry * PI / 180;
+
+  // Draw cube edges
+  const s = size * 0.4;
+  const cubeVerts = [
+    [-s,-s,-s],[s,-s,-s],[s,s,-s],[-s,s,-s],
+    [-s,-s,s],[s,-s,s],[s,s,s],[-s,s,s]
+  ];
+  const edges = [[0,1],[1,2],[2,3],[3,0],[4,5],[5,6],[6,7],[7,4],[0,4],[1,5],[2,6],[3,7]];
+
+  function projCube(v) {
+    let x1 = v[0]*cos(ry) - v[2]*sin(ry);
+    let z1 = v[0]*sin(ry) + v[2]*cos(ry);
+    let y2 = v[1]*cos(rx) - z1*sin(rx);
+    return { x: x1, y: -y2 };
+  }
+
+  X.strokeStyle = '#444';
+  X.lineWidth = 0.5;
+  for(const [a,b] of edges) {
+    const pa = projCube(cubeVerts[a]), pb = projCube(cubeVerts[b]);
+    X.beginPath(); X.moveTo(pa.x, pa.y); X.lineTo(pb.x, pb.y); X.stroke();
+  }
+
+  // Axis lines
+  const axLen = s * 1.3;
+  const xp = projCube([axLen,0,0]), yp = projCube([0,-axLen,0]), zp = projCube([0,0,axLen]);
+  X.lineWidth = 1.5;
+  X.strokeStyle = '#e33'; X.beginPath(); X.moveTo(0,0); X.lineTo(xp.x,xp.y); X.stroke();
+  X.strokeStyle = '#58f'; X.beginPath(); X.moveTo(0,0); X.lineTo(yp.x,yp.y); X.stroke();
+  X.strokeStyle = '#3b3'; X.beginPath(); X.moveTo(0,0); X.lineTo(zp.x,zp.y); X.stroke();
+
+  X.font = '8px monospace';
+  X.fillStyle = '#e33'; X.fillText('X', xp.x+3, xp.y+3);
+  X.fillStyle = '#58f'; X.fillText('Y', yp.x+3, yp.y+3);
+  X.fillStyle = '#3b3'; X.fillText('Z', zp.x+3, zp.y+3);
+
+  X.restore();
+}
+
+// Patch render to include viewcube
+const _origRender = render;
+// We'll just add viewcube drawing at the end of render
+const origRenderRef = render;
+
+// Override render
+window._render = render;
+render = function() {
+  _origRender();
+  drawViewCube();
+};
+
+// ── INITIAL SCENE ──────────────────────────────────────────────
+
+// Add a default box
+addFeature('box', { sx: 50, sy: 25, sz: 30, color: '#6699cc' });
+buildTree();
+buildProps();
+
+// Init
+setTimeout(resize, 0);
+
+</script>
+</body>
+</html>

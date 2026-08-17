@@ -1,0 +1,853 @@
+<!DOCTYPE html><html lang="en"> <head> <meta charset="UTF-8"> <meta name="viewport" content="width=device-width, initial-scale=1.0, maximum-scale=1.0, user-scalable=no"> <title>AXIOM - AI Code Editor</title> <link rel="icon" type="image/svg+xml" href="data:image/svg+xml;base64,PHN2ZyB4bWxucz0iaHR0cDovL3d3dy53My5vcmcvMjAwMC9zdmciIHZpZXdCb3g9IjAgMCAzMiAzMiI+PGRlZnM+PGxpbmVhckdyYWRpZW50IGlkPSJnIiB4MT0iMCUiIHkxPSIwJSIgeDI9IjEwMCUiIHkyPSIxMDAlIj48c3RvcCBvZmZzZXQ9IjAlIiBzdG9wLWNvbG9yPSIjNmY0MmMxIi8+PHN0b3Agb2Zmc2V0PSIxMDAlIiBzdG9wLWNvbG9yPSIjMzk4YmU3Ii8+PC9saW5lYXJHcmFkaWVudD48L2RlZnM+PHJlY3Qgd2lkdGg9IjMyIiBoZWlnaHQ9IjMyIiByeD0iNiIgZmlsbD0iIzBkMTExNyIvPjxwYXRoIGQ9Ik04IDI0TDE2IDhMMjQgMjRIMjBMMTggMjBIMTRMMTIgMjRIOFpNMTUgMTRMMTMuNSAxN0gxOC41TDE3IDE0SDE1WiIgZmlsbD0idXJsKCNnKSIvPjwvc3ZnPg==">
+
+<link rel="stylesheet" href="https://cdnjs.cloudflare.com/ajax/libs/codemirror/5.65.16/codemirror.min.css">
+<link rel="stylesheet" href="https://cdnjs.cloudflare.com/ajax/libs/codemirror/5.65.16/theme/material-darker.min.css">
+
+<style>
+    * { margin: 0; padding: 0; box-sizing: border-box; }
+    :root {
+        --bg-deep: #08090c; --bg-primary: #0d1117; --bg-secondary: #131820; --bg-tertiary: #1a2028;
+        --bg-elevated: #222830; --border-subtle: #252d38; --border-default: #303848; --text-primary: #e2e8f0;
+        --text-secondary: #8892a2; --text-muted: #5a6472; --accent-primary: #6f42c1; --accent-secondary: #398be7;
+        --accent-gradient: linear-gradient(135deg, #6f42c1 0%, #398be7 100%); --success: #2ea44f;
+        --warning: #c9922e; --error: #d64545;
+    }
+    body { font-family: 'SF Mono', 'Consolas', 'Monaco', monospace; background: var(--bg-deep); color: var(--text-primary); height: 100vh; display: flex; flex-direction: column; overflow: hidden; font-size: 13px; }
+    
+    .header { background: var(--bg-secondary); border-bottom: 1px solid var(--border-subtle); padding: 8px 12px; display: flex; align-items: center; gap: 10px; flex-wrap: nowrap; overflow-x: auto; scrollbar-width: none; }
+    .header::-webkit-scrollbar { display: none; }
+    .brand { display: flex; align-items: center; gap: 8px; padding-right: 10px; border-right: 1px solid var(--border-subtle); flex-shrink: 0; }
+    .brand-logo { width: 22px; height: 22px; }
+    .brand-name { font-size: 14px; font-weight: 700; letter-spacing: 2px; background: var(--accent-gradient); -webkit-background-clip: text; -webkit-text-fill-color: transparent; }
+    
+    .status-badge { display: flex; align-items: center; gap: 5px; padding: 4px 8px; border-radius: 4px; font-size: 10px; background: var(--bg-tertiary); cursor: pointer; flex-shrink: 0; border: 1px solid var(--border-subtle); }
+    .status-badge:hover { background: var(--bg-elevated); }
+    .status-dot { width: 6px; height: 6px; border-radius: 50%; background: var(--error); }
+    .status-dot.active { background: var(--success); box-shadow: 0 0 6px var(--success); } 
+    
+    .btn { display: inline-flex; align-items: center; justify-content: center; gap: 6px; padding: 5px 10px; border-radius: 4px; font-family: inherit; font-size: 11px; font-weight: 500; cursor: pointer; border: 1px solid transparent; transition: all 0.15s; flex-shrink: 0; white-space: nowrap; }
+    .btn svg { width: 14px; height: 14px; }
+    .btn-primary { background: var(--accent-gradient); color: white; border: none; } .btn-primary:hover { opacity: 0.9; }
+    .btn-secondary { background: var(--bg-tertiary); color: var(--text-primary); border-color: var(--border-subtle); } .btn-secondary:hover { background: var(--bg-elevated); }
+    
+    .icon-btn { width: 28px; height: 28px; display: flex; align-items: center; justify-content: center; border-radius: 4px; cursor: pointer; color: var(--text-secondary); background: var(--bg-tertiary); border: 1px solid var(--border-subtle); flex-shrink: 0; }
+    .icon-btn:hover { background: var(--bg-elevated); color: var(--text-primary); }
+    .icon-btn svg { width: 16px; height: 16px; }
+    
+    .hidden { display: none !important; } 
+    .main-container { display: flex; flex: 1; overflow: hidden; position: relative; }
+    
+    .sidebar { width: 220px; background: var(--bg-secondary); border-right: 1px solid var(--border-subtle); display: flex; flex-direction: column; z-index: 100; transition: transform 0.3s ease; flex-shrink: 0; }
+    .sidebar-header { padding: 8px 10px; border-bottom: 1px solid var(--border-subtle); display: flex; align-items: center; justify-content: space-between; height: 33px; }
+    .sidebar-title { font-size: 9px; text-transform: uppercase; letter-spacing: 1px; color: var(--text-muted); font-weight: 600; }
+    .sidebar-backdrop { display: none; position: fixed; inset: 0; background: rgba(0,0,0,0.6); z-index: 99; }
+    
+    .file-list { flex: 1; overflow-y: auto; padding: 4px 0; }
+    .file-item { padding: 6px 10px; display: flex; align-items: center; gap: 8px; cursor: pointer; color: var(--text-secondary); font-size: 11px; border-left: 2px solid transparent; }
+    .file-item:hover { background: var(--bg-tertiary); color: var(--text-primary); } 
+    .file-item.active { background: var(--bg-tertiary); color: var(--text-primary); border-left-color: var(--accent-primary); } 
+    .file-item.modified .file-name::after { content: ' *'; color: var(--warning); }
+    .file-icon { width: 16px; height: 16px; flex-shrink: 0; } .file-icon svg { width: 14px; height: 14px; }
+    .file-name { flex: 1; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+    .file-actions { display: flex; gap: 2px; opacity: 0; } .file-item:hover .file-actions { opacity: 1; }
+    .file-action-btn { width: 20px; height: 20px; display: flex; align-items: center; justify-content: center; background: var(--bg-elevated); border: 1px solid var(--border-subtle); border-radius: 3px; color: var(--text-secondary); cursor: pointer; }
+    .file-action-btn:hover { background: var(--accent-primary); border-color: var(--accent-primary); color: white; } .file-action-btn svg { width: 12px; height: 12px; }
+    .empty-sidebar { padding: 12px 10px; text-align: center; color: var(--text-muted); font-size: 10px; }
+    
+    .editor-area { flex: 1; display: flex; flex-direction: column; overflow: hidden; background: var(--bg-primary); width: 100%; }
+    .tabs-bar { display: flex; background: var(--bg-secondary); border-bottom: 1px solid var(--border-subtle); overflow-x: auto; min-height: 33px; scrollbar-width: none; }
+    .tabs-bar::-webkit-scrollbar { display: none; }
+    .tab { display: flex; align-items: center; gap: 6px; padding: 0 12px; color: var(--text-secondary); cursor: pointer; border-right: 1px solid var(--border-subtle); font-size: 11px; white-space: nowrap; position: relative; }
+    .tab::after { content: ''; position: absolute; bottom: 0; left: 0; right: 0; height: 2px; background: transparent; } 
+    .tab:hover { background: var(--bg-tertiary); color: var(--text-primary); } 
+    .tab.active { background: var(--bg-primary); color: var(--text-primary); } 
+    .tab.active::after { background: var(--accent-gradient); }
+    .tab-close { opacity: 0.5; font-size: 12px; padding: 2px; } .tab-close:hover { opacity: 1; color: var(--error); }
+    
+    .editor-wrapper { flex: 1; overflow: hidden; }
+    .CodeMirror { height: 100%; font-family: 'SF Mono', 'Consolas', monospace; font-size: 13px; line-height: 1.5; background: var(--bg-primary); }
+    .CodeMirror-gutters { background: var(--bg-secondary); border-right: 1px solid var(--border-subtle); } .CodeMirror-linenumber { color: var(--text-muted); padding: 0 5px; } .cm-s-material-darker.CodeMirror { background: var(--bg-primary); }
+    
+    .terminal-panel { height: 280px; background: var(--bg-secondary); border-top: 1px solid var(--border-subtle); display: flex; flex-direction: column; transition: height 0.3s cubic-bezier(0.4, 0, 0.2, 1); flex-shrink: 0; }
+    .terminal-panel.collapsed { height: 32px !important; }
+    .terminal-header { display: flex; align-items: center; justify-content: space-between; padding: 0 12px; height: 32px; border-bottom: 1px solid var(--border-subtle); cursor: pointer; user-select: none; background: var(--bg-tertiary); }
+    .terminal-header:hover { background: var(--bg-elevated); }
+    .terminal-title { font-size: 10px; color: var(--text-secondary); font-weight: 600; text-transform: uppercase; letter-spacing: 0.5px; }
+    .term-toggle { color: var(--text-muted); font-size: 10px; transition: transform 0.3s; }
+    .collapsed .term-toggle { transform: rotate(180deg); }
+    
+    .terminal-output { flex: 1; overflow-y: auto; padding: 10px; display: flex; flex-direction: column; gap: 8px; }
+    .msg { padding: 8px 10px; border-radius: 4px; border-left: 3px solid; background: var(--bg-tertiary); font-size: 12px; line-height: 1.5; }
+    .msg.user { border-left-color: var(--accent-secondary); } .msg.assistant { border-left-color: var(--accent-primary); background: rgba(111,66,193,0.08); } .msg.system { border-left-color: var(--success); background: rgba(46,164,79,0.08); } .msg.error { border-left-color: var(--error); background: rgba(214,69,69,0.08); } .msg.tool { border-left-color: var(--warning); background: rgba(201,146,46,0.08); }
+    .msg-header { display: flex; justify-content: space-between; align-items: center; font-size: 9px; text-transform: uppercase; color: var(--text-muted); font-weight: 600; margin-bottom: 4px; cursor: pointer; user-select: none; }
+    .msg-header:hover { color: var(--text-secondary); }
+    .msg-toggle { font-size: 8px; transition: transform 0.2s; }
+    .msg.collapsed .msg-toggle { transform: rotate(-90deg); }
+    .msg.collapsed .msg-body { display: none; }
+    .msg-body { white-space: pre-wrap; word-break: break-word; }
+    
+    .terminal-input-area { display: flex; align-items: center; padding: 8px 10px; border-top: 1px solid var(--border-subtle); gap: 8px; background: var(--bg-secondary); }
+    .prompt-char { color: var(--accent-primary); font-weight: bold; }
+    .terminal-input { flex: 1; background: var(--bg-tertiary); border: 1px solid var(--border-subtle); color: var(--text-primary); padding: 8px 10px; border-radius: 4px; font-family: inherit; font-size: 12px; }
+    .terminal-input:focus { outline: none; border-color: var(--accent-primary); box-shadow: 0 0 0 1px var(--accent-primary); }
+    
+    .loading-dots { display: inline-flex; gap: 3px; } .loading-dots span { width: 4px; height: 4px; background: var(--accent-primary); border-radius: 50%; animation: bounce 1s infinite; } .loading-dots span:nth-child(2) { animation-delay: 0.15s; } .loading-dots span:nth-child(3) { animation-delay: 0.3s; }
+    @keyframes bounce { 0%, 80%, 100% { transform: scale(0.8); } 40% { transform: scale(1.2); } }
+    
+    .toast { position: fixed; bottom: 80px; left: 50%; transform: translateX(-50%); background: var(--bg-elevated); border: 1px solid var(--border-default); padding: 8px 16px; border-radius: 4px; font-size: 12px; z-index: 2000; box-shadow: 0 4px 12px rgba(0,0,0,0.5); }
+    ::-webkit-scrollbar { width: 8px; height: 8px; } ::-webkit-scrollbar-track { background: var(--bg-primary); } ::-webkit-scrollbar-thumb { background: var(--border-default); border-radius: 4px; } ::-webkit-scrollbar-thumb:hover { background: var(--text-muted); }
+    
+    .modal-overlay { position: fixed; inset: 0; background: rgba(0,0,0,0.7); display: flex; align-items: center; justify-content: center; z-index: 1000; backdrop-filter: blur(2px); }
+    .modal { background: var(--bg-secondary); border: 1px solid var(--border-default); border-radius: 8px; width: 480px; max-width: 95vw; max-height: 90vh; overflow: auto; box-shadow: 0 10px 30px rgba(0,0,0,0.8); }
+    .modal-header { padding: 14px 16px; border-bottom: 1px solid var(--border-subtle); display: flex; justify-content: space-between; align-items: center; background: var(--bg-tertiary); border-radius: 8px 8px 0 0; } .modal-title { font-size: 14px; font-weight: 600; color: white; } .modal-close { background: none; border: none; color: var(--text-secondary); font-size: 20px; cursor: pointer; line-height: 1; } .modal-close:hover { color: white; }
+    .modal-body { padding: 16px; } 
+    .setting-group { margin-bottom: 16px; } 
+    .setting-label { font-size: 10px; color: var(--text-secondary); margin-bottom: 6px; display: flex; justify-content: space-between; text-transform: uppercase; letter-spacing: 0.5px; font-weight: 600; } 
+    .setting-label a { color: var(--accent-secondary); text-decoration: none; } .setting-label a:hover { text-decoration: underline; }
+    .setting-input, .setting-select { width: 100%; background: var(--bg-primary); border: 1px solid var(--border-subtle); color: var(--text-primary); padding: 10px 12px; border-radius: 4px; font-family: inherit; font-size: 12px; transition: border-color 0.2s; } 
+    .setting-input:focus, .setting-select:focus { outline: none; border-color: var(--accent-secondary); } 
+    .presets { display: flex; gap: 6px; margin-top: 8px; flex-wrap: wrap; } .preset-btn { padding: 4px 8px; background: var(--bg-elevated); border: 1px solid var(--border-subtle); border-radius: 4px; color: var(--text-secondary); font-size: 10px; cursor: pointer; font-family: inherit; transition: all 0.2s; } .preset-btn:hover { background: var(--accent-secondary); border-color: var(--accent-secondary); color: white; }
+
+    /* Mobile Responsive Rules */
+    .mobile-only { display: none; }
+    @media (max-width: 768px) {
+        .mobile-only { display: flex !important; }
+        .desktop-only { display: none !important; }
+        .sidebar { position: absolute; height: 100%; transform: translateX(-100%); box-shadow: 2px 0 10px rgba(0,0,0,0.5); }
+        .sidebar.open { transform: translateX(0); }
+        .sidebar-backdrop.active { display: block; }
+        .terminal-panel { height: 40vh; }
+        .btn-text { display: none; } /* Hide text on buttons in header */
+        .header { gap: 6px; padding: 8px; }
+        .brand-name { display: none; } /* Hide text to save space */
+    }
+</style>
+</head> <body> <input type="file" id="fileInput" class="hidden" multiple onchange="handleFileUpload(event)">
+
+<header class="header">
+    <button class="icon-btn mobile-only" onclick="toggleSidebar()" title="Menu">
+        <svg viewBox="0 0 24 24" stroke="currentColor" stroke-width="2" fill="none"><line x1="3" y1="12" x2="21" y2="12"></line><line x1="3" y1="6" x2="21" y2="6"></line><line x1="3" y1="18" x2="21" y2="18"></line></svg>
+    </button>
+    
+    <div class="brand">
+        <svg class="brand-logo" viewBox="0 0 32 32" fill="none">
+            <defs><linearGradient id="brandGrad" x1="0%" y1="0%" x2="100%" y2="100%"><stop offset="0%" stop-color="#6f42c1"/><stop offset="100%" stop-color="#398be7"/></linearGradient></defs>
+            <rect width="32" height="32" rx="6" fill="#0d1117"/>
+            <path d="M8 24L16 8L24 24H20L18 20H14L12 24H8ZM15 14L13.5 17H18.5L17 14H15Z" fill="url(#brandGrad)"/>
+        </svg>
+        <span class="brand-name">AXIOM</span>
+    </div>
+
+    <div class="status-badge" onclick="showSettings()" title="Click to configure">
+        <div class="status-dot" id="statusDot"></div>
+        <span id="statusText">Offline</span>
+    </div>
+
+    <div style="flex:1"></div>
+
+    <button class="btn btn-secondary" onclick="showSettings()" title="Configuration">
+        <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><circle cx="12" cy="12" r="3"></circle><path d="M19.4 15a1.65 1.65 0 0 0 .33 1.82l.06.06a2 2 0 0 1 0 2.83 2 2 0 0 1-2.83 0l-.06-.06a1.65 1.65 0 0 0-1.82-.33 1.65 1.65 0 0 0-1 1.51V21a2 2 0 0 1-2 2 2 2 0 0 1-2-2v-.09A1.65 1.65 0 0 0 9 19.4a1.65 1.65 0 0 0-1.82.33l-.06.06a2 2 0 0 1-2.83 0 2 2 0 0 1 0-2.83l.06-.06a1.65 1.65 0 0 0 .33-1.82 1.65 1.65 0 0 0-1.51-1H3a2 2 0 0 1-2-2 2 2 0 0 1 2-2h.09A1.65 1.65 0 0 0 4.6 9a1.65 1.65 0 0 0-.33-1.82l-.06-.06a2 2 0 0 1 0-2.83 2 2 0 0 1 2.83 0l.06.06a1.65 1.65 0 0 0 1.82.33H9a1.65 1.65 0 0 0 1-1.51V3a2 2 0 0 1 2-2 2 2 0 0 1 2 2v.09a1.65 1.65 0 0 0 1 1.51 1.65 1.65 0 0 0 1.82-.33l.06-.06a2 2 0 0 1 2.83 0 2 2 0 0 1 0 2.83l-.06.06a1.65 1.65 0 0 0-.33 1.82V9a1.65 1.65 0 0 0 1.51 1H21a2 2 0 0 1 2 2 2 2 0 0 1-2 2h-.09a1.65 1.65 0 0 0-1.51 1z"></path></svg>
+        <span class="btn-text">Config</span>
+    </button>
+    <button class="btn btn-secondary" onclick="saveWorkspace()" title="Save Workspace">
+        <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M19 21H5a2 2 0 0 1-2-2V5a2 2 0 0 1 2-2h11l5 5v11a2 2 0 0 1-2 2z"></path><polyline points="17 21 17 13 7 13 7 21"></polyline><polyline points="7 3 7 8 15 8"></polyline></svg>
+        <span class="btn-text">Save</span>
+    </button>
+    <button class="btn btn-secondary" onclick="document.getElementById('fileInput').click()" title="Upload Files">
+        <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M21 15v4a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2v-4"></path><polyline points="17 8 12 3 7 8"></polyline><line x1="12" y1="3" x2="12" y2="15"></line></svg>
+        <span class="btn-text">Upload</span>
+    </button>
+    <button class="btn btn-secondary" onclick="createNewFile()" title="New File">
+        <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><line x1="12" y1="5" x2="12" y2="19"></line><line x1="5" y1="12" x2="19" y2="12"></line></svg>
+        <span class="btn-text">New</span>
+    </button>
+    <button class="btn btn-secondary" onclick="downloadZip()" title="Download Project">
+        <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M21 15v4a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2v-4"></path><polyline points="7 10 12 15 17 10"></polyline><line x1="12" y1="15" x2="12" y2="3"></line></svg>
+        <span class="btn-text">ZIP</span>
+    </button>
+</header>
+
+<div class="main-container">
+    <div class="sidebar-backdrop" id="sidebarBackdrop" onclick="toggleSidebar()"></div>
+    <aside class="sidebar" id="sidebar">
+        <div class="sidebar-header">
+            <span class="sidebar-title">Project Files</span>
+            <div style="display:flex; gap:4px;">
+                <button class="icon-btn" onclick="createNewFile()" style="width:20px;height:20px;"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><line x1="12" y1="5" x2="12" y2="19"></line><line x1="5" y1="12" x2="19" y2="12"></line></svg></button>
+            </div>
+        </div>
+        <div class="file-list" id="fileList">
+            <div class="empty-sidebar">No files loaded</div>
+        </div>
+    </aside>
+
+    <main class="editor-area">
+        <div class="tabs-bar" id="tabsBar"></div>
+
+        <div class="editor-wrapper">
+            <textarea id="codeEditor"></textarea>
+        </div>
+
+        <div class="terminal-panel" id="terminalPanel">
+            <div class="terminal-header" onclick="toggleTerminal()">
+                <span class="terminal-title">Terminal & AI Chat</span>
+                <div style="display:flex;align-items:center;gap:10px;">
+                    <span class="term-toggle">▼</span>
+                </div>
+            </div>
+
+            <div class="terminal-output" id="terminalOutput">
+                <div class="msg system">
+                    <div class="msg-header" onclick="this.parentElement.classList.toggle('collapsed')">
+                        <span>System</span>
+                        <span class="msg-toggle">▼</span>
+                    </div>
+                    <div class="msg-body">Ready. Advanced Context Saving Tools Active.</div>
+                </div>
+            </div>
+
+            <div class="terminal-input-area">
+                <span class="prompt-char">></span>
+                <input type="text" class="terminal-input" id="terminalInput" placeholder="Tell AI what to build or fix...">
+                <button class="btn btn-primary" onclick="sendMessage()">Send</button>
+            </div>
+        </div>
+    </main>
+</div>
+
+<!-- Configuration Modal -->
+<div class="modal-overlay hidden" id="settingsModal">
+    <div class="modal">
+        <div class="modal-header">
+            <span class="modal-title">AI Configuration</span>
+            <button class="modal-close" onclick="hideSettings()">×</button>
+        </div>
+        <div class="modal-body">
+            <div class="setting-group">
+                <label class="setting-label">AI Provider</label>
+                <select id="providerSelect" class="setting-select" onchange="onProviderChange()">
+                    <optgroup label="Cloud APIs">
+                        <option value="google">Google Gemini</option>
+                        <option value="openai">OpenAI</option>
+                        <option value="anthropic">Anthropic Claude</option>
+                        <option value="mistral">Mistral AI</option>
+                        <option value="groq">Groq Fast AI</option>
+                        <option value="together">Together AI</option>
+                        <option value="openrouter">OpenRouter</option>
+                    </optgroup>
+                    <optgroup label="Local / Custom">
+                        <option value="ollama">Ollama (Local)</option>
+                        <option value="lmstudio">LM Studio (Local)</option>
+                        <option value="llamacpp">llama.cpp (Local)</option>
+                        <option value="cloudflare">Cloudflare Worker</option>
+                        <option value="custom">Custom Endpoint</option>
+                    </optgroup>
+                </select>
+            </div>
+            <div class="setting-group" id="endpointGroup">
+                <label class="setting-label">API Endpoint URL</label>
+                <input type="text" class="setting-input" id="settingEndpoint" placeholder="http://localhost:11434/v1/chat/completions">
+                <div class="presets">
+                    <button class="preset-btn" onclick="setPreset('http://localhost:11434/v1/chat/completions')">Ollama</button>
+                    <button class="preset-btn" onclick="setPreset('http://localhost:1234/v1/chat/completions')">LM Studio</button>
+                    <button class="preset-btn" onclick="setPreset('http://localhost:8080/v1/chat/completions')">llama.cpp</button>
+                </div>
+            </div>
+            <div class="setting-group">
+                <label class="setting-label"><span>API Key</span><a href="#" id="apiKeyLink" target="_blank">Get Key</a></label>
+                <input type="password" class="setting-input" id="settingApiKey" placeholder="sk-...">
+            </div>
+            <div class="setting-group">
+                <label class="setting-label">Model ID</label>
+                <input type="text" class="setting-input" id="settingModel" placeholder="gpt-4o, gemini-2.0-flash, etc.">
+            </div>
+            <button class="btn btn-primary" onclick="saveSettingsAndConnect()" style="width:100%; padding: 10px; font-size: 13px; margin-top: 5px;">Save & Connect</button>
+        </div>
+    </div>
+</div>
+
+<div class="toast hidden" id="toast"></div>
+
+<script src="https://cdnjs.cloudflare.com/ajax/libs/codemirror/5.65.16/codemirror.min.js"></script>
+<script src="https://cdnjs.cloudflare.com/ajax/libs/codemirror/5.65.16/mode/meta.min.js"></script>
+<script src="https://cdnjs.cloudflare.com/ajax/libs/codemirror/5.65.16/mode/javascript/javascript.min.js"></script>
+<script src="https://cdnjs.cloudflare.com/ajax/libs/codemirror/5.65.16/mode/xml/xml.min.js"></script>
+<script src="https://cdnjs.cloudflare.com/ajax/libs/codemirror/5.65.16/mode/css/css.min.js"></script>
+<script src="https://cdnjs.cloudflare.com/ajax/libs/codemirror/5.65.16/mode/htmlmixed/htmlmixed.min.js"></script>
+<script src="https://cdnjs.cloudflare.com/ajax/libs/codemirror/5.65.16/mode/python/python.min.js"></script>
+<script src="https://cdnjs.cloudflare.com/ajax/libs/codemirror/5.65.16/mode/markdown/markdown.min.js"></script>
+<script src="https://cdnjs.cloudflare.com/ajax/libs/codemirror/5.65.16/mode/clike/clike.min.js"></script>
+<script src="https://cdnjs.cloudflare.com/ajax/libs/jszip/3.10.1/jszip.min.js"></script>
+
+<script>
+    function getFileIcon(filename) {
+        const ext = filename.split('.').pop().toLowerCase();
+        const colors = { js:'#f7df1e',ts:'#3178c6',py:'#3776ab',html:'#e44d26',css:'#264de4',json:'#cbcb41',md:'#083fa1' };
+        const c = colors[ext] || '#8892a2';
+        return `<div class="file-icon"><svg viewBox="0 0 24 24" fill="${c}"><rect x="4" y="2" width="16" height="20" rx="2" fill="${c}" opacity="0.2"/><text x="12" y="14" text-anchor="middle" font-size="6" font-weight="bold" fill="${c}">${ext.slice(0,3).toUpperCase()}</text></svg></div>`;
+    }
+
+    function parseAIResponse(data) {
+        if (typeof data === 'string') { try { data = JSON.parse(data); } catch(e) { return data; } }
+        
+        // Unwrap Cloudflare/Custom API wrappers safely
+        if (data?.result && data.result.choices) {
+            data = data.result;
+        } else if (data?.result && typeof data.result === 'object' && data.result.response) {
+            return data.result.response;
+        }
+
+        if (data?.choices?.[0]?.message?.tool_calls?.length > 0) {
+            const tc = data.choices[0].message.tool_calls[0];
+            return JSON.stringify({ tool: tc.function?.name || tc.name, args: tc.function?.arguments || tc.arguments });
+        }
+        
+        let msg = data?.choices?.[0]?.message;
+        if (msg) {
+            let content = msg.content || "";
+            let reasoning = msg.reasoning_content || msg.reasoning || "";
+            
+            if (reasoning || content) {
+                let out = "";
+                if (reasoning) {
+                    out += `[💭 AI Thinking]\n${reasoning}\n\n`;
+                }
+                if (content) {
+                    out += content;
+                }
+                return out.trim();
+            }
+        }
+        
+        if (data?.candidates?.[0]?.content?.parts?.[0]?.text) return data.candidates[0].content.parts[0].text;
+        if (typeof data?.response === 'string') return data.response;
+        if (typeof data?.text === 'string') return data.text;
+        
+        return JSON.stringify(data, null, 2);
+    }
+
+    const PROVIDERS = {
+        google: { name: 'Gemini', type: 'cloud', keyUrl: 'https://aistudio.google.com/app/apikey', defaultModel: 'gemini-2.0-flash-exp',
+            buildRequest: (msgs, cfg) => {
+                const contents = [];
+                msgs.forEach(m => {
+                    const role = m.role === 'assistant' ? 'model' : 'user';
+                    if (contents.length > 0 && contents[contents.length - 1].role === role) contents[contents.length - 1].parts[0].text += '\n\n' + m.content;
+                    else contents.push({ role, parts: [{ text: m.content }] });
+                });
+                return { url: `https://generativelanguage.googleapis.com/v1beta/models/${cfg.model}:generateContent?key=${cfg.apiKey}`, headers: { 'Content-Type': 'application/json' }, body: { contents, generationConfig: { temperature: 0.7, maxOutputTokens: 8192 } } };
+            }
+        },
+        openai: { name: 'OpenAI', type: 'cloud', keyUrl: 'https://platform.openai.com/api-keys', defaultModel: 'gpt-4o', buildRequest: (msgs, cfg) => ({ url: 'https://api.openai.com/v1/chat/completions', headers: { 'Authorization': `Bearer ${cfg.apiKey}`, 'Content-Type': 'application/json' }, body: { model: cfg.model, messages: msgs, temperature: 0.7 } }) },
+        anthropic: { name: 'Anthropic', type: 'cloud', keyUrl: 'https://console.anthropic.com/settings/keys', defaultModel: 'claude-3-5-sonnet-20241022', buildRequest: (msgs, cfg) => ({ url: 'https://api.anthropic.com/v1/messages', headers: { 'x-api-key': cfg.apiKey, 'Content-Type': 'application/json', 'anthropic-version': '2023-06-01', 'anthropic-dangerous-direct-browser-access': 'true' }, body: { model: cfg.model, max_tokens: 8192, messages: msgs.filter(m => m.role !== 'system') } }) },
+        mistral: { name: 'Mistral', type: 'cloud', keyUrl: 'https://console.mistral.ai/api-keys/', defaultModel: 'mistral-large-latest', buildRequest: (msgs, cfg) => ({ url: 'https://api.mistral.ai/v1/chat/completions', headers: { 'Authorization': `Bearer ${cfg.apiKey}`, 'Content-Type': 'application/json' }, body: { model: cfg.model, messages: msgs, temperature: 0.7 } }) },
+        groq: { name: 'Groq', type: 'cloud', keyUrl: 'https://console.groq.com/keys', defaultModel: 'llama-3.3-70b-versatile', buildRequest: (msgs, cfg) => ({ url: 'https://api.groq.com/openai/v1/chat/completions', headers: { 'Authorization': `Bearer ${cfg.apiKey}`, 'Content-Type': 'application/json' }, body: { model: cfg.model, messages: msgs, temperature: 0.7 } }) },
+        together: { name: 'Together', type: 'cloud', keyUrl: 'https://api.together.xyz/settings/api-keys', defaultModel: 'meta-llama/Meta-Llama-3.1-70B-Instruct-Turbo', buildRequest: (msgs, cfg) => ({ url: 'https://api.together.xyz/v1/chat/completions', headers: { 'Authorization': `Bearer ${cfg.apiKey}`, 'Content-Type': 'application/json' }, body: { model: cfg.model, messages: msgs, temperature: 0.7 } }) },
+        openrouter: { name: 'OpenRouter', type: 'cloud', keyUrl: 'https://openrouter.ai/keys', defaultModel: 'anthropic/claude-3.5-sonnet', buildRequest: (msgs, cfg) => ({ url: 'https://openrouter.ai/api/v1/chat/completions', headers: { 'Authorization': `Bearer ${cfg.apiKey}`, 'Content-Type': 'application/json' }, body: { model: cfg.model, messages: msgs } }) },
+        ollama: { name: 'Ollama', type: 'local', keyUrl: '#', defaultModel: 'llama3.2', defaultEndpoint: 'http://localhost:11434/v1/chat/completions', buildRequest: (msgs, cfg) => ({ url: cfg.endpoint, headers: cfg.apiKey ? { 'Authorization': `Bearer ${cfg.apiKey}`, 'Content-Type': 'application/json' } : { 'Content-Type': 'application/json' }, body: { model: cfg.model, messages: msgs, stream: false } }) },
+        lmstudio: { name: 'LM Studio', type: 'local', keyUrl: '#', defaultModel: 'local-model', defaultEndpoint: 'http://localhost:1234/v1/chat/completions', buildRequest: (msgs, cfg) => ({ url: cfg.endpoint, headers: { 'Content-Type': 'application/json' }, body: { model: cfg.model, messages: msgs, stream: false } }) },
+        llamacpp: { name: 'llama.cpp', type: 'local', keyUrl: '#', defaultModel: 'default', defaultEndpoint: 'http://localhost:8080/v1/chat/completions', buildRequest: (msgs, cfg) => ({ url: cfg.endpoint, headers: { 'Content-Type': 'application/json' }, body: { model: cfg.model, messages: msgs, stream: false } }) },
+        cloudflare: { name: 'Cloudflare', type: 'custom', keyUrl: 'https://dash.cloudflare.com', defaultModel: '@cf/meta/llama-3.1-8b-instruct', defaultEndpoint: '', buildRequest: (msgs, cfg) => ({ url: cfg.endpoint, headers: cfg.apiKey ? { 'Authorization': `Bearer ${cfg.apiKey}`, 'Content-Type': 'application/json' } : { 'Content-Type': 'application/json' }, body: { model: cfg.model, messages: msgs } }) },
+        custom: { name: 'Custom', type: 'custom', keyUrl: '#', defaultModel: '', defaultEndpoint: '', buildRequest: (msgs, cfg) => ({ url: cfg.endpoint, headers: cfg.apiKey ? { 'Authorization': `Bearer ${cfg.apiKey}`, 'Content-Type': 'application/json' } : { 'Content-Type': 'application/json' }, body: { model: cfg.model, messages: msgs } }) }
+    };
+
+    const state = { provider: 'google', configs: {}, connected: false, files: new Map(), openTabs: [], activeTab: '', history: [], cmdHistory: [], cmdIndex: -1, currentInput: '' };
+    let editor = null;
+
+    document.addEventListener('DOMContentLoaded', () => {
+        editor = CodeMirror.fromTextArea(document.getElementById('codeEditor'), { theme: 'material-darker', lineNumbers: true, mode: 'markdown', tabSize: 4, lineWrapping: true });
+        
+        loadWorkspace();
+
+        if (state.files.size === 0) {
+            state.files.set('README.md', { content: `# AXIOM - AI Code Editor\n\nWelcome to AXIOM. Built for pure AI-driven creation.\n\n1. Click the Config button (⚙️) to set your Provider & API Key.\n2. Open the Terminal (▼) and type "Create a snake game in index.html".\n3. Ask for changes ("Make the snake blue"). The AI uses Smart Context Tools to efficiently scan and edit large files.`, modified: false });
+            state.openTabs = ['README.md'];
+            state.activeTab = 'README.md';
+        }
+
+        updateFileList(); updateTabs();
+        editor.setValue(state.files.get(state.activeTab).content);
+        const info = CodeMirror.findModeByFileName(state.activeTab);
+        editor.setOption('mode', info ? info.mode : 'text/plain');
+
+        editor.on('change', (cm, changeObj) => { 
+            if (changeObj.origin !== 'setValue') {
+                const f = state.files.get(state.activeTab); 
+                if (f) { f.modified = true; f.content = editor.getValue(); updateTabs(); updateFileList(); } 
+            }
+        });
+
+        loadConfig(); setupEvents();
+    });
+
+    function loadWorkspace() {
+        try {
+            const saved = localStorage.getItem('axiom_workspace');
+            if (saved) {
+                const workspace = JSON.parse(saved);
+                if (workspace && workspace.length > 0) {
+                    state.files.clear();
+                    state.openTabs = [];
+                    workspace.forEach(f => state.files.set(f.name, { content: f.content, modified: false }));
+                    const firstFile = workspace[0].name;
+                    state.openTabs.push(firstFile);
+                    state.activeTab = firstFile;
+                }
+            }
+        } catch (e) { console.error('Failed to load workspace', e); }
+    }
+
+    function saveWorkspace() {
+        const workspace = [];
+        state.files.forEach((file, name) => {
+            workspace.push({ name, content: file.content });
+            file.modified = false;
+        });
+        localStorage.setItem('axiom_workspace', JSON.stringify(workspace));
+        updateFileList(); updateTabs();
+        toast('Workspace saved locally');
+    }
+
+    function loadConfig() {
+        const saved = localStorage.getItem('axiom_v9');
+        if (saved) {
+            try {
+                const c = JSON.parse(saved);
+                state.provider = c.provider || 'google'; state.configs = c.configs || {}; state.cmdHistory = c.cmdHistory || [];
+                document.getElementById('providerSelect').value = state.provider;
+                loadProviderUI();
+                const cfg = state.configs[state.provider]; const p = PROVIDERS[state.provider];
+                if (cfg?.apiKey || p?.type !== 'cloud') connectAPI(true);
+            } catch(e) {}
+        } else loadProviderUI();
+    }
+
+    function saveConfig() {
+        localStorage.setItem('axiom_v9', JSON.stringify({ provider: state.provider, configs: state.configs, cmdHistory: state.cmdHistory.slice(-100) }));
+    }
+
+    function loadProviderUI() {
+        const p = PROVIDERS[state.provider]; const cfg = state.configs[state.provider] || {};
+        document.getElementById('settingApiKey').value = cfg.apiKey || ''; document.getElementById('settingModel').value = cfg.model || p?.defaultModel || ''; document.getElementById('settingEndpoint').value = cfg.endpoint || p?.defaultEndpoint || '';
+        document.getElementById('endpointGroup').style.display = (p?.type === 'local' || p?.type === 'custom') ? 'block' : 'none';
+        document.getElementById('apiKeyLink').href = p?.keyUrl || '#';
+    }
+
+    function setupEvents() {
+        const input = document.getElementById('terminalInput');
+        input.addEventListener('keydown', (e) => {
+            if (e.key === 'Enter') { e.preventDefault(); sendMessage(); }
+            else if (e.key === 'ArrowUp') { e.preventDefault(); navHistory(-1); }
+            else if (e.key === 'ArrowDown') { e.preventDefault(); navHistory(1); }
+        });
+        input.addEventListener('input', () => { state.cmdIndex = -1; state.currentInput = input.value; });
+    }
+
+    function navHistory(dir) {
+        const input = document.getElementById('terminalInput');
+        if (!state.cmdHistory.length) return;
+        if (state.cmdIndex === -1 && dir === -1) { state.currentInput = input.value; state.cmdIndex = state.cmdHistory.length - 1; }
+        else { state.cmdIndex += dir; }
+        if (state.cmdIndex < 0 || state.cmdIndex >= state.cmdHistory.length) { state.cmdIndex = -1; input.value = state.currentInput; }
+        else { input.value = state.cmdHistory[state.cmdIndex]; }
+        input.selectionStart = input.selectionEnd = input.value.length;
+    }
+
+    function toggleSidebar() { document.getElementById('sidebar').classList.toggle('open'); document.getElementById('sidebarBackdrop').classList.toggle('active'); }
+    function toggleTerminal() { document.getElementById('terminalPanel').classList.toggle('collapsed'); }
+    
+    function showSettings() { loadProviderUI(); document.getElementById('settingsModal').classList.remove('hidden'); }
+    function hideSettings() { document.getElementById('settingsModal').classList.add('hidden'); }
+    function setPreset(url) { document.getElementById('settingEndpoint').value = url; }
+    
+    function onProviderChange() {
+        state.provider = document.getElementById('providerSelect').value; loadProviderUI(); state.connected = false; updateStatus(false);
+    }
+
+    function saveSettingsAndConnect() {
+        state.provider = document.getElementById('providerSelect').value;
+        state.configs[state.provider] = { endpoint: document.getElementById('settingEndpoint').value.trim(), apiKey: document.getElementById('settingApiKey').value.trim(), model: document.getElementById('settingModel').value.trim() };
+        hideSettings(); connectAPI();
+    }
+
+    function connectAPI(silent = false) {
+        saveConfig(); const p = PROVIDERS[state.provider]; const cfg = state.configs[state.provider] || {};
+        if (p?.type === 'cloud' && !cfg.apiKey) return !silent && toast('Enter API key in Settings');
+        if ((p?.type === 'local' || p?.type === 'custom') && !cfg.endpoint) return !silent && toast('Enter endpoint URL in Settings');
+        state.connected = true; updateStatus(true); if (!silent) addMsg('system', `Connected: ${p?.name || state.provider} | Model: ${cfg.model || 'default'}`);
+    }
+
+    function updateStatus(connected) {
+        const dot = document.getElementById('statusDot'); const txt = document.getElementById('statusText');
+        dot.classList.toggle('active', connected); txt.textContent = connected ? PROVIDERS[state.provider]?.name : 'Offline';
+    }
+
+    function handleFileUpload(e) {
+        for (const file of e.target.files) {
+            if (!file.name.startsWith('.')) {
+                const reader = new FileReader();
+                reader.onload = (ev) => { state.files.set(file.name, { content: ev.target.result, modified: false }); updateFileList(); if (state.activeTab === file.name) openFile(file.name); else openFile(file.name); };
+                reader.readAsText(file);
+            }
+        }
+        e.target.value = '';
+    }
+
+    function createNewFile() {
+        const name = prompt('Filename:');
+        if (!name || state.files.has(name)) return;
+        state.files.set(name, { content: '', modified: false }); updateFileList(); openFile(name);
+    }
+
+    function openFile(name) {
+        if(window.innerWidth <= 768 && document.getElementById('sidebar').classList.contains('open')) toggleSidebar();
+        const file = state.files.get(name); if (!file) return;
+        if (!state.openTabs.includes(name)) state.openTabs.push(name);
+        state.activeTab = name; updateTabs(); editor.setValue(file.content);
+        const info = CodeMirror.findModeByFileName(name); editor.setOption('mode', info ? info.mode : 'text/plain');
+    }
+
+    function downloadFile(name) {
+        const file = state.files.get(name); if (!file) return;
+        const a = document.createElement('a'); a.href = URL.createObjectURL(new Blob([file.content])); a.download = name; a.click();
+    }
+
+    function deleteFile(name) {
+        if (!confirm(`Delete ${name}?`)) return;
+        state.files.delete(name); closeTab(name); updateFileList();
+    }
+
+    async function downloadZip() {
+        if (!state.files.size) return toast('No files');
+        const zip = new JSZip(); state.files.forEach((f, n) => zip.file(n, f.content));
+        const blob = await zip.generateAsync({ type: 'blob' });
+        const a = document.createElement('a'); a.href = URL.createObjectURL(blob); a.download = 'project.zip'; a.click();
+    }
+
+    function updateFileList() {
+        const list = document.getElementById('fileList');
+        if (!state.files.size) { list.innerHTML = '<div class="empty-sidebar">No files</div>'; return; }
+        list.innerHTML = [...state.files.keys()].sort().map(name => {
+            const f = state.files.get(name);
+            return `<div class="file-item${name === state.activeTab ? ' active' : ''}${f.modified ? ' modified' : ''}" onclick="openFile('${esc(name)}')">
+                ${getFileIcon(name)}<span class="file-name">${esc(name)}</span>
+                <div class="file-actions">
+                    <button class="file-action-btn" onclick="event.stopPropagation();downloadFile('${esc(name)}')" title="Download"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M21 15v4a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2v-4"/><polyline points="7 10 12 15 17 10"/><line x1="12" y1="15" x2="12" y2="3"/></svg></button>
+                    <button class="file-action-btn" onclick="event.stopPropagation();deleteFile('${esc(name)}')" title="Delete"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><polyline points="3 6 5 6 21 6"/><path d="M19 6v14a2 2 0 0 1-2 2H7a2 2 0 0 1-2-2V6m3 0V4a2 2 0 0 1 2-2h4a2 2 0 0 1 2 2v2"/></svg></button>
+                </div></div>`;
+        }).join('');
+    }
+
+    function updateTabs() {
+        document.getElementById('tabsBar').innerHTML = state.openTabs.map(n => {
+            const f = state.files.get(n);
+            return `<div class="tab${n === state.activeTab ? ' active' : ''}" onclick="switchTab('${esc(n)}')">
+                <span>${esc(n)}${f?.modified ? ' *' : ''}</span>
+                <span class="tab-close" onclick="event.stopPropagation();closeTab('${esc(n)}')">×</span>
+            </div>`;
+        }).join('');
+    }
+
+    function switchTab(name) {
+        state.activeTab = name; updateTabs(); updateFileList();
+        const f = state.files.get(name); 
+        if (f) {
+            editor.setValue(f.content);
+            const info = CodeMirror.findModeByFileName(name); 
+            editor.setOption('mode', info ? info.mode : 'text/plain');
+        } else editor.setValue('');
+    }
+
+    function closeTab(name) {
+        const i = state.openTabs.indexOf(name);
+        if (i > -1) {
+            state.openTabs.splice(i, 1);
+            if (state.activeTab === name) state.activeTab = state.openTabs[Math.max(0, i - 1)] || null;
+            if (!state.openTabs.length) { 
+                state.openTabs.push('README.md'); state.activeTab = 'README.md'; 
+                if(!state.files.has('README.md')) state.files.set('README.md', {content: '# AXIOM\n', modified: false});
+            }
+            updateTabs(); switchTab(state.activeTab);
+        }
+    }
+
+    function runTool(name, args) {
+        let result;
+        try {
+            switch (name) {
+                case 'list_files': 
+                    result = { files: [...state.files.keys()] }; 
+                    break;
+                
+                case 'search_file': {
+                    const f = state.files.get(args.filename);
+                    if (!f) { result = { error: 'Not found' }; break; }
+                    const lines = f.content.split('\n');
+                    const query = args.query.toLowerCase();
+                    let results = [];
+                    for (let i = 0; i < lines.length; i++) {
+                        if (lines[i].toLowerCase().includes(query)) {
+                            let s = Math.max(0, i - 2);
+                            let e = Math.min(lines.length - 1, i + 2);
+                            results.push(`--- Match around line ${i+1} ---`);
+                            for (let j = s; j <= e; j++) {
+                                results.push(`${j + 1} | ${lines[j]}`);
+                            }
+                        }
+                    }
+                    if (results.length === 0) { result = { error: `No matches found for '${args.query}'` }; break; }
+                    result = { matches: results.join('\n') };
+                    break;
+                }
+
+                case 'read_file': { 
+                    const f = state.files.get(args.filename); 
+                    if (!f) { result = { error: 'Not found' }; break; }
+                    const lines = f.content.split('\n');
+                    
+                    let start = 0;
+                    let end = lines.length;
+                    
+                    if (args.start_line !== undefined) start = Math.max(0, parseInt(args.start_line) - 1);
+                    if (args.end_line !== undefined) end = Math.min(lines.length, parseInt(args.end_line));
+                    if (start >= end) { result = { error: 'Invalid line range' }; break; }
+
+                    const numbered = lines.slice(start, end).map((l, i) => `${start + i + 1} | ${l}`).join('\n');
+                    result = { 
+                        total_lines_in_file: lines.length, 
+                        showing_lines: `${start + 1} to ${end}`,
+                        content: numbered 
+                    }; 
+                    break;
+                }
+                
+                case 'write_file': {
+                    state.files.set(args.filename, { content: args.content, modified: false }); updateFileList();
+                    if (!state.openTabs.includes(args.filename)) state.openTabs.push(args.filename);
+                    if (state.activeTab === 'README.md' && state.openTabs.length > 1) closeTab('README.md');
+                    state.activeTab = args.filename; updateTabs(); editor.setValue(args.content);
+                    const info = CodeMirror.findModeByFileName(args.filename); editor.setOption('mode', info ? info.mode : 'text/plain');
+                    result = { success: true };
+                    break;
+                }
+                
+                case 'edit_lines': {
+                    const f = state.files.get(args.filename); 
+                    if (!f) { result = { error: 'Not found' }; break; }
+                    const lines = f.content.split('\n');
+                    let start = parseInt(args.start_line); let end = parseInt(args.end_line);
+                    if(isNaN(start) || isNaN(end)) { result = { error: 'Invalid line numbers' }; break; }
+                    start = Math.max(1, start) - 1; end = Math.min(lines.length, end);
+                    if(start > end) { result = { error: 'start_line must be <= end_line' }; break; }
+                    
+                    // Smart Indentation Fix
+                    const originalIndent = lines[start] ? lines[start].match(/^\s*/)[0] : '';
+                    let replacementLines = args.replace_with.split('\n');
+                    
+                    if (originalIndent.length > 0 && replacementLines.length > 0 && !replacementLines[0].match(/^\s+/)) {
+                        args.replace_with = replacementLines.map(l => l.trim() !== '' ? originalIndent + l : l).join('\n');
+                    }
+
+                    lines.splice(start, end - start, args.replace_with);
+                    f.content = lines.join('\n'); f.modified = false; state.files.set(args.filename, f); updateFileList();
+                    
+                    if (state.activeTab === args.filename) {
+                        const scrollInfo = editor.getScrollInfo();
+                        editor.setValue(f.content);
+                        editor.scrollTo(scrollInfo.left, scrollInfo.top);
+                    }
+                    result = { success: true };
+                    break;
+                }
+                default: 
+                    result = { error: 'Unknown tool' };
+            }
+        } catch (e) {
+            result = { error: e.message };
+        }
+
+        // Pretty print action and result to UI inside a collapsible block
+        let argStr = JSON.stringify(args);
+        if (argStr.length > 80) argStr = argStr.substring(0, 80) + '...}';
+        let resContent = typeof result === 'object' ? JSON.stringify(result, null, 2) : result;
+        
+        addMsg('tool', `Action: ${name}(${argStr})\n\nResult:\n${resContent}`, true);
+        
+        // Output clean system notifications for modifications
+        if (name === 'write_file' && result.success) addMsg('system', `Created file: ${args.filename}`);
+        if (name === 'edit_lines' && result.success) addMsg('system', `Edited lines ${args.start_line}-${args.end_line} in ${args.filename}`);
+
+        return result;
+    }
+
+    async function sendMessage() {
+        const input = document.getElementById('terminalInput'); const text = input.value.trim();
+        if (!text) return; if (!state.connected) { showSettings(); return toast('Connect to an AI Provider first'); }
+        state.cmdHistory.push(text); state.cmdIndex = -1; saveConfig(); input.value = '';
+        if(document.getElementById('terminalPanel').classList.contains('collapsed')) toggleTerminal();
+        
+        if (state.history.length === 0) {
+            state.history.push({
+                role: 'user',
+                content: `SYSTEM INSTRUCTION: You are an autonomous AI Editor. YOU MUST USE TOOLS. No markdown code dumps. 
+To SAVE TOKENS on large files, USE search_file or read_file with line ranges instead of reading the whole file.
+
+AVAILABLE TOOLS:
+- "list_files" (args: {}): Returns a list of all files in the directory.
+- "search_file" (args: {"filename": "...", "query": "..."}): Searches the file for a string and returns matching lines WITH surrounding context (+/- 2 lines). USE THIS FIRST to find where to edit.
+- "read_file" (args: {"filename": "...", "start_line": 1, "end_line": 50}): Returns file content WITH LINE NUMBERS. start_line and end_line are optional, but HIGHLY RECOMMENDED for large files.
+- "write_file" (args: {"filename": "...", "content": "..."}): Creates a new file. DO NOT include line numbers in content.
+- "edit_lines" (args: {"filename": "...", "start_line": 1, "end_line": 2, "replace_with": "..."}): Replaces a range of lines exactly. Start and end are inclusive. DO NOT include line numbers in "replace_with" string. CRITICAL: Maintain exact indentation to match the original code!
+
+Format EXACTLY:
+\`\`\`json
+{
+  "tool": "edit_lines",
+  "args": {
+    "filename": "app.js",
+    "start_line": 10,
+    "end_line": 15,
+    "replace_with": "    const a = 1;\\n    console.log(a);"
+  }
+}
+\`\`\`
+DO NOT use 'name' or 'arguments' formats.
+CRITICAL FOR REASONING MODELS: If you use a thinking/reasoning process, YOU MUST output the final JSON block AFTER your reasoning finishes. NEVER stop after just reasoning! Put the json block in the normal response text, or put it directly in the reasoning block if necessary.`
+            });
+            state.history.push({ role: 'assistant', content: 'Understood. I will exclusively use the exact JSON format {"tool": "...", "args": {...}} and output it after any reasoning is complete. I will utilize search_file and line ranges to save tokens, and edit_lines for precise surgical edits, keeping indentation perfect.' });
+        }
+
+        addMsg('user', text); state.history.push({ role: 'user', content: text });
+        await runAI();
+    }
+
+    async function runAI(maxIter = 20) {
+        const p = PROVIDERS[state.provider]; const cfg = state.configs[state.provider] || {};
+        const fullCfg = { apiKey: cfg.apiKey || '', model: cfg.model || p?.defaultModel || '', endpoint: cfg.endpoint || p?.defaultEndpoint || '' };
+        let iter = 0;
+        while (iter++ < maxIter) {
+            showLoading();
+            try {
+                const req = p.buildRequest(state.history, fullCfg);
+                const res = await fetch(req.url, { method: 'POST', headers: req.headers, body: JSON.stringify(req.body) });
+                if (!res.ok) { const errText = await res.text(); throw new Error(`${res.status}: ${errText.slice(0, 200)}`); }
+                
+                const data = await res.json();
+                let content = parseAIResponse(data);
+                
+                if (content) {
+                    let toolCmd = null;
+                    let jsonStr = '';
+                    
+                    const toolMatch = content.match(/```(?:json)?\s*(\{[\s\S]*?\})\s*```/i);
+                    if (toolMatch) {
+                        jsonStr = toolMatch[1];
+                    } else if (content.includes('"tool"') && content.includes('{') && content.includes('}')) {
+                        const start = content.indexOf('{'); const end = content.lastIndexOf('}');
+                        if (start > -1 && end > start) jsonStr = content.substring(start, end + 1);
+                    }
+
+                    if (jsonStr) {
+                        try { toolCmd = JSON.parse(jsonStr); } catch(e1) {
+                            try {
+                                // JS Engine Healing fallback
+                                let inStr = false, esc = false, resStr = "";
+                                for (let i = 0; i < jsonStr.length; i++) {
+                                    let c = jsonStr[i];
+                                    if (c === '"' && !esc) inStr = !inStr;
+                                    if (c === '\\' && !esc) esc = true; else esc = false;
+                                    if (inStr && c === '\n') resStr += '\\n';
+                                    else if (inStr && c === '\r') resStr += '\\r';
+                                    else if (inStr && c === '\t') resStr += '\\t';
+                                    else resStr += c;
+                                }
+                                toolCmd = new Function('return ' + resStr)();
+                            } catch(e2) {
+                                // Ultimate Regex Fallback for syntax disasters
+                                const fm = jsonStr.match(/"filename"\s*:\s*"([^"]+)"/);
+                                const allowedTools = ['edit_lines', 'write_file', 'list_files', 'read_file', 'search_file'];
+                                const tNameMatch = allowedTools.find(t => jsonStr.includes(`"${t}"`));
+                                const unescapeStr = (str) => str.replace(/\\n/g, '\n').replace(/\\t/g, '\t').replace(/\\"/g, '"').replace(/\\([ \t\r\n])/g, '$1').replace(/\\\\/g, '\\');
+                                
+                                if (tNameMatch === 'write_file') {
+                                    const cIdx = jsonStr.indexOf('"content"');
+                                    if (cIdx > -1) {
+                                        const sQ = jsonStr.indexOf('"', cIdx + 9); let eQMatch = jsonStr.match(/"\s*\}?\s*\}\s*$/); let eQ = eQMatch ? eQMatch.index : jsonStr.lastIndexOf('"');
+                                        if (sQ > -1 && eQ > sQ) toolCmd = { tool: 'write_file', args: { filename: fm ? fm[1] : 'app.js', content: unescapeStr(jsonStr.substring(sQ + 1, eQ)) } };
+                                    }
+                                } else if (tNameMatch === 'edit_lines') {
+                                    const sl = jsonStr.match(/"start_line"\s*:\s*(\d+)/); const el = jsonStr.match(/"end_line"\s*:\s*(\d+)/);
+                                    const rIdx = jsonStr.indexOf('"replace_with"');
+                                    if (sl && el && rIdx > -1) {
+                                        const sQ = jsonStr.indexOf('"', rIdx + 14); let eQMatch = jsonStr.match(/"\s*\}?\s*\}\s*$/); let eQ = eQMatch ? eQMatch.index : jsonStr.lastIndexOf('"');
+                                        if (sQ > -1 && eQ > sQ) toolCmd = { tool: 'edit_lines', args: { filename: fm ? fm[1] : 'app.js', start_line: parseInt(sl[1]), end_line: parseInt(el[1]), replace_with: unescapeStr(jsonStr.substring(sQ + 1, eQ)) } };
+                                    }
+                                } else if (tNameMatch === 'search_file') {
+                                    const qm = jsonStr.match(/"query"\s*:\s*"([^"]+)"/);
+                                    if(qm && fm) toolCmd = { tool: 'search_file', args: { filename: fm[1], query: qm[1] } };
+                                } else if (tNameMatch === 'read_file') {
+                                    const sl = jsonStr.match(/"start_line"\s*:\s*(\d+)/); const el = jsonStr.match(/"end_line"\s*:\s*(\d+)/);
+                                    let rArgs = { filename: fm ? fm[1] : 'app.js' };
+                                    if (sl) rArgs.start_line = parseInt(sl[1]);
+                                    if (el) rArgs.end_line = parseInt(el[1]);
+                                    toolCmd = { tool: 'read_file', args: rArgs };
+                                } else if (tNameMatch === 'list_files') {
+                                    toolCmd = { tool: 'list_files', args: {} };
+                                }
+                            }
+                        }
+                    }
+
+                    if (toolCmd) {
+                        let tName = toolCmd.tool || toolCmd.name; let tArgs = toolCmd.args || toolCmd.arguments || toolCmd.parameters;
+                        if (toolCmd.function) { tName = tName || toolCmd.function.name; tArgs = tArgs || toolCmd.function.arguments; }
+                        if (toolCmd.tool_calls && Array.isArray(toolCmd.tool_calls) && toolCmd.tool_calls.length > 0) { const tc = toolCmd.tool_calls[0]; tName = tName || tc.name || tc.function?.name; tArgs = tArgs || tc.arguments || tc.function?.arguments; }
+                        if (typeof tArgs === 'string') { try { tArgs = JSON.parse(tArgs); } catch(e) {} }
+                        
+                        if (tName && tArgs && typeof tArgs === 'object') {
+                            removeLoading(); const result = runTool(tName, tArgs);
+                            state.history.push({ role: 'assistant', content }); state.history.push({ role: 'user', content: `Tool returned: ${JSON.stringify(result)}. Continue or say Done.` });
+                            continue;
+                        }
+                    }
+
+                    removeLoading();
+                    if (!toolCmd && content.includes('"tool"') && content.includes('"args"')) addMsg('error', 'AI generated invalid JSON that could not be parsed.');
+                    addMsg('assistant', content); state.history.push({ role: 'assistant', content });
+                } else { removeLoading(); addMsg('error', 'Empty response from API. The model returned absolutely nothing.'); }
+                break;
+            } catch (e) { removeLoading(); addMsg('error', e.message); break; }
+        }
+    }
+
+    function addMsg(type, content, isCollapsed = false) {
+        removeLoading(); 
+        const out = document.getElementById('terminalOutput'); 
+        const labels = { user: 'You', assistant: 'AI', system: 'System', error: 'Error', tool: 'Tool' };
+        
+        const div = document.createElement('div'); 
+        div.className = `msg ${type}${isCollapsed ? ' collapsed' : ''}`; 
+        
+        div.innerHTML = `
+            <div class="msg-header" onclick="this.parentElement.classList.toggle('collapsed')" title="Click to expand/collapse">
+                <span>${labels[type]}</span>
+                <span class="msg-toggle">▼</span>
+            </div>
+            <div class="msg-body">${esc(content)}</div>
+        `;
+        
+        out.appendChild(div); 
+        out.scrollTop = out.scrollHeight;
+    }
+
+    function showLoading() {
+        const out = document.getElementById('terminalOutput'); const div = document.createElement('div'); div.className = 'msg assistant loading';
+        div.innerHTML = `<div class="msg-header"><span>AI</span></div><div class="msg-body"><div class="loading-dots"><span></span><span></span><span></span></div></div>`;
+        out.appendChild(div); out.scrollTop = out.scrollHeight;
+    }
+
+    function removeLoading() { document.querySelector('.loading')?.remove(); }
+    function toast(msg) { const t = document.getElementById('toast'); t.textContent = msg; t.classList.remove('hidden'); setTimeout(() => t.classList.add('hidden'), 2500); }
+    function esc(s) { const d = document.createElement('div'); d.textContent = s; return d.innerHTML; }
+</script>
+</body> </html>
