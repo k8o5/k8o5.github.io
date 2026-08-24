@@ -1,6 +1,5 @@
 
-<!doctype html>
-<html lang="en">
+<!doctype html><html lang="en">
 <head>
 <meta charset="utf-8">
 <meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover, maximum-scale=1, user-scalable=no">
@@ -82,7 +81,8 @@
   #playerShell.empty { opacity: 0; }
   #playerShell #player,
   #playerShell iframe,
-  #playerShell video {
+  #playerShell video,
+  #playerShell audio {
     position: absolute;
     inset: 0;
     width: 100% !important;
@@ -93,7 +93,7 @@
     filter: blur(14px) brightness(0.6);
     transform: scale(1.05);
     will-change: transform;
-    transition: filter 0.3s ease;
+    transition: filter 0.25s ease;
   }
   body.video-mode #playerShell #player,
   body.video-mode #playerShell iframe,
@@ -112,6 +112,10 @@
       radial-gradient(circle at 80% 85%, rgba(140, 45, 220, 0.12), transparent 50%),
       linear-gradient(180deg, rgba(0, 0, 0, 0.6) 0%, rgba(0, 0, 0, 0.88) 100%);
     pointer-events: none;
+    transition: opacity 0.25s ease;
+  }
+  body.video-mode #bgScrim {
+    opacity: 0.35;
   }
 
   #netBanner {
@@ -1015,7 +1019,7 @@ const YTKit = (function () {
     queue: [], index: -1, history: [], recent: [], playlists: [], liked: [], prefs: null, view: 'liked',
     host: 'https://www.youtube-nocookie.com', shuffle: false, repeat: 0,
     lastError: null, loadToken: 0, searching: false, deadIds: {}, consecutiveErrors: 0,
-    everPlayed: false, hostSwapped: false, engine: 'api', proxyIdx: null, proxyTimer: 0, streamFailed: false,
+    everPlayed: false, hostSwapped: false, engine: 'stream', proxyIdx: null, proxyTimer: 0, streamFailed: false,
     pop: null, popReady: false, popTime: 0, popDur: 0, popState: -1, popMuted: false, listenIv: 0, pendingLoad: null,
     popVideoId: null, popOpenedAt: 0, popAnnounced: false, autoMuted: false, videoMode: false,
     trackStartedAt: 0, activePlaylistId: null,
@@ -1070,7 +1074,6 @@ const YTKit = (function () {
   function mainMsg(html) { el.mainMsg.innerHTML = html; el.mainMsg.hidden = false; }
   function mainMsgHide() { el.mainMsg.hidden = true; el.mainMsg.innerHTML = ''; }
 
-  /* ---------------- Native Stream & Screen-Off Playback Architecture ---------------- */
   function updateMediaSession(track) {
     if (!('mediaSession' in navigator) || !track) return;
     try {
@@ -1150,15 +1153,30 @@ const YTKit = (function () {
 
   document.addEventListener('visibilitychange', function () {
     if (document.visibilityState === 'hidden') {
-      if (S.playing && S.player) {
-        try { if (S.player.playVideo) S.player.playVideo(); } catch (e) {}
+      document.body.classList.add('video-mode');
+      if (S.playing) {
         var v = el.shell.querySelector('video, audio');
-        if (v && v.paused) v.play().catch(function () {});
+        if (v) {
+          v.play().catch(function () {});
+        } else if (S.player && S.player.playVideo) {
+          try { S.player.playVideo(); } catch (e) {}
+        }
+        syncMediaSessionState(true);
+      }
+    } else {
+      if (!S.videoMode) {
+        document.body.classList.remove('video-mode');
       }
     }
   });
 
-  /* ---------------- Autocomplete Suggestions ---------------- */
+  window.addEventListener('pagehide', function () {
+    if (S.playing) {
+      var v = el.shell.querySelector('video, audio');
+      if (v && v.paused) v.play().catch(function () {});
+    }
+  });
+
   var suggestTimer = null;
   window.__ytSuggestCallback = function (data) {
     if (!data || !Array.isArray(data[1])) return;
@@ -1221,7 +1239,6 @@ const YTKit = (function () {
     }, 40);
   });
 
-  /* ---------------- Robust Paste Button Implementation ---------------- */
   async function handlePasteClick() {
     if (navigator.clipboard && navigator.clipboard.readText) {
       try {
@@ -1252,7 +1269,6 @@ const YTKit = (function () {
   }
   el.paste.onclick = handlePasteClick;
 
-  /* ---------------- Liked Songs (Main Screen) ---------------- */
   function isLiked(videoId) {
     return S.liked.some(function (t) { return t.videoId === videoId; });
   }
@@ -1300,7 +1316,6 @@ const YTKit = (function () {
     syncLikeUi();
   }
 
-  /* ---------------- Custom Playlists ---------------- */
   var pendingAddTrack = null;
 
   function renderSidebarPlaylists() {
@@ -1387,7 +1402,6 @@ const YTKit = (function () {
   };
   el.btnCloseAddModal.onclick = function () { el.modalAdd.classList.remove('open'); };
 
-  /* ---------------- YouTube IFrame API Fallback ---------------- */
   var apiPromise = null;
   function loadApi() {
     if (window.YT && window.YT.Player && window.YT.Player.prototype) return Promise.resolve(window.YT);
@@ -1566,7 +1580,6 @@ const YTKit = (function () {
     }
   });
 
-  /* ---------------- Direct Stream Relay Engine (Fast Audio Priority) ---------------- */
   var STREAM_HOSTS = ['https://api.piped.private.coffee', 'https://pipedapi.kavin.rocks'];
   var INVIDIOUS_HOSTS = ['https://yewtu.be', 'https://invidious.nerdvpn.de', 'https://inv.vern.cc'];
   function fetchStreams(id) {
@@ -1633,6 +1646,8 @@ const YTKit = (function () {
     var v = document.createElement('video');
     v.setAttribute('data-stream', '1');
     v.setAttribute('playsinline', 'true');
+    v.setAttribute('webkit-playsinline', 'true');
+    v.setAttribute('x5-playsinline', 'true');
     v.style.cssText = 'position:absolute;inset:0;width:100%;height:100%;background:#000;object-fit:cover';
     v.playsInline = true;
     v.muted = false;
