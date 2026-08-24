@@ -1,0 +1,308 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <title>File to Vision-Ready Image Converter</title>
+  <style>
+    :root {
+      --bg: #0f172a;
+      --card: #1e293b;
+      --text: #f8fafc;
+      --accent: #38bdf8;
+      --border: #334155;
+    }
+    body {
+      font-family: system-ui, -apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, sans-serif;
+      background-color: var(--bg);
+      color: var(--text);
+      margin: 0;
+      padding: 2rem;
+      display: flex;
+      flex-direction: column;
+      align-items: center;
+    }
+    .container {
+      width: 100%;
+      max-width: 900px;
+      background: var(--card);
+      padding: 2rem;
+      border-radius: 12px;
+      border: 1px solid var(--border);
+      box-shadow: 0 10px 25px rgba(0,0,0,0.3);
+    }
+    h1 {
+      margin-top: 0;
+      font-size: 1.5rem;
+      color: var(--accent);
+    }
+    .controls {
+      display: grid;
+      grid-template-columns: repeat(auto-fit, minmax(200px, 1fr));
+      gap: 1rem;
+      margin-bottom: 1.5rem;
+    }
+    .control-group {
+      display: flex;
+      flex-direction: column;
+      gap: 0.5rem;
+    }
+    label {
+      font-size: 0.875rem;
+      color: #94a3b8;
+    }
+    input, select, button {
+      background: #0f172a;
+      border: 1px solid var(--border);
+      color: var(--text);
+      padding: 0.6rem 0.8rem;
+      border-radius: 6px;
+      font-size: 0.9rem;
+    }
+    button {
+      background: var(--accent);
+      color: #0f172a;
+      font-weight: 600;
+      cursor: pointer;
+      border: none;
+      transition: opacity 0.2s;
+    }
+    button:hover {
+      opacity: 0.9;
+    }
+    button:disabled {
+      opacity: 0.5;
+      cursor: not-allowed;
+    }
+    .status {
+      margin-top: 1rem;
+      font-size: 0.875rem;
+      color: #94a3b8;
+    }
+    .preview-container {
+      margin-top: 1.5rem;
+      max-height: 500px;
+      overflow-y: auto;
+      border: 1px solid var(--border);
+      border-radius: 8px;
+      background: #000;
+      display: flex;
+      justify-content: center;
+      padding: 1rem;
+    }
+    canvas {
+      max-width: 100%;
+      height: auto;
+      box-shadow: 0 4px 10px rgba(0,0,0,0.5);
+    }
+  </style>
+</head>
+<body>
+
+<div class="container">
+  <h1>File to Image Converter for LLMs</h1>
+  <p style="color: #94a3b8; font-size: 0.9rem; margin-top: -0.5rem;">
+    Converts text, code, or data into a high-contrast image suitable for vision models (<15MB).
+  </p>
+
+  <div class="controls">
+    <div class="control-group">
+      <label for="fileInput">Choose File</label>
+      <input type="file" id="fileInput">
+    </div>
+
+    <div class="control-group">
+      <label for="formatSelect">Output Format</label>
+      <select id="formatSelect">
+        <option value="image/png">PNG (Lossless, High Sharpness)</option>
+        <option value="image/webp" selected>WebP (Efficient / Small Size)</option>
+        <option value="image/jpeg">JPEG (Standard)</option>
+      </select>
+    </div>
+
+    <div class="control-group">
+      <label for="fontSize">Font Size (px)</label>
+      <input type="number" id="fontSize" value="16" min="10" max="32">
+    </div>
+
+    <div class="control-group" style="justify-content: flex-end;">
+      <button id="downloadBtn" disabled>Download Image</button>
+    </div>
+  </div>
+
+  <div class="status" id="statusText">Select a file to begin.</div>
+
+  <div class="preview-container">
+    <canvas id="outputCanvas" style="display: none;"></canvas>
+  </div>
+</div>
+
+<script>
+  const fileInput = document.getElementById('fileInput');
+  const formatSelect = document.getElementById('formatSelect');
+  const fontSizeInput = document.getElementById('fontSize');
+  const downloadBtn = document.getElementById('downloadBtn');
+  const statusText = document.getElementById('statusText');
+  const canvas = document.getElementById('outputCanvas');
+  const ctx = canvas.getContext('2d');
+
+  let currentBlob = null;
+  let originalFileName = 'converted';
+
+  fileInput.addEventListener('change', async (e) => {
+    const file = e.target.files[0];
+    if (!file) return;
+
+    originalFileName = file.name.substring(0, file.name.lastIndexOf('.')) || file.name;
+    statusText.textContent = `Processing "${file.name}"...`;
+
+    try {
+      let content = '';
+      if (file.type.startsWith('image/')) {
+        statusText.textContent = `File is already an image. Rendering...`;
+        await renderImageFile(file);
+      } else {
+        content = await readFileContent(file);
+        renderTextToCanvas(content);
+      }
+      generateOutputBlob();
+    } catch (err) {
+      statusText.textContent = `Error: ${err.message}`;
+    }
+  });
+
+  fontSizeInput.addEventListener('change', () => {
+    if (fileInput.files[0] && !fileInput.files[0].type.startsWith('image/')) {
+      fileInput.dispatchEvent(new Event('change'));
+    }
+  });
+
+  formatSelect.addEventListener('change', () => {
+    if (canvas.width > 0 && canvas.height > 0) {
+      generateOutputBlob();
+    }
+  });
+
+  function readFileContent(file) {
+    return new Promise((resolve, reject) => {
+      const reader = new FileReader();
+      reader.onload = (e) => resolve(e.target.result);
+      reader.onerror = () => reject(new Error('Failed to read file as text.'));
+      
+      // Attempt reading as text; fallback to hex dump representation if binary
+      reader.readAsText(file);
+    });
+  }
+
+  function renderImageFile(file) {
+    return new Promise((resolve, reject) => {
+      const img = new Image();
+      img.onload = () => {
+        canvas.width = img.width;
+        canvas.height = img.height;
+        ctx.drawImage(img, 0, 0);
+        canvas.style.display = 'block';
+        resolve();
+      };
+      img.onerror = () => reject(new Error('Failed to load image file.'));
+      img.src = URL.createObjectURL(file);
+    });
+  }
+
+  function renderTextToCanvas(text) {
+    const fontSize = parseInt(fontSizeInput.value, 10) || 16;
+    const lineHeight = Math.round(fontSize * 1.4);
+    const padding = 40;
+    const canvasWidth = 1400; // Fixed width optimized for text density & LLM OCR
+    
+    ctx.font = `${fontSize}px "Courier New", Courier, monospace`;
+
+    // Break lines to fit canvas
+    const maxTextWidth = canvasWidth - (padding * 2);
+    const rawLines = text.split(/\r?\n/);
+    const wrappedLines = [];
+
+    for (let line of rawLines) {
+      if (line === '') {
+        wrappedLines.push('');
+        continue;
+      }
+
+      let currentLine = '';
+      for (let char of line) {
+        const testLine = currentLine + char;
+        const metrics = ctx.measureText(testLine);
+        if (metrics.width > maxTextWidth && currentLine.length > 0) {
+          wrappedLines.push(currentLine);
+          currentLine = char;
+        } else {
+          currentLine = testLine;
+        }
+      }
+      wrappedLines.push(currentLine);
+    }
+
+    const calculatedHeight = (wrappedLines.length * lineHeight) + (padding * 2);
+    
+    // Safety clamp on height to prevent browser canvas memory exhaustion
+    const finalHeight = Math.min(calculatedHeight, 32767);
+
+    canvas.width = canvasWidth;
+    canvas.height = Math.max(finalHeight, 400);
+
+    // Canvas styling: Clean high-contrast white background with dark monospace text
+    ctx.fillStyle = '#ffffff';
+    ctx.fillRect(0, 0, canvas.width, canvas.height);
+
+    ctx.fillStyle = '#111827';
+    ctx.font = `${fontSize}px "Courier New", Courier, monospace`;
+    ctx.textBaseline = 'top';
+
+    for (let i = 0; i < wrappedLines.length; i++) {
+      const y = padding + (i * lineHeight);
+      if (y + lineHeight > canvas.height) break; // Avoid drawing out of bounds
+      ctx.fillText(wrappedLines[i], padding, y);
+    }
+
+    canvas.style.display = 'block';
+  }
+
+  function generateOutputBlob() {
+    const format = formatSelect.value;
+    const quality = format === 'image/png' ? undefined : 0.92;
+
+    canvas.toBlob((blob) => {
+      if (!blob) {
+        statusText.textContent = 'Failed to generate image.';
+        return;
+      }
+
+      currentBlob = blob;
+      const sizeMB = (blob.size / (1024 * 1024)).toFixed(2);
+      
+      if (blob.size > 15 * 1024 * 1024) {
+        statusText.textContent = `Warning: Output size is ${sizeMB} MB (Exceeds 15MB limit). Try lowering the font size or using WebP/JPEG.`;
+        downloadBtn.disabled = true;
+      } else {
+        statusText.textContent = `Ready: Image generated (${canvas.width}x${canvas.height}px, ${sizeMB} MB).`;
+        downloadBtn.disabled = false;
+      }
+    }, format, quality);
+  }
+
+  downloadBtn.addEventListener('click', () => {
+    if (!currentBlob) return;
+
+    const extension = formatSelect.value.split('/')[1];
+    const url = URL.createObjectURL(currentBlob);
+    const a = document.createElement('a');
+    a.href = url;
+    a.download = `${originalFileName}-llm-input.${extension}`;
+    document.body.appendChild(a);
+    a.click();
+    document.body.removeChild(a);
+    URL.revokeObjectURL(url);
+  });
+</script>
+</body>
+</html>
