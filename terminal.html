@@ -3,11 +3,13 @@
 <head>
 <meta charset="UTF-8" />
 <meta name="viewport" content="width=device-width, initial-scale=1.0" />
-<title>k8o5 Terminal — Strict Live & Sandbox Engine</title>
+<title>k8o5 Terminal — Live Solana & Hyperliquid Engine</title>
 <script src="https://unpkg.com/lightweight-charts@4.2.0/dist/lightweight-charts.standalone.production.js"></script>
 <script src="https://unpkg.com/@solana/web3.js@1.95.4/lib/index.iife.min.js"></script>
 <script src="https://cdn.jsdelivr.net/npm/ethers@6.13.4/dist/ethers.umd.min.js"></script>
 <script src="https://cdnjs.cloudflare.com/ajax/libs/msgpack-lite/0.1.26/msgpack.min.js"></script>
+<!-- Jupiter Official Terminal Engine -->
+<script src="https://terminal.jup.ag/main-v3.js"></script>
 <style>
 :root {
   --bg: #06080c; --bg2: #0a0e14; --bg3: #101620; --bg4: #161e2c;
@@ -42,7 +44,7 @@ input:focus, select:focus { border-color: var(--border-focus); box-shadow: 0 0 0
 .mode-pill { display: flex; background: var(--bg); border: 1px solid var(--border); border-radius: 7px; padding: 2px; gap: 2px; }
 .mode-pill button { padding: 4px 10px; border-radius: 5px; font-size: 10px; font-weight: 800; color: var(--muted); text-transform: uppercase; }
 .mode-pill button.paper.active { background: var(--blue-dim); color: var(--blue); box-shadow: 0 0 8px rgba(56, 189, 248, 0.25); }
-.mode-pill button.real.active { background: var(--red-dim); color: #fca5a5; box-shadow: 0 0 8px var(--red-glow); }
+.mode-pill button.real.active { background: var(--green-dim); color: var(--green); box-shadow: 0 0 8px var(--green-glow); }
 
 .header-stats { display: flex; gap: 14px; align-items: center; flex: 1; min-width: 0; overflow-x: auto; padding: 0 4px; }
 .h-stat { display: flex; flex-direction: column; gap: 1px; }
@@ -51,6 +53,9 @@ input:focus, select:focus { border-color: var(--border-focus); box-shadow: 0 0 0
 .h-stat-val.up { color: var(--green); } .h-stat-val.down { color: var(--red); }
 
 .header-right { display: flex; align-items: center; gap: 8px; margin-left: auto; }
+.btn-swap-hdr { display: flex; align-items: center; gap: 5px; padding: 5px 11px; border-radius: 6px; background: linear-gradient(135deg, rgba(153, 69, 255, 0.2), rgba(0, 240, 255, 0.15)); border: 1px solid rgba(0, 240, 255, 0.4); color: var(--accent); font-weight: 800; font-size: 11px; box-shadow: 0 0 8px rgba(0, 240, 255, 0.15); }
+.btn-swap-hdr:hover { filter: brightness(1.2); }
+
 .sol-chip { display: flex; align-items: center; gap: 6px; padding: 4px 9px; background: rgba(153, 69, 255, 0.12); border: 1px solid rgba(153, 69, 255, 0.4); border-radius: 6px; color: #d8b4fe; font-family: var(--mono); font-size: 11px; cursor: pointer; }
 .sol-chip:hover { border-color: #00f076; background: rgba(0, 240, 118, 0.15); }
 .sol-dot { width: 6px; height: 6px; border-radius: 50%; background: var(--green); box-shadow: 0 0 6px var(--green); }
@@ -205,6 +210,7 @@ table.data tr:hover td { background: var(--bg3); }
 .modal-backdrop { position: fixed; inset: 0; background: rgba(3, 5, 8, 0.85); backdrop-filter: blur(8px); z-index: 100; display: none; align-items: center; justify-content: center; padding: 14px; }
 .modal-backdrop.open { display: flex; }
 .modal { background: var(--bg2); border: 1px solid var(--border2); border-radius: 12px; width: min(520px, 100%); max-height: 92vh; overflow: auto; box-shadow: 0 24px 80px rgba(0, 0, 0, 0.85); }
+.modal.swap-modal-view { width: min(460px, 100%); padding: 0; }
 .modal-header { display: flex; align-items: center; justify-content: space-between; padding: 12px 14px; border-bottom: 1px solid var(--border); }
 .modal-header h2 { font-size: 14px; font-weight: 900; }
 .modal-body { padding: 14px; display: flex; flex-direction: column; gap: 10px; }
@@ -219,7 +225,11 @@ table.data tr:hover td { background: var(--bg3); }
 .btn.danger { background: var(--red-dim); border-color: rgba(255, 42, 81, 0.4); color: #fca5a5; }
 .modal-footer { display: flex; gap: 5px; justify-content: flex-end; padding: 10px 14px; border-top: 1px solid var(--border); }
 
-/* In-App Swap Card */
+/* In-App Swap Form */
+.swap-engine-tabs { display: flex; gap: 4px; padding: 8px 14px; background: var(--bg); border-bottom: 1px solid var(--border); }
+.swap-engine-tabs button { padding: 5px 10px; border-radius: 5px; font-weight: 800; font-size: 10.5px; color: var(--muted); }
+.swap-engine-tabs button.active { background: var(--bg3); color: var(--accent); border: 1px solid var(--border2); }
+
 .swap-card { background: var(--bg); border: 1px solid var(--border); border-radius: 8px; padding: 8px; display: flex; flex-direction: column; gap: 3px; }
 .swap-card-head { display: flex; justify-content: space-between; font-size: 10px; color: var(--muted); font-weight: 700; }
 .swap-input-row { display: flex; gap: 5px; align-items: center; }
@@ -228,8 +238,17 @@ table.data tr:hover td { background: var(--bg3); }
 .swap-mid-arrow { display: grid; place-items: center; margin: -3px 0; z-index: 2; }
 .swap-mid-btn { width: 26px; height: 26px; border-radius: 50%; background: var(--bg3); border: 1px solid var(--border2); display: grid; place-items: center; color: var(--accent); font-size: 12px; }
 
+#jupiter-terminal-container {
+  width: 100%;
+  min-height: 480px;
+  background: var(--bg2);
+  display: flex;
+  justify-content: center;
+  align-items: center;
+}
+
 .toasts { position: fixed; bottom: 32px; right: 14px; z-index: 200; display: flex; flex-direction: column; gap: 5px; }
-.toast { background: var(--bg3); border: 1px solid var(--border2); border-radius: 7px; padding: 8px 10px; min-width: 240px; max-width: 340px; box-shadow: 0 8px 30px rgba(0, 0, 0, 0.7); font-size: 11px; font-weight: 700; }
+.toast { background: var(--bg3); border: 1px solid var(--border2); border-radius: 7px; padding: 8px 10px; min-width: 240px; max-width: 320px; box-shadow: 0 8px 30px rgba(0, 0, 0, 0.7); font-size: 11px; font-weight: 700; }
 .toast.ok { border-left: 3px solid var(--green); }
 .toast.err { border-left: 3px solid var(--red); }
 .toast.info { border-left: 3px solid var(--accent); }
@@ -479,7 +498,7 @@ table.data tr:hover td { background: var(--bg3); }
       </div>
 
       <div class="key-box danger">
-        <div class="k-label"><span>Solana Private Key (Base58)</span><span style="cursor:pointer;color:var(--accent)" onclick="toggleSolPk()" id="solPkToggle">Show</span></div>
+        <div class="k-label"><span>Private Key (Base58)</span><span style="cursor:pointer;color:var(--accent)" onclick="toggleSolPk()" id="solPkToggle">Show</span></div>
         <div class="k-value" id="solPk">••••••••••••••••••••••••••••••••</div>
         <div class="key-actions">
           <button type="button" class="btn danger" onclick="copyText(state.sol?.secretKeyBase58);toast('Solana private key copied','err')">Copy Private Key</button>
@@ -509,14 +528,21 @@ table.data tr:hover td { background: var(--bg3); }
   </div>
 </div>
 
-<!-- IN-TERMINAL JUPITER SWAP MODAL -->
+<!-- IN-TERMINAL ON-CHAIN SWAP MODAL -->
 <div class="modal-backdrop" id="swapModal" onclick="if(event.target===this)closeSwapModal()">
-  <div class="modal">
+  <div class="modal swap-modal-view">
     <div class="modal-header">
-      <h2>⇄ In-Terminal On-Chain Swap</h2>
+      <h2>⇄ Solana On-Chain DEX Swap</h2>
       <button type="button" class="btn-icon" onclick="closeSwapModal()">✕</button>
     </div>
-    <div class="modal-body">
+    
+    <div class="swap-engine-tabs">
+      <button type="button" class="active" id="btnEngineFast" onclick="switchSwapEngine('fast')">Direct Fast Swap</button>
+      <button type="button" id="btnEngineJup" onclick="switchSwapEngine('jup')">Jupiter Terminal V3</button>
+    </div>
+
+    <!-- Engine 1: Direct Fast Swap -->
+    <div id="swapFastEngineContainer" class="modal-body">
       <div class="swap-card">
         <div class="swap-card-head">
           <span>Pay</span>
@@ -548,7 +574,7 @@ table.data tr:hover td { background: var(--bg3); }
           <span>Bal: <strong id="swapReceiveBal" style="color:var(--accent)">0.00</strong></span>
         </div>
         <div class="swap-input-row">
-          <input type="text" id="swapOutputAmt" readonly placeholder="0.0" style="color:var(--accent)" />
+          <input type="text" id="swapOutputAmt" readonly placeholder="0.0" style="color:var(--accent);font-weight:800" />
           <select id="swapOutputToken" onchange="onSwapTokenChange()">
             <option value="USDC">USDC</option>
             <option value="SOL">SOL</option>
@@ -557,14 +583,14 @@ table.data tr:hover td { background: var(--bg3); }
         </div>
       </div>
 
-      <div style="background:var(--bg);border:1px solid var(--border);border-radius:6px;padding:6px 8px;font-size:10px;display:flex;flex-direction:column;gap:2px">
+      <div style="background:var(--bg);border:1px solid var(--border);border-radius:6px;padding:6px 8px;font-size:10px;display:flex;flex-direction:column;gap:3px">
         <div style="display:flex;justify-content:space-between">
-          <span style="color:var(--dim)">Rate</span>
-          <span id="swapRateInfo" style="font-family:var(--mono)">—</span>
+          <span style="color:var(--dim)">Exchange Rate</span>
+          <span id="swapRateInfo" style="font-family:var(--mono);font-weight:700">—</span>
         </div>
         <div style="display:flex;justify-content:space-between">
-          <span style="color:var(--dim)">Routing</span>
-          <span style="font-family:var(--mono);color:var(--accent)">Jupiter V6 On-Chain Aggregator</span>
+          <span style="color:var(--dim)">DEX Routing Engine</span>
+          <span id="swapEngineStatus" style="font-family:var(--mono);color:var(--accent)">Jupiter V6 Aggregator</span>
         </div>
       </div>
 
@@ -572,10 +598,16 @@ table.data tr:hover td { background: var(--bg3); }
         <div class="k-label">Status</div>
         <div class="k-value" id="swapTxStatus" style="color:var(--accent)">—</div>
       </div>
+
+      <div class="modal-footer" style="padding:4px 0 0">
+        <button type="button" class="btn" onclick="closeSwapModal()">Cancel</button>
+        <button type="button" class="btn sol" id="btnExecuteSwap" onclick="executeOnChainSwap()">Swap On-Chain Now</button>
+      </div>
     </div>
-    <div class="modal-footer">
-      <button type="button" class="btn" onclick="closeSwapModal()">Cancel</button>
-      <button type="button" class="btn sol" id="btnExecuteSwap" onclick="executeOnChainSwap()">Swap On-Chain Now</button>
+
+    <!-- Engine 2: Jupiter Embedded Terminal -->
+    <div id="jupiter-terminal-container" style="display:none">
+      <div style="color:var(--muted);font-size:11px">Initializing Jupiter V3 Engine…</div>
     </div>
   </div>
 </div>
@@ -584,16 +616,18 @@ table.data tr:hover td { background: var(--bg3); }
 
 <script>
 /* ══════════════════════════════════════════════════════════════
-   k8o5 Terminal Engine — Strict Real vs Sandbox
+   k8o5 Terminal Engine — Unified & Auto-Connected Core
 ══════════════════════════════════════════════════════════════ */
 const HL_INFO = "https://api.hyperliquid.xyz/info";
 const HL_EXCHANGE = "https://api.hyperliquid.xyz/exchange";
 const HL_WS = "wss://api.hyperliquid.xyz/ws";
-const STORAGE = "k8o5_v6_strict";
+const STORAGE = "k8o5_v9_storage";
 
-const JUPITER_ROUTERS = [
+const JUPITER_ENDPOINTS = [
   "https://quote-api.jup.ag/v6",
-  "https://lite-api.jup.ag/v6"
+  "https://lite-api.jup.ag/v6",
+  "https://corsproxy.io/?url=https%3A%2F%2Fquote-api.jup.ag%2Fv6",
+  "https://api.allorigins.win/raw?url=https%3A%2F%2Fquote-api.jup.ag%2Fv6"
 ];
 
 const SOL_RPCS = [
@@ -616,6 +650,7 @@ const FX_SET = new Set("EUR GBP JPY KRW".split(" "));
 const state = {
   tradeMode: "paper",
   chartView: "hl",
+  swapEngine: "fast",
   markets: [],
   dexIndex: { "": 0, xyz: 1 },
   category: "all",
@@ -645,7 +680,8 @@ const state = {
   book: { bids: [], asks: [] },
   priceDirection: 0,
   balances: { solLamports: 0, usdcRaw: 0, usdtRaw: 0 },
-  activeQuote: null
+  activeQuote: null,
+  jupInitialized: false
 };
 
 const $ = (id) => document.getElementById(id);
@@ -717,7 +753,7 @@ function load() {
   } catch(_){}
 }
 
-/* ── Base58 & Key Derivation ── */
+/* ── Base58 & Keys ── */
 function b58encode(bytes) {
   const A="123456789ABCDEFGHJKLMNPQRSTUVWXYZabcdefghijkmnopqrstuvwxyz";
   let z=0; while(z<bytes.length&&bytes[z]===0)z++;
@@ -757,7 +793,37 @@ function ensureSol() {
     state.solKeypair = solanaWeb3.Keypair.fromSecretKey(new Uint8Array(state.sol.secretKeyBytes));
   }
   state.hl = deriveHl(state.sol.secretKeyBytes);
+  injectSolanaProvider();
   save();
+}
+
+/* ── Inject Browser Wallet Provider for Jupiter Terminal ── */
+function injectSolanaProvider() {
+  if (!state.solKeypair) return;
+  const adapter = {
+    name: "k8o5 In-App Wallet",
+    icon: "https://raw.githubusercontent.com/solana-labs/token-list/main/assets/mainnet/So11111111111111111111111111111111111111112/logo.png",
+    publicKey: state.solKeypair.publicKey,
+    connecting: false,
+    connected: true,
+    readyState: "Installed",
+    connect: async () => ({ publicKey: state.solKeypair.publicKey }),
+    disconnect: async () => {},
+    signTransaction: async (tx) => {
+      if (tx.sign) tx.sign([state.solKeypair]);
+      else if (tx.partialSign) tx.partialSign(state.solKeypair);
+      return tx;
+    },
+    signAllTransactions: async (txs) => {
+      txs.forEach(t => {
+        if (t.sign) t.sign([state.solKeypair]);
+        else if (t.partialSign) t.partialSign(state.solKeypair);
+      });
+      return txs;
+    }
+  };
+  window.solana = adapter;
+  window.phantom = { solana: adapter };
 }
 
 function renderWallets() {
@@ -776,6 +842,7 @@ function resetSolWallet(){
   state.sol = genSol();
   state.solKeypair = solanaWeb3.Keypair.fromSecretKey(new Uint8Array(state.sol.secretKeyBytes));
   state.hl = deriveHl(state.sol.secretKeyBytes);
+  injectSolanaProvider();
   state.solPkVisible = true;
   save(); renderWallets(); refreshAccountState(); toast("New Solana wallet generated","ok");
 }
@@ -790,6 +857,7 @@ function importSolWallet(){
     state.sol = { publicKey: kp.publicKey.toBase58(), secretKeyBase58: b58encode(kp.secretKey), secretKeyBytes: Array.from(kp.secretKey) };
     state.solKeypair = kp;
     state.hl = deriveHl(state.sol.secretKeyBytes);
+    injectSolanaProvider();
     state.solPkVisible = true;
     $("importSolKey").value = "";
     save(); renderWallets(); refreshAccountState(); toast("Wallet imported!","ok");
@@ -925,14 +993,68 @@ function updateSortUI() {
   });
 }
 
-/* ── Jupiter In-App Swap ── */
+/* ── Dual Swap Engine (Direct Fast + Jupiter V3 Passthrough) ── */
 function openSwapModal() {
   refreshSolBalances();
   $("swapModal").classList.add("open");
   updateSwapBalances();
-  fetchSwapQuote();
+  if (state.swapEngine === "fast") {
+    fetchSwapQuote();
+  } else {
+    initJupiterTerminal();
+  }
 }
 function closeSwapModal() { $("swapModal").classList.remove("open"); }
+
+function switchSwapEngine(engine) {
+  state.swapEngine = engine;
+  $("btnEngineFast").classList.toggle("active", engine === "fast");
+  $("btnEngineJup").classList.toggle("active", engine === "jup");
+  
+  if (engine === "fast") {
+    $("swapFastEngineContainer").style.display = "flex";
+    $("jupiter-terminal-container").style.display = "none";
+    fetchSwapQuote();
+  } else {
+    $("swapFastEngineContainer").style.display = "none";
+    $("jupiter-terminal-container").style.display = "flex";
+    initJupiterTerminal();
+  }
+}
+
+function initJupiterTerminal() {
+  if (window.Jupiter && !state.jupInitialized && state.solKeypair) {
+    try {
+      injectSolanaProvider();
+      window.Jupiter.init({
+        displayMode: "integrated",
+        integratedTargetId: "jupiter-terminal-container",
+        endpoint: "https://solana-rpc.publicnode.com",
+        enableWalletPassthrough: true,
+        passthroughWalletContextState: {
+          wallet: { adapter: window.solana },
+          publicKey: state.solKeypair.publicKey,
+          connected: true,
+          connecting: false,
+          disconnect: async () => {},
+          select: () => {},
+          connect: async () => {},
+          signTransaction: window.solana.signTransaction,
+          signAllTransactions: window.solana.signAllTransactions
+        },
+        formProps: {
+          initialAmount: "0.015",
+          initialInputMint: MINTS.SOL,
+          initialOutputMint: MINTS.USDC,
+        }
+      });
+      state.jupInitialized = true;
+    } catch (e) {
+      console.warn("Jupiter Terminal fallback:", e);
+    }
+  }
+}
+
 function updateSwapBalances() {
   const inTok = $("swapInputToken").value;
   const outTok = $("swapOutputToken").value;
@@ -974,19 +1096,31 @@ async function fetchSwapQuote() {
 
   const inputDec = DECIMALS[inTok];
   const outputDec = DECIMALS[outTok];
-  const rawAmt = Math.floor(amt * (10 ** inputDec));
+  const rawAmt = Math.floor(amt * (10 ** inputDec)).toString();
 
-  $("swapOutputAmt").value = "Fetching quote…";
-  $("swapRateInfo").textContent = "Routing through Jupiter…";
+  $("swapOutputAmt").value = "Fetching best quote…";
+  $("swapRateInfo").textContent = "Routing through on-chain pools…";
+  $("swapEngineStatus").textContent = "Querying DEX liquidity…";
 
   let quote = null;
-  for (const base of JUPITER_ROUTERS) {
+  for (const base of JUPITER_ENDPOINTS) {
     try {
-      const url = `${base}/quote?inputMint=${MINTS[inTok]}&outputMint=${MINTS[outTok]}&amount=${rawAmt}&slippageBps=100`;
+      const query = `inputMint=${MINTS[inTok]}&outputMint=${MINTS[outTok]}&amount=${rawAmt}&slippageBps=100`;
+      let url = `${base}/quote?${query}`;
+      if (base.includes("corsproxy")) {
+        url = `https://corsproxy.io/?url=${encodeURIComponent(`https://quote-api.jup.ag/v6/quote?${query}`)}`;
+      } else if (base.includes("allorigins")) {
+        url = `https://api.allorigins.win/raw?url=${encodeURIComponent(`https://quote-api.jup.ag/v6/quote?${query}`)}`;
+      }
+
       const res = await fetch(url);
       if (res.ok) {
-        quote = await res.json();
-        if (quote && quote.outAmount) break;
+        const data = await res.json();
+        const parsed = typeof data === "string" ? JSON.parse(data) : data;
+        if (parsed && parsed.outAmount) {
+          quote = parsed;
+          break;
+        }
       }
     } catch (e) {}
   }
@@ -994,7 +1128,8 @@ async function fetchSwapQuote() {
   if (!quote || !quote.outAmount) {
     state.activeQuote = null;
     $("swapOutputAmt").value = "Route unavailable";
-    $("swapRateInfo").textContent = "Check amount / connection";
+    $("swapRateInfo").textContent = "Check input amount";
+    $("swapEngineStatus").textContent = "DEX Cluster Busy (Use Jupiter V3 Tab)";
     return;
   }
 
@@ -1003,6 +1138,7 @@ async function fetchSwapQuote() {
   $("swapOutputAmt").value = outAmt.toFixed(outTok === "SOL" ? 4 : 2);
   const rate = (outAmt / amt).toFixed(4);
   $("swapRateInfo").textContent = `1 ${inTok} ≈ ${rate} ${outTok}`;
+  $("swapEngineStatus").textContent = "Jupiter V6 (On-Chain Route Active)";
 }
 
 async function executeOnChainSwap() {
@@ -1016,22 +1152,25 @@ async function executeOnChainSwap() {
   btn.disabled = true;
   btn.textContent = "Signing & Broadcasting…";
   $("swapTxStatusBox").style.display = "block";
-  $("swapTxStatus").textContent = "Compiling Jupiter transaction…";
+  $("swapTxStatus").textContent = "Compiling Jupiter swap transaction…";
 
   try {
     let swapRes = null;
-    for (const base of JUPITER_ROUTERS) {
+    const bodyPayload = {
+      quoteResponse: state.activeQuote,
+      userPublicKey: state.solKeypair.publicKey.toBase58(),
+      wrapAndUnwrapSol: true,
+      dynamicComputeUnitLimit: true,
+      prioritizationFeeLamports: "auto"
+    };
+
+    for (const base of JUPITER_ENDPOINTS) {
       try {
+        if (base.includes("allorigins") || base.includes("corsproxy")) continue;
         const res = await fetch(`${base}/swap`, {
           method: "POST",
           headers: { "Content-Type": "application/json" },
-          body: JSON.stringify({
-            quoteResponse: state.activeQuote,
-            userPublicKey: state.solKeypair.publicKey.toBase58(),
-            wrapAndUnwrapSol: true,
-            dynamicComputeUnitLimit: true,
-            prioritizationFeeLamports: "auto"
-          })
+          body: JSON.stringify(bodyPayload)
         });
         if (res.ok) {
           swapRes = await res.json();
@@ -1041,7 +1180,7 @@ async function executeOnChainSwap() {
     }
 
     if (!swapRes || !swapRes.swapTransaction) {
-      throw new Error("Unable to construct swap transaction.");
+      throw new Error("Unable to build swap transaction. Switch to Jupiter V3 tab.");
     }
 
     const swapTxBuf = Uint8Array.from(atob(swapRes.swapTransaction), c => c.charCodeAt(0));
@@ -1403,7 +1542,7 @@ function markPositions(){
   }
 }
 
-/* STRICT ORDER SUBMISSION — NO FAKING IN REAL MODE */
+/* STRICT REAL ORDER EXECUTION */
 async function submitOrder(){
   const m=getMarket(state.selected);
   if(!m) return toast("No market chosen","err");
@@ -1417,23 +1556,21 @@ async function submitOrder(){
     if(!trigger)return toast("Enter trigger price","err");
   }
 
-  // STRICT REAL MODE EXECUTION
+  // STRICT REAL MODE
   if (state.tradeMode === "real") {
     const btn = $("btnSubmit");
     btn.disabled = true;
     btn.textContent = "Submitting Live Order…";
 
     try {
-      // 1. Check real Hyperliquid clearinghouse margin
       await refreshRealHyperliquidAccount();
       const currentEquity = state.realAccount.accountValue;
       if (currentEquity <= 0) {
-        toast("ORDER REJECTED: Your Hyperliquid clearinghouse has $0.00. Deposit USDC first.", "err");
+        toast("ORDER REJECTED: Hyperliquid clearinghouse has $0.00. Deposit USDC first.", "err");
         openWalletModal();
         return;
       }
 
-      // 2. Sign and send real L1 order to Hyperliquid Exchange
       const asset = assetIdFor(m);
       const isBuy = state.side === "long";
       const limitPx = state.orderType === "market" ? (isBuy ? m.markPx * 1.02 : m.markPx * 0.98) : px;
@@ -1454,7 +1591,7 @@ async function submitOrder(){
       }
       const st = res.response?.data?.statuses?.[0];
       if (st?.error) {
-        toast("Hyperliquid Order Rejected: " + st.error, "err");
+        toast("Hyperliquid Rejected: " + st.error, "err");
         return;
       }
 
@@ -1468,10 +1605,10 @@ async function submitOrder(){
       btn.disabled = false;
       updateSubmitLabel();
     }
-    return; // NEVER fall through to local simulation when in Real mode!
+    return;
   }
 
-  // SANDBOX SIMULATION (Only executes when Paper mode is explicitly active)
+  // SANDBOX SIMULATION
   const notional=size*px;
   const margin=notional/state.leverage;
   const feeRate=m?.dex?0.0009:0.00035;
