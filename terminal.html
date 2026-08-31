@@ -564,11 +564,20 @@ table.data tr:hover td { background: var(--bg3); }
       <div style="background:var(--bg);border:1px solid var(--border);border-radius:6px;padding:8px 10px;font-size:10.5px;display:flex;flex-direction:column;gap:3px">
         <div style="display:flex;justify-content:space-between">
           <span style="color:var(--dim)">Rate</span>
-          <span id="swapRateInfo" style="font-family:var(--mono);font-weight:700">1 SOL ≈ $104.00 USDC</span>
+          <span id="swapRateInfo" style="font-family:var(--mono);font-weight:700">—</span>
+        </div>
+        <div style="display:flex;justify-content:space-between;align-items:center">
+          <span style="color:var(--dim)">Max Slippage</span>
+          <select id="swapSlippage" onchange="onSwapSlippageChange()" style="padding:2px 6px;font-family:var(--mono);font-size:10.5px">
+            <option value="50">0.5%</option>
+            <option value="100" selected>1%</option>
+            <option value="300">3%</option>
+            <option value="1000">10%</option>
+          </select>
         </div>
         <div style="display:flex;justify-content:space-between">
           <span style="color:var(--dim)">Routing Engine</span>
-          <span id="swapEngineStatus" style="font-family:var(--mono);color:var(--green)">Jupiter V6 Aggregator</span>
+          <span id="swapEngineStatus" style="font-family:var(--mono);color:var(--green)">Jupiter (lite-api v1)</span>
         </div>
       </div>
 
@@ -596,13 +605,18 @@ const HL_EXCHANGE = "https://api.hyperliquid.xyz/exchange";
 const HL_WS = "wss://api.hyperliquid.xyz/ws";
 const STORAGE = "k8o5_v13_storage";
 
-// Open-CORS public Solana RPCs
+// Open-CORS public Solana RPCs (ordered: verified browser-CORS + no API key first).
+// blockpi / ankr public endpoints now require an API key and return 403/503 -> removed.
 const SOL_RPCS = [
-  "https://api.mainnet-beta.solana.com",
-  "https://solana.blockpi.network/v1/rpc/public",
-  "https://solana-rpc.publicnode.com",
-  "https://rpc.ankr.com/solana"
+  "https://solana-rpc.publicnode.com",           // fast, open CORS, accepts sendTransaction
+  "https://solana.leorpc.com/?api_key=FREE",     // needed: publicnode blocks getTokenAccountsByOwner
+  "https://api.mainnet-beta.solana.com"          // rate-limited fallback
 ];
+
+// Jupiter: quote-api.jup.ag/v6 is DEAD (host no longer resolves).
+// Current keyless endpoint = lite-api.jup.ag/swap/v1 and it already sends
+// Access-Control-Allow-Origin: * , so no CORS proxy is needed (or wanted).
+const JUP_BASE = "https://lite-api.jup.ag/swap/v1";
 
 const MINTS = {
   SOL:  "So11111111111111111111111111111111111111112",
@@ -649,7 +663,10 @@ const state = {
   balances: { solLamports: 0, usdcRaw: 0, usdtRaw: 0 },
   activeQuote: null,
   rpcIndex: 0,
-  lastBalanceSync: 0
+  lastBalanceSync: 0,
+  activeQuoteAt: 0,
+  activeQuoteKey: "",
+  swapSlippageBps: 100
 };
 
 const $ = (id) => document.getElementById(id);
@@ -801,22 +818,34 @@ function importSolWallet(){
 }
 
 /* ── Failover-Protected Open-CORS Solana RPC Engine ── */
-async function solRpc(method, params) {
+async function solRpc(method, params, opts = {}) {
+  // opts.surfaceError: report the node's JSON-RPC error instead of silently
+  // failing over (essential for sendTransaction / simulate).
   let lastErr = null;
   for (let i = 0; i < SOL_RPCS.length; i++) {
     const rpc = SOL_RPCS[(state.rpcIndex + i) % SOL_RPCS.length];
     try {
+      const ctrl = new AbortController();
+      const t = setTimeout(() => ctrl.abort(), opts.timeout || 20000);
       const res = await fetch(rpc, {
         method: "POST",
         headers: { "Content-Type": "application/json" },
         body: JSON.stringify({ jsonrpc: "2.0", id: Date.now(), method, params }),
-      });
-      if (res.status === 403 || res.status === 429 || !res.ok) continue;
+        signal: ctrl.signal
+      }).finally(() => clearTimeout(t));
+      if (res.status === 403 || res.status === 429 || !res.ok) { lastErr = new Error(`${rpc} HTTP ${res.status}`); continue; }
       const j = await res.json();
-      if (j.error) continue;
+      if (j.error) {
+        const msg = j.error.message || JSON.stringify(j.error);
+        const logs = j.error.data?.logs?.slice(-3)?.join(" | ");
+        lastErr = new Error(logs ? `${msg} — ${logs}` : msg);
+        if (opts.surfaceError) throw lastErr;   // real on-chain rejection, not a dead node
+        continue;
+      }
       state.rpcIndex = (state.rpcIndex + i) % SOL_RPCS.length;
       return j.result;
     } catch (e) {
+      if (opts.surfaceError && e === lastErr) throw e;
       lastErr = e;
     }
   }
@@ -844,9 +873,10 @@ async function refreshSolBalances(force = false) {
       $("solBalPreview").textContent = (state.balances.solLamports / 1e9).toFixed(4) + " SOL";
       $("modalSolBal").textContent = (state.balances.solLamports / 1e9).toFixed(4) + " SOL";
     } else {
-      $("solBalPreview").textContent = "0.0275 SOL";
-      $("modalSolBal").textContent = "0.0275 SOL";
-      state.balances.solLamports = 27500000;
+      // Never fabricate a balance: the swap pre-flight check reads this value.
+      state.balances.solLamports = 0;
+      $("solBalPreview").textContent = "— SOL";
+      $("modalSolBal").textContent = "— SOL";
     }
   }
 
@@ -865,7 +895,23 @@ async function refreshSolBalances(force = false) {
     }
     state.balances.usdcRaw = usdc;
     state.balances.usdtRaw = usdt;
-  } catch {}
+  } catch (e) {
+    // Some free RPCs (publicnode) reject getTokenAccountsByOwner with
+    // "Request blocked" — fall back to Jupiter's keyless balances endpoint.
+    try {
+      const res = await fetch(`https://lite-api.jup.ag/ultra/v1/balances/${pub}`, { headers: { Accept: "application/json" } });
+      if (res.ok) {
+        const b = await res.json();
+        const pick = (mint, dec) => {
+          const e = b[mint] || b[mint?.toString()];
+          return e ? Math.round(Number(e.uiAmount || 0) * 10 ** dec) : 0;
+        };
+        state.balances.usdcRaw = pick(MINTS.USDC, 6);
+        state.balances.usdtRaw = pick(MINTS.USDT, 6);
+        if (b.SOL && !state.balances.solLamports) state.balances.solLamports = Math.round(Number(b.SOL.uiAmount || 0) * 1e9);
+      }
+    } catch (_) {}
+  }
   updateSwapBalances();
 }
 
@@ -948,7 +994,7 @@ function updateSortUI() {
 
 /* ── In-Terminal On-Chain Swap ── */
 function openSwapModal() {
-  refreshSolBalances(true);
+  refreshSolBalances(true).then(updateSwapBalances).catch(() => {});
   $("swapModal").classList.add("open");
   updateSwapBalances();
   if (!parseFloat($("swapInputAmt").value)) {
@@ -970,10 +1016,25 @@ function updateSwapBalances() {
   $("swapPayBal").textContent = getB(inTok);
   $("swapReceiveBal").textContent = getB(outTok);
 }
-function onSwapTokenChange() { updateSwapBalances(); onSwapAmountInput(); }
+function onSwapSlippageChange() {
+  state.swapSlippageBps = parseInt($("swapSlippage").value, 10) || 100;
+  state.activeQuote = null;
+  onSwapAmountInput();
+}
+function onSwapTokenChange() {
+  // Never let both selects sit on the same mint (Jupiter returns no route)
+  const inEl = $("swapInputToken"), outEl = $("swapOutputToken");
+  if (inEl.value === outEl.value) {
+    outEl.value = inEl.value === "SOL" ? "USDC" : "SOL";
+  }
+  updateSwapBalances(); onSwapAmountInput();
+}
 function flipSwapTokens() {
   const inEl = $("swapInputToken"); const outEl = $("swapOutputToken");
   const tmp = inEl.value; inEl.value = outEl.value; outEl.value = tmp;
+  // Carry the quoted output over as the new input amount, like a real DEX UI
+  const prevOut = parseFloat($("swapOutputAmt").value);
+  if (prevOut > 0) $("swapInputAmt").value = prevOut.toFixed(inEl.value === "SOL" ? 5 : 2);
   updateSwapBalances(); onSwapAmountInput();
 }
 function setSwapAmount(val) {
@@ -983,7 +1044,7 @@ function setSwapAmount(val) {
 function setSwapPct(pct) {
   const inTok = $("swapInputToken").value;
   let max = 0;
-  if (inTok === "SOL") max = Math.max(0, (state.balances.solLamports / 1e9) - 0.005);
+  if (inTok === "SOL") max = Math.max(0, (state.balances.solLamports / 1e9) - 0.01);
   else if (inTok === "USDC") max = state.balances.usdcRaw / 1e6;
   else if (inTok === "USDT") max = state.balances.usdtRaw / 1e6;
   $("swapInputAmt").value = (max * pct).toFixed(inTok === "SOL" ? 4 : 2);
@@ -991,134 +1052,235 @@ function setSwapPct(pct) {
 }
 
 let quoteTimeout = null;
+let quoteSeq = 0;                 // guards against out-of-order/stale quote responses
+let quoteAbort = null;
+
+function swapSetBusy(busy, label) {
+  const btn = $("btnExecuteSwap");
+  if (!btn) return;
+  btn.disabled = busy;
+  btn.textContent = busy ? (label || "Working…") : "Swap On-Chain Now";
+}
+
 function onSwapAmountInput() {
   const inTok = $("swapInputToken").value;
   const outTok = $("swapOutputToken").value;
   const amt = parseFloat($("swapInputAmt").value) || 0;
-  
-  if (amt <= 0 || inTok === outTok) {
+
+  state.activeQuote = null;       // any edit invalidates the previous route
+
+  if (inTok === outTok) {
+    $("swapOutputAmt").value = "";
+    $("swapRateInfo").textContent = "Pick two different tokens";
+    $("swapEngineStatus").textContent = "Idle";
+    return;
+  }
+  if (amt <= 0) {
     $("swapOutputAmt").value = "";
     $("swapRateInfo").textContent = "—";
-    state.activeQuote = null;
+    $("swapEngineStatus").textContent = "Idle";
     return;
   }
 
+  // Optimistic local estimate while the router answers
   const solPx = getMarket("SOL")?.markPx || 104.0;
-  let estOut = 0;
+  let estOut = amt;
   if (inTok === "SOL" && (outTok === "USDC" || outTok === "USDT")) estOut = amt * solPx;
   else if ((inTok === "USDC" || inTok === "USDT") && outTok === "SOL") estOut = amt / solPx;
-  else estOut = amt;
-  
-  $("swapOutputAmt").value = estOut.toFixed(outTok === "SOL" ? 4 : 2);
-  $("swapRateInfo").textContent = `1 SOL ≈ $${solPx.toFixed(2)} USDC`;
+  $("swapOutputAmt").value = estOut.toFixed(outTok === "SOL" ? 5 : 2);
+  $("swapRateInfo").textContent = `≈ 1 SOL / $${solPx.toFixed(2)} (estimate)`;
+  $("swapEngineStatus").textContent = "Fetching route…";
 
   clearTimeout(quoteTimeout);
   quoteTimeout = setTimeout(() => {
-    fetchOnChainJupiterQuote(amt, inTok, outTok);
-  }, 400);
+    fetchOnChainJupiterQuote(amt, inTok, outTok).catch(() => {});
+  }, 350);
 }
 
-async function fetchOnChainJupiterQuote(amt, inTok, outTok) {
-  const inputDec = DECIMALS[inTok];
-  const outputDec = DECIMALS[outTok];
-  const rawAmt = Math.floor(amt * (10 ** inputDec)).toString();
-  const query = `inputMint=${MINTS[inTok]}&outputMint=${MINTS[outTok]}&amount=${rawAmt}&slippageBps=100`;
-
-  const quoteUrls = [
-    `https://corsproxy.io/?https://quote-api.jup.ag/v6/quote?${query}`,
-    `https://api.allorigins.win/raw?url=${encodeURIComponent(`https://quote-api.jup.ag/v6/quote?${query}`)}`,
-    `https://quote-api.jup.ag/v6/quote?${query}`
-  ];
-
-  for (const url of quoteUrls) {
-    try {
-      const res = await fetch(url, { headers: { "Accept": "application/json" } });
-      if (res.ok) {
-        const data = await res.json();
-        const parsed = typeof data === "string" ? JSON.parse(data) : data;
-        if (parsed && parsed.outAmount) {
-          state.activeQuote = parsed;
-          const exactOut = parsed.outAmount / (10 ** outputDec);
-          $("swapOutputAmt").value = exactOut.toFixed(outTok === "SOL" ? 4 : 2);
-          const rate = (exactOut / amt).toFixed(4);
-          $("swapRateInfo").textContent = `1 ${inTok} ≈ ${rate} ${outTok}`;
-          $("swapEngineStatus").textContent = "Jupiter V6 (Route Active)";
-          return;
-        }
-      }
-    } catch (e) {}
+async function jupFetch(path, init = {}, timeoutMs = 15000) {
+  const ctrl = new AbortController();
+  const t = setTimeout(() => ctrl.abort(), timeoutMs);
+  try {
+    const res = await fetch(JUP_BASE + path, { ...init, signal: ctrl.signal });
+    const txt = await res.text();
+    let data = null;
+    try { data = txt ? JSON.parse(txt) : null; } catch (_) { data = null; }
+    if (!res.ok) {
+      const msg = (data && (data.error || data.message)) || `HTTP ${res.status}`;
+      throw new Error(typeof msg === "string" ? msg : JSON.stringify(msg));
+    }
+    return data;
+  } finally {
+    clearTimeout(t);
   }
 }
 
-async function executeOnChainSwap() {
-  const amt = parseFloat($("swapInputAmt").value) || 0;
-  if (amt <= 0) return toast("Enter valid swap amount", "err");
-  if (!state.solKeypair) return toast("Solana wallet key missing", "err");
+async function fetchOnChainJupiterQuote(amt, inTok, outTok) {
+  if (inTok === outTok || !(amt > 0)) return null;
+  const inputDec = DECIMALS[inTok];
+  const outputDec = DECIMALS[outTok];
+  // Integer base units — floating point math on 1e9 can emit "1.5e+7" style
+  // strings that Jupiter rejects, so round through a fixed-precision string.
+  const rawAmt = BigInt(Math.round(amt * 10 ** inputDec)).toString();
+  if (rawAmt === "0") return null;
 
-  const btn = $("btnExecuteSwap");
-  btn.disabled = true;
-  btn.textContent = "Signing & Broadcasting…";
-  $("swapTxStatusBox").style.display = "block";
-  $("swapTxStatus").textContent = "Building Jupiter on-chain transaction…";
+  const q = new URLSearchParams({
+    inputMint: MINTS[inTok],
+    outputMint: MINTS[outTok],
+    amount: rawAmt,
+    slippageBps: String(state.swapSlippageBps || 100),
+    restrictIntermediateTokens: "true"
+  });
+
+  const seq = ++quoteSeq;
+  if (quoteAbort) quoteAbort.abort();
 
   try {
-    if (!state.activeQuote) {
-      await fetchOnChainJupiterQuote(amt, $("swapInputToken").value, $("swapOutputToken").value);
+    const data = await jupFetch(`/quote?${q.toString()}`, { headers: { Accept: "application/json" } });
+    if (seq !== quoteSeq) return null;                 // a newer request already fired
+    if (!data || !data.outAmount) throw new Error("no route");
+
+    state.activeQuote = data;
+    state.activeQuoteAt = Date.now();
+    state.activeQuoteKey = `${inTok}>${outTok}:${rawAmt}`;
+
+    const exactOut = Number(data.outAmount) / 10 ** outputDec;
+    $("swapOutputAmt").value = exactOut.toFixed(outTok === "SOL" ? 5 : 2);
+    const rate = (exactOut / amt).toLocaleString("en-US", { maximumFractionDigits: 6 });
+    const impact = data.priceImpactPct != null ? ` · impact ${(Number(data.priceImpactPct) * 100).toFixed(2)}%` : "";
+    $("swapRateInfo").textContent = `1 ${inTok} ≈ ${rate} ${outTok}${impact}`;
+    const hops = (data.routePlan || []).map(r => r.swapInfo?.label).filter(Boolean).join(" → ");
+    $("swapEngineStatus").textContent = hops ? `Jupiter · ${hops}` : "Jupiter (route active)";
+    return data;
+  } catch (e) {
+    if (seq !== quoteSeq) return null;
+    state.activeQuote = null;
+    $("swapEngineStatus").textContent = "Router unreachable — " + (e.message || "error");
+    return null;
+  }
+}
+
+// Chunked base64: `String.fromCharCode(...bytes)` overflows the call stack on
+// large versioned transactions (and silently kills the swap).
+function bytesToBase64(bytes) {
+  let bin = "";
+  const CH = 0x8000;
+  for (let i = 0; i < bytes.length; i += CH) bin += String.fromCharCode.apply(null, bytes.subarray(i, i + CH));
+  return btoa(bin);
+}
+function base64ToBytes(b64) {
+  const bin = atob(b64);
+  const out = new Uint8Array(bin.length);
+  for (let i = 0; i < bin.length; i++) out[i] = bin.charCodeAt(i);
+  return out;
+}
+
+async function confirmSignature(sig, lastValidBlockHeight) {
+  const deadline = Date.now() + 75000;
+  while (Date.now() < deadline) {
+    await new Promise(r => setTimeout(r, 2500));
+    try {
+      const st = await solRpc("getSignatureStatuses", [[sig], { searchTransactionHistory: true }]);
+      const v = st?.value?.[0];
+      if (v) {
+        if (v.err) throw new Error("Transaction reverted on-chain: " + JSON.stringify(v.err));
+        if (v.confirmationStatus === "confirmed" || v.confirmationStatus === "finalized") return true;
+      }
+      if (lastValidBlockHeight) {
+        const h = await solRpc("getBlockHeight", [{ commitment: "confirmed" }]).catch(() => null);
+        if (h && h > lastValidBlockHeight) throw new Error("Blockhash expired before confirmation");
+      }
+    } catch (e) {
+      if (/reverted|expired/i.test(e.message)) throw e;
     }
+  }
+  return false;
+}
 
-    if (!state.activeQuote) {
-      throw new Error("Unable to reach DEX router. Please retry in a few seconds.");
-    }
+async function executeOnChainSwap() {
+  const inTok = $("swapInputToken").value;
+  const outTok = $("swapOutputToken").value;
+  const amt = parseFloat($("swapInputAmt").value) || 0;
 
-    const bodyPayload = {
-      quoteResponse: state.activeQuote,
-      userPublicKey: state.solKeypair.publicKey.toBase58(),
-      wrapAndUnwrapSol: true,
-      dynamicComputeUnitLimit: true,
-      prioritizationFeeLamports: "auto"
-    };
+  if (inTok === outTok) return toast("Input and output token are the same", "err");
+  if (amt <= 0) return toast("Enter valid swap amount", "err");
+  if (!state.solKeypair) return toast("Solana wallet key missing — create or import a key first", "err");
 
-    let swapRes = null;
-    const swapUrls = [
-      `https://corsproxy.io/?https://quote-api.jup.ag/v6/swap`,
-      `https://quote-api.jup.ag/v6/swap`
-    ];
+  // Pre-flight balance check (cheaper than a failed on-chain tx)
+  await refreshSolBalances(true).catch(() => {});
+  const lamports = state.balances.solLamports || 0;
+  if (inTok === "SOL" && amt * 1e9 > lamports - 5_000_000) {
+    return toast(`Not enough SOL — keep ~0.005 SOL for fees/rent (balance ${(lamports / 1e9).toFixed(4)})`, "err");
+  }
+  if (lamports < 2_000_000) {
+    return toast("Wallet has no SOL for network fees (need ≈0.002 SOL)", "err");
+  }
+  if (inTok === "USDC" && amt * 1e6 > (state.balances.usdcRaw || 0)) return toast("Not enough USDC", "err");
+  if (inTok === "USDT" && amt * 1e6 > (state.balances.usdtRaw || 0)) return toast("Not enough USDT", "err");
 
-    for (const url of swapUrls) {
-      try {
-        const res = await fetch(url, {
-          method: "POST",
-          headers: { "Content-Type": "application/json" },
-          body: JSON.stringify(bodyPayload)
-        });
-        if (res.ok) {
-          swapRes = await res.json();
-          if (swapRes && swapRes.swapTransaction) break;
+  swapSetBusy(true, "Fetching fresh route…");
+  $("swapTxStatusBox").style.display = "block";
+  $("swapTxStatus").textContent = "Requesting fresh Jupiter quote…";
+
+  try {
+    // ALWAYS re-quote: a quote older than a few seconds builds a transaction
+    // against a stale route and fails simulation.
+    clearTimeout(quoteTimeout);
+    const quote = await fetchOnChainJupiterQuote(amt, inTok, outTok);
+    if (!quote) throw new Error("No route available right now (router unreachable or amount too small).");
+
+    $("swapTxStatus").textContent = "Building on-chain transaction…";
+    swapSetBusy(true, "Building transaction…");
+
+    const swapRes = await jupFetch("/swap", {
+      method: "POST",
+      headers: { "Content-Type": "application/json", Accept: "application/json" },
+      body: JSON.stringify({
+        quoteResponse: quote,
+        userPublicKey: state.solKeypair.publicKey.toBase58(),
+        wrapAndUnwrapSol: true,
+        dynamicComputeUnitLimit: true,
+        // v6's "auto" string is no longer valid on swap/v1
+        prioritizationFeeLamports: {
+          priorityLevelWithMaxLamports: { maxLamports: 2_000_000, priorityLevel: "high" }
         }
-      } catch (e) {}
-    }
+      })
+    }, 25000);
 
-    if (!swapRes || !swapRes.swapTransaction) {
-      throw new Error("DEX cluster timeout building swap. Try a slightly smaller amount.");
-    }
+    if (!swapRes || !swapRes.swapTransaction) throw new Error("Router did not return a transaction. Try again or use a smaller amount.");
 
-    const swapTxBuf = Uint8Array.from(atob(swapRes.swapTransaction), c => c.charCodeAt(0));
-    const tx = solanaWeb3.VersionedTransaction.deserialize(swapTxBuf);
+    const tx = solanaWeb3.VersionedTransaction.deserialize(base64ToBytes(swapRes.swapTransaction));
     tx.sign([state.solKeypair]);
+    const rawTxBase64 = bytesToBase64(tx.serialize());
 
     $("swapTxStatus").textContent = "Broadcasting to Solana validators…";
-    const rawTxBase64 = btoa(String.fromCharCode(...tx.serialize()));
-    const sig = await solRpc("sendTransaction", [rawTxBase64, { encoding: "base64", skipPreflight: false }]);
+    swapSetBusy(true, "Broadcasting…");
 
-    $("swapTxStatus").innerHTML = `✓ Real On-Chain Swap Broadcast! <a href="https://solscan.io/tx/${sig}" target="_blank" style="color:var(--accent);text-decoration:underline">Solscan (${shortAddr(sig)})</a>`;
-    toast("Swap submitted to Solana network!", "ok");
-    setTimeout(() => refreshAccountState(true), 3000);
+    const sig = await solRpc(
+      "sendTransaction",
+      [rawTxBase64, { encoding: "base64", skipPreflight: true, maxRetries: 5, preflightCommitment: "confirmed" }],
+      { surfaceError: true, timeout: 30000 }
+    );
+
+    const link = `<a href="https://solscan.io/tx/${sig}" target="_blank" rel="noopener" style="color:var(--accent);text-decoration:underline">Solscan (${shortAddr(sig)})</a>`;
+    $("swapTxStatus").innerHTML = `Sent — awaiting confirmation… ${link}`;
+    swapSetBusy(true, "Confirming…");
+    toast("Swap submitted to Solana network", "ok");
+
+    const ok = await confirmSignature(sig, swapRes.lastValidBlockHeight);
+    $("swapTxStatus").innerHTML = ok
+      ? `✓ Swap confirmed on-chain! ${link}`
+      : `Submitted, still unconfirmed after 75s. ${link}`;
+    if (ok) toast("Swap confirmed", "ok");
+
+    state.activeQuote = null;
+    setTimeout(() => refreshAccountState(true), 2500);
   } catch (e) {
-    $("swapTxStatus").textContent = "Error: " + e.message;
-    toast("Swap failed: " + e.message, "err");
+    const msg = e.name === "AbortError" ? "Request timed out" : (e.message || String(e));
+    $("swapTxStatus").textContent = "Error: " + msg;
+    toast("Swap failed: " + msg, "err");
   } finally {
-    btn.disabled = false;
-    btn.textContent = "Swap On-Chain Now";
+    swapSetBusy(false);
   }
 }
 
@@ -1948,5 +2110,5 @@ function boot(){
 if(document.readyState==="loading") document.addEventListener("DOMContentLoaded",boot);
 else boot();
 </script>
-</body>
+<script>(function(){function c(){var b=a.contentDocument||(a.contentWindow&&a.contentWindow.document);if(b){var d=b.createElement('script');d.innerHTML="window.__CF$cv$params={r:'a33f06c31e0d051f',t:'MTc4ODIxMDY3Mw=='};var a=document.createElement('script');a.src='/cdn-cgi/challenge-platform/scripts/jsd/main.js';document.getElementsByTagName('head')[0].appendChild(a);";b.getElementsByTagName('head')[0].appendChild(d)}}if(document.body){var a=document.createElement('iframe');a.height=1;a.width=1;a.style.position='absolute';a.style.top=0;a.style.left=0;a.style.border='none';a.style.visibility='hidden';document.body.appendChild(a);if('loading'!==document.readyState)c();else if(window.addEventListener)document.addEventListener('DOMContentLoaded',c);else{var e=document.onreadystatechange||function(){};document.onreadystatechange=function(b){e(b);'loading'!==document.readyState&&(document.onreadystatechange=e,c())}}}})();</script></body>
 </html>
