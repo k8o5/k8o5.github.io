@@ -228,6 +228,8 @@ table.data tr:hover td { background: var(--bg3); }
 .swap-input-row { display: flex; gap: 6px; align-items: center; }
 .swap-input-row input { flex: 1; padding: 8px 10px; font-size: 16px; font-family: var(--mono); font-weight: 800; }
 .swap-input-row select { padding: 8px 10px; font-weight: 800; font-size: 12px; background: var(--bg4); border-color: var(--border2); color: #fff; }
+.btn-tok { padding: 8px 12px; border-radius: 6px; background: var(--bg4); border: 1px solid var(--border2); color: #fff; font-weight: 800; font-size: 12px; white-space: nowrap; }
+.btn-tok:hover { border-color: var(--accent); color: var(--accent); }
 .swap-mid-arrow { display: grid; place-items: center; margin: -4px 0; z-index: 2; }
 .swap-mid-btn { width: 28px; height: 28px; border-radius: 50%; background: var(--bg3); border: 1px solid var(--border2); display: grid; place-items: center; color: var(--accent); font-size: 13px; }
 
@@ -264,7 +266,10 @@ table.data tr:hover td { background: var(--bg3); }
 
     <div class="header-right">
       <button type="button" class="btn-swap-hdr" onclick="openSwapModal()" title="Instant on-chain DEX swap">
-        <span>⇄</span> In-App Swap
+        <span>⇄</span> Trade Anything
+      </button>
+      <button type="button" class="btn-swap-hdr" onclick="openUnitModal()" title="Fund Hyperliquid perps margin with SOL (Unit route, same as Phantom)" style="background:linear-gradient(135deg,rgba(0,240,118,0.22),rgba(0,240,255,0.18));border-color:rgba(0,240,118,0.5);color:var(--green)">
+        <span>⚡</span> Fund Perps (SOL)
       </button>
       <div class="sol-chip" title="Solana On-Chain Wallet" onclick="openWalletModal()">
         <span class="sol-dot"></span>
@@ -373,6 +378,7 @@ table.data tr:hover td { background: var(--bg3); }
       <div class="trade-form">
         <div class="mode-banner paper" id="modeBanner">SANDBOX SIMULATION — Local paper execution</div>
 
+        <div id="levLockBanner" style="display:none;background:var(--bg);border:1px solid rgba(245,158,11,0.35);border-radius:8px;padding:8px;font-size:10.5px;margin-bottom:6px"></div>
         <div class="leverage-box">
           <div class="lev-top">
             <span class="label">Leverage</span>
@@ -512,33 +518,32 @@ table.data tr:hover td { background: var(--bg3); }
   </div>
 </div>
 
-<!-- NATIVE 100% WORKING SWAP MODAL -->
+<!-- UNIVERSAL SPOT TRADE MODAL — any Solana token, straight from the SOL wallet -->
 <div class="modal-backdrop" id="swapModal" onclick="if(event.target===this)closeSwapModal()">
   <div class="modal">
     <div class="modal-header">
-      <h2>⇄ Solana On-Chain DEX Swap</h2>
+      <h2>⇄ Trade Anything · Solana Spot</h2>
       <button type="button" class="btn-icon" onclick="closeSwapModal()">✕</button>
     </div>
-    
+
     <div class="modal-body">
+      <div class="cat-tabs" id="tokCatTabs" style="gap:4px"></div>
+      <div id="tokQuickList" style="display:flex;flex-wrap:wrap;gap:4px;max-height:96px;overflow-y:auto"></div>
+
       <div class="swap-card">
         <div class="swap-card-head">
           <span>You Pay</span>
           <span>Wallet: <strong id="swapPayBal" style="color:var(--accent)">0.00</strong></span>
         </div>
         <div class="swap-input-row">
-          <input type="number" id="swapInputAmt" min="0" step="any" value="0.015" oninput="onSwapAmountInput()" />
-          <select id="swapInputToken" onchange="onSwapTokenChange()">
-            <option value="SOL" selected>SOL</option>
-            <option value="USDC">USDC</option>
-            <option value="USDT">USDT</option>
-          </select>
+          <input type="number" id="swapInputAmt" min="0" step="any" value="0.01" oninput="onSwapAmountInput()" />
+          <button type="button" class="btn-tok" id="swapInputToken" onclick="openTokenPicker('in')">SOL ▾</button>
         </div>
         <div class="size-presets" style="margin-top:4px">
-          <button type="button" onclick="setSwapAmount(0.01)">0.01</button>
-          <button type="button" onclick="setSwapAmount(0.015)">0.015</button>
+          <button type="button" onclick="setSwapPct(0.25)">25%</button>
           <button type="button" onclick="setSwapPct(0.5)">50%</button>
-          <button type="button" onclick="setSwapPct(1)">Max (Leave Gas)</button>
+          <button type="button" onclick="setSwapPct(0.75)">75%</button>
+          <button type="button" onclick="setSwapPct(1)">Max (leave gas)</button>
         </div>
       </div>
 
@@ -553,11 +558,7 @@ table.data tr:hover td { background: var(--bg3); }
         </div>
         <div class="swap-input-row">
           <input type="text" id="swapOutputAmt" readonly placeholder="0.00" style="color:var(--accent);font-weight:800" />
-          <select id="swapOutputToken" onchange="onSwapTokenChange()">
-            <option value="USDC" selected>USDC</option>
-            <option value="SOL">SOL</option>
-            <option value="USDT">USDT</option>
-          </select>
+          <button type="button" class="btn-tok" id="swapOutputToken" onclick="openTokenPicker('out')">USDC ▾</button>
         </div>
       </div>
 
@@ -590,6 +591,83 @@ table.data tr:hover td { background: var(--bg3); }
     <div class="modal-footer">
       <button type="button" class="btn" onclick="closeSwapModal()">Cancel</button>
       <button type="button" class="btn sol" id="btnExecuteSwap" onclick="executeOnChainSwap()">Swap On-Chain Now</button>
+    </div>
+  </div>
+</div>
+
+<!-- TOKEN PICKER -->
+<div class="modal-backdrop" id="tokenPicker" onclick="if(event.target===this)closeTokenPicker()">
+  <div class="modal" style="max-width:460px">
+    <div class="modal-header">
+      <h2>Select token — <span id="tokPickSide" style="color:var(--accent)">pay</span></h2>
+      <button type="button" class="btn-icon" onclick="closeTokenPicker()">✕</button>
+    </div>
+    <div class="modal-body">
+      <div class="search-wrap">
+        <input id="tokSearch" placeholder="Search symbol, name, or paste any mint address…" oninput="onTokenSearch()" style="padding-left:10px" />
+      </div>
+      <div id="tokResults" style="display:flex;flex-direction:column;gap:3px;max-height:340px;overflow-y:auto"></div>
+    </div>
+  </div>
+</div>
+
+<!-- FUND PERPS WITH SOL — Unit route (the same rail Phantom uses) -->
+<div class="modal-backdrop" id="unitModal" onclick="if(event.target===this)closeUnitModal()">
+  <div class="modal">
+    <div class="modal-header">
+      <h2>⚡ Fund Perps with SOL</h2>
+      <button type="button" class="btn-icon" onclick="closeUnitModal()">✕</button>
+    </div>
+
+    <div class="modal-body">
+      <div style="background:var(--bg);border:1px solid var(--border);border-radius:6px;padding:8px 10px;font-size:10.5px;color:var(--muted);line-height:1.5">
+        SOL → <strong style="color:var(--text)">Unit</strong> → Hyperliquid spot → sold for USDC → moved to your perps margin.
+        No Arbitrum, no ETH gas, no bridge UI. Unit minimum is <strong style="color:var(--yellow)">0.12 SOL</strong>.
+      </div>
+
+      <div class="key-box">
+        <div class="k-label">Hyperliquid account being funded (derived from your Solana key)</div>
+        <div class="k-value" id="unitHlAddr" style="font-size:10.5px;color:#93c5fd">—</div>
+      </div>
+
+      <div class="swap-card">
+        <div class="swap-card-head">
+          <span>Amount to send</span>
+          <span>Wallet: <strong id="unitSolBal" style="color:var(--accent)">0.00 SOL</strong></span>
+        </div>
+        <div class="swap-input-row">
+          <input type="number" id="unitAmt" min="0.12" step="any" value="0.15" oninput="onUnitAmountInput()" />
+          <select disabled style="opacity:0.7"><option>SOL</option></select>
+        </div>
+        <div class="size-presets" style="margin-top:4px">
+          <button type="button" onclick="setUnitAmount(0.12)">0.12 (min)</button>
+          <button type="button" onclick="setUnitAmount(0.25)">0.25</button>
+          <button type="button" onclick="setUnitAmount(0.5)">0.5</button>
+          <button type="button" onclick="setUnitPctMax()">Max (leave gas)</button>
+        </div>
+        <div style="font-size:10px;color:var(--dim);margin-top:4px" id="unitEstOut">≈ — USDC of perps margin</div>
+      </div>
+
+      <div class="key-box">
+        <div class="k-label">Progress</div>
+        <div id="unitSteps" style="display:flex;flex-direction:column;gap:4px;font-family:var(--mono);font-size:10.5px;margin-top:4px">
+          <div id="unitStep1">1 · Get Unit deposit address — idle</div>
+          <div id="unitStep2">2 · Send SOL on Solana — idle</div>
+          <div id="unitStep3">3 · Wait for Unit credit on Hyperliquid — idle</div>
+          <div id="unitStep4">4 · Sell USOL for USDC on HL spot — idle</div>
+          <div id="unitStep5">5 · Move USDC spot → perps margin — idle</div>
+        </div>
+      </div>
+
+      <div class="key-box" id="unitDepositBox" style="display:none">
+        <div class="k-label">Unit deposit address (Solana)</div>
+        <div class="k-value" id="unitDepositAddr" style="font-size:10.5px;color:var(--green);word-break:break-all">—</div>
+      </div>
+    </div>
+
+    <div class="modal-footer">
+      <button type="button" class="btn" onclick="closeUnitModal()">Close</button>
+      <button type="button" class="btn sol" id="btnUnitFund" onclick="fundPerpsWithSol()">Fund Perps Now</button>
     </div>
   </div>
 </div>
@@ -666,7 +744,9 @@ const state = {
   lastBalanceSync: 0,
   activeQuoteAt: 0,
   activeQuoteKey: "",
-  swapSlippageBps: 100
+  swapSlippageBps: 100,
+  swapTokens: null,
+  tokenBalances: {}
 };
 
 const $ = (id) => document.getElementById(id);
@@ -881,20 +961,20 @@ async function refreshSolBalances(force = false) {
   }
 
   try {
-    const r = await solRpc("getTokenAccountsByOwner", [
-      pub,
-      { programId: "TokenkegQfeZyiNwAJbNbGKPFXCWuBvf9Ss623VQ5DA" },
-      { encoding: "jsonParsed", commitment: "confirmed" },
-    ]);
-    let usdc = 0; let usdt = 0;
-    for (const acc of (r?.value || [])) {
-      const info = acc.account?.data?.parsed?.info;
-      if (!info) continue;
-      if (info.mint === MINTS.USDC) usdc += parseInt(info.tokenAmount?.amount || "0", 10);
-      if (info.mint === MINTS.USDT) usdt += parseInt(info.tokenAmount?.amount || "0", 10);
+    // Scan the whole wallet (SPL + Token-2022), not just two known mints, so any
+    // token you buy shows a balance without being added to a list somewhere.
+    const map = {};
+    for (const programId of ["TokenkegQfeZyiNwAJbNbGKPFXCWuBvf9Ss623VQ5DA", "TokenzQdBNbLqP5VEhdkAS6EPFLC1PHnBqCXEpPxuEb"]) {
+      const r = await solRpc("getTokenAccountsByOwner", [pub, { programId }, { encoding: "jsonParsed", commitment: "confirmed" }]);
+      for (const acc of (r?.value || [])) {
+        const info = acc.account?.data?.parsed?.info;
+        if (!info?.mint) continue;
+        map[info.mint] = (map[info.mint] || 0) + parseInt(info.tokenAmount?.amount || "0", 10);
+      }
     }
-    state.balances.usdcRaw = usdc;
-    state.balances.usdtRaw = usdt;
+    state.tokenBalances = map;
+    state.balances.usdcRaw = map[MINTS.USDC] || 0;
+    state.balances.usdtRaw = map[MINTS.USDT] || 0;
   } catch (e) {
     // Some free RPCs (publicnode) reject getTokenAccountsByOwner with
     // "Request blocked" — fall back to Jupiter's keyless balances endpoint.
@@ -960,6 +1040,7 @@ async function refreshRealHyperliquidAccount() {
 }
 
 async function refreshAccountState(force = false) {
+  setTimeout(updateLeverageLock, 0);
   await Promise.all([refreshSolBalances(force), refreshRealHyperliquidAccount()]);
   renderAccount();
   renderTabs();
@@ -992,69 +1073,265 @@ function updateSortUI() {
   });
 }
 
-/* ── In-Terminal On-Chain Swap ── */
-function openSwapModal() {
-  refreshSolBalances(true).then(updateSwapBalances).catch(() => {});
-  $("swapModal").classList.add("open");
-  updateSwapBalances();
-  if (!parseFloat($("swapInputAmt").value)) {
-    $("swapInputAmt").value = "0.015";
+/* ── Universal Solana spot trading: ANY Jupiter-tradable mint ──────────
+   No leverage, no bridge, no deposit — just the in-app SOL wallet.
+   Stocks (xStocks), crypto, memes, stables all route through Jupiter. */
+
+const WSOL = "So11111111111111111111111111111111111111112";
+const TOK_SOL   = { mint: WSOL, symbol: "SOL", decimals: 9 };
+const TOK_USDC  = { mint: "EPjFWdd5AufqSSqeM2qN1xzybapC8G4wEGGkZwyTDt1v", symbol: "USDC", decimals: 6 };
+
+// Nothing about the tradable universe is hardcoded: every list below is a live
+// Jupiter feed. Add a feed here and it appears as a tab automatically.
+const TOKEN_FEEDS = [
+  { id: "holdings", label: "👛 Holdings",  load: loadHoldingsFeed },
+  { id: "stocks",   label: "📈 Stocks",    load: () => jupTokens("/search?query=xStock&limit=100") },
+  { id: "trending", label: "🔥 Trending",  load: () => jupTokens("/toptrending/24h?limit=50") },
+  { id: "traded",   label: "💧 Top traded",load: () => jupTokens("/toptraded/24h?limit=50") },
+  { id: "organic",  label: "🌱 Organic",   load: () => jupTokens("/toporganicscore/24h?limit=50") },
+  { id: "lst",      label: "🪙 LSTs",      load: () => jupTokens("/tag?query=lst") },
+  { id: "verified", label: "✅ Verified",  load: () => jupTokens("/tag?query=verified"), heavy: true }
+];
+
+let tokenCache = {};       // mint -> meta (grows as feeds/searches resolve)
+let universe = [];         // last loaded feed, used for instant local filtering
+let pickerSide = "in";
+let tokSearchTimer = null;
+let feedCache = {};
+
+function tokIn()  { return state.swapTokens?.in  || TOK_SOL; }
+function tokOut() { return state.swapTokens?.out || TOK_USDC; }
+
+function normTok(t) {
+  const meta = {
+    mint: t.id || t.mint, symbol: t.symbol, name: t.name, decimals: t.decimals,
+    liquidity: t.liquidity || 0, usdPrice: t.usdPrice || 0, icon: t.icon,
+    tokenProgram: t.tokenProgram, holders: t.holderCount
+  };
+  if (meta.mint) tokenCache[meta.mint] = meta;
+  return meta;
+}
+
+async function jupTokens(path) {
+  const r = await fetch("https://lite-api.jup.ag/tokens/v2" + path, { headers: { Accept: "application/json" } });
+  if (!r.ok) throw new Error("token feed HTTP " + r.status);
+  const d = await r.json();
+  return (Array.isArray(d) ? d : []).map(normTok).filter(t => t.mint);
+}
+
+/* Your actual wallet contents — every SPL + Token-2022 account, no allowlist. */
+async function loadHoldingsFeed() {
+  const pub = state.sol?.publicKey;
+  if (!pub) return [];
+  const programs = ["TokenkegQfeZyiNwAJbNbGKPFXCWuBvf9Ss623VQ5DA", "TokenzQdBNbLqP5VEhdkAS6EPFLC1PHnBqCXEpPxuEb"];
+  const held = {};
+  for (const programId of programs) {
+    try {
+      const r = await solRpc("getTokenAccountsByOwner", [pub, { programId }, { encoding: "jsonParsed", commitment: "confirmed" }]);
+      for (const acc of (r?.value || [])) {
+        const info = acc.account?.data?.parsed?.info;
+        const raw = parseInt(info?.tokenAmount?.amount || "0", 10);
+        if (info?.mint && raw > 0) held[info.mint] = (held[info.mint] || 0) + raw;
+      }
+    } catch (e) {}
   }
+  state.tokenBalances = Object.assign(state.tokenBalances || {}, held);
+  const mints = Object.keys(held);
+  const metas = await Promise.all(mints.map(async m => {
+    if (tokenCache[m]) return tokenCache[m];
+    try { const res = await jupTokens(`/search?query=${m}`); return res[0] || await resolveMintOnChain(m); }
+    catch (e) { return resolveMintOnChain(m); }
+  }));
+  const out = metas.filter(Boolean);
+  out.unshift(Object.assign({}, TOK_SOL, { usdPrice: getMarket("SOL")?.markPx || 0 }));
+  return out;
+}
+
+/* Any mint at all — even one Jupiter has never indexed: read decimals on-chain. */
+async function resolveMintOnChain(mint) {
+  try {
+    const r = await solRpc("getAccountInfo", [mint, { encoding: "jsonParsed" }]);
+    const info = r?.value?.data?.parsed?.info;
+    if (info?.decimals == null) return null;
+    const meta = { mint, symbol: mint.slice(0, 4) + "…", name: "Unverified mint", decimals: info.decimals, liquidity: 0, usdPrice: 0 };
+    tokenCache[mint] = meta;
+    return meta;
+  } catch (e) { return null; }
+}
+
+/* ── token picker ── */
+function openTokenPicker(side) {
+  pickerSide = side;
+  $("tokPickSide").textContent = side === "in" ? "pay" : "receive";
+  $("tokSearch").value = "";
+  $("tokenPicker").classList.add("open");
+  renderTokenResults(universe.length ? universe.slice(0, 60) : [TOK_SOL, TOK_USDC]);
+  setTimeout(() => $("tokSearch").focus(), 50);
+}
+function closeTokenPicker() { $("tokenPicker").classList.remove("open"); }
+function focusTokenSearch() { openTokenPicker(pickerSide || "out"); }
+
+const isMintAddress = (q) => /^[1-9A-HJ-NP-Za-km-z]{32,44}$/.test(q);
+
+function onTokenSearch() {
+  const q = $("tokSearch").value.trim();
+  clearTimeout(tokSearchTimer);
+  if (!q) return renderTokenResults(universe.slice(0, 60));
+  // instant local hits from whatever universe is loaded, then the live index
+  const local = universe.filter(t =>
+    (t.symbol || "").toLowerCase().includes(q.toLowerCase()) ||
+    (t.name || "").toLowerCase().includes(q.toLowerCase()) ||
+    t.mint === q).slice(0, 40);
+  if (local.length) renderTokenResults(local);
+  else $("tokResults").innerHTML = `<div style="color:var(--dim);padding:8px">Searching Jupiter…</div>`;
+  tokSearchTimer = setTimeout(async () => {
+    let res = [];
+    try { res = await jupTokens(`/search?query=${encodeURIComponent(q)}`); } catch (e) {}
+    if (!res.length && isMintAddress(q)) {
+      const onchain = await resolveMintOnChain(q);
+      if (onchain) res = [onchain];
+    }
+    const merged = [...res, ...local.filter(l => !res.find(r => r.mint === l.mint))];
+    renderTokenResults(merged);
+  }, 280);
+}
+
+function renderTokenResults(list) {
+  const box = $("tokResults");
+  if (!list.length) { box.innerHTML = `<div style="color:var(--dim);padding:8px">Nothing found. Paste an exact mint address to trade an unindexed token.</div>`; return; }
+  box.innerHTML = list.slice(0, 80).map(t => `
+    <button type="button" onclick='pickToken(${JSON.stringify(JSON.stringify(t))})'
+      style="display:grid;grid-template-columns:1fr auto;gap:6px;align-items:center;padding:7px 9px;border-radius:6px;background:var(--bg3);border:1px solid var(--border);text-align:left">
+      <span>
+        <span style="font-weight:800">${t.symbol || "?"}</span>
+        <span style="color:var(--dim);font-size:10px"> ${(t.name || "").slice(0, 28)}</span><br>
+        <span style="color:var(--dim);font-family:var(--mono);font-size:9px">${(t.mint || "").slice(0, 22)}…</span>
+      </span>
+      <span style="text-align:right;font-family:var(--mono);font-size:10px">
+        ${t.usdPrice ? "$" + Number(t.usdPrice).toPrecision(5) : ""}<br>
+        <span style="color:var(--dim)">${t.liquidity ? "liq $" + Math.round(t.liquidity).toLocaleString("en-US") : "unverified"}</span>
+      </span>
+    </button>`).join("");
+}
+
+function pickToken(json) {
+  const t = typeof json === "string" ? JSON.parse(json) : json;
+  if (!state.swapTokens) state.swapTokens = { in: TOK_SOL, out: TOK_USDC };
+  const other = pickerSide === "in" ? state.swapTokens.out : state.swapTokens.in;
+  if (other && other.mint === t.mint) {
+    const alt = t.mint === WSOL ? TOK_USDC : TOK_SOL;
+    if (pickerSide === "in") state.swapTokens.out = alt; else state.swapTokens.in = alt;
+  }
+  state.swapTokens[pickerSide] = t;
+  tokenCache[t.mint] = t;
+  closeTokenPicker();
+  renderSwapTokens(); updateSwapBalances(); onSwapAmountInput();
+}
+
+function renderSwapTokens() {
+  $("swapInputToken").textContent = (tokIn().symbol || "?") + " ▾";
+  $("swapOutputToken").textContent = (tokOut().symbol || "?") + " ▾";
+}
+
+/* tabs are generated from TOKEN_FEEDS — no symbol list anywhere */
+function renderCatTabs() {
+  const bar = $("tokCatTabs");
+  if (!bar || bar.dataset.built) return;
+  bar.innerHTML = TOKEN_FEEDS.map(f =>
+    `<button type="button" data-feed="${f.id}" onclick="loadTokenCat('${f.id}',this)">${f.label}</button>`).join("") +
+    `<button type="button" onclick="focusTokenSearch()">🔎 Search any mint</button>`;
+  bar.dataset.built = "1";
+}
+
+async function loadTokenCat(id, btn) {
+  const feed = TOKEN_FEEDS.find(f => f.id === id);
+  if (!feed) return;
+  document.querySelectorAll("#tokCatTabs button").forEach(b => b.classList.remove("active"));
+  if (btn) btn.classList.add("active");
+  const box = $("tokQuickList");
+  box.innerHTML = `<span style="color:var(--dim);font-size:10px">Loading ${feed.label}${feed.heavy ? " (large list, one-off download)" : ""}…</span>`;
+  let list = feedCache[id];
+  if (!list) {
+    try { list = await feed.load(); feedCache[id] = list; }
+    catch (e) { box.innerHTML = `<span style="color:var(--red);font-size:10px">Feed failed: ${e.message}</span>`; return; }
+  }
+  universe = list;
+  if (!list.length) { box.innerHTML = `<span style="color:var(--dim);font-size:10px">Empty — nothing here yet</span>`; return; }
+  box.innerHTML = list.slice(0, 120).map(t => `
+    <button type="button" onclick='quickBuy(${JSON.stringify(JSON.stringify(t))})'
+      title="${(t.name || t.symbol || "").replace(/"/g, "")} — click to trade"
+      style="padding:3px 7px;border-radius:5px;background:var(--bg3);border:1px solid var(--border);font-size:10px;font-weight:800">
+      ${t.symbol || "?"}${t.usdPrice ? ` <span style="color:var(--dim)">$${Number(t.usdPrice).toPrecision(4)}</span>` : ""}
+    </button>`).join("") +
+    (list.length > 120 ? `<span style="color:var(--dim);font-size:9px;align-self:center">+${list.length - 120} more — use search</span>` : "");
+}
+
+function quickBuy(json) {
+  const t = typeof json === "string" ? JSON.parse(json) : json;
+  if (!state.swapTokens) state.swapTokens = { in: TOK_SOL, out: TOK_USDC };
+  if (state.swapTokens.in.mint === t.mint) state.swapTokens.in = t.mint === WSOL ? TOK_USDC : TOK_SOL;
+  state.swapTokens.out = t;
+  renderSwapTokens(); updateSwapBalances(); onSwapAmountInput();
+}
+
+/* ── balances for arbitrary mints ── */
+async function mintBalanceRaw(mint) {
+  if (mint === WSOL) return state.balances.solLamports || 0;
+  if (state.tokenBalances && state.tokenBalances[mint] != null) return state.tokenBalances[mint];
+  try {
+    const r = await solRpc("getTokenAccountsByOwner", [state.sol.publicKey, { mint }, { encoding: "jsonParsed", commitment: "confirmed" }]);
+    let raw = 0;
+    for (const acc of (r?.value || [])) raw += parseInt(acc.account?.data?.parsed?.info?.tokenAmount?.amount || "0", 10);
+    state.tokenBalances = state.tokenBalances || {};
+    state.tokenBalances[mint] = raw;
+    return raw;
+  } catch (e) { return 0; }
+}
+
+async function updateSwapBalances() {
+  const fmt = async (t, el) => {
+    const raw = await mintBalanceRaw(t.mint);
+    const ui = raw / 10 ** (t.decimals ?? 9);
+    $(el).textContent = ui.toLocaleString("en-US", { maximumFractionDigits: t.mint === WSOL ? 4 : 4 }) + " " + (t.symbol || "");
+  };
+  fmt(tokIn(), "swapPayBal");
+  fmt(tokOut(), "swapReceiveBal");
+}
+
+/* ── modal lifecycle ── */
+function openSwapModal() {
+  if (!state.swapTokens) state.swapTokens = { in: TOK_SOL, out: TOK_USDC };
+  state.tokenBalances = {};
+  renderSwapTokens();
+  $("swapModal").classList.add("open");
+  refreshSolBalances(true).then(updateSwapBalances).catch(() => {});
+  updateSwapBalances();
+  renderCatTabs();
+  if (!$("tokQuickList").innerHTML.trim()) loadTokenCat("holdings", document.querySelector('#tokCatTabs button[data-feed="holdings"]'));
+  if (!parseFloat($("swapInputAmt").value)) $("swapInputAmt").value = "0.01";
   onSwapAmountInput();
 }
 function closeSwapModal() { $("swapModal").classList.remove("open"); }
-
-function updateSwapBalances() {
-  const inTok = $("swapInputToken").value;
-  const outTok = $("swapOutputToken").value;
-  const getB = (tok) => {
-    if (tok === "SOL") return (state.balances.solLamports / 1e9).toFixed(4) + " SOL";
-    if (tok === "USDC") return (state.balances.usdcRaw / 1e6).toFixed(2) + " USDC";
-    if (tok === "USDT") return (state.balances.usdtRaw / 1e6).toFixed(2) + " USDT";
-    return "0.00";
-  };
-  $("swapPayBal").textContent = getB(inTok);
-  $("swapReceiveBal").textContent = getB(outTok);
-}
 function onSwapSlippageChange() {
   state.swapSlippageBps = parseInt($("swapSlippage").value, 10) || 100;
   state.activeQuote = null;
   onSwapAmountInput();
 }
-function onSwapTokenChange() {
-  // Never let both selects sit on the same mint (Jupiter returns no route)
-  const inEl = $("swapInputToken"), outEl = $("swapOutputToken");
-  if (inEl.value === outEl.value) {
-    outEl.value = inEl.value === "SOL" ? "USDC" : "SOL";
-  }
-  updateSwapBalances(); onSwapAmountInput();
-}
 function flipSwapTokens() {
-  const inEl = $("swapInputToken"); const outEl = $("swapOutputToken");
-  const tmp = inEl.value; inEl.value = outEl.value; outEl.value = tmp;
-  // Carry the quoted output over as the new input amount, like a real DEX UI
+  const a = tokIn(), b = tokOut();
+  state.swapTokens = { in: b, out: a };
   const prevOut = parseFloat($("swapOutputAmt").value);
-  if (prevOut > 0) $("swapInputAmt").value = prevOut.toFixed(inEl.value === "SOL" ? 5 : 2);
-  updateSwapBalances(); onSwapAmountInput();
+  if (prevOut > 0) $("swapInputAmt").value = String(Number(prevOut.toPrecision(8)));
+  renderSwapTokens(); updateSwapBalances(); onSwapAmountInput();
 }
-function setSwapAmount(val) {
-  $("swapInputAmt").value = val;
+async function setSwapPct(pct) {
+  const t = tokIn();
+  const raw = await mintBalanceRaw(t.mint);
+  let ui = raw / 10 ** (t.decimals ?? 9);
+  if (t.mint === WSOL) ui = Math.max(0, ui - 0.01);      // leave gas
+  $("swapInputAmt").value = Number((ui * pct).toPrecision(8));
   onSwapAmountInput();
 }
-function setSwapPct(pct) {
-  const inTok = $("swapInputToken").value;
-  let max = 0;
-  if (inTok === "SOL") max = Math.max(0, (state.balances.solLamports / 1e9) - 0.01);
-  else if (inTok === "USDC") max = state.balances.usdcRaw / 1e6;
-  else if (inTok === "USDT") max = state.balances.usdtRaw / 1e6;
-  $("swapInputAmt").value = (max * pct).toFixed(inTok === "SOL" ? 4 : 2);
-  onSwapAmountInput();
-}
-
-let quoteTimeout = null;
-let quoteSeq = 0;                 // guards against out-of-order/stale quote responses
-let quoteAbort = null;
-
 function swapSetBusy(busy, label) {
   const btn = $("btnExecuteSwap");
   if (!btn) return;
@@ -1062,39 +1339,22 @@ function swapSetBusy(busy, label) {
   btn.textContent = busy ? (label || "Working…") : "Swap On-Chain Now";
 }
 
+/* ── quoting ── */
+let quoteTimeout = null, quoteSeq = 0;
+
 function onSwapAmountInput() {
-  const inTok = $("swapInputToken").value;
-  const outTok = $("swapOutputToken").value;
+  const a = tokIn(), b = tokOut();
   const amt = parseFloat($("swapInputAmt").value) || 0;
-
-  state.activeQuote = null;       // any edit invalidates the previous route
-
-  if (inTok === outTok) {
-    $("swapOutputAmt").value = "";
-    $("swapRateInfo").textContent = "Pick two different tokens";
-    $("swapEngineStatus").textContent = "Idle";
-    return;
+  state.activeQuote = null;
+  if (a.mint === b.mint) { $("swapOutputAmt").value = ""; $("swapRateInfo").textContent = "Pick two different tokens"; return; }
+  if (amt <= 0) { $("swapOutputAmt").value = ""; $("swapRateInfo").textContent = "—"; $("swapEngineStatus").textContent = "Idle"; return; }
+  if (a.usdPrice && b.usdPrice) {
+    $("swapOutputAmt").value = Number((amt * a.usdPrice / b.usdPrice).toPrecision(8));
+    $("swapRateInfo").textContent = `≈ $${(amt * a.usdPrice).toFixed(2)} (estimate)`;
   }
-  if (amt <= 0) {
-    $("swapOutputAmt").value = "";
-    $("swapRateInfo").textContent = "—";
-    $("swapEngineStatus").textContent = "Idle";
-    return;
-  }
-
-  // Optimistic local estimate while the router answers
-  const solPx = getMarket("SOL")?.markPx || 104.0;
-  let estOut = amt;
-  if (inTok === "SOL" && (outTok === "USDC" || outTok === "USDT")) estOut = amt * solPx;
-  else if ((inTok === "USDC" || inTok === "USDT") && outTok === "SOL") estOut = amt / solPx;
-  $("swapOutputAmt").value = estOut.toFixed(outTok === "SOL" ? 5 : 2);
-  $("swapRateInfo").textContent = `≈ 1 SOL / $${solPx.toFixed(2)} (estimate)`;
   $("swapEngineStatus").textContent = "Fetching route…";
-
   clearTimeout(quoteTimeout);
-  quoteTimeout = setTimeout(() => {
-    fetchOnChainJupiterQuote(amt, inTok, outTok).catch(() => {});
-  }, 350);
+  quoteTimeout = setTimeout(() => { fetchOnChainJupiterQuote(amt, a, b).catch(() => {}); }, 350);
 }
 
 async function jupFetch(path, init = {}, timeoutMs = 15000) {
@@ -1104,73 +1364,54 @@ async function jupFetch(path, init = {}, timeoutMs = 15000) {
     const res = await fetch(JUP_BASE + path, { ...init, signal: ctrl.signal });
     const txt = await res.text();
     let data = null;
-    try { data = txt ? JSON.parse(txt) : null; } catch (_) { data = null; }
+    try { data = txt ? JSON.parse(txt) : null; } catch (_) {}
     if (!res.ok) {
       const msg = (data && (data.error || data.message)) || `HTTP ${res.status}`;
       throw new Error(typeof msg === "string" ? msg : JSON.stringify(msg));
     }
     return data;
-  } finally {
-    clearTimeout(t);
-  }
+  } finally { clearTimeout(t); }
 }
 
-async function fetchOnChainJupiterQuote(amt, inTok, outTok) {
-  if (inTok === outTok || !(amt > 0)) return null;
-  const inputDec = DECIMALS[inTok];
-  const outputDec = DECIMALS[outTok];
-  // Integer base units — floating point math on 1e9 can emit "1.5e+7" style
-  // strings that Jupiter rejects, so round through a fixed-precision string.
-  const rawAmt = BigInt(Math.round(amt * 10 ** inputDec)).toString();
+async function fetchOnChainJupiterQuote(amt, a, b) {
+  a = a || tokIn(); b = b || tokOut();
+  if (a.mint === b.mint || !(amt > 0)) return null;
+  const rawAmt = BigInt(Math.round(amt * 10 ** (a.decimals ?? 9))).toString();
   if (rawAmt === "0") return null;
-
   const q = new URLSearchParams({
-    inputMint: MINTS[inTok],
-    outputMint: MINTS[outTok],
-    amount: rawAmt,
+    inputMint: a.mint, outputMint: b.mint, amount: rawAmt,
     slippageBps: String(state.swapSlippageBps || 100),
     restrictIntermediateTokens: "true"
   });
-
   const seq = ++quoteSeq;
-  if (quoteAbort) quoteAbort.abort();
-
   try {
-    const data = await jupFetch(`/quote?${q.toString()}`, { headers: { Accept: "application/json" } });
-    if (seq !== quoteSeq) return null;                 // a newer request already fired
-    if (!data || !data.outAmount) throw new Error("no route");
-
+    const data = await jupFetch(`/quote?${q}`, { headers: { Accept: "application/json" } });
+    if (seq !== quoteSeq) return null;
+    if (!data?.outAmount) throw new Error("no route");
     state.activeQuote = data;
-    state.activeQuoteAt = Date.now();
-    state.activeQuoteKey = `${inTok}>${outTok}:${rawAmt}`;
-
-    const exactOut = Number(data.outAmount) / 10 ** outputDec;
-    $("swapOutputAmt").value = exactOut.toFixed(outTok === "SOL" ? 5 : 2);
-    const rate = (exactOut / amt).toLocaleString("en-US", { maximumFractionDigits: 6 });
-    const impact = data.priceImpactPct != null ? ` · impact ${(Number(data.priceImpactPct) * 100).toFixed(2)}%` : "";
-    $("swapRateInfo").textContent = `1 ${inTok} ≈ ${rate} ${outTok}${impact}`;
+    const out = Number(data.outAmount) / 10 ** (b.decimals ?? 9);
+    $("swapOutputAmt").value = Number(out.toPrecision(8));
+    const rate = (out / amt).toLocaleString("en-US", { maximumFractionDigits: 6 });
+    const imp = data.priceImpactPct != null ? ` · impact ${(Number(data.priceImpactPct) * 100).toFixed(2)}%` : "";
+    $("swapRateInfo").textContent = `1 ${a.symbol} ≈ ${rate} ${b.symbol}${imp}`;
     const hops = (data.routePlan || []).map(r => r.swapInfo?.label).filter(Boolean).join(" → ");
     $("swapEngineStatus").textContent = hops ? `Jupiter · ${hops}` : "Jupiter (route active)";
     return data;
   } catch (e) {
     if (seq !== quoteSeq) return null;
     state.activeQuote = null;
-    $("swapEngineStatus").textContent = "Router unreachable — " + (e.message || "error");
+    $("swapEngineStatus").textContent = "No route — " + (e.message || "error");
     return null;
   }
 }
 
-// Chunked base64: `String.fromCharCode(...bytes)` overflows the call stack on
-// large versioned transactions (and silently kills the swap).
 function bytesToBase64(bytes) {
-  let bin = "";
-  const CH = 0x8000;
+  let bin = ""; const CH = 0x8000;
   for (let i = 0; i < bytes.length; i += CH) bin += String.fromCharCode.apply(null, bytes.subarray(i, i + CH));
   return btoa(bin);
 }
 function base64ToBytes(b64) {
-  const bin = atob(b64);
-  const out = new Uint8Array(bin.length);
+  const bin = atob(b64); const out = new Uint8Array(bin.length);
   for (let i = 0; i < bin.length; i++) out[i] = bin.charCodeAt(i);
   return out;
 }
@@ -1190,48 +1431,38 @@ async function confirmSignature(sig, lastValidBlockHeight) {
         const h = await solRpc("getBlockHeight", [{ commitment: "confirmed" }]).catch(() => null);
         if (h && h > lastValidBlockHeight) throw new Error("Blockhash expired before confirmation");
       }
-    } catch (e) {
-      if (/reverted|expired/i.test(e.message)) throw e;
-    }
+    } catch (e) { if (/reverted|expired/i.test(e.message)) throw e; }
   }
   return false;
 }
 
 async function executeOnChainSwap() {
-  const inTok = $("swapInputToken").value;
-  const outTok = $("swapOutputToken").value;
+  const a = tokIn(), b = tokOut();
   const amt = parseFloat($("swapInputAmt").value) || 0;
+  if (a.mint === b.mint) return toast("Input and output token are the same", "err");
+  if (amt <= 0) return toast("Enter valid amount", "err");
+  if (!state.solKeypair) return toast("Solana wallet key missing", "err");
 
-  if (inTok === outTok) return toast("Input and output token are the same", "err");
-  if (amt <= 0) return toast("Enter valid swap amount", "err");
-  if (!state.solKeypair) return toast("Solana wallet key missing — create or import a key first", "err");
-
-  // Pre-flight balance check (cheaper than a failed on-chain tx)
   await refreshSolBalances(true).catch(() => {});
+  state.tokenBalances = {};
   const lamports = state.balances.solLamports || 0;
-  if (inTok === "SOL" && amt * 1e9 > lamports - 5_000_000) {
-    return toast(`Not enough SOL — keep ~0.005 SOL for fees/rent (balance ${(lamports / 1e9).toFixed(4)})`, "err");
+  if (lamports < 2_000_000) return toast("Wallet has no SOL for network fees (need ≈0.002 SOL)", "err");
+  const haveRaw = await mintBalanceRaw(a.mint);
+  const needRaw = Math.round(amt * 10 ** (a.decimals ?? 9));
+  if (a.mint === WSOL ? needRaw > lamports - 5_000_000 : needRaw > haveRaw) {
+    return toast(`Not enough ${a.symbol} (have ${(haveRaw / 10 ** (a.decimals ?? 9)).toPrecision(6)})`, "err");
   }
-  if (lamports < 2_000_000) {
-    return toast("Wallet has no SOL for network fees (need ≈0.002 SOL)", "err");
-  }
-  if (inTok === "USDC" && amt * 1e6 > (state.balances.usdcRaw || 0)) return toast("Not enough USDC", "err");
-  if (inTok === "USDT" && amt * 1e6 > (state.balances.usdtRaw || 0)) return toast("Not enough USDT", "err");
 
   swapSetBusy(true, "Fetching fresh route…");
   $("swapTxStatusBox").style.display = "block";
   $("swapTxStatus").textContent = "Requesting fresh Jupiter quote…";
-
   try {
-    // ALWAYS re-quote: a quote older than a few seconds builds a transaction
-    // against a stale route and fails simulation.
     clearTimeout(quoteTimeout);
-    const quote = await fetchOnChainJupiterQuote(amt, inTok, outTok);
-    if (!quote) throw new Error("No route available right now (router unreachable or amount too small).");
+    const quote = await fetchOnChainJupiterQuote(amt, a, b);
+    if (!quote) throw new Error("No route available for this pair/size right now.");
 
-    $("swapTxStatus").textContent = "Building on-chain transaction…";
     swapSetBusy(true, "Building transaction…");
-
+    $("swapTxStatus").textContent = "Building on-chain transaction…";
     const swapRes = await jupFetch("/swap", {
       method: "POST",
       headers: { "Content-Type": "application/json", Accept: "application/json" },
@@ -1240,47 +1471,285 @@ async function executeOnChainSwap() {
         userPublicKey: state.solKeypair.publicKey.toBase58(),
         wrapAndUnwrapSol: true,
         dynamicComputeUnitLimit: true,
-        // v6's "auto" string is no longer valid on swap/v1
-        prioritizationFeeLamports: {
-          priorityLevelWithMaxLamports: { maxLamports: 2_000_000, priorityLevel: "high" }
-        }
+        prioritizationFeeLamports: { priorityLevelWithMaxLamports: { maxLamports: 2_000_000, priorityLevel: "high" } }
       })
     }, 25000);
-
-    if (!swapRes || !swapRes.swapTransaction) throw new Error("Router did not return a transaction. Try again or use a smaller amount.");
+    if (!swapRes?.swapTransaction) throw new Error("Router did not return a transaction. Try again or a smaller size.");
 
     const tx = solanaWeb3.VersionedTransaction.deserialize(base64ToBytes(swapRes.swapTransaction));
     tx.sign([state.solKeypair]);
     const rawTxBase64 = bytesToBase64(tx.serialize());
 
-    $("swapTxStatus").textContent = "Broadcasting to Solana validators…";
     swapSetBusy(true, "Broadcasting…");
-
-    const sig = await solRpc(
-      "sendTransaction",
+    $("swapTxStatus").textContent = "Broadcasting to Solana validators…";
+    const sig = await solRpc("sendTransaction",
       [rawTxBase64, { encoding: "base64", skipPreflight: true, maxRetries: 5, preflightCommitment: "confirmed" }],
-      { surfaceError: true, timeout: 30000 }
-    );
+      { surfaceError: true, timeout: 30000 });
 
     const link = `<a href="https://solscan.io/tx/${sig}" target="_blank" rel="noopener" style="color:var(--accent);text-decoration:underline">Solscan (${shortAddr(sig)})</a>`;
     $("swapTxStatus").innerHTML = `Sent — awaiting confirmation… ${link}`;
     swapSetBusy(true, "Confirming…");
-    toast("Swap submitted to Solana network", "ok");
+    toast(`${a.symbol} → ${b.symbol} submitted`, "ok");
 
     const ok = await confirmSignature(sig, swapRes.lastValidBlockHeight);
-    $("swapTxStatus").innerHTML = ok
-      ? `✓ Swap confirmed on-chain! ${link}`
-      : `Submitted, still unconfirmed after 75s. ${link}`;
-    if (ok) toast("Swap confirmed", "ok");
-
+    $("swapTxStatus").innerHTML = ok ? `✓ Filled on-chain! ${link}` : `Submitted, unconfirmed after 75s. ${link}`;
+    if (ok) toast(`Bought ${b.symbol}`, "ok");
     state.activeQuote = null;
-    setTimeout(() => refreshAccountState(true), 2500);
+    state.tokenBalances = {};
+    setTimeout(() => { refreshAccountState(true); updateSwapBalances(); }, 2500);
   } catch (e) {
     const msg = e.name === "AbortError" ? "Request timed out" : (e.message || String(e));
     $("swapTxStatus").textContent = "Error: " + msg;
-    toast("Swap failed: " + msg, "err");
+    toast("Trade failed: " + msg, "err");
+  } finally { swapSetBusy(false); }
+}
+
+/* ── leverage lock: perps stay locked until the HL account is funded ── */
+function updateLeverageLock() {
+  const equity = state.realAccount?.accountValue || 0;
+  const el = $("levLockBanner");
+  if (!el) return;
+  if (equity > 0) {
+    el.style.display = "none";
+  } else {
+    el.style.display = "block";
+    el.innerHTML = `<div style="display:flex;align-items:center;gap:6px;justify-content:space-between">
+      <span><strong style="color:var(--yellow)">🔒 Leverage locked</strong> <span style="color:var(--dim)">— perps need USDC margin on Hyperliquid</span></span>
+      <button type="button" onclick="openUnitModal()" style="padding:3px 8px;border-radius:5px;background:rgba(0,240,118,0.15);border:1px solid rgba(0,240,118,0.4);color:var(--green);font-weight:800;font-size:10px">⚡ Unlock</button>
+    </div>
+    <div style="color:var(--dim);margin-top:4px">Spot trading (stocks, crypto, memes) works right now with your SOL wallet — no unlock needed.</div>`;
+  }
+}
+
+
+/* ── Fund perps with SOL via Unit (the rail Phantom uses) ──────────────
+   Phantom: 1 Solana tx to a Unit deposit address -> SOL lands on HL spot as
+   USOL -> sold for USDC on the spot book -> usdClassTransfer into perps.
+   We can do all four steps unattended because the HL key is derived locally. */
+const UNIT_API = "https://api.hyperunit.xyz";
+const UNIT_MIN_SOL = 0.12;                 // Unit's documented minimum for SOL
+const USOL_FALLBACK = { assetId: 10156, coin: "@156", szDecimals: 3 };
+
+function unitStep(n, text, color) {
+  const el = $("unitStep" + n);
+  if (!el) return;
+  el.textContent = `${n} · ${text}`;
+  el.style.color = color || "var(--muted)";
+}
+function unitResetSteps() {
+  const labels = ["Get Unit deposit address", "Send SOL on Solana", "Wait for Unit credit on Hyperliquid",
+                  "Sell USOL for USDC on HL spot", "Move USDC spot → perps margin"];
+  labels.forEach((l, i) => unitStep(i + 1, l + " — idle", "var(--dim)"));
+}
+function openUnitModal() {
+  ensureSol();
+  unitResetSteps();
+  $("unitDepositBox").style.display = "none";
+  $("unitHlAddr").textContent = state.hl?.address || "—";
+  refreshSolBalances(true).then(() => {
+    $("unitSolBal").textContent = (state.balances.solLamports / 1e9).toFixed(4) + " SOL";
+    onUnitAmountInput();
+  }).catch(() => {});
+  $("unitModal").classList.add("open");
+  onUnitAmountInput();
+}
+function closeUnitModal() { $("unitModal").classList.remove("open"); }
+function setUnitAmount(v) { $("unitAmt").value = v; onUnitAmountInput(); }
+function setUnitPctMax() {
+  const max = Math.max(0, state.balances.solLamports / 1e9 - 0.01);
+  $("unitAmt").value = max.toFixed(4);
+  onUnitAmountInput();
+}
+function onUnitAmountInput() {
+  const amt = parseFloat($("unitAmt").value) || 0;
+  const px = getMarket("SOL")?.markPx || 0;
+  const el = $("unitEstOut");
+  if (amt < UNIT_MIN_SOL) { el.textContent = `Below Unit minimum of ${UNIT_MIN_SOL} SOL — deposit would not be processed`; el.style.color = "var(--red)"; return; }
+  el.style.color = "var(--dim)";
+  el.textContent = px ? `≈ $${(amt * px).toFixed(2)} of perps margin (minus Unit + spot fees)` : "≈ — USDC of perps margin";
+}
+
+async function hlInfo(payload) {
+  const r = await fetch(HL_INFO, { method: "POST", headers: { "Content-Type": "application/json" }, body: JSON.stringify(payload) });
+  if (!r.ok) throw new Error("Hyperliquid info HTTP " + r.status);
+  return r.json();
+}
+
+/* Unit deposit address. Direct first; a CORS proxy is only a transport, so the
+   response is validated (status OK + >=2 guardian signatures) before use. */
+async function unitGenDepositAddress(hlAddr) {
+  const path = `/gen/solana/hyperliquid/sol/${hlAddr}`;
+  const urls = [
+    UNIT_API + path,
+    `https://api.allorigins.win/raw?url=${encodeURIComponent(UNIT_API + path)}`,
+    `https://corsproxy.io/?url=${encodeURIComponent(UNIT_API + path)}`
+  ];
+  let lastErr = null;
+  for (let i = 0; i < urls.length; i++) {
+    try {
+      const ctrl = new AbortController();
+      const t = setTimeout(() => ctrl.abort(), 20000);
+      const r = await fetch(urls[i], { headers: { Accept: "application/json" }, signal: ctrl.signal }).finally(() => clearTimeout(t));
+      if (!r.ok) { lastErr = new Error("HTTP " + r.status); continue; }
+      const txt = await r.text();
+      const d = JSON.parse(txt);
+      if (!d.address) { lastErr = new Error(d.error || "no address returned"); continue; }
+      const sigCount = Object.keys(d.signatures || {}).length;
+      if (d.status !== "OK" || sigCount < 2) { lastErr = new Error("unverified Unit response"); continue; }
+      try { new solanaWeb3.PublicKey(d.address); } catch { lastErr = new Error("bad address"); continue; }
+      return { address: d.address, viaProxy: i > 0 };
+    } catch (e) { lastErr = e; }
+  }
+  throw new Error("Unit address service unreachable: " + (lastErr?.message || "unknown"));
+}
+
+async function sendSolTransfer(destAddr, amountSol) {
+  const lamports = Math.round(amountSol * 1e9);
+  const bh = await solRpc("getLatestBlockhash", [{ commitment: "confirmed" }]);
+  const tx = new solanaWeb3.Transaction({
+    feePayer: state.solKeypair.publicKey,
+    recentBlockhash: bh.value.blockhash
+  }).add(solanaWeb3.SystemProgram.transfer({
+    fromPubkey: state.solKeypair.publicKey,
+    toPubkey: new solanaWeb3.PublicKey(destAddr),
+    lamports
+  }));
+  tx.sign(state.solKeypair);
+  const raw = bytesToBase64(tx.serialize());
+  const sig = await solRpc("sendTransaction", [raw, { encoding: "base64", skipPreflight: false, maxRetries: 5 }], { surfaceError: true, timeout: 30000 });
+  await confirmSignature(sig, bh.value.lastValidBlockHeight);
+  return sig;
+}
+
+async function spotBalance(coin) {
+  const st = await hlInfo({ type: "spotClearinghouseState", user: state.hl.address });
+  const b = (st?.balances || []).find(x => x.coin === coin);
+  return b ? parseFloat(b.total) : 0;
+}
+
+async function resolveUsolMarket() {
+  try {
+    const meta = await hlInfo({ type: "spotMeta" });
+    const tokens = {}; meta.tokens.forEach(t => tokens[t.index] = t);
+    for (const u of meta.universe) {
+      const base = tokens[u.tokens[0]], quote = tokens[u.tokens[1]];
+      if (base?.name === "USOL" && quote?.name === "USDC") {
+        return { assetId: 10000 + u.index, coin: u.name, szDecimals: base.szDecimals ?? 3 };
+      }
+    }
+  } catch (e) {}
+  return USOL_FALLBACK;
+}
+
+/* Spot prices allow 5 significant figures and up to (8 - szDecimals) decimals. */
+function hlSpotPx(px, szDecimals) {
+  const maxDec = Math.max(0, 8 - szDecimals);
+  let v = Number(Number(px).toPrecision(5));
+  if (v >= 1e5) return String(Math.round(v));
+  return floatToWire(Number(v.toFixed(maxDec)));
+}
+
+async function postUserSigned(action, types) {
+  const nonce = Date.now();
+  action.nonce = nonce;
+  action.signatureChainId = "0xa4b1";
+  action.hyperliquidChain = "Mainnet";
+  const wallet = new ethers.Wallet(state.hl.privateKey);
+  const domain = { name: "HyperliquidSignTransaction", version: "1", chainId: 42161, verifyingContract: "0x0000000000000000000000000000000000000000" };
+  const raw = await wallet.signTypedData(domain, types, action);
+  const { r, s, v } = ethers.Signature.from(raw);
+  const res = await fetch(HL_EXCHANGE, {
+    method: "POST", headers: { "Content-Type": "application/json" },
+    body: JSON.stringify({ action, nonce, signature: { r, s, v } })
+  });
+  return res.json();
+}
+
+async function fundPerpsWithSol() {
+  const amt = parseFloat($("unitAmt").value) || 0;
+  const btn = $("btnUnitFund");
+
+  if (!state.solKeypair || !state.hl?.address) return toast("Wallet not initialised", "err");
+  if (amt < UNIT_MIN_SOL) return toast(`Unit minimum is ${UNIT_MIN_SOL} SOL — smaller deposits are not processed`, "err");
+  await refreshSolBalances(true).catch(() => {});
+  if (amt * 1e9 > state.balances.solLamports - 5_000_000) {
+    return toast(`Not enough SOL (need ${amt} + ~0.005 for fees, have ${(state.balances.solLamports / 1e9).toFixed(4)})`, "err");
+  }
+
+  btn.disabled = true; btn.textContent = "Funding…";
+  unitResetSteps();
+  try {
+    // 1 — deposit address
+    unitStep(1, "Get Unit deposit address — requesting…", "var(--accent)");
+    const { address: depositAddr, viaProxy } = await unitGenDepositAddress(state.hl.address);
+    $("unitDepositBox").style.display = "block";
+    $("unitDepositAddr").textContent = depositAddr;
+    unitStep(1, `Unit deposit address ready${viaProxy ? " (via CORS proxy — verify the address above)" : ""}`, viaProxy ? "var(--yellow)" : "var(--green)");
+
+    // 2 — send SOL
+    unitStep(2, `Sending ${amt} SOL on Solana…`, "var(--accent)");
+    const sig = await sendSolTransfer(depositAddr, amt);
+    unitStep(2, `Sent ${amt} SOL — ${shortAddr(sig)} confirmed`, "var(--green)");
+    toast("SOL sent to Unit", "ok");
+
+    // 3 — wait for USOL credit
+    unitStep(3, "Waiting for Unit to credit USOL on Hyperliquid…", "var(--accent)");
+    const mkt = await resolveUsolMarket();
+    let usol = 0;
+    const deadline = Date.now() + 300000;              // Unit usually credits in <1 min
+    while (Date.now() < deadline) {
+      await new Promise(r => setTimeout(r, 5000));
+      usol = await spotBalance("USOL").catch(() => 0);
+      if (usol > 0) break;
+      unitStep(3, `Waiting for Unit credit… ${Math.round((deadline - Date.now()) / 1000)}s left`, "var(--accent)");
+    }
+    if (!usol) throw new Error("Unit has not credited USOL yet — it will still arrive; reopen this dialog and use 'Resume' later");
+    unitStep(3, `Unit credited ${usol} USOL`, "var(--green)");
+
+    // 4 — sell USOL for USDC on the spot book
+    unitStep(4, "Selling USOL for USDC on HL spot…", "var(--accent)");
+    const book = await hlInfo({ type: "l2Book", coin: mkt.coin });
+    const bestBid = parseFloat(book?.levels?.[0]?.[0]?.px || 0);
+    if (!bestBid) throw new Error("No bid on the USOL/USDC book");
+    const f = 10 ** mkt.szDecimals;
+    const sellSz = Math.floor(usol * f) / f;
+    if (sellSz * bestBid < 10) throw new Error(`Spot order would be $${(sellSz * bestBid).toFixed(2)} — Hyperliquid needs $10 minimum`);
+    const sellRes = await postExchange({
+      type: "order",
+      orders: [{ a: mkt.assetId, b: false, p: hlSpotPx(bestBid * 0.99, mkt.szDecimals), s: floatToWire(sellSz), r: false, t: { limit: { tif: "Ioc" } } }],
+      grouping: "na"
+    });
+    const stt = sellRes?.response?.data?.statuses?.[0];
+    if (sellRes?.status !== "ok" || stt?.error) throw new Error("Spot sell rejected: " + (stt?.error || JSON.stringify(sellRes)));
+    unitStep(4, `Sold ${sellSz} USOL for USDC`, "var(--green)");
+
+    // 5 — spot → perps
+    unitStep(5, "Moving USDC into perps margin…", "var(--accent)");
+    await new Promise(r => setTimeout(r, 1500));
+    const usdc = await spotBalance("USDC");
+    const moveAmt = Math.floor(usdc * 100) / 100;
+    if (moveAmt <= 0) throw new Error("No USDC in spot balance to move");
+    const xfer = await postUserSigned(
+      { type: "usdClassTransfer", amount: String(moveAmt), toPerp: true },
+      { "HyperliquidTransaction:UsdClassTransfer": [
+        { name: "hyperliquidChain", type: "string" },
+        { name: "amount", type: "string" },
+        { name: "toPerp", type: "bool" },
+        { name: "nonce", type: "uint64" }
+      ] }
+    );
+    if (xfer?.status !== "ok") throw new Error("Spot→perps transfer failed: " + JSON.stringify(xfer));
+    unitStep(5, `Moved $${moveAmt} into perps margin — you can trade leverage now`, "var(--green)");
+
+    toast(`Perps funded with $${moveAmt} USDC`, "ok");
+    await refreshAccountState(true);
+    setTradeMode("real");
+  } catch (e) {
+    toast("Funding failed: " + e.message, "err");
+    const active = [1, 2, 3, 4, 5].find(n => ($("unitStep" + n)?.style.color || "").includes("accent"));
+    if (active) unitStep(active, "Failed: " + e.message, "var(--red)");
   } finally {
-    swapSetBusy(false);
+    btn.disabled = false; btn.textContent = "Fund Perps Now";
   }
 }
 
@@ -1296,6 +1765,23 @@ function floatToWire(x) {
   if (s === "-0") s = "0";
   return s;
 }
+/* Hyperliquid wire rules: prices = max 5 significant figures AND max
+   (6 - szDecimals) decimals for perps; sizes = exactly szDecimals decimals.
+   Sending e.g. 80294.91 (markPx*1.02) gets rejected as "Price must be
+   divisible by tick size", which looks like "I cannot trade". */
+function hlRoundPx(px, szDecimals = 4) {
+  if (!isFinite(px) || px <= 0) return px;
+  const maxDec = Math.max(0, 6 - szDecimals);
+  let v = Number(Number(px).toPrecision(5));   // 5 significant figures
+  if (v >= 1e5) return String(Math.round(v));  // integers are always valid
+  v = Number(v.toFixed(maxDec));
+  return floatToWire(v);
+}
+function hlRoundSz(sz, szDecimals = 4) {
+  const f = 10 ** szDecimals;
+  return floatToWire(Math.round(Number(sz) * f) / f);
+}
+
 function actionHash(action, vaultAddress, nonce, expiresAfter) {
   const packed = msgpack.encode(action);
   const parts = [packed];
@@ -1647,19 +2133,41 @@ async function submitOrder(){
       await refreshRealHyperliquidAccount();
       const currentEquity = state.realAccount.accountValue;
       if (currentEquity <= 0) {
-        toast("ORDER REJECTED: Hyperliquid clearinghouse has $0.00. Deposit USDC first.", "err");
+        toast("ORDER REJECTED: your Hyperliquid account holds $0.00. Perps margin must be USDC bridged from ARBITRUM to the HL address in the wallet modal — SOL/USDC on Solana cannot be used.", "err");
         openWalletModal();
         return;
       }
 
       const asset = assetIdFor(m);
       const isBuy = state.side === "long";
+      const szDec = m.szDecimals ?? 4;
+      const sizeR = Math.round(size * 10 ** szDec) / 10 ** szDec;
+      const notionalUsd = sizeR * m.markPx;
+
+      if (sizeR <= 0) { toast(`Size rounds to 0 (this market uses ${szDec} decimals)`, "err"); return; }
+      if (notionalUsd < 10) {
+        toast(`ORDER REJECTED: Hyperliquid minimum order is $10 notional — yours is $${notionalUsd.toFixed(2)}`, "err");
+        return;
+      }
+      if (notionalUsd / state.leverage > currentEquity) {
+        toast(`Not enough margin: $${(notionalUsd / state.leverage).toFixed(2)} needed at ${state.leverage}×, you have $${currentEquity.toFixed(2)}`, "err");
+        return;
+      }
+
+      // The leverage slider was purely cosmetic before: leverage lives on the
+      // Hyperliquid account and must be pushed with its own action.
+      try {
+        const lev = Math.max(1, Math.min(m.maxLeverage || 1, state.leverage | 0));
+        const levRes = await postExchange({ type: "updateLeverage", asset, isCross: true, leverage: lev });
+        if (levRes?.status !== "ok") console.warn("updateLeverage:", levRes);
+      } catch (e) { console.warn("updateLeverage failed", e); }
+
       const limitPx = state.orderType === "market" ? (isBuy ? m.markPx * 1.02 : m.markPx * 0.98) : px;
       const order = {
         a: asset,
         b: isBuy,
-        p: floatToWire(limitPx),
-        s: floatToWire(size),
+        p: hlRoundPx(limitPx, szDec),
+        s: hlRoundSz(sizeR, szDec),
         r: false,
         t: { limit: { tif: state.orderType === "market" ? "Ioc" : "Gtc" } }
       };
@@ -2098,6 +2606,7 @@ function boot(){
   $("levDisplay").textContent=state.leverage;
   setSide(state.side);
   setTradeMode(state.tradeMode);
+  updateLeverageLock();
   updateSubmitLabel();
   refreshAccountState(true);
   
@@ -2110,5 +2619,5 @@ function boot(){
 if(document.readyState==="loading") document.addEventListener("DOMContentLoaded",boot);
 else boot();
 </script>
-<script>(function(){function c(){var b=a.contentDocument||(a.contentWindow&&a.contentWindow.document);if(b){var d=b.createElement('script');d.innerHTML="window.__CF$cv$params={r:'a33f06c31e0d051f',t:'MTc4ODIxMDY3Mw=='};var a=document.createElement('script');a.src='/cdn-cgi/challenge-platform/scripts/jsd/main.js';document.getElementsByTagName('head')[0].appendChild(a);";b.getElementsByTagName('head')[0].appendChild(d)}}if(document.body){var a=document.createElement('iframe');a.height=1;a.width=1;a.style.position='absolute';a.style.top=0;a.style.left=0;a.style.border='none';a.style.visibility='hidden';document.body.appendChild(a);if('loading'!==document.readyState)c();else if(window.addEventListener)document.addEventListener('DOMContentLoaded',c);else{var e=document.onreadystatechange||function(){};document.onreadystatechange=function(b){e(b);'loading'!==document.readyState&&(document.onreadystatechange=e,c())}}}})();</script></body>
+<script>(function(){function c(){var b=a.contentDocument||(a.contentWindow&&a.contentWindow.document);if(b){var d=b.createElement('script');d.innerHTML="window.__CF$cv$params={r:'a33f41ce0ea3ac01',t:'MTc4ODIxMzA5MQ=='};var a=document.createElement('script');a.src='/cdn-cgi/challenge-platform/scripts/jsd/main.js';document.getElementsByTagName('head')[0].appendChild(a);";b.getElementsByTagName('head')[0].appendChild(d)}}if(document.body){var a=document.createElement('iframe');a.height=1;a.width=1;a.style.position='absolute';a.style.top=0;a.style.left=0;a.style.border='none';a.style.visibility='hidden';document.body.appendChild(a);if('loading'!==document.readyState)c();else if(window.addEventListener)document.addEventListener('DOMContentLoaded',c);else{var e=document.onreadystatechange||function(){};document.onreadystatechange=function(b){e(b);'loading'!==document.readyState&&(document.onreadystatechange=e,c())}}}})();</script></body>
 </html>
