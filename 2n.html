@@ -58,16 +58,21 @@
     <div style="display:grid;grid-template-columns:1fr 1fr 1fr;gap:8px">
       <div><div class="muted">BUY SIZE (SOL)</div><input id="buy" type="number" step="0.0001" value="0.0006" class="input"></div>
       <div><div class="muted">SELL % PER 2^n</div><input id="sellPct" type="number" value="25" class="input"></div>
-      <div><div class="muted">MIN SCORE</div><input id="minScore" type="number" value="20" class="input"></div>
+      <div><div class="muted">STOP LOSS %</div><input id="sl" type="number" value="15" class="input"></div>
     </div>
     <div style="display:grid;grid-template-columns:1fr 1fr;gap:8px;margin-top:8px">
-      <div><label class="muted"><input id="degen" type="checkbox" checked> DEGEN MODE (buy even 0 score if < $8k)</label></div>
-      <div><label class="muted"><input id="requireSocial" type="checkbox"> Require X/TG (off = faster)</label></div>
+      <div><div class="muted">MIN SCORE</div><input id="minScore" type="number" value="20" class="input"></div>
+      <div><div class="muted">WALLET % SMART</div><input id="walletPct" type="number" value="15" class="input"></div>
+      <div style="display:flex;align-items:end"><label class="muted" style="display:flex;gap:6px;align-items:center"><input id="useWalletPct" type="checkbox" checked> USE % OF WALLET</label></div>
     </div>
-    <div class="muted" style="margin-top:8px">LADDER: 2,4,8,16,32,64,128,256,512% - sells X% at each level. DEGEN buys ultra early for 2% flips.</div>
+    <div style="display:grid;grid-template-columns:1fr 1fr;gap:8px;margin-top:8px">
+      <div><label class="muted"><input id="degen" type="checkbox" checked> DEGEN MODE (buy < $8k)</label></div>
+      <div><label class="muted"><input id="requireSocial" type="checkbox"> Require X/TG</label></div>
+    </div>
+    <div class="muted" style="margin-top:8px">SMART: Uses <span id="walletPctDisplay" style="color:#a6ff00">15%</span> of wallet per trade (auto scales). Ladder 2,4,8,16,32,64,128% sells <span id="sellPctDisplay" style="color:#a6ff00">25%</span> each. SL <span id="slDisplay" style="color:#ff3b3b">15%</span> auto.</div>
     <div style="margin-top:10px"><label class="muted"><input id="live" type="checkbox" checked> <b style="color:#ff3b3b">LIVE MAINNET REAL TRADES</b></label></div>
     <button id="main" class="btn go" style="margin-top:12px" onclick="toggleBot()">▶ START 2^n WS</button>
-    <div class="muted" style="text-align:center;margin-top:6px" id="status">Ready - WS only, no REST</div>
+    <div class="muted" style="text-align:center;margin-top:6px" id="status">Ready - autonomous % wallet + 15% SL</div>
   </div>
 
   <div class="card">
@@ -195,13 +200,38 @@ function renderPos(){
 window.buySpecific=async(mint)=>{const c=feed.find(x=>x.mint===mint); if(c)await doBuy(c)}
 window.sellAll=async(mint)=>{const p=positions.find(x=>x.mint===mint&&x.status==='open'); if(p)await doSell(p,100,'manual 100%')}
 
+async function getSmartBuyAmount(){
+  const usePct=$('useWalletPct')?.checked;
+  const walletPct=parseFloat($('walletPct')?.value||'15');
+  const fixedAmt=parseFloat($('buy').value);
+  if(!usePct || !conn || !kp){
+    return fixedAmt;
+  }
+  try{
+    const b=await conn.getBalance(kp.publicKey);
+    const balSol=b/LAMPORTS_PER_SOL;
+    // keep 0.005 SOL reserve for fees/rent buffer, use % of rest
+    const tradable=Math.max(0, balSol - 0.005);
+    let smartAmt=tradable * (walletPct/100);
+    // clamp min 0.0003 max 0.02 to avoid dust or huge buys
+    smartAmt=Math.max(0.0003, Math.min(smartAmt, 0.02));
+    // if fixed is smaller and balance low, use fixed to preserve
+    if(balSol<0.02) smartAmt=Math.min(smartAmt, fixedAmt);
+    log(`SMART BUY: wallet ${balSol.toFixed(4)} SOL * ${walletPct}% = ${smartAmt.toFixed(5)} SOL (fixed ${fixedAmt})`,' #777');
+    return smartAmt;
+  }catch(e){
+    return fixedAmt;
+  }
+}
+
 async function doBuy(c){
   const mint=c.mint; if(seen.has(mint))return;
   const sc=score(c);
-  if(sc<50){log(`skip ${c.name} score ${sc}<50`,' #777'); return;}
+  const minScore=parseInt($('minScore')?.value||'20');
+  if(sc<minScore && !($('degen')?.checked)){log(`skip ${c.name} score ${sc}<${minScore}`,' #777'); return;}
   const mcUsd=(c.marketCapSol*165||c.usd_market_cap||c.market_cap||0);
   if(mcUsd>12000){log(`skip ${c.name} mcap $${mcUsd.toFixed(0)} >12k too late`,' #777'); return;}
-  const amt=parseFloat($('buy').value);
+  const amt=await getSmartBuyAmount();
   const live=$('live').checked;
   if(live && conn){
     try{
@@ -209,11 +239,11 @@ async function doBuy(c){
       const balSol=b/LAMPORTS_PER_SOL;
       const ATA_RENT=0.00203;
       const FEES=0.001;
-      const need=amt+ATA_RENT+FEES; // need rent for new token account + fees
+      const need=amt+ATA_RENT+FEES;
       const isNewMint=!seen.has(mint);
       const required=isNewMint?need:amt+FEES;
       if(balSol < required){
-        log(`STOP BUY - low bal: have ${balSol.toFixed(4)} need ${required.toFixed(4)} for ${isNewMint?'NEW token (buy+rent+fees)':'existing token'}. Sell some positions to reclaim ${ATA_RENT} rent per token!`,' #ff3b3b');
+        log(`STOP BUY - low bal: have ${balSol.toFixed(4)} need ${required.toFixed(4)} for ${isNewMint?'NEW token (buy+rent+fees)':'existing token'}. Sell to reclaim ${ATA_RENT} rent!`,' #ff3b3b');
         return;
       }
     }catch(e){ log(`bal check err ${e.message}`,' #ff3b3b'); }
@@ -298,14 +328,15 @@ async function checkLadder(){
     const pnl=((cur.mcap - p.entryMcap)/p.entryMcap*100);
     p.pnl=pnl; p.curMcap=cur.mcap;
     const sellPerLevel=parseFloat($('sellPct').value);
+    const slPct=parseFloat($('sl').value||'15');
     for(let lvl of LEVELS){
       if(pnl>=lvl && !p.hitLevels.includes(lvl)){
         await doSell(p,sellPerLevel,lvl+'%');
         await new Promise(r=>setTimeout(r,800));
       }
     }
-    if(pnl<=-40 && p.hitLevels.length===0){
-      await doSell(p,p.remaining,`SL ${pnl.toFixed(0)}%`);
+    if(pnl<=-slPct && p.hitLevels.length===0){
+      await doSell(p,p.remaining,`SL -${slPct}% -> ${pnl.toFixed(1)}%`);
     }
   }
   renderPos();
@@ -406,10 +437,12 @@ window.toggleBot=()=>{
   if(running){running=false; $('main').textContent='▶ START 2^n WS'; $('main').className='btn go'; $('status').textContent='Stopped'; log('BOT STOPPED',' #777'); return;}
   const live=$('live').checked;
   if(!conn){log('No RPC',' #ff3b3b'); return;}
-  if(live && !confirm(`REAL MAINNET LIVE TRADES: ${$('buy').value} SOL per coin, 2^n ladder sell ${$('sellPct').value}% each level. Your wallet ${kp.publicKey.toBase58().slice(0,8)}... will spend real SOL. OK?`))return;
+  const buyDisplay=$('useWalletPct').checked?`${$('walletPct').value}% of wallet SMART`:`${$('buy').value} SOL fixed`;
+  const slVal=$('sl').value;
+  if(live && !confirm(`REAL MAINNET LIVE TRADES:\nBuy: ${buyDisplay}\nSell: ${$('sellPct').value}% per 2^n level\nStop Loss: -${slVal}% AUTO\nWallet ${kp.publicKey.toBase58().slice(0,8)}... will spend real SOL. OK?`))return;
   running=true; $('main').textContent='■ STOP BOT'; $('main').className='btn stop';
-  $('status').textContent=live?'LIVE MAINNET - WS FEED - 2^n ladder':'PAPER MAINNET - WS FEED';
-  log(`STARTED WS ONLY buy=${$('buy').value} sell=${$('sellPct').value}% per level LIVE=${live} wallet=${kp.publicKey.toBase58().slice(0,8)}`,' #a6ff00');
+  $('status').textContent=live?`LIVE MAINNET - ${buyDisplay} - SL ${slVal}% - 2^n ladder`:`PAPER - ${buyDisplay} - SL ${slVal}%`;
+  log(`STARTED WS ONLY buy=${buyDisplay} sell=${$('sellPct').value}% SL=${slVal}% LIVE=${live} wallet=${kp.publicKey.toBase58().slice(0,8)}`,' #a6ff00');
 }
 
 (async()=>{
@@ -423,8 +456,20 @@ window.toggleBot=()=>{
   setInterval(checkLadder,2500);
   setInterval(renderPos,3000);
   $('rpc').addEventListener('change', async(e)=>{ await initConn(e.target.value); localStorage.setItem('2pow_rpc',e.target.value); });
-  log('WS ONLY VERSION READY - No REST API, bypasses pump.fun CORS 403. Feed comes from wss://pumpportal.fun/api/data',' #00ffaa');
-  log('If feed stays empty, WS blocked by adblock or firewall. Disable adblock.',' #ffaa00');
+  // update display spans
+  const updateDisplays=()=>{
+    const wp=$('walletPct')?.value||'15';
+    const sp=$('sellPct')?.value||'25';
+    const sl=$('sl')?.value||'15';
+    if($('walletPctDisplay'))$('walletPctDisplay').textContent=wp+'%';
+    if($('sellPctDisplay'))$('sellPctDisplay').textContent=sp+'%';
+    if($('slDisplay'))$('slDisplay').textContent=sl+'%';
+  };
+  ['walletPct','sellPct','sl'].forEach(id=>{ const el=$(id); if(el) el.addEventListener('input', updateDisplays); });
+  updateDisplays();
+  log('WS ONLY VERSION READY - SMART % WALLET + 15% SL AUTO + 2^n ladder - No REST API',' #00ffaa');
+  log('SMART: Uses % of wallet per trade, auto scales up/down. SL 15% auto sells losers.',' #00ffaa');
+  log('If feed empty, WS blocked by adblock.',' #ffaa00');
 })();
 </script>
 </body>
