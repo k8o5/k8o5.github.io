@@ -55,11 +55,16 @@
   </div>
 
   <div class="card">
-    <div style="display:grid;grid-template-columns:1fr 1fr;gap:8px">
+    <div style="display:grid;grid-template-columns:1fr 1fr 1fr;gap:8px">
       <div><div class="muted">BUY SIZE (SOL)</div><input id="buy" type="number" step="0.0001" value="0.0006" class="input"></div>
       <div><div class="muted">SELL % PER 2^n</div><input id="sellPct" type="number" value="25" class="input"></div>
+      <div><div class="muted">MIN SCORE</div><input id="minScore" type="number" value="20" class="input"></div>
     </div>
-    <div class="muted" style="margin-top:8px">LADDER: 2,4,8,16,32,64,128,256,512% - sells X% at each level</div>
+    <div style="display:grid;grid-template-columns:1fr 1fr;gap:8px;margin-top:8px">
+      <div><label class="muted"><input id="degen" type="checkbox" checked> DEGEN MODE (buy even 0 score if < $8k)</label></div>
+      <div><label class="muted"><input id="requireSocial" type="checkbox"> Require X/TG (off = faster)</label></div>
+    </div>
+    <div class="muted" style="margin-top:8px">LADDER: 2,4,8,16,32,64,128,256,512% - sells X% at each level. DEGEN buys ultra early for 2% flips.</div>
     <div style="margin-top:10px"><label class="muted"><input id="live" type="checkbox" checked> <b style="color:#ff3b3b">LIVE MAINNET REAL TRADES</b></label></div>
     <button id="main" class="btn go" style="margin-top:12px" onclick="toggleBot()">▶ START 2^n WS</button>
     <div class="muted" style="text-align:center;margin-top:6px" id="status">Ready - WS only, no REST</div>
@@ -116,20 +121,34 @@ window.setRpc=async(url)=>{ $('rpc').value=url; localStorage.setItem('2pow_rpc',
 function renderWallet(){ $('pub').value=kp.publicKey.toBase58(); $('priv').textContent=bs58.encode(kp.secretKey); $('importedName').textContent=kp.publicKey.toBase58().slice(0,6)+'...'; updBal(); renderPos(); renderStats(); }
 async function updBal(){if(!conn||!kp)return; try{const b=await conn.getBalance(kp.publicKey);const s=b/LAMPORTS_PER_SOL;$('bal').textContent=s.toFixed(4);$('balSt').textContent=s>0?'● LIVE MAINNET':''; $('balSt').style.color='#a6ff00'}catch(e){$('balSt').textContent='BAL ERR';}}
 function score(c){
-  // c from pumpportal WS: has mint, name, symbol, marketCapSol, twitter, telegram, etc
-  let s=0;
-  const hasTw=!!(c.twitter||c.twitter_url||c.metadata?.twitter);
-  const hasTg=!!(c.telegram||c.telegram_url||c.metadata?.telegram);
+  // DEBUG: log raw fields once
+  // c from pumpportal WS - at creation most have NO socials, they add 5-15 sec later
+  let s=20; // base 20 for being new
+  let reasons=[];
+  const hasTw=!!(c.twitter||c.twitter_url||c.metadata?.twitter||c.twitter_url?.length>5);
+  const hasTg=!!(c.telegram||c.telegram_url||c.metadata?.telegram||c.telegram_url?.length>5);
   const hasWeb=!!(c.website||c.website_url);
-  if(hasTw)s+=30; if(hasTg)s+=30; if(hasWeb)s+=10;
+  const hasImg=!!(c.image||c.image_uri);
+  if(hasTw){s+=25; reasons.push('X');}
+  if(hasTg){s+=25; reasons.push('TG');}
+  if(hasWeb){s+=10; reasons.push('WEB');}
+  if(hasImg){s+=5; reasons.push('IMG');}
   const mcSol=c.marketCapSol||c.market_cap||0;
-  const mcUsd=mcSol*165 || c.usd_market_cap||0;
-  if(mcUsd>=1500&&mcUsd<=9000)s+=25; // super early
-  else if(mcUsd>9000&&mcUsd<20000)s+=10;
-  else if(mcUsd>50000)s-=20;
-  if(!hasTw&&!hasTg)s-=40;
-  if(/test|xxx|porn/i.test((c.name||'')+(c.symbol||'')))s-=100;
-  return Math.max(0,Math.min(100,s));
+  const mcUsd=mcSol*165 || c.usd_market_cap||c.market_cap||0;
+  if(mcUsd>=0&&mcUsd<=4000){s+=20; reasons.push('ULTRA_EARLY');}
+  else if(mcUsd>4000&&mcUsd<=9000){s+=25; reasons.push('EARLY');}
+  else if(mcUsd>9000&&mcUsd<20000){s+=10; reasons.push('MID');}
+  else if(mcUsd>50000){s-=20; reasons.push('LATE');}
+  if(!hasTw&&!hasTg&&mcUsd<5000){
+    // don't penalize super early no-socials, they are actually better for 2% flips
+    s+=10; reasons.push('NO_SOC_EARLY_OK');
+  }
+  if(/test|xxx|porn|fuck/i.test((c.name||'')+(c.symbol||''))){s-=100; reasons.push('SPAM');}
+  // name length bonus
+  if((c.name||'').length>=3 && (c.name||'').length<=16) {s+=5;}
+  const final=Math.max(0,Math.min(100,s));
+  c._scoreReasons=reasons.join(' ');
+  return final;
 }
 window.toggle=()=>{const e=$('priv'),b=$('eye');if(e.style.filter==='none'){e.style.filter='blur(12px)';b.textContent='SHOW'}else{e.style.filter='none';b.textContent='HIDE'}}
 window.doImport=()=>{try{const v=$('imp').value.trim();let k;if(v.startsWith('['))k=Keypair.fromSecretKey(Uint8Array.from(JSON.parse(v)));else k=Keypair.fromSecretKey(bs58.decode(v));kp=k;saveW();renderWallet();$('imp').value='';log('imported '+k.publicKey.toBase58(),' #a6ff00'); updBal()}catch(e){alert(e.message)}}
