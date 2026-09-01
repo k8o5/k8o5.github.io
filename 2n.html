@@ -155,14 +155,20 @@ window.doImport=()=>{try{const v=$('imp').value.trim();let k;if(v.startsWith('['
 function renderStats(){localStorage.setItem('2pow_stats',JSON.stringify(stats))}
 function renderFeed(){
   const el=$('feed'); el.innerHTML='';
-  feed.slice(0,25).forEach(c=>{
+  feed.slice(0,30).forEach(c=>{
     const sc=score(c);
-    const mcUsd=(c.marketCapSol*165||c.usd_market_cap||0);
-    const d=document.createElement('div'); d.className='coin'+(sc>=60?' banger':'');
-    d.innerHTML=`<img src="${c.image||c.image_uri||`https://api.dicebear.com/7.x/identicon/svg?seed=${c.mint}`}" style="width:36px;height:36px;border-radius:8px;background:#222" onerror="this.src='https://api.dicebear.com/7.x/bottts/svg?seed=${c.mint}'"><div style="flex:1"><div style="font-weight:700">${(c.name||'Unknown').slice(0,18)} $${(c.symbol||'???').slice(0,8)} <span style="color:${sc>=60?'#a6ff00':'#777'}">${sc}</span></div><div class="muted">$${mcUsd.toFixed(0)} ${c.twitter?'𝕏':''} ${c.telegram?'TG':''} ${c.mint.slice(0,4)}..</div></div><button onclick="buySpecific('${c.mint}')" style="background:${sc>=60?'#a6ff00':'#222'};color:${sc>=60?'#000':'#fff'};border:none;border-radius:6px;padding:6px 10px;font-weight:700;font-size:11px">BUY</button>`;
+    const mcUsd=(c.marketCapSol*165||c.usd_market_cap||c.market_cap||0);
+    const d=document.createElement('div'); d.className='coin'+(sc>=50?' banger':'');
+    d.innerHTML=`<img src="${c.image||c.image_uri||`https://api.dicebear.com/7.x/identicon/svg?seed=${c.mint}`}" style="width:36px;height:36px;border-radius:8px;background:#222" onerror="this.src='https://api.dicebear.com/7.x/bottts/svg?seed=${c.mint}'"><div style="flex:1"><div style="font-weight:700">${(c.name||'Unknown').slice(0,18)} $${(c.symbol||'???').slice(0,8)} <span style="color:${sc>=50?'#a6ff00':sc>=20?'#ffaa00':'#777'}">${sc}</span> <span class="muted" style="font-size:9px">${c._scoreReasons||''}</span></div><div class="muted">$${mcUsd.toFixed(0)} ${c.twitter?'𝕏':''} ${c.telegram?'TG':''} mcapSol:${(c.marketCapSol||0).toFixed(2)} ${c.mint.slice(0,4)}..</div></div><button onclick="buySpecific('${c.mint}')" style="background:${sc>=20?'#a6ff00':'#222'};color:${sc>=20?'#000':'#fff'};border:none;border-radius:6px;padding:6px 10px;font-weight:700;font-size:11px">BUY</button>`;
     el.appendChild(d);
   });
   $('feedCount').textContent=feed.length+' coins';
+  // log raw example for debugging
+  if(feed.length>0 && !window._loggedExample){
+    window._loggedExample=true;
+    console.log('EXAMPLE PUMP COIN RAW:', feed[0]);
+    log('EXAMPLE RAW: '+JSON.stringify(feed[0]).slice(0,300),' #777');
+  }
 }
 function renderPos(){
   const el=$('positions'); el.innerHTML='';
@@ -198,7 +204,16 @@ async function doBuy(c){
   const amt=parseFloat($('buy').value);
   const live=$('live').checked;
   if(live && conn){
-    try{const b=await conn.getBalance(kp.publicKey); if(b/LAMPORTS_PER_SOL < amt+0.015){log(`low bal need ${amt} have ${(b/LAMPORTS_PER_SOL).toFixed(4)}`,' #ff3b3b'); return;}}catch{}
+    try{
+      const b=await conn.getBalance(kp.publicKey);
+      const balSol=b/LAMPORTS_PER_SOL;
+      const need=amt+0.0025; // 0.0025 for fees + rent, was 0.015 too high
+      if(balSol < need){
+        log(`low bal: have ${balSol.toFixed(4)} SOL, need ${need.toFixed(4)} (buy ${amt} + 0.0025 fees) - you have ${balSol.toFixed(4)} which is ${balSol>=amt?'enough for buy but low for fees, lowering buffer':'not enough'}`,' #ff3b3b');
+        if(balSol < amt){ return; } // only block if not even enough for buy itself
+        else { log(`Allowing buy anyway - you have ${balSol.toFixed(4)} > buy ${amt}, ignoring fee buffer`,' #ffaa00'); }
+      }
+    }catch(e){ log(`bal check err ${e.message}`,' #ff3b3b'); }
   }
   const pos={mint,name:c.name||'Unknown',symbol:c.symbol||'???',entry:Date.now(),entryMcap:mcUsd||3000,curMcap:mcUsd||3000,status:'open',pnl:0,remaining:100,hitLevels:[],live,buyAmt:amt};
   priceMap.set(mint,{mcap:mcUsd, lastUpdate:Date.now()});
@@ -320,23 +335,44 @@ function connectWS(){
     ws.onmessage=async(e)=>{
       try{
         const data=JSON.parse(e.data);
-        // New token creation
-        if(data.txType==='create' && data.mint){
+        // New token creation - pumpportal sends different formats
+        if((data.txType==='create' || data.type==='create' || data.mint) && data.mint){
           // dedup
           if(feed.find(x=>x.mint===data.mint))return;
-          // normalize marketCapSol
-          if(!data.marketCapSol && data.market_cap) data.marketCapSol=data.market_cap/165;
+          // normalize marketCapSol - pumpportal sometimes sends market_cap in lamports?
+          if(!data.marketCapSol){
+            if(data.market_cap) data.marketCapSol=data.market_cap/1e9; // convert lamports to SOL
+            else if(data.marketCap) data.marketCapSol=data.marketCap/165;
+            else data.marketCapSol=0.02; // default early
+          }
+          // ensure name/symbol exist
+          if(!data.name) data.name=data.metadata?.name||'Unknown';
+          if(!data.symbol) data.symbol=data.metadata?.symbol||'???';
           feed.unshift(data);
-          if(feed.length>60)feed.pop();
+          if(feed.length>80)feed.pop();
           renderFeed();
-          log(`NEW COIN: ${data.name} $${data.symbol} mcap $${((data.marketCapSol*165)||0).toFixed(0)} score ${score(data)}`,' #aaa');
+          const sc=score(data);
+          const mcUsd=(data.marketCapSol*165||0);
+          log(`NEW: ${data.name} $${data.symbol} mcap $${mcUsd.toFixed(0)} score ${sc} ${data._scoreReasons||''} mint ${data.mint.slice(0,6)}`,' #aaa');
           if(running){
-            const sc=score(data);
-            const mcUsd=(data.marketCapSol*165||0);
-            if(sc>=55 && mcUsd>0 && mcUsd<12000 && !seen.has(data.mint) && (data.twitter||data.telegram)){
-              log(`AUTO BUY TRIGGER ${data.name} score ${sc} mcap $${mcUsd.toFixed(0)}`,' #a6ff00');
-              await doBuy(data);
+            const minScore=parseInt($('minScore')?.value||'20');
+            const degen=$('degen')?.checked;
+            const requireSocial=$('requireSocial')?.checked;
+            const hasSocial=!!(data.twitter||data.telegram||data.twitter_url||data.telegram_url);
+            let shouldBuy=false;
+            if(degen && mcUsd<8000 && !seen.has(data.mint)){
+              // DEGEN MODE: buy ultra early regardless of score, for 2% flips
+              shouldBuy=true;
+              log(`DEGEN BUY TRIGGER ${data.name} mcap $${mcUsd.toFixed(0)} score ${sc}`,' #a6ff00');
+            } else if(sc>=minScore && mcUsd>0 && mcUsd<12000 && !seen.has(data.mint)){
+              if(requireSocial && !hasSocial){
+                log(`SKIP ${data.name} needs social but has none`,' #777');
+              } else {
+                shouldBuy=true;
+                log(`AUTO BUY TRIGGER ${data.name} score ${sc} mcap $${mcUsd.toFixed(0)}`,' #a6ff00');
+              }
             }
+            if(shouldBuy) await doBuy(data);
           }
         }
         // Trade message - contains market cap updates
