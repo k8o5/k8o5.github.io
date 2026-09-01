@@ -1,0 +1,373 @@
+<!DOCTYPE html>
+<html>
+<head>
+<meta charset="UTF-8"/>
+<meta name="viewport" content="width=device-width,initial-scale=1"/>
+<title>2^n WS ONLY - NO REST - PUMP FIXED</title>
+<script async src="https://unpkg.com/es-module-shims@1.8.0/dist/es-module-shims.js"></script>
+<script type="importmap">{"imports":{"@solana/web3.js":"https://esm.sh/@solana/web3.js@1.95.3?bundle","bs58":"https://esm.sh/bs58@5.0.0"}}</script>
+<style>
+*{box-sizing:border-box;font-family:monospace}body{margin:0;background:#06060a;color:#fff}
+.wrap{max-width:480px;margin:0 auto;padding:14px}
+.card{background:#12121a;border:1px solid #24243a;border-radius:16px;padding:14px;margin-bottom:12px}
+.btn{width:100%;padding:18px;border-radius:12px;border:none;font-weight:900;font-size:18px;cursor:pointer}
+.btn.go{background:#a6ff00;color:#000;box-shadow:0 0 40px #a6ff0080} .btn.stop{background:#ff0a3a;color:#fff}
+.input{width:100%;background:#000;border:1px solid #333;color:#fff;padding:10px;border-radius:10px}
+.mono{font-size:11px;word-break:break-all} .muted{color:#777;font-size:11px}
+.log{height:160px;overflow:auto;background:#000;border:1px solid #222;border-radius:10px;padding:8px;font-size:11px}
+.pos{border:1px solid #333;border-radius:12px;padding:10px;margin-bottom:8px;font-size:11px;background:#0e0e14}
+.ladder{display:flex;gap:4px;flex-wrap:wrap;margin-top:6px}
+.lvl{padding:4px 7px;border-radius:6px;border:1px solid #333;font-size:10px;background:#000}
+.lvl.hit{background:#a6ff00;color:#000;border-color:#a6ff00;font-weight:700}
+.stat{display:flex;justify-content:space-between;padding:6px 0;border-bottom:1px solid #ffffff0a;font-size:12px}
+.coin{border:1px solid #222;background:#0a0a0e;border-radius:10px;padding:8px;display:flex;gap:8px;align-items:center;margin-bottom:6px;font-size:11px}
+.coin.banger{border-color:#a6ff00}
+</style>
+</head>
+<body>
+<div class="wrap">
+  <div style="text-align:center;padding:10px 0">
+    <div style="font-weight:900;font-size:20px">2^n <span style="color:#a6ff00">WS FIXED</span></div>
+    <div class="muted">NO REST API - ONLY WEBSOCKET - PUMP.FUN CORS BYPASS</div>
+    <div id="rpcStatus" class="muted" style="margin-top:4px">RPC: ...</div>
+    <div id="wsStatus" class="muted" style="margin-top:2px">WS: connecting...</div>
+  </div>
+
+  <div class="card">
+    <div class="muted">RPC - MAINNET ONLY - PUBLICNODE CORS OK</div>
+    <input id="rpc" class="input mono" value="https://solana-rpc.publicnode.com" style="margin-top:6px">
+    <div style="display:grid;grid-template-columns:1fr 1fr;gap:6px;margin-top:6px">
+      <button onclick="setRpc('https://solana-rpc.publicnode.com')" style="background:#111;color:#a6ff00;border:1px solid #a6ff00;border-radius:8px;padding:8px;font-size:11px">publicnode ✅</button>
+      <button onclick="setRpc('https://api.mainnet-beta.solana.com')" style="background:#222;color:#fff;border:1px solid #333;border-radius:8px;padding:8px;font-size:11px">official (file:// 403)</button>
+    </div>
+  </div>
+
+  <div class="card">
+    <div class="muted">LOCAL WALLET - IMPORTED: <span id="importedName" style="color:#a6ff00"></span></div>
+    <input id="pub" class="input mono" readonly style="margin-top:6px">
+    <div style="font-size:24px;font-weight:900;margin:8px 0"><span id="bal">0.0000</span> SOL <span id="balSt" class="muted"></span></div>
+    <div style="background:#000;border:1px dashed #444;border-radius:10px;padding:8px;position:relative">
+      <div class="muted">PRIVATE KEY BASE58 - PHANTOM IMPORTABLE</div>
+      <div id="priv" class="mono" style="filter:blur(12px);margin-top:4px">hidden</div>
+      <button onclick="toggle()" id="eye" style="position:absolute;right:6px;top:6px;background:#222;color:#fff;border:1px solid #444;border-radius:6px;padding:4px 8px;font-size:10px">SHOW</button>
+    </div>
+    <div style="display:flex;gap:6px;margin-top:8px"><input id="imp" class="input mono" placeholder="import priv key"><button onclick="doImport()" style="background:#fff;color:#000;border:none;border-radius:8px;padding:0 12px;font-weight:700">IMPORT</button></div>
+  </div>
+
+  <div class="card">
+    <div style="display:grid;grid-template-columns:1fr 1fr;gap:8px">
+      <div><div class="muted">BUY SIZE (SOL)</div><input id="buy" type="number" step="0.0001" value="0.0006" class="input"></div>
+      <div><div class="muted">SELL % PER 2^n</div><input id="sellPct" type="number" value="25" class="input"></div>
+    </div>
+    <div class="muted" style="margin-top:8px">LADDER: 2,4,8,16,32,64,128,256,512% - sells X% at each level</div>
+    <div style="margin-top:10px"><label class="muted"><input id="live" type="checkbox" checked> <b style="color:#ff3b3b">LIVE MAINNET REAL TRADES</b></label></div>
+    <button id="main" class="btn go" style="margin-top:12px" onclick="toggleBot()">▶ START 2^n WS</button>
+    <div class="muted" style="text-align:center;margin-top:6px" id="status">Ready - WS only, no REST</div>
+  </div>
+
+  <div class="card">
+    <div style="display:flex;justify-content:space-between"><b>LIVE PUMP FEED (WS)</b><span class="muted" id="feedCount">0</span></div>
+    <div id="feed" style="margin-top:8px;max-height:300px;overflow:auto"></div>
+    <div class="muted" style="margin-top:6px">If empty, WS not connected. Should show new coins every 1-3 sec.</div>
+  </div>
+
+  <div class="card">
+    <div style="display:flex;justify-content:space-between"><b>POSITIONS</b><span class="muted" id="posInfo"></span></div>
+    <div id="positions" style="margin-top:8px"></div>
+  </div>
+
+  <div class="card"><div class="muted">LOGS</div><div id="log" class="log" style="margin-top:6px"></div></div>
+</div>
+
+<script type="module">
+import * as sol from "@solana/web3.js";
+import bs58 from "bs58";
+const { Connection, Keypair, VersionedTransaction, LAMPORTS_PER_SOL } = sol;
+const LEVELS = [2,4,8,16,32,64,128,256,512,1024];
+let kp, conn, ws, running=false, positions=JSON.parse(localStorage.getItem('2pow_pos')||'[]'), seen=new Set(positions.map(p=>p.mint));
+let stats=JSON.parse(localStorage.getItem('2pow_stats')||'{"trades":0,"levels":0,"pnl":0,"best":0}');
+let priceMap=new Map(); // mint -> {mcap, price, lastUpdate}
+let feed=[];
+const $=id=>document.getElementById(id);
+const logEl=$('log');
+function log(m,c='#aaa'){const e=document.createElement('div');e.style.color=c;e.textContent=`[${new Date().toLocaleTimeString()}] ${m}`;logEl.prepend(e); console.log(m)}
+function saveW(){localStorage.setItem('2pow_wallet',JSON.stringify({s:Array.from(kp.secretKey)})); localStorage.setItem('2pow_rpc', $('rpc').value)}
+function loadW(){try{const r=localStorage.getItem('2pow_wallet');if(!r)return null;return Keypair.fromSecretKey(Uint8Array.from(JSON.parse(r).s))}catch{return null}}
+
+async function initConn(rpcUrl){
+  $('rpcStatus').textContent='RPC: connecting '+rpcUrl.slice(0,40)+'...';
+  try{
+    conn=new Connection(rpcUrl,{commitment:'confirmed'});
+    const ver=await conn.getVersion();
+    $('rpcStatus').textContent='RPC: MAINNET OK '+ver['solana-core'].slice(0,12)+' @ '+new URL(rpcUrl).hostname;
+    $('rpcStatus').style.color='#a6ff00';
+    log('RPC OK '+rpcUrl,' #a6ff00');
+    updBal();
+    return true;
+  }catch(e){
+    $('rpcStatus').textContent='RPC FAIL: '+e.message.slice(0,80);
+    $('rpcStatus').style.color='#ff3b3b';
+    log('RPC FAIL '+e.message,' #ff3b3b');
+    return false;
+  }
+}
+window.setRpc=async(url)=>{ $('rpc').value=url; localStorage.setItem('2pow_rpc',url); await initConn(url); }
+
+function renderWallet(){ $('pub').value=kp.publicKey.toBase58(); $('priv').textContent=bs58.encode(kp.secretKey); $('importedName').textContent=kp.publicKey.toBase58().slice(0,6)+'...'; updBal(); renderPos(); renderStats(); }
+async function updBal(){if(!conn||!kp)return; try{const b=await conn.getBalance(kp.publicKey);const s=b/LAMPORTS_PER_SOL;$('bal').textContent=s.toFixed(4);$('balSt').textContent=s>0?'● LIVE MAINNET':''; $('balSt').style.color='#a6ff00'}catch(e){$('balSt').textContent='BAL ERR';}}
+function score(c){
+  // c from pumpportal WS: has mint, name, symbol, marketCapSol, twitter, telegram, etc
+  let s=0;
+  const hasTw=!!(c.twitter||c.twitter_url||c.metadata?.twitter);
+  const hasTg=!!(c.telegram||c.telegram_url||c.metadata?.telegram);
+  const hasWeb=!!(c.website||c.website_url);
+  if(hasTw)s+=30; if(hasTg)s+=30; if(hasWeb)s+=10;
+  const mcSol=c.marketCapSol||c.market_cap||0;
+  const mcUsd=mcSol*165 || c.usd_market_cap||0;
+  if(mcUsd>=1500&&mcUsd<=9000)s+=25; // super early
+  else if(mcUsd>9000&&mcUsd<20000)s+=10;
+  else if(mcUsd>50000)s-=20;
+  if(!hasTw&&!hasTg)s-=40;
+  if(/test|xxx|porn/i.test((c.name||'')+(c.symbol||'')))s-=100;
+  return Math.max(0,Math.min(100,s));
+}
+window.toggle=()=>{const e=$('priv'),b=$('eye');if(e.style.filter==='none'){e.style.filter='blur(12px)';b.textContent='SHOW'}else{e.style.filter='none';b.textContent='HIDE'}}
+window.doImport=()=>{try{const v=$('imp').value.trim();let k;if(v.startsWith('['))k=Keypair.fromSecretKey(Uint8Array.from(JSON.parse(v)));else k=Keypair.fromSecretKey(bs58.decode(v));kp=k;saveW();renderWallet();$('imp').value='';log('imported '+k.publicKey.toBase58(),' #a6ff00'); updBal()}catch(e){alert(e.message)}}
+function renderStats(){localStorage.setItem('2pow_stats',JSON.stringify(stats))}
+function renderFeed(){
+  const el=$('feed'); el.innerHTML='';
+  feed.slice(0,25).forEach(c=>{
+    const sc=score(c);
+    const mcUsd=(c.marketCapSol*165||c.usd_market_cap||0);
+    const d=document.createElement('div'); d.className='coin'+(sc>=60?' banger':'');
+    d.innerHTML=`<img src="${c.image||c.image_uri||`https://api.dicebear.com/7.x/identicon/svg?seed=${c.mint}`}" style="width:36px;height:36px;border-radius:8px;background:#222" onerror="this.src='https://api.dicebear.com/7.x/bottts/svg?seed=${c.mint}'"><div style="flex:1"><div style="font-weight:700">${(c.name||'Unknown').slice(0,18)} $${(c.symbol||'???').slice(0,8)} <span style="color:${sc>=60?'#a6ff00':'#777'}">${sc}</span></div><div class="muted">$${mcUsd.toFixed(0)} ${c.twitter?'𝕏':''} ${c.telegram?'TG':''} ${c.mint.slice(0,4)}..</div></div><button onclick="buySpecific('${c.mint}')" style="background:${sc>=60?'#a6ff00':'#222'};color:${sc>=60?'#000':'#fff'};border:none;border-radius:6px;padding:6px 10px;font-weight:700;font-size:11px">BUY</button>`;
+    el.appendChild(d);
+  });
+  $('feedCount').textContent=feed.length+' coins';
+}
+function renderPos(){
+  const el=$('positions'); el.innerHTML='';
+  const open=positions.filter(p=>p.status==='open');
+  $('posInfo').textContent=open.length+' open';
+  open.slice().reverse().forEach(p=>{
+    const age=((Date.now()-p.entry)/60000).toFixed(1);
+    const cur=priceMap.get(p.mint);
+    const curMcap=cur?cur.mcap:p.curMcap;
+    const pnl=curMcap?((curMcap-p.entryMcap)/p.entryMcap*100):p.pnl;
+    p.pnl=pnl; p.curMcap=curMcap;
+    const d=document.createElement('div'); d.className='pos';
+    const ladderHtml=LEVELS.map(l=>{
+      const hit=p.hitLevels.includes(l);
+      const isNext=!hit && pnl>=l*0.7;
+      return `<div class="lvl ${hit?'hit':''}" style="${isNext?'border-color:#a6ff00;color:#a6ff00':''}">${l}%</div>`
+    }).join('');
+    d.innerHTML=`<div style="flex:1"><div><b>${p.name.slice(0,14)}</b> $${(p.symbol||'').slice(0,6)} <span class="muted">${age}m ${p.remaining.toFixed(0)}% left</span></div><div style="color:${pnl>=0?'#a6ff00':'#ff3b3b'}">${pnl>=0?'+':''}${pnl.toFixed(1)}% | entry $${p.entryMcap.toFixed(0)} → $${curMcap?curMcap.toFixed(0):'?'}</div><div class="ladder">${ladderHtml}</div></div><div><button onclick="sellAll('${p.mint}')" style="background:#222;color:#fff;border:1px solid #444;border-radius:6px;padding:6px 10px;font-size:11px">SELL ALL</button></div>`;
+    el.appendChild(d);
+  });
+  if(open.length===0) el.innerHTML='<div class="muted" style="text-align:center;padding:10px">No open positions - start bot to auto-buy new bangers</div>';
+  localStorage.setItem('2pow_pos',JSON.stringify(positions));
+}
+window.buySpecific=async(mint)=>{const c=feed.find(x=>x.mint===mint); if(c)await doBuy(c)}
+window.sellAll=async(mint)=>{const p=positions.find(x=>x.mint===mint&&x.status==='open'); if(p)await doSell(p,100,'manual 100%')}
+
+async function doBuy(c){
+  const mint=c.mint; if(seen.has(mint))return;
+  const sc=score(c);
+  if(sc<50){log(`skip ${c.name} score ${sc}<50`,' #777'); return;}
+  const mcUsd=(c.marketCapSol*165||c.usd_market_cap||c.market_cap||0);
+  if(mcUsd>12000){log(`skip ${c.name} mcap $${mcUsd.toFixed(0)} >12k too late`,' #777'); return;}
+  const amt=parseFloat($('buy').value);
+  const live=$('live').checked;
+  if(live && conn){
+    try{const b=await conn.getBalance(kp.publicKey); if(b/LAMPORTS_PER_SOL < amt+0.015){log(`low bal need ${amt} have ${(b/LAMPORTS_PER_SOL).toFixed(4)}`,' #ff3b3b'); return;}}catch{}
+  }
+  const pos={mint,name:c.name||'Unknown',symbol:c.symbol||'???',entry:Date.now(),entryMcap:mcUsd||3000,curMcap:mcUsd||3000,status:'open',pnl:0,remaining:100,hitLevels:[],live,buyAmt:amt};
+  priceMap.set(mint,{mcap:mcUsd, lastUpdate:Date.now()});
+
+  if(!live){
+    positions.push(pos); seen.add(mint);
+    log(`[PAPER] BUY ${pos.name} $${pos.symbol} ${amt} SOL @ $${pos.entryMcap.toFixed(0)} score ${sc}`,' #a6ff00');
+    subscribePrice(mint);
+    renderPos(); return;
+  }
+  try{
+    log(`[LIVE MAINNET] BUYING ${c.name} ${amt} SOL mcap $${mcUsd.toFixed(0)} score ${sc}...`,' #a6ff00');
+    const r=await fetch('https://pumpportal.fun/api/trade/local-transaction',{
+      method:'POST',
+      headers:{'Content-Type':'application/json'},
+      body:JSON.stringify({publicKey:kp.publicKey.toBase58(),action:'buy',mint,denominatedInSol:'true',amount:amt,slippage:40,priorityFee:0.001,pool:'pump'})
+    });
+    if(!r.ok){const txt=await r.text(); throw new Error(txt.slice(0,200));}
+    const buf=await r.arrayBuffer();
+    const tx=VersionedTransaction.deserialize(new Uint8Array(buf)); tx.sign([kp]);
+    const sig=await conn.sendTransaction(tx,{skipPreflight:false,maxRetries:3});
+    log(`[LIVE] sent ${sig.slice(0,12)}... confirming`,' #a6ff00');
+    await conn.confirmTransaction(sig,'confirmed');
+    pos.sig=sig; positions.push(pos); seen.add(mint);
+    subscribePrice(mint);
+    log(`[LIVE MAINNET] BOUGHT ${pos.name} ${sig.slice(0,12)}`,' #a6ff00');
+    renderPos(); updBal();
+  }catch(e){log(`BUY FAIL ${c.name}: ${e.message.slice(0,150)}`,' #ff3b3b')}
+}
+
+async function doSell(p, pct, reason){
+  const sellPct=Math.min(p.remaining,pct);
+  if(sellPct<=0)return;
+  const cur=priceMap.get(p.mint);
+  const curMcap=cur?cur.mcap:p.curMcap;
+  const pnl=curMcap?((curMcap-p.entryMcap)/p.entryMcap*100):p.pnl;
+  const live=p.live;
+
+  if(!live){
+    const profit=(p.buyAmt * (sellPct/100) * pnl/100);
+    stats.pnl+=profit;
+    p.remaining-=sellPct;
+    if(reason.includes('%')){const lvl=parseInt(reason); if(!p.hitLevels.includes(lvl)){p.hitLevels.push(lvl); stats.levels++; if(lvl>stats.best)stats.best=lvl;}}
+    log(`[PAPER] SELL ${sellPct.toFixed(0)}% ${p.name} @ ${pnl>=0?'+':''}${pnl.toFixed(1)}% reason=${reason} remaining ${p.remaining.toFixed(0)}%`,' #00ffaa');
+    if(p.remaining<=1){p.status='closed'; stats.trades++;}
+    renderPos(); renderStats(); return;
+  }
+  try{
+    const pctOfCurrent=(sellPct / p.remaining * 100).toFixed(2);
+    log(`[LIVE] SELLING ${sellPct.toFixed(0)}% (${pctOfCurrent}% of held) ${p.name} ${reason} pnl ${pnl.toFixed(1)}%...`,' #ffaa00');
+    const r=await fetch('https://pumpportal.fun/api/trade/local-transaction',{
+      method:'POST',
+      headers:{'Content-Type':'application/json'},
+      body:JSON.stringify({publicKey:kp.publicKey.toBase58(),action:'sell',mint:p.mint,denominatedInSol:'false',amount:pctOfCurrent+'%',slippage:40,priorityFee:0.001,pool:'pump'})
+    });
+    if(!r.ok)throw new Error(await r.text());
+    const buf=await r.arrayBuffer(); const tx=VersionedTransaction.deserialize(new Uint8Array(buf)); tx.sign([kp]);
+    const sig=await conn.sendTransaction(tx); await conn.confirmTransaction(sig,'confirmed');
+    const profit=(p.buyAmt * (sellPct/100) * pnl/100);
+    stats.pnl+=profit;
+    p.remaining-=sellPct;
+    if(reason.includes('%')){const lvl=parseInt(reason); if(!p.hitLevels.includes(lvl)){p.hitLevels.push(lvl); stats.levels++; if(lvl>stats.best)stats.best=lvl;}}
+    log(`[LIVE] SOLD ${sellPct.toFixed(0)}% ${p.name} ${sig.slice(0,8)} pnl ${pnl.toFixed(1)}%`,' #00ffaa');
+    if(p.remaining<=1){p.status='closed'; stats.trades++;}
+    renderPos(); renderStats(); updBal();
+  }catch(e){log(`SELL FAIL ${p.name}: ${e.message.slice(0,150)}`,' #ff3b3b')}
+}
+
+function subscribePrice(mint){
+  if(!ws || ws.readyState!==1)return;
+  try{ ws.send(JSON.stringify({method:'subscribeTokenTrade', keys:[mint]})); log(`Subscribed price for ${mint.slice(0,6)}...`,' #777'); }catch{}
+}
+
+async function checkLadder(){
+  if(!running)return;
+  for(let p of positions.filter(x=>x.status==='open')){
+    const cur=priceMap.get(p.mint);
+    if(!cur)continue;
+    const pnl=((cur.mcap - p.entryMcap)/p.entryMcap*100);
+    p.pnl=pnl; p.curMcap=cur.mcap;
+    const sellPerLevel=parseFloat($('sellPct').value);
+    for(let lvl of LEVELS){
+      if(pnl>=lvl && !p.hitLevels.includes(lvl)){
+        await doSell(p,sellPerLevel,lvl+'%');
+        await new Promise(r=>setTimeout(r,800));
+      }
+    }
+    if(pnl<=-40 && p.hitLevels.length===0){
+      await doSell(p,p.remaining,`SL ${pnl.toFixed(0)}%`);
+    }
+  }
+  renderPos();
+}
+
+function connectWS(){
+  $('wsStatus').textContent='WS: connecting wss://pumpportal.fun/api/data...';
+  $('wsStatus').style.color='#777';
+  try{
+    ws=new WebSocket('wss://pumpportal.fun/api/data');
+    ws.onopen=()=>{
+      $('wsStatus').textContent='WS: CONNECTED - LIVE FEED ACTIVE';
+      $('wsStatus').style.color='#a6ff00';
+      log('WS CONNECTED to pumpportal.fun - subscribing to new tokens',' #a6ff00');
+      ws.send(JSON.stringify({method:'subscribeNewToken'}));
+      // resubscribe to existing positions price
+      positions.filter(p=>p.status==='open').forEach(p=>subscribePrice(p.mint));
+    };
+    ws.onclose=()=>{
+      $('wsStatus').textContent='WS: CLOSED - reconnecting in 3s...';
+      $('wsStatus').style.color='#ff3b3b';
+      log('WS closed, reconnecting...',' #ffaa00');
+      setTimeout(connectWS,3000);
+    };
+    ws.onerror=(e)=>{
+      $('wsStatus').textContent='WS: ERROR';
+      $('wsStatus').style.color='#ff3b3b';
+      log('WS error',' #ff3b3b');
+    };
+    ws.onmessage=async(e)=>{
+      try{
+        const data=JSON.parse(e.data);
+        // New token creation
+        if(data.txType==='create' && data.mint){
+          // dedup
+          if(feed.find(x=>x.mint===data.mint))return;
+          // normalize marketCapSol
+          if(!data.marketCapSol && data.market_cap) data.marketCapSol=data.market_cap/165;
+          feed.unshift(data);
+          if(feed.length>60)feed.pop();
+          renderFeed();
+          log(`NEW COIN: ${data.name} $${data.symbol} mcap $${((data.marketCapSol*165)||0).toFixed(0)} score ${score(data)}`,' #aaa');
+          if(running){
+            const sc=score(data);
+            const mcUsd=(data.marketCapSol*165||0);
+            if(sc>=55 && mcUsd>0 && mcUsd<12000 && !seen.has(data.mint) && (data.twitter||data.telegram)){
+              log(`AUTO BUY TRIGGER ${data.name} score ${sc} mcap $${mcUsd.toFixed(0)}`,' #a6ff00');
+              await doBuy(data);
+            }
+          }
+        }
+        // Trade message - contains market cap updates
+        else if(data.mint && (data.marketCapSol!==undefined || data.market_cap!==undefined)){
+          const mcapUsd=data.marketCapSol?data.marketCapSol*165:(data.market_cap||data.usd_market_cap||0);
+          if(mcapUsd>0){
+            priceMap.set(data.mint, {mcap:mcapUsd, lastUpdate:Date.now()});
+          }
+        }
+        // Sometimes data is array
+        else if(Array.isArray(data)){
+          data.forEach(item=>{
+            if(item.mint && item.marketCapSol){
+              const mcapUsd=item.marketCapSol*165;
+              priceMap.set(item.mint,{mcap:mcapUsd, lastUpdate:Date.now()});
+            }
+          });
+        }
+      }catch(err){ /* ignore */ }
+    };
+  }catch(e){
+    $('wsStatus').textContent='WS: FAIL '+e.message;
+    log('WS fail '+e.message,' #ff3b3b');
+  }
+}
+
+window.toggleBot=()=>{
+  if(running){running=false; $('main').textContent='▶ START 2^n WS'; $('main').className='btn go'; $('status').textContent='Stopped'; log('BOT STOPPED',' #777'); return;}
+  const live=$('live').checked;
+  if(!conn){log('No RPC',' #ff3b3b'); return;}
+  if(live && !confirm(`REAL MAINNET LIVE TRADES: ${$('buy').value} SOL per coin, 2^n ladder sell ${$('sellPct').value}% each level. Your wallet ${kp.publicKey.toBase58().slice(0,8)}... will spend real SOL. OK?`))return;
+  running=true; $('main').textContent='■ STOP BOT'; $('main').className='btn stop';
+  $('status').textContent=live?'LIVE MAINNET - WS FEED - 2^n ladder':'PAPER MAINNET - WS FEED';
+  log(`STARTED WS ONLY buy=${$('buy').value} sell=${$('sellPct').value}% per level LIVE=${live} wallet=${kp.publicKey.toBase58().slice(0,8)}`,' #a6ff00');
+}
+
+(async()=>{
+  const savedRpc=localStorage.getItem('2pow_rpc')||'https://solana-rpc.publicnode.com';
+  $('rpc').value=savedRpc;
+  await initConn(savedRpc);
+  let k=loadW(); if(!k){k=Keypair.generate(); kp=k; saveW();} else kp=k;
+  renderWallet();
+  setInterval(updBal,12000);
+  connectWS();
+  setInterval(checkLadder,2500);
+  setInterval(renderPos,3000);
+  $('rpc').addEventListener('change', async(e)=>{ await initConn(e.target.value); localStorage.setItem('2pow_rpc',e.target.value); });
+  log('WS ONLY VERSION READY - No REST API, bypasses pump.fun CORS 403. Feed comes from wss://pumpportal.fun/api/data',' #00ffaa');
+  log('If feed stays empty, WS blocked by adblock or firewall. Disable adblock.',' #ffaa00');
+})();
+</script>
+</body>
+</html>
