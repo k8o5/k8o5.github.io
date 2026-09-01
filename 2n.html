@@ -173,7 +173,7 @@ function renderFeed(){
 function renderPos(){
   const el=$('positions'); el.innerHTML='';
   const open=positions.filter(p=>p.status==='open');
-  $('posInfo').textContent=open.length+' open';
+  $('posInfo').textContent=open.length+' open | rent locked '+(open.length*0.00203).toFixed(4)+' SOL - SELL ALL reclaims rent';
   open.slice().reverse().forEach(p=>{
     const age=((Date.now()-p.entry)/60000).toFixed(1);
     const cur=priceMap.get(p.mint);
@@ -189,7 +189,7 @@ function renderPos(){
     d.innerHTML=`<div style="flex:1"><div><b>${p.name.slice(0,14)}</b> $${(p.symbol||'').slice(0,6)} <span class="muted">${age}m ${p.remaining.toFixed(0)}% left</span></div><div style="color:${pnl>=0?'#a6ff00':'#ff3b3b'}">${pnl>=0?'+':''}${pnl.toFixed(1)}% | entry $${p.entryMcap.toFixed(0)} → $${curMcap?curMcap.toFixed(0):'?'}</div><div class="ladder">${ladderHtml}</div></div><div><button onclick="sellAll('${p.mint}')" style="background:#222;color:#fff;border:1px solid #444;border-radius:6px;padding:6px 10px;font-size:11px">SELL ALL</button></div>`;
     el.appendChild(d);
   });
-  if(open.length===0) el.innerHTML='<div class="muted" style="text-align:center;padding:10px">No open positions - start bot to auto-buy new bangers</div>';
+  if(open.length===0) el.innerHTML='<div class="muted" style="text-align:center;padding:10px">No open positions<br>With 0.01 SOL you can hold max 3-4 tokens (0.00203 rent each). SELL reclaims rent.</div>';
   localStorage.setItem('2pow_pos',JSON.stringify(positions));
 }
 window.buySpecific=async(mint)=>{const c=feed.find(x=>x.mint===mint); if(c)await doBuy(c)}
@@ -207,11 +207,14 @@ async function doBuy(c){
     try{
       const b=await conn.getBalance(kp.publicKey);
       const balSol=b/LAMPORTS_PER_SOL;
-      const need=amt+0.0025; // 0.0025 for fees + rent, was 0.015 too high
-      if(balSol < need){
-        log(`low bal: have ${balSol.toFixed(4)} SOL, need ${need.toFixed(4)} (buy ${amt} + 0.0025 fees) - you have ${balSol.toFixed(4)} which is ${balSol>=amt?'enough for buy but low for fees, lowering buffer':'not enough'}`,' #ff3b3b');
-        if(balSol < amt){ return; } // only block if not even enough for buy itself
-        else { log(`Allowing buy anyway - you have ${balSol.toFixed(4)} > buy ${amt}, ignoring fee buffer`,' #ffaa00'); }
+      const ATA_RENT=0.00203;
+      const FEES=0.001;
+      const need=amt+ATA_RENT+FEES; // need rent for new token account + fees
+      const isNewMint=!seen.has(mint);
+      const required=isNewMint?need:amt+FEES;
+      if(balSol < required){
+        log(`STOP BUY - low bal: have ${balSol.toFixed(4)} need ${required.toFixed(4)} for ${isNewMint?'NEW token (buy+rent+fees)':'existing token'}. Sell some positions to reclaim ${ATA_RENT} rent per token!`,' #ff3b3b');
+        return;
       }
     }catch(e){ log(`bal check err ${e.message}`,' #ff3b3b'); }
   }
