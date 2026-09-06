@@ -837,6 +837,10 @@ function mineHtml() {
 
 /* =============================== trading view =============================== */
 // pump.fun launched (bonding-curve / PumpSwap) coin vs. merely indexed foreign token (program 'non_launchpad' → no curve, never 'bonding')
+// pump.fun's `complete` flag is stale for old coins that graduated to Raydium before PumpSwap existed (2024): they carry
+// raydium_pool / market_id / a pool_address that is not the bonding curve while `complete` still says false.
+const pfGraduated = (c, pairs = []) => !!c && (c.complete === true || !!c.raydium_pool || !!c.market_id || (c.pool_address && c.bonding_curve && c.pool_address !== c.bonding_curve) || (c.real_token_reserves === 0 && c.real_sol_reserves > 0)
+  || pairs.some(p => p.chainId === 'solana' && p.dexId && p.dexId !== 'pumpfun' && (p.liquidity?.usd > 0 || p.volume?.h24 > 0)));
 const pfNative = c => !!c && !c.statusCode && !/non_launchpad/i.test(c.program || c.protocol || '') && (c.real_sol_reserves > 0 || c.complete === true || /pump$/i.test(c.mint || '') || c.bonding_curve && c.program !== 'non_launchpad');
 async function openCoin(mint, hint = {}, {back = false} = {}) {
   if (!mint) return;
@@ -865,7 +869,7 @@ async function openCoin(mint, hint = {}, {back = false} = {}) {
     info.chg ??= {m5: j.chg5m, h1: j.chg1h, h6: j.chg6h, h24: j.chg24h}; info.vol ??= {h24: j.vol24}; info.txns ??= {h24: {buys: j.buys24, sells: j.sells24}}; if (!info.dex && j.stock) info.dex = 'xStocks'; }
   if (extra.pf && extra.pf.statusCode) extra.pf = null;
   if (extra.pf) { const c = extra.pf; info.name ??= c.name; info.symbol ??= c.symbol; info.image ??= c.image_uri; info.mcap ??= c.usd_market_cap; info.created ??= c.created_timestamp;
-    const np = pfNative(c); info.complete = np ? c.complete : true; info.bonding = np ? (c.complete ? 100 : Math.min(100, (c.real_sol_reserves || 0) / 85e9 * 100)) : undefined; info.pfLinks = {twitter: c.twitter, telegram: c.telegram, website: c.website}; info.replies = c.reply_count; info.ath = c.ath_market_cap; info.creator = c.creator; info.live = c.is_currently_live; }
+    const np = pfNative(c), grad = !np || pfGraduated(c, pairs); info.complete = grad; info.bonding = np && !grad ? Math.min(100, (c.real_sol_reserves || 0) / 85e9 * 100) : undefined; info.pfLinks = {twitter: c.twitter, telegram: c.telegram, website: c.website}; info.replies = c.reply_count; info.ath = c.ath_market_cap; info.creator = c.creator; info.live = c.is_currently_live; }
   S.tvCache.set(mint, {t: Date.now(), info, extra});
   renderTV(info, extra);
 }
@@ -964,7 +968,7 @@ async function liveOnce() {
   if (S.sel !== mint) return; if (px) { LIVE.fails = 0; applyLivePrice(info, px); }
   if (LIVE.n % 3 === 0) { try {
     if (info.pair || info.complete !== false) { const d = await getJSON(`${DS}/tokens/v1/solana/${mint}`, false, 0); const best = (d || []).find(p => p.pairAddress === info.pair) || (d || []).slice().sort((a, b) => score(b) - score(a))[0]; if (best && S.sel === mint) { S.meta.set(mint, best); Object.assign(info, {chg: best.priceChange, vol: best.volume, txns: best.txns, liq: best.liquidity?.usd, mcap: best.marketCap ?? best.fdv ?? info.mcap}); if (!px && +best.priceUsd) applyLivePrice(info, +best.priceUsd); applyLiveStats(info); } }
-    else { const cn = await getJSON(`${PF}/coins/${mint}`, true, 0); if (cn && S.sel === mint) { info.mcap = cn.usd_market_cap ?? info.mcap; if (pfNative(cn)) { info.complete = cn.complete; info.bonding = cn.complete ? 100 : Math.min(100, (cn.real_sol_reserves || 0) / 85e9 * 100); } applyLiveStats(info); } }
+    else { const cn = await getJSON(`${PF}/coins/${mint}`, true, 0); if (cn && S.sel === mint) { info.mcap = cn.usd_market_cap ?? info.mcap; if (pfNative(cn)) { const grad = pfGraduated(cn, info.pairs || []); info.complete = grad; info.bonding = grad ? undefined : Math.min(100, (cn.real_sol_reserves || 0) / 85e9 * 100); } applyLiveStats(info); } }
   } catch {} }
   c.t = Date.now();
 }
@@ -972,7 +976,7 @@ function applyLivePrice(info, px) {
   const prev = info.price; info.price = px; if (prev && info.mcap) info.mcap = info.mcap * px / prev;
   const el = $('#tvPx'); if (el) { el.innerHTML = price(px); if (prev && px !== prev) { el.classList.remove('up', 'dn'); void el.offsetWidth; el.classList.add(px > prev ? 'up' : 'dn'); } }
   const mc = $('#tvMc'); if (mc) mc.textContent = 'MC ' + usd(info.mcap); $('#tvLive')?.classList.remove('stale');
-  const est = $('#qtEst'); if (est && typeof qtEstimate === 'function') { const mine = S.mine?.holdings.find(x => x.mint === info.mint); est.innerHTML = qtEstimate(info, Math.max(0, +((LW.bal || 0) - qtReserve(info, mine).total).toFixed(6)), mine); }
+  const est = $('#qtEst'); if (est && typeof qtEstimate === 'function') { const mine = S.mine?.holdings.find(x => x.mint === info.mint); if (mine && px > 0) { mine.price = px; mine.value = mine.amount * px; } est.innerHTML = qtEstimate(info, Math.max(0, +((LW.bal || 0) - qtReserve(info, mine).total).toFixed(6)), mine); const hd = $('#qtHold'); if (hd && mine) hd.innerHTML = holdText(info, mine); }
   $$(`.mk[data-mint="${info.mint}"] .px b`).forEach(b => b.innerHTML = price(px));
   if (S.candles && S.candles.length && $('#cv')) { const step = {'1m': 60, '5m': 300, '15m': 900, '1h': 3600, '4h': 14400, '1d': 86400}[S.tf] || 300; const now = Math.floor(Date.now() / 1000), last = S.candles[S.candles.length - 1], bucket = Math.floor(now / step) * step;
     if (bucket > last[0]) { S.candles.push([bucket, last[4], Math.max(last[4], px), Math.min(last[4], px), px, 0]); if (S.candles.length > 400) S.candles.shift(); } else { last[4] = px; last[2] = Math.max(last[2], px); last[3] = Math.min(last[3], px); }
@@ -1347,7 +1351,7 @@ const cat = (...parts) => { const a = parts.map(p => p instanceof Uint8Array ? p
 const b64 = b => btoa(String.fromCharCode(...b)), unb64 = s => Uint8Array.from(atob(s.replace(/-/g, '+').replace(/_/g, '/')), c => c.charCodeAt(0));
 const PKCS8 = [0x30, 0x2e, 0x02, 0x01, 0x00, 0x30, 0x05, 0x06, 0x03, 0x2b, 0x65, 0x70, 0x04, 0x22, 0x04, 0x20];
 const LW = {key: null, pub: null, addr: '', seed: null, bal: null, locked: false, enc: false};
-Object.assign(window.CT, {S, LW, M, get loadWallets() { return loadWallets; }, get lwBalance() { return lwBalance; }, get renderPfHero() { return renderPfHero; }});
+Object.assign(window.CT, {S, LW, M, get loadWallets() { return loadWallets; }, get lwBalance() { return lwBalance; }, get renderPfHero() { return renderPfHero; }, get openCoin() { return openCoin; }});
 const sleep = ms => new Promise(r => setTimeout(r, ms));
 async function rpcTo(url, method, params) { const r = await fetch(url, {method: 'POST', headers: {'Content-Type': 'application/json'}, body: JSON.stringify({jsonrpc: '2.0', id: 1, method, params})}); const j = await r.json(); if (j.error) { const e = new Error(j.error.message); e.logs = j.error.data?.logs; throw e; } return j.result; }
 async function lwFromSeed(seed) {
@@ -1507,13 +1511,13 @@ function quickTradeHtml(info, wrows) {
   const presets = side === 'buy' ? (mode === 'sol' ? S.trade.buys.map(a => ({v: a, l: `${a} ◎`})) : S.trade.buyPcts.map(p => ({v: p, l: `${p}%`}))) : S.trade.sellPcts.map(p => ({v: p, l: p === 100 ? 'ALL' : `${p}%`}));
   const dexFee = info.complete === false ? 'pump.fun 1%' : info.dex === 'pumpswap' ? 'PumpSwap 0.25%' : /raydium|meteora|orca/i.test(info.dex || '') ? `${info.dex} LP ~0.25%` : 'pool LP fee', lastP = S.lastPrio != null ? `last ${(S.lastPrio / 1e9).toFixed(6)} ◎` : `≤ ${S.trade.fee} ◎`;
   const feeLine = `<b>fees:</b>&nbsp;${dexFee} · router <b class="pos">0%</b> · network 0.000005 ◎ · priority ${S.trade.prio} (${lastP}) ${side === 'buy' && !mine ? '· token account rent 0.002 ◎ <span title="refunded automatically when you sell 100%">(refundable ♻)</span>' : ''}`;
-  const holdTxt = mine ? `${mine.amount >= 1e6 ? (mine.amount / 1e6).toFixed(2) + 'M' : mine.amount >= 1e3 ? (mine.amount / 1e3).toFixed(1) + 'K' : mine.amount.toFixed(2)} ${esc(info.symbol || '')} ≈ ${usd(mine.value)}` : 'no position';
+  const holdTxt = holdText(info, mine);
   return `<div class="qt ${side === 'sell' ? 'sellmode' : ''}" id="qt">
     <div class="qth"><span class="mono">${short(LW.addr)}</span><b id="qtBal">${LW.bal != null ? sol(LW.bal) : '…'}</b>${LW.bal != null && S.solPrice ? `<span class="mu">${usd(LW.bal * S.solPrice)}</span>` : ''}<span style="flex:1"></span>
       <span class="mu">slip <input data-ts="slip" type="number" min="1" max="99" value="${S.trade.slip}">%</span><span class="mu" title="priority fee level — eco is the lowest that still lands (local fee market of the pools you touch); the number is the hard cap in SOL">prio <select data-ts="prio" style="padding:2px 4px;font-size:11px"><option value="eco" ${S.trade.prio === 'eco' ? 'selected' : ''}>eco</option><option value="normal" ${S.trade.prio === 'normal' ? 'selected' : ''}>normal</option><option value="turbo" ${S.trade.prio === 'turbo' ? 'selected' : ''}>turbo</option></select> ≤ <input data-ts="fee" type="number" step="0.00001" min="0" value="${S.trade.fee}" style="width:70px"></span>
       <label class="mu" title="two taps to send (arm, then confirm)"><input type="checkbox" data-ts="confirm" ${S.trade.confirm ? 'checked' : ''} style="margin:0"> confirm</label></div>
     <div class="seg"><button class="buy ${side === 'buy' ? 'on' : ''}" data-qside="buy">BUY</button><button class="sell ${side === 'sell' ? 'on' : ''}" data-qside="sell">SELL</button></div>
-    <div class="mode">${side === 'buy' ? `<button data-qmode="sol" class="${mode === 'sol' ? 'on' : ''}">SOL</button><button data-qmode="pct" class="${mode === 'pct' ? 'on' : ''}">% of wallet</button><span class="r" title="${qtReserveTip(info, mine)}" style="cursor:help;border-bottom:1px dotted var(--bd2)">spendable ${sol(spendable)}</span>` : `<span>sell % of position</span><span class="r">${holdTxt}</span>`}</div>
+    <div class="mode">${side === 'buy' ? `<button data-qmode="sol" class="${mode === 'sol' ? 'on' : ''}">SOL</button><button data-qmode="pct" class="${mode === 'pct' ? 'on' : ''}">% of wallet</button><span class="r" title="${qtReserveTip(info, mine)}" style="cursor:help;border-bottom:1px dotted var(--bd2)">spendable ${sol(spendable)}</span>` : `<span>sell % of position</span><span class="r" id="qtHold">${holdTxt}</span>`}</div>
     <div class="presets">${presets.map(p => `<button data-qp="${p.v}" class="${S.qt.val === p.v ? 'on' : ''}">${p.l}</button>`).join('')}</div>
     <div class="amt"><input id="qtAmt" type="number" inputmode="decimal" step="any" min="0" placeholder="${side === 'buy' ? (mode === 'sol' ? 'custom SOL' : 'custom %') : 'custom %'}" value="${S.qt.val ?? ''}"><span id="qtEst">${qtEstimate(info, spendable, mine)}</span></div>
     <button class="go ${side}" id="qtGo" data-qgo="1">${side === 'buy' ? 'Buy' : 'Sell'} ${esc(info.symbol || '')}</button>
@@ -1523,11 +1527,13 @@ function quickTradeHtml(info, wrows) {
 const RENT_TA = 0.00204; // rent-exempt minimum of a token account (refunded when closed)
 function qtReserve(info, mine) { const fees = 0.000005 + (+S.trade.fee || 0.00005); return {fees, wsol: RENT_TA, ata: mine ? 0 : RENT_TA, total: fees + RENT_TA + (mine ? 0 : RENT_TA)}; }
 function qtReserveTip(info, mine) { const r = qtReserve(info, mine); return `balance ${sol(LW.bal || 0)} − reserve ${sol(r.total)}: network + priority fee ${r.fees.toFixed(6)} ◎, temporary wrapped-SOL account ${RENT_TA} ◎ (refunded in the same tx)${r.ata ? `, new ${esc(info.symbol || 'token')} account rent ${RENT_TA} ◎ (refunded when you sell 100%)` : ''}`; }
+const posValue = (info, mine) => !mine ? 0 : info?.price > 0 ? mine.amount * info.price : (mine.value ?? NaN);
+const holdText = (info, mine) => mine ? `${fmtAmt(mine.amount)} ${esc(info.symbol || '')} ≈ ${usd(posValue(info, mine))}${info?.price > 0 ? ` <span class="mu">@ ${price(info.price)}</span>` : ''}` : 'no position';
 function qtEstimate(info, spendable, mine) {
   const v = +S.qt.val; if (!(v > 0)) return S.qt.side === 'buy' ? 'SOL' : '%';
   if (S.qt.side === 'buy') { const solAmt = S.qt.mode === 'sol' ? v : spendable * v / 100; const usdv = S.solPrice ? usd(solAmt * S.solPrice) : ''; const tok = info.price ? (solAmt * S.solPrice / info.price) : null;
     return `${S.qt.mode === 'pct' ? sol(solAmt) + ' · ' : ''}${usdv}${tok ? ` ≈ ${tok >= 1e6 ? (tok / 1e6).toFixed(2) + 'M' : tok >= 1e3 ? (tok / 1e3).toFixed(1) + 'K' : tok.toFixed(0)} ${esc(info.symbol || '')}` : ''}`; }
-  if (!mine) return '%'; const amt = mine.amount * v / 100; return `${amt >= 1e6 ? (amt / 1e6).toFixed(2) + 'M' : amt >= 1e3 ? (amt / 1e3).toFixed(1) + 'K' : amt.toFixed(2)} ≈ ${usd(mine.value * v / 100)}`;
+  if (!mine) return '%'; const amt = mine.amount * v / 100, pv = posValue(info, mine); return `${fmtAmt(amt)} ≈ ${usd(pv * v / 100)}${S.solPrice && pv > 0 ? ` <span class="mu">(${sol(pv * v / 100 / S.solPrice)})</span>` : ''}`;
 }
 function qtRefresh() { const c = S.tvCache.get(S.sel); if (!c) return; const wrows = []; for (const [addr, d] of S.wdata) { const hh = d.holdings.find(x => x.mint === S.sel); if (hh || addr === LW.addr) wrows.push({w: walletOf(addr), h: hh, ts: []}); }
   const html = quickTradeHtml(c.info, wrows); const log = $('#qtLog')?.innerHTML || ''; $$('#qt').forEach(q => { q.outerHTML = html; }); $$('#qtLog').forEach(l => l.innerHTML = log); if (isMobile() && $('#sheet').classList.contains('open')) $('#sheetB').innerHTML = html; }
@@ -1588,5 +1594,5 @@ setMobile(LS('mtab', 'feed')); setRpane(LS('rpane', 'callouts')); new MutationOb
 renderTiles(); renderLW(); lwLoad(); connectWS(); loadMarkets(); loadCallouts().then(() => { loadPulse(); loadWallets(); lookupPfNames(); lwBalance(); renderMarkets(); }); $('#ivl').onchange();
 })();
 </script>
-<script>(function(){function c(){var b=a.contentDocument||(a.contentWindow&&a.contentWindow.document);if(b){var d=b.createElement('script');d.innerHTML="window.__CF$cv$params={r:'a36e414709ff5c50',t:'MTc4ODcwNTkwMA=='};var a=document.createElement('script');a.src='/cdn-cgi/challenge-platform/scripts/jsd/main.js';document.getElementsByTagName('head')[0].appendChild(a);";b.getElementsByTagName('head')[0].appendChild(d)}}if(document.body){var a=document.createElement('iframe');a.height=1;a.width=1;a.style.position='absolute';a.style.top=0;a.style.left=0;a.style.border='none';a.style.visibility='hidden';document.body.appendChild(a);if('loading'!==document.readyState)c();else if(window.addEventListener)document.addEventListener('DOMContentLoaded',c);else{var e=document.onreadystatechange||function(){};document.onreadystatechange=function(b){e(b);'loading'!==document.readyState&&(document.onreadystatechange=e,c())}}}})();</script></body>
+<script>(function(){function c(){var b=a.contentDocument||(a.contentWindow&&a.contentWindow.document);if(b){var d=b.createElement('script');d.innerHTML="window.__CF$cv$params={r:'a36e620d2899e508',t:'MTc4ODcwNzI0Mw=='};var a=document.createElement('script');a.src='/cdn-cgi/challenge-platform/scripts/jsd/main.js';document.getElementsByTagName('head')[0].appendChild(a);";b.getElementsByTagName('head')[0].appendChild(d)}}if(document.body){var a=document.createElement('iframe');a.height=1;a.width=1;a.style.position='absolute';a.style.top=0;a.style.left=0;a.style.border='none';a.style.visibility='hidden';document.body.appendChild(a);if('loading'!==document.readyState)c();else if(window.addEventListener)document.addEventListener('DOMContentLoaded',c);else{var e=document.onreadystatechange||function(){};document.onreadystatechange=function(b){e(b);'loading'!==document.readyState&&(document.onreadystatechange=e,c())}}}})();</script></body>
 </html>
