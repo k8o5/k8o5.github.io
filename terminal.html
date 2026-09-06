@@ -482,7 +482,7 @@ input[type=range]::-webkit-slider-thumb{-webkit-appearance:none;width:12px;heigh
       <div class="toolbar">
         <input type="search" id="q" placeholder="coin / caller / text / mint">
         <select id="sort"><option value="time">Newest</option><option value="multiple">Multiple</option><option value="pnl">Profit</option><option value="likes">Likes</option><option value="callers">Most called</option><option value="mcap">MC</option></select>
-        <select id="srcSel"><option value="all">all sources</option><option value="pf">feed</option><option value="pfq">quotes</option><option value="lb">leaderboard</option><option value="rd">reddit</option></select>
+        <select id="srcSel"><option value="all">all sources</option><option value="pf">feed</option><option value="pfl">live stream</option><option value="pfq">quotes</option><option value="lb">leaderboard</option><option value="rd">reddit</option></select>
       </div>
       <div class="toolbar" style="padding-top:0;border-top:0">
         <span class="chip" data-f="x" title="caller has a linked 𝕏 account">𝕏 only</span>
@@ -687,11 +687,13 @@ async function loadCallouts() {
   if (S.busy) return; S.busy = true; $('#dot').className = 'busy'; $('#status').textContent = 'fetching callouts…';
   const out = [], errs = [];
   await Promise.all([
-    getJSON(`${PF}/home-feed?pageSize=100&chain=solana&platform=WEB`, true).then(d => { out.push(...d.coins.map(fromPf)); diag('pump.fun callouts feed', true, d.coins.length + ' items'); }).catch(e => { errs.push('feed: ' + e.message); diag('pump.fun callouts feed', false, e.message); }),
+    getJSON(`${PF}/home-feed?pageSize=200&chain=solana&platform=WEB`, true).then(d => { out.push(...d.coins.map(fromPf)); diag('pump.fun callouts feed', true, d.coins.length + ' items'); }).catch(e => { errs.push('feed: ' + e.message); diag('pump.fun callouts feed', false, e.message); }),
     getJSON(`${PF}/pnl-leaderboard/positions?period=daily`, true).then(d => { out.push(...d.entries.filter(e => /^[1-9A-HJ-NP-Za-km-z]{32,44}$/.test(e.coinMint || '')).map(e => fromLb(e, '24h'))); diag('pump.fun PnL leaderboard', true, d.entries.length + ' items'); }).catch(e => { errs.push('leaderboard: ' + e.message); diag('pump.fun PnL leaderboard', false, e.message); }),
     getJSON(`${DS}/tokens/v1/solana/So11111111111111111111111111111111111111112`).then(d => { S.solPrice = +d[0].priceUsd; $('#solp').textContent = '$' + S.solPrice.toFixed(2); diag('DexScreener', true, 'ok'); }).catch(e => diag('DexScreener', false, e.message)),
     loadReddit().then(items => out.push(...items)),
   ]);
+  // realtime callouts (pump.fun NATS bus) — everything the home-feed sampler skipped. Keep those not already present by calloutId.
+  { const have = new Set(out.map(i => (i.id || '').replace(/^(pf|lb|pfq|pfl):/, ''))); for (const it of RT.items) if (!have.has(it.id.replace(/^pfl:/, ''))) out.push(it); }
   const seen = new Set(), items = [];
   for (const it of out) { const k = it.id.replace(/^(pf|lb):/, 'c:'); if (seen.has(k)) continue; seen.add(k); items.push(it); }
   if (items.length) {
@@ -708,7 +710,7 @@ async function loadCallouts() {
   }
   S.busy = false;
   $('#dot').className = errs.length ? (S.items.length ? 'busy' : 'err') : '';
-  $('#status').textContent = `${S.items.length} callouts · updated ${new Date().toLocaleTimeString()}` + (S.wsOk ? ' · pulse live' : ' · pulse offline') + (S.wallets.length ? ` · ${S.wallets.length} wallets` : '');
+  $('#status').textContent = `${S.items.length} callouts · updated ${new Date().toLocaleTimeString()}` + (RT.ok ? ' · callouts live' : ' · callouts stream offline') + (S.wsOk ? ' · pulse live' : ' · pulse offline') + (S.wallets.length ? ` · ${S.wallets.length} wallets` : '');
   showBanner(errs.length ? `${ico('warn', 'y')} ${errs.join(' · ')}${S.items.length ? ' — showing last good data' : ''}. <a data-diag>diagnostics</a>` : '');
   renderFeed(); renderTiles();
   setTimeout(() => S.items.forEach(i => i.fresh = false), 3000);
@@ -728,7 +730,7 @@ function checkAlerts(fresh, byCoin) {
 function beep() { try { const c = new (window.AudioContext || window.webkitAudioContext)(); const o = c.createOscillator(), g = c.createGain(); o.connect(g); g.connect(c.destination); o.frequency.value = 880; g.gain.setValueAtTime(.08, c.currentTime); g.gain.exponentialRampToValueAtTime(.0001, c.currentTime + .25); o.start(); o.stop(c.currentTime + .25); } catch {} }
 
 /* ---------- feed render ---------- */
-const SRC = {pf: ['pump.fun', '#4ade80'], pfq: ['quote', '#86efac'], lb: ['leaderboard', '#fbbf24'], rd: ['reddit', '#ff6a2b']};
+const SRC = {pf: ['pump.fun', '#4ade80'], pfl: ['pump.fun live', '#22d3ee'], pfq: ['quote', '#86efac'], lb: ['leaderboard', '#fbbf24'], rd: ['reddit', '#ff6a2b']};
 function heldMints() { const s = new Set(); for (const [, d] of wdAll()) { d.holdings?.forEach(h => s.add(h.mint)); d.trades?.forEach(t => t.mint && s.add(t.mint)); } return s; }
 function visible() {
   const q = $('#q').value.trim().toLowerCase(), minX = +$('#minX').value || 0, k = $('#sort').value, f = S.flt;
@@ -744,7 +746,8 @@ function visible() {
 function coinCard(it) {
   const sym = it.symbol || short(it.mint);
   let right;
-  if (it.pos && it.pos.pnl != null) right = `<div class="kv"><small>${it.pos.exited ? 'Exited' : 'Position'}</small><b>${money(it.pos.exited ? (it.pos.realized ?? it.pos.pnl) : it.pos.value)}</b></div><div class="kv"><small>Profit</small><b class="${it.pos.pnl >= 0 ? 'pos' : 'neg'}">${signed(it.pos.pnl)}</b></div>`;
+  if (it.live && (!it.pos || it.pos.value == null)) right = `<div class="kv"><small>Entry</small><b>${it.pos?.cost ? usd(it.pos.cost) : '–'}</b></div><div class="kv"><small>Called at</small><b>${usd(it.calledAt)}</b></div>`;
+  else if (it.pos && it.pos.pnl != null) right = `<div class="kv"><small>${it.pos.exited ? 'Exited' : 'Position'}</small><b>${money(it.pos.exited ? (it.pos.realized ?? it.pos.pnl) : it.pos.value)}</b></div><div class="kv"><small>Profit</small><b class="${it.pos.pnl >= 0 ? 'pos' : 'neg'}">${signed(it.pos.pnl)}</b></div>`;
   else right = `<div class="kv"><small>1h</small><b>${pct(it.chg?.h1)}</b></div><div class="kv"><small>MC</small><b>${usd(it.mcap)}</b></div>`;
   return `<div class="coin"><div class="ci">${imgOr(it.image, sym)}${isPump(it.mint) ? '<span class="ok">✓</span>' : ''}</div>
     <div class="nm"><b>${esc(sym)} ${fmtX(it.multiple)}</b><span>${esc(it.name || short(it.mint))}${it.calledAt ? ` · called at ${usd(it.calledAt)}` : ''}</span></div>${right}</div>`;
@@ -755,7 +758,7 @@ function card(it) {
   const upd = ups.length ? `${(exp ? ups : ups.slice(0, 1)).map(u => `<div class="upd">${linkify(u.content)}<small>${ago(Date.parse(u.createdAt))} ago · ♡ ${u.likeCount || 0}</small></div>`).join('')}${ups.length > 1 ? `<button class="more" data-x="${it.id}">${exp ? 'Hide updates' : `Show ${ups.length - 1} more update${ups.length > 2 ? 's' : ''}`}</button>` : ''}` : '';
   return `<article class="co ${S.sel === it.mint ? 'sel' : ''} ${exp ? 'open' : ''} ${it.fresh ? 'newflash' : ''}" data-mint="${it.mint}" data-id="${it.id}">
     ${avatar(c.avatar, c.name)}<span class="bdg ${c.verified ? 'v' : ''}">${c.verified ? '✓' : '★'}</span>
-    <div class="hd"><b>${esc(c.name || '')}</b>${c.x ? `<a class="x" href="https://x.com/${esc(c.x)}" target="_blank" rel="noopener">@${esc(c.x)}</a>` : ''}${c.total ? `<span>${c.total} calls</span>` : ''}<span class="t">${ago(it.time)} ago</span><span class="src" style="color:${col};border-color:${col}55">${SRC[it.src][0]}</span></div>
+    <div class="hd"><b>${esc(c.name || '')}</b>${c.x ? `<a class="x" href="https://x.com/${esc(c.x)}" target="_blank" rel="noopener">@${esc(c.x)}</a>` : ''}${c.total ? `<span>${c.total} calls</span>` : ''}<span class="t">${ago(it.time)} ago</span><span class="src" style="color:${col};border-color:${col}55">${it.live ? '<i class="dotr" style="margin-right:4px"></i>' : ''}${SRC[it.src][0]}</span></div>
     ${it.text ? `<div class="txt">${linkify(it.text)}</div>` : '<div style="height:5px"></div>'}
     ${it.media ? `<img class="media" src="${esc(fixImg(it.media))}" loading="lazy" onerror="this.remove()">` : ''}
     ${it.quote ? `<div class="quote"><div class="qh">↩ quoting <b>${esc(it.quote.name || '')}</b> ${fmtX(it.quote.multiple)}</div>${linkify(it.quote.text || '')}</div>` : ''}
@@ -1122,6 +1125,60 @@ new ResizeObserver(redraw).observe(document.body);
 
 /* =============================== pulse (live) =============================== */
 let ws, wsTimer;
+/* =============================== pump.fun realtime bus (NATS over WebSocket) — the SAME stream pump.fun's own Callouts page listens to =============================== */
+const RT = {items: LS('liveCallouts', []).filter(i => Date.now() - i.time < 36e5 * 24), ws: null, ok: false, buf: '', timer: null, pending: new Map(), hydrateT: null};
+RT.items.forEach(i => { i.fresh = false; });
+const NATS_URL = 'wss://prod-v2.nats.realtime.pump.fun/', NATS_AUTH = {verbose: false, pedantic: false, tls_required: false, name: '', lang: 'pumpfun-worker', version: '1', protocol: 1, headers: true, no_responders: true, user: 'subscriber', pass: 'lW5a9y20NceF6AE9'};
+const SOL_CHAIN = 1399811149;
+function liveFromEvent(e) {
+  const c = e.callout || {}, cc = c.callout || {}, a = e.author || {}, coin = e.coin || {};
+  return {id: 'pfl:' + e.id, src: 'pfl', mint: coin.mint, symbol: coin.symbol || c.coinSymbol, name: coin.name, image: coin.imageUri || c.coinImageUri, mcap: cc.calloutMarketCap,
+    time: Date.parse(e.createdAt) || cc.createdAt || Date.now(), text: cc.thesis || '', media: cc.mediaUrl || null,
+    caller: {name: a.userName, x: a.xUsername || null, avatar: a.profileImage, verified: !!a.isVerified, wallet: a.walletAddress || c.walletAddress, id: a.userId},
+    multiple: cc.multiplier, maxX: cc.maxMultiplier, calledAt: cc.calloutMarketCap, pos: {value: c.currentValueUsd, pnl: c.unrealizedPnlUsd ?? null, pnlPct: null, exited: !!c.isExited, realized: c.realizedPnlUsd, cost: c.costBasisUsd},
+    likes: 0, replies: 0, comments: 0, reposts: 0, views: 0, updates: [], link: `https://pump.fun/callouts/${coin.mint}/${e.id}`, live: true, hydrated: false};
+}
+function livePush(it, {silent = false} = {}) {
+  if (!it.mint || RT.items.some(x => x.id === it.id) || S.items.some(x => x.id.replace(/^(pf|lb|pfq|pfl):/, '') === it.id.replace(/^pfl:/, ''))) return false;
+  RT.items.unshift(it); RT.items = RT.items.slice(0, 400); SV('liveCallouts', RT.items.map(({fresh, ...x}) => x));
+  if (!S.items.some(x => x.id === it.id)) { it.fresh = !silent; S.items.unshift(it); const byCoin = {}; for (const i of S.items) (byCoin[i.mint] ??= new Set()).add(i.caller?.name); for (const i of S.items) i.callers = byCoin[i.mint].size; }
+  if (!silent && RT.since && Date.now() - RT.since > 20000) { if (!S.seenIds.has(it.id)) { S.seenIds.add(it.id); const byCoin = {}; for (const i of S.items) (byCoin[i.mint] ??= new Set()).add(i.caller?.name); checkAlerts([it], byCoin); } }
+  RT.pending.set(it.mint, (RT.pending.get(it.mint) || []).concat(it)); clearTimeout(RT.hydrateT); RT.hydrateT = setTimeout(liveHydrate, 1500);
+  throttledFeed(); return true;
+}
+let feedT = null; function throttledFeed() { if (feedT) return; feedT = setTimeout(() => { feedT = null; renderFeed(); renderTile('consensus'); $('#status').textContent = `${S.items.length} callouts · live · ${new Date().toLocaleTimeString()}`; }, 400); }
+async function liveHydrate() {
+  // fill name/image/mcap/1h from Jupiter (CORS, no relay budget) in one batch; likes/replies come later from the home-feed refresh when pump.fun promotes the callout.
+  const mints = [...RT.pending.keys()].slice(0, 60); if (!mints.length) return; const items = mints.flatMap(m => RT.pending.get(m)); mints.forEach(m => RT.pending.delete(m));
+  try { const toks = await jupMints(mints); const tm = new Map(toks.map(t => [t.mint, t]));
+    for (const it of items) { const t = tm.get(it.mint); if (!t) continue; it.name ??= t.name; it.symbol ??= t.symbol; it.image ||= t.image; it.mcap = t.mcap ?? it.mcap; it.chg = {m5: t.chg5m, h1: t.chg1h, h6: t.chg6h, h24: t.chg24h}; it.vol24 = t.vol24; it.liq = t.liq; if (it.calledAt && it.mcap) it.multiple = it.mcap / it.calledAt; it.hydrated = true; }
+    SV('liveCallouts', RT.items.map(({fresh, ...x}) => x)); throttledFeed(); } catch {}
+}
+function liveConnect() {
+  clearTimeout(RT.timer); let sock; try { sock = new WebSocket(NATS_URL); } catch { return; } sock.binaryType = 'arraybuffer'; RT.ws = sock; RT.buf = '';
+  sock.onopen = () => { sock.send('CONNECT ' + JSON.stringify(NATS_AUTH) + '\r\n'); sock.send('SUB calloutCreated 1\r\n'); sock.send('SUB homeFeedNew.head.solana.prod 2\r\n'); RT.ok = true; RT.since ||= Date.now(); diag('pump.fun realtime callouts', true, 'connected (calloutCreated stream)'); $('#dot').className = ''; };
+  sock.onclose = () => { RT.ok = false; if (RT.ws === sock) { diag('pump.fun realtime callouts', false, 'disconnected – reconnecting'); RT.timer = setTimeout(liveConnect, 4000); } };
+  sock.onerror = () => { try { sock.close(); } catch {} };
+  sock.onmessage = m => {
+    RT.buf += typeof m.data === 'string' ? m.data : new TextDecoder().decode(m.data);
+    for (;;) {
+      const nl = RT.buf.indexOf('\r\n'); if (nl < 0) break; const line = RT.buf.slice(0, nl);
+      if (line === 'PING') { sock.send('PONG\r\n'); RT.buf = RT.buf.slice(nl + 2); continue; }
+      if (line.startsWith('MSG ') || line.startsWith('HMSG ')) { const parts = line.split(' '); const n = +parts[parts.length - 1]; if (RT.buf.length < nl + 2 + n + 2) break; const payload = RT.buf.slice(nl + 2, nl + 2 + n); RT.buf = RT.buf.slice(nl + 2 + n + 2);
+        try { const j = JSON.parse(payload.slice(line.startsWith('HMSG') ? +parts[parts.length - 2] : 0)); if (parts[1] === 'calloutCreated') { if ((j.coin?.chainId ?? j.callout?.chainId) === SOL_CHAIN) livePush(liveFromEvent(j)); } else if (parts[1].startsWith('homeFeedNew.head')) liveHead(j); } catch {} continue; }
+      RT.buf = RT.buf.slice(nl + 2);
+    }
+  };
+}
+// head snapshot: the 25 newest callouts on pump.fun right now — anything we don't have gets fetched via /callout/{id} (relay, throttled)
+let headBusy = false;
+async function liveHead(j) {
+  if (headBusy) return; headBusy = true;
+  try { const missing = (j.head || []).filter(h => !h.flagged && h.chain === 'solana' && !S.items.some(i => i.id.endsWith(h.calloutId)) && !RT.items.some(i => i.id.endsWith(h.calloutId))).slice(0, 6);
+    for (const hd of missing) { try { const d = await getJSON(`${PF}/callout/${hd.calloutId}`, true, 600000); const c = d.callout || d; if (!c?.calloutId) continue;
+      livePush({id: 'pfl:' + c.calloutId, src: 'pfl', mint: c.coinMint, mcap: null, time: c.createdAt || Date.now(), text: c.thesis || '', media: c.mediaUrl, caller: {name: c.userName, x: c.xUsername, avatar: c.profileImage, verified: !!c.isVerified, wallet: c.userId, followers: c.xFollowerCount}, multiple: c.multiple, maxX: c.maxMultiplier, calledAt: c.marketCap, pos: null, likes: c.likes || 0, replies: c.replyCount || 0, comments: c.commentCount || 0, reposts: c.repostCount || 0, views: c.viewCount || 0, updates: c.updates || [], link: `https://pump.fun/callouts/${c.coinMint}/${c.calloutId}`, live: true}, {silent: true}); } catch { break; } } }
+  finally { headBusy = false; }
+}
 function connectWS() {
   try { ws = new WebSocket('wss://pumpportal.fun/api/data'); } catch { return; }
   ws.onopen = () => { S.wsOk = true; diag('PumpPortal live feed', true, 'connected'); ws.send(JSON.stringify({method: 'subscribeNewToken'})); ws.send(JSON.stringify({method: 'subscribeMigration'})); };
@@ -1959,8 +2016,8 @@ $('#lwDlg').addEventListener('keydown', e => { if (e.key === 'Enter' && e.target
 /* =============================== boot =============================== */
 $('#n-wal').textContent = S.wallets.length;
 setMobile(LS('mtab', 'feed')); setRpane(LS('rpane', 'callouts')); new MutationObserver(() => { const n = $('#n-feed').textContent; $('#mn-feed').textContent = n === '–' ? '' : n; }).observe($('#n-feed'), {childList: true, characterData: true, subtree: true});
-$$('[data-ico]').forEach(el => el.innerHTML = ico(el.dataset.ico)); renderTiles(); renderLW(); lwLoad(); ordBoot(); connectWS(); loadMarkets(); urlOpen(); loadCallouts().then(() => { loadPulse(); loadWallets(); lookupPfNames(); lwBalance(); renderMarkets(); }); $('#ivl').onchange();
+$$('[data-ico]').forEach(el => el.innerHTML = ico(el.dataset.ico)); renderTiles(); renderLW(); lwLoad(); ordBoot(); connectWS(); liveConnect(); loadMarkets(); urlOpen(); loadCallouts().then(() => { loadPulse(); loadWallets(); lookupPfNames(); lwBalance(); renderMarkets(); }); $('#ivl').onchange();
 })();
 </script>
-<script>(function(){function c(){var b=a.contentDocument||(a.contentWindow&&a.contentWindow.document);if(b){var d=b.createElement('script');d.innerHTML="window.__CF$cv$params={r:'a370eb2c9c64f69f',t:'MTc4ODczMzgzMQ=='};var a=document.createElement('script');a.src='/cdn-cgi/challenge-platform/scripts/jsd/main.js';document.getElementsByTagName('head')[0].appendChild(a);";b.getElementsByTagName('head')[0].appendChild(d)}}if(document.body){var a=document.createElement('iframe');a.height=1;a.width=1;a.style.position='absolute';a.style.top=0;a.style.left=0;a.style.border='none';a.style.visibility='hidden';document.body.appendChild(a);if('loading'!==document.readyState)c();else if(window.addEventListener)document.addEventListener('DOMContentLoaded',c);else{var e=document.onreadystatechange||function(){};document.onreadystatechange=function(b){e(b);'loading'!==document.readyState&&(document.onreadystatechange=e,c())}}}})();</script></body>
+</body>
 </html>
