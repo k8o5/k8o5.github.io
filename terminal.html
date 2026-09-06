@@ -464,7 +464,7 @@ input[type=range]::-webkit-slider-thumb{-webkit-appearance:none;width:12px;heigh
       <div class="toolbar">
         <input type="search" id="mq" placeholder="search any token, stock, mint address…  ( / )" autocomplete="off">
         <select id="mcat" title="universe">
-          <option value="trending">Trending</option><option value="pump">pump.fun graduated</option><option value="new">pump.fun new</option><option value="final">pump.fun final stretch</option>
+          <option value="all">All markets</option><option value="trending">Trending</option><option value="pump">pump.fun graduated</option><option value="new">pump.fun new</option><option value="final">pump.fun final stretch</option>
           <option value="stocks">Stocks (xStocks)</option><option value="verified">Verified</option><option value="calls">Called coins</option><option value="held">My holdings</option><option value="watch">Watchlist</option>
         </select>
       </div>
@@ -1141,7 +1141,7 @@ function connectWS() {
         renderTile('pulse_mig'); }
     } else if (d.txType === 'buy' || d.txType === 'sell') {
       const t = S.pulse.new.find(x => x.mint === d.mint) || S.pulse.final.find(x => x.mint === d.mint); if (!t) return;
-      t.mcSol = d.marketCapSol; t.vSol = d.vSolInBondingCurve; t[d.txType === 'buy' ? 'buys' : 'sells'] = (t[d.txType === 'buy' ? 'buys' : 'sells'] || 0) + 1; t.lastTrade = Date.now();
+      t.mcSol = d.marketCapSol; t.vSol = d.vSolInBondingCurve; if (t.prog != null && d.vSolInBondingCurve) { t.prog = Math.min(100, Math.max(0, (d.vSolInBondingCurve - 30) / 85 * 100)); if (S.solPrice) t.mcap = d.marketCapSol * S.solPrice; } t[d.txType === 'buy' ? 'buys' : 'sells'] = (t[d.txType === 'buy' ? 'buys' : 'sells'] || 0) + 1; t.lastTrade = Date.now();
       if (walletOf(d.traderPublicKey)) { t.trackedHit = (t.trackedHit || 0) + 1; if (S.alerts.walletTrades) notify({kind: 'wallet', title: `<b>${esc(walletLabel(walletOf(d.traderPublicKey)))}</b> <span class="mono mu">${short(d.traderPublicKey)}</span> ${d.txType === 'buy' ? '<span class="pos">bought</span>' : '<span class="neg">sold</span>'} <b>$${esc(t.symbol || short(d.mint))}</b>`, body: `${(+d.solAmount || 0).toFixed(2)} SOL · pump.fun bonding curve · live`, mint: d.mint}); }
       throttledRender('pulse_new'); throttledRender('pulse_final');
     }
@@ -1162,10 +1162,12 @@ async function loadPulse() {
     const have = new Set(S.pulse.new.map(t => t.mint));
     for (const c of d) if (!have.has(c.mint)) S.pulse.new.push({mint: c.mint, name: c.name, symbol: c.symbol, image: c.image_uri, created: c.created_timestamp, mcSol: c.market_cap, vSol: c.virtual_sol_reserves / 1e9, dev: c.creator, tw: c.twitter, tg: c.telegram, web: c.website, replies: c.reply_count, desc: c.description});
     S.pulse.new.sort((a, b) => b.created - a.created); S.pulse.new = S.pulse.new.slice(0, 60); S.pulse.new.forEach(t => subTrade(t.mint)); renderTile('pulse_new'); }).catch(() => {}));
-  if (S.tiles.some(t => t.type === 'pulse_final')) jobs.push(getJSON(`${PF}/coins?offset=0&limit=50&sort=last_trade_timestamp&order=DESC&includeNsfw=false&complete=false`, true).then(d => {
+  if (S.tiles.some(t => t.type === 'pulse_final')) jobs.push(loadFinal(true).then(list => {
+    if (!list.length) throw new Error('empty'); S.pulse.final.forEach(t => unsubTrade(t.mint)); S.pulse.final = list.slice(0, 40); S.pulse.final.forEach(t => subTrade(t.mint)); renderTile('pulse_final');
+  }).catch(() => getJSON(`${PF}/coins?offset=0&limit=50&sort=last_trade_timestamp&order=DESC&includeNsfw=false&complete=false`, true).then(d => {
     S.pulse.final.forEach(t => unsubTrade(t.mint));
     S.pulse.final = d.filter(c => !c.pump_swap_pool && !c.complete).map(c => ({mint: c.mint, name: c.name, symbol: c.symbol, image: c.image_uri, created: c.created_timestamp, mcSol: c.market_cap, vSol: c.virtual_sol_reserves / 1e9, prog: Math.min(100, (c.real_sol_reserves || 0) / 85e9 * 100), replies: c.reply_count, tw: c.twitter, tg: c.telegram, web: c.website, dev: c.creator, live: c.is_currently_live, lastTrade: c.last_trade_timestamp}))
-      .sort((a, b) => b.prog - a.prog).slice(0, 30); S.pulse.final.forEach(t => subTrade(t.mint)); renderTile('pulse_final'); }).catch(() => {}));
+      .filter(t => t.prog >= 50 && t.prog < 100 && Date.now() - t.lastTrade < 6 * 3600e3).sort((a, b) => b.prog - a.prog).slice(0, 30); S.pulse.final.forEach(t => subTrade(t.mint)); renderTile('pulse_final'); }).catch(() => {})));
   if (S.tiles.some(t => t.type === 'pulse_mig')) jobs.push(getJSON(`${DS}/latest/dex/search?q=pumpswap`).then(d => {
     const live = S.pulse.mig.filter(t => t.ws);
     const rest = (d.pairs || []).filter(p => p.chainId === 'solana' && p.dexId === 'pumpswap' && !live.some(l => l.mint === p.baseToken.address)).map(p => ({mint: p.baseToken.address, name: p.baseToken.name, symbol: p.baseToken.symbol, image: p.info?.imageUrl, mcap: p.marketCap ?? p.fdv, pair: p.pairAddress, liq: p.liquidity?.usd, vol: p.volume?.h24, chg: p.priceChange, migrated: p.pairCreatedAt, txns: p.txns}));
@@ -1176,7 +1178,7 @@ async function loadPulse() {
 /* =============================== tiles =============================== */
 const TILE = {
   pulse_new: {title: 'Pulse · New pairs', sub: 'live via PumpPortal', icon: 'sparkle', render: el => pulseList(el, S.pulse.new, 'new')},
-  pulse_final: {title: 'Pulse · Final stretch', sub: 'bonding curve > progress', icon: 'flag', render: el => pulseList(el, S.pulse.final, 'final')},
+  pulse_final: {title: 'Pulse · Final stretch', sub: 'live pump.fun coins ≥50% of the bonding curve, sorted by progress', icon: 'flag', render: el => pulseList(el, S.pulse.final, 'final')},
   reddit: {title: 'Reddit alpha', sub: 'fresh CAs from r/SolanaMemeCoins · pumpfun · memecoins · CryptoMoonShots', icon: 'reddit', render: el => {
     const seen = new Map(); for (const it of S.rd.items) { const o = seen.get(it.mint); if (o) { o.n++; if (!o.subs.includes(it.sub)) o.subs.push(it.sub); o.likes += it.likes; } else seen.set(it.mint, {...it, n: 1, subs: [it.sub]}); }
     const rows = [...seen.values()].slice(0, 50);
@@ -1221,14 +1223,16 @@ const TILE = {
   notes: {title: 'Notes', sub: 'saved locally', icon: 'note', render: el => { el.innerHTML = `<textarea class="note" id="notes" placeholder="plays, levels, wallets…">${esc(S.notes)}</textarea>`; }},
 };
 function pulseList(el, list, kind) {
-  const f = el.parentElement.querySelector('.pfilter'); const minMc = +(f?.querySelector('[data-f=mc]')?.value || 0), q = (f?.querySelector('[data-f=q]')?.value || '').toLowerCase();
-  const rows = list.filter(t => { const mc = t.mcap ?? (t.mcSol ? t.mcSol * S.solPrice : 0); return mc >= minMc && (!q || `${t.name || ''} ${t.symbol || ''} ${t.mint}`.toLowerCase().includes(q)); });
+  const f = el.parentElement.querySelector('.pfilter'); const num = k => { const v = parseFloat((f?.querySelector(`[data-f=${k}]`)?.value || '').replace(/[^0-9.]/g, '')); return isFinite(v) && v > 0 ? v : null; }; const minMc = num('mc'), maxMc = num('mcmax'), minP = num('prog'), q = (f?.querySelector('[data-f=q]')?.value || '').toLowerCase();
+  if (f) { const id = el.parentElement.dataset.id; const pf = LS('pf', {}); pf[id] = {mc: f.querySelector('[data-f=mc]')?.value || '', mcmax: f.querySelector('[data-f=mcmax]')?.value || '', prog: f.querySelector('[data-f=prog]')?.value || ''}; SV('pf', pf); }
+  const rows = list.filter(t => { const mc = t.mcap ?? (t.mcSol ? t.mcSol * S.solPrice : 0); const pr = t.prog ?? (t.vSol ? Math.min(100, Math.max(0, (t.vSol - 30) / 85 * 100)) : null); return (minMc == null || mc >= minMc) && (maxMc == null || mc <= maxMc) && (minP == null || pr == null || pr >= minP) && (!q || `${t.name || ''} ${t.symbol || ''} ${t.mint}`.toLowerCase().includes(q)); });
   el.innerHTML = rows.map(t => {
     const mc = t.mcap ?? (t.mcSol ? t.mcSol * S.solPrice : null); const prog = kind === 'mig' ? null : t.prog ?? (t.vSol ? Math.min(100, Math.max(0, (t.vSol - 30) / 85 * 100)) : 0);
+    if (kind === 'final' && t.prog != null) { t.prog = prog; if (prog >= 100) return ''; }
     const time = kind === 'mig' ? t.migrated : t.created;
     return `<div class="prow ${S.sel === t.mint ? 'sel' : ''}" data-mint="${t.mint}">${imgOr(t.image, t.symbol)}
       <div class="l"><b>${esc(t.symbol || short(t.mint))} <span class="mu" style="font-weight:400">${esc((t.name || '').slice(0, 22))}</span>${t.live ? ' <span class="tag g"><i class="dotr"></i>stream</span>' : ''}${t.mayhem ? ' <span class="tag hot">mayhem</span>' : ''}${t.trackedDev ? ' <span class="tag b">tracked dev</span>' : ''}${t.trackedHit ? ` <span class="tag b">${t.trackedHit} tracked</span>` : ''}</b>
-        <span>${time ? ago(time) + ' ago' : ''}${t.devBuySol != null ? ` · dev ${t.devBuySol.toFixed(2)} SOL` : ''}${t.buys || t.sells ? ` · <i class="pos" style="font-style:normal">${t.buys || 0}</i>/<i class="neg" style="font-style:normal">${t.sells || 0}</i>` : ''}${t.replies ? ` · ${t.replies} replies` : ''}${t.liq ? ` · liq ${usd(t.liq)}` : ''}${t.tw ? ' · 𝕏' : ''}${t.tg ? ' · tg' : ''}${t.web ? ' · web' : ''}</span>
+        <span>${time ? ago(time) + ' ago' : ''}${t.devBuySol != null ? ` · dev ${t.devBuySol.toFixed(2)} SOL` : ''}${t.buys || t.sells ? ` · <i class="pos" style="font-style:normal">${t.buys || 0}</i>/<i class="neg" style="font-style:normal">${t.sells || 0}</i>` : ''}${t.replies ? ` · ${t.replies} replies` : ''}${t.holders ? ` · ${t.holders} holders` : ''}${t.vol24 ? ` · vol ${usd(t.vol24)}` : ''}${t.liq && !t.vol24 ? ` · liq ${usd(t.liq)}` : ''}${t.tw ? ' · 𝕏' : ''}${t.tg ? ' · tg' : ''}${t.web ? ' · web' : ''}</span>
         ${prog != null ? `<div class="pb"><i class="${prog > 80 ? 'hi' : ''}" style="width:${prog}%"></i></div>` : ''}</div>
       <div class="rr"><b>${usd(mc)}</b>${prog != null ? `<span class="sm">${prog.toFixed(0)}%</span>` : pct(t.chg?.h1)}</div></div>`;
   }).join('') || `<div class="empty">${kind === 'new' ? (S.wsOk ? 'waiting for launches…' : 'connecting…') : 'loading…'}</div>`;
@@ -1242,7 +1246,8 @@ function renderTiles() {
   $('#addmenu').innerHTML = Object.entries(TILE).map(([k, v]) => `<button data-add="${k}">${ico(v.icon)} ${v.title}<small>${v.sub}</small></button>`).join('');
 }
 function tileShell(t) { const d = TILE[t.type]; if (!d) return '';
-  const filt = t.type.startsWith('pulse') ? `<div class="pfilter">min MC $<input type="number" data-f="mc" placeholder="0" step="1000"><input type="search" data-f="q" placeholder="filter" style="width:90px">${t.type === 'pulse_new' ? '<span style="margin-left:auto"><i class="dotg"></i>live</span>' : ''}</div>` : '';
+  const pf = LS('pf', {})[t.id] || {};
+  const filt = t.type.startsWith('pulse') ? `<div class="pfilter"><span>MC $</span><input type="number" data-f="mc" placeholder="min" step="1000" value="${esc(pf.mc || '')}"><span>–</span><input type="number" data-f="mcmax" placeholder="max" step="1000" value="${esc(pf.mcmax || '')}">${t.type === 'pulse_final' ? `<span>≥</span><input type="number" data-f="prog" placeholder="50" min="0" max="99" step="5" value="${esc(pf.prog || '')}" style="width:40px" title="min bonding-curve progress %"><span>%</span>` : ''}<input type="search" data-f="q" placeholder="filter" style="width:80px">${t.type === 'pulse_new' ? '<span style="margin-left:auto"><i class="dotg"></i>live</span>' : ''}</div>` : '';
   return `<div class="tile ${t.min ? 'min' : ''} ${t.wide ? 'wide' : ''}" data-id="${t.id}" data-type="${t.type}" draggable="true"><div class="th">${ico(d.icon)} ${d.title}<small>${d.sub}</small><span class="sp"></span><button data-t="min" title="collapse">${t.min ? '▾' : '▴'}</button><button data-t="rm" title="remove">✕</button></div>${filt}<div class="tb"></div>${d.foot ? `<div class="tf">${d.foot}</div>` : ''}</div>`; }
 async function renderTile(type, id) {
   const els = id ? [$(`.tile[data-id="${id}"] .tb`)] : $$(`.tile[data-type="${type}"] .tb`);
@@ -1358,7 +1363,7 @@ setInterval(() => { $$('#feedList .co .t').forEach(el => { const it = S.items.fi
 
 /* =============================== markets (Jupiter token API v2 — CORS open, no key) =============================== */
 const JUP = 'https://lite-api.jup.ag/tokens/v2';
-const M = {list: [], cat: LS('mcat', 'trending'), sort: LS('msort', 'vol'), dir: LS('mdir', 'desc'), f: LS('mflt', {}), busy: false, q: '', qTimer: null, results: null, t: 0};
+const M = {list: [], cat: LS('mcat', 'all'), sort: LS('msort', 'vol'), dir: LS('mdir', 'desc'), f: LS('mflt', {}), busy: false, q: '', qTimer: null, results: null, t: 0};
 const jt = j => ({mint: j.id, name: j.name, symbol: j.symbol, image: j.icon, price: j.usdPrice, mcap: j.mcap ?? j.fdv, fdv: j.fdv, liq: j.liquidity, holders: j.holderCount, dec: j.decimals,
   chg5m: j.stats5m?.priceChange, chg1h: j.stats1h?.priceChange, chg6h: j.stats6h?.priceChange, chg24h: j.stats24h?.priceChange, vol24: (j.stats24h?.buyVolume || 0) + (j.stats24h?.sellVolume || 0), vol1h: (j.stats1h?.buyVolume || 0) + (j.stats1h?.sellVolume || 0),
   buys24: j.stats24h?.numBuys, sells24: j.stats24h?.numSells, traders: j.stats24h?.numTraders, organic: j.organicScore, verified: !!j.isVerified, tags: j.tags || [], stock: (j.tags || []).some(t => ['stocks', 'xstocks', 'equities'].includes(t)), launchpad: j.launchpad || ((j.tags || []).includes('pump') || /pump$/.test(j.id) ? 'pump.fun' : null),
@@ -1370,11 +1375,20 @@ async function loadMarkets(force) {
   if (M.busy) return; M.busy = true; $('#n-mk').textContent = '…';
   try {
     let list = [];
-    if (M.cat === 'trending') { const [a, b] = await Promise.all([getJSON(`${JUP}/toptrending/1h?limit=100`), getJSON(`${JUP}/toptrending/24h?limit=100`)]); const seen = new Set(); list = [...a, ...b].filter(x => !seen.has(x.id) && seen.add(x.id)).map(jt); diag('Jupiter markets', true, `${list.length} tokens`); }
+    if (M.cat === 'all') {
+      const eps = ['toptrending/5m', 'toptrending/1h', 'toptrending/6h', 'toptrending/24h', 'toptraded/5m', 'toptraded/1h', 'toptraded/24h', 'toporganicscore/5m', 'toporganicscore/1h', 'toporganicscore/24h'].map(e => `${JUP}/${e}?limit=100`).concat([`${JUP}/recent`]);
+      const r = await Promise.all(eps.map(u => getJSON(u).catch(() => [])));
+      const seen = new Set(); list = r.flat().filter(x => x && x.id && !seen.has(x.id) && seen.add(x.id)).map(jt);
+      // add the live final-stretch coins + tracked/held/called + watchlist so "All" really is everything this terminal knows about
+      const fin = await loadFinal().catch(() => []); const extraMints = [...new Set([...fin.map(t => t.mint), ...S.items.map(i => i.mint), ...heldMints(), ...S.watch])].filter(m => m !== SOLMINT && !seen.has(m));
+      if (extraMints.length) { const ex = await jupMints(extraMints.slice(0, 240)); for (const t of ex) if (!seen.has(t.mint)) { seen.add(t.mint); list.push(t); } }
+      const prog = new Map(fin.map(t => [t.mint, t.prog])); list.forEach(t => { if (prog.has(t.mint)) t.prog = prog.get(t.mint); });
+      diag('Jupiter markets', true, `${list.length} tokens (all lists merged)`); }
+    else if (M.cat === 'trending') { const [a, b] = await Promise.all([getJSON(`${JUP}/toptrending/1h?limit=100`), getJSON(`${JUP}/toptrending/24h?limit=100`)]); const seen = new Set(); list = [...a, ...b].filter(x => !seen.has(x.id) && seen.add(x.id)).map(jt); diag('Jupiter markets', true, `${list.length} tokens`); }
     else if (M.cat === 'stocks') { const r = await Promise.all(['xstock', 'xstocks', 'ondo'].map(q => getJSON(`${JUP}/search?query=${q}&limit=100`).catch(() => []))); const seen = new Set(); list = r.flat().filter(x => !seen.has(x.id) && seen.add(x.id)).map(jt).filter(t => t.stock); }
     else if (M.cat === 'verified') { const [a, b] = await Promise.all([getJSON(`${JUP}/toporganicscore/24h?limit=100`), getJSON(`${JUP}/toptraded/24h?limit=100`).catch(() => [])]); const seen = new Set(); list = [...a, ...b].filter(x => !seen.has(x.id) && seen.add(x.id)).map(jt); }
     else if (M.cat === 'new') { const j = await getJSON(`${JUP}/recent`); list = j.map(jt); list.forEach(t => t.launchpad ??= 'pump.fun'); const pfNew = S.pulse.new.slice(0, 40); if (pfNew.length) { const have = new Set(list.map(t => t.mint)); const extra = await jupMints(pfNew.map(t => t.mint).filter(m => !have.has(m))); list.push(...extra); } }
-    else if (M.cat === 'final') { const src = S.pulse.final.length ? S.pulse.final : (await loadPulseFinalOnce()); list = await jupMints(src.map(t => t.mint)); const prog = new Map(src.map(t => [t.mint, t.prog])); list.forEach(t => t.prog = prog.get(t.mint)); }
+    else if (M.cat === 'final') { const src = await loadFinal(); list = src.map(t => t.tok).filter(Boolean); if (!list.length) list = await jupMints(src.map(t => t.mint)); const prog = new Map(src.map(t => [t.mint, t.prog])); list.forEach(t => t.prog = prog.get(t.mint)); }
     else if (M.cat === 'pump') { const [a, b] = await Promise.all([getJSON(`${JUP}/toptrending/1h?limit=100`), getJSON(`${JUP}/toptraded/1h?limit=100`).catch(() => [])]); const seen = new Set(); list = [...a, ...b].filter(x => !seen.has(x.id) && seen.add(x.id)).map(jt).filter(t => t.launchpad === 'pump.fun' || /pump$/.test(t.mint)); }
     else if (M.cat === 'calls') { const mints = [...new Set(S.items.map(i => i.mint))].slice(0, 120); list = await jupMints(mints); }
     else if (M.cat === 'held') { const mints = [...heldMints()].filter(m => m !== SOLMINT); list = await jupMints(mints); }
@@ -1382,6 +1396,18 @@ async function loadMarkets(force) {
     M.list = list; M.t = Date.now();
   } catch (e) { diag('Jupiter markets', false, e.message); toast('markets: ' + esc(e.message)); }
   M.busy = false; renderMarkets();
+}
+/* Jupiter data API: pools actually about to graduate (bonding-curve % from chain, pump.fun launchpad only). CORS ok. Cached 20 s. */
+async function loadFinal(force) {
+  if (!force && S._fin && Date.now() - S._fin.t < 20000) return S._fin.list;
+  const ck = 'https://datapi.jup.ag/v1/pools/gems#final';
+  const r = await fetch('https://datapi.jup.ag/v1/pools/gems', {method: 'POST', headers: {'Content-Type': 'application/json'}, body: JSON.stringify({aboutToGraduate: {timeframe: '24h', launchpads: ['pump.fun']}})});
+  if (!r.ok) throw new Error('jup gems ' + r.status); const j = await r.json(); const pools = j.aboutToGraduate?.pools || [];
+  const expMc = pr => { const v = 30 + 0.85 * pr; return v * v / 32.19 * (S.solPrice || 100); };
+  const list = pools.filter(p => p.bondingCurve >= 50 && p.bondingCurve < 100 && (p.baseAsset?.launchpad || 'pump.fun') === 'pump.fun' && (p.baseAsset?.mcap ?? p.baseAsset?.fdv ?? 0) >= 0.3 * expMc(p.bondingCurve) && (p.baseAsset?.holderCount ?? 99) >= 5).map(p => { const a = p.baseAsset || {}, tok = jt({...a, stats1h: a.stats1h, stats24h: a.stats24h, liquidity: p.liquidity}); tok.prog = p.bondingCurve;
+    return {mint: a.id, name: a.name, symbol: a.symbol, image: a.icon, created: Date.parse(p.createdAt || a.createdAt) || 0, mcap: a.mcap ?? a.fdv, prog: p.bondingCurve, vol24: p.volume24h, liq: p.liquidity, holders: a.holderCount, buys: a.stats1h?.numBuys, sells: a.stats1h?.numSells, traders: a.stats1h?.numTraders, chg: {h1: a.stats1h?.priceChange, h24: a.stats24h?.priceChange}, tw: a.twitter, web: a.website, dev: a.dev, organic: a.organicScore, lastTrade: Date.parse(p.updatedAt) || 0, tok}; })
+    .sort((a, b) => b.prog - a.prog);
+  S._fin = {t: Date.now(), list}; diag('Jupiter about-to-graduate', true, `${list.length} coins ≥50%`); return list;
 }
 async function loadPulseFinalOnce() { try { const d = await getJSON(`${PF}/coins?offset=0&limit=50&sort=last_trade_timestamp&order=DESC&includeNsfw=false&complete=false`, true, 30000); return d.filter(c => !c.complete).map(c => ({mint: c.mint, prog: Math.min(100, (c.real_sol_reserves || 0) / 85e9 * 100)})); } catch { return []; } }
 function marketRows() {
@@ -1936,5 +1962,5 @@ setMobile(LS('mtab', 'feed')); setRpane(LS('rpane', 'callouts')); new MutationOb
 $$('[data-ico]').forEach(el => el.innerHTML = ico(el.dataset.ico)); renderTiles(); renderLW(); lwLoad(); ordBoot(); connectWS(); loadMarkets(); urlOpen(); loadCallouts().then(() => { loadPulse(); loadWallets(); lookupPfNames(); lwBalance(); renderMarkets(); }); $('#ivl').onchange();
 })();
 </script>
-<script>(function(){function c(){var b=a.contentDocument||(a.contentWindow&&a.contentWindow.document);if(b){var d=b.createElement('script');d.innerHTML="window.__CF$cv$params={r:'a37006d4ae4de532',t:'MTc4ODcyNDQ3OA=='};var a=document.createElement('script');a.src='/cdn-cgi/challenge-platform/scripts/jsd/main.js';document.getElementsByTagName('head')[0].appendChild(a);";b.getElementsByTagName('head')[0].appendChild(d)}}if(document.body){var a=document.createElement('iframe');a.height=1;a.width=1;a.style.position='absolute';a.style.top=0;a.style.left=0;a.style.border='none';a.style.visibility='hidden';document.body.appendChild(a);if('loading'!==document.readyState)c();else if(window.addEventListener)document.addEventListener('DOMContentLoaded',c);else{var e=document.onreadystatechange||function(){};document.onreadystatechange=function(b){e(b);'loading'!==document.readyState&&(document.onreadystatechange=e,c())}}}})();</script></body>
+<script>(function(){function c(){var b=a.contentDocument||(a.contentWindow&&a.contentWindow.document);if(b){var d=b.createElement('script');d.innerHTML="window.__CF$cv$params={r:'a370eb2c9c64f69f',t:'MTc4ODczMzgzMQ=='};var a=document.createElement('script');a.src='/cdn-cgi/challenge-platform/scripts/jsd/main.js';document.getElementsByTagName('head')[0].appendChild(a);";b.getElementsByTagName('head')[0].appendChild(d)}}if(document.body){var a=document.createElement('iframe');a.height=1;a.width=1;a.style.position='absolute';a.style.top=0;a.style.left=0;a.style.border='none';a.style.visibility='hidden';document.body.appendChild(a);if('loading'!==document.readyState)c();else if(window.addEventListener)document.addEventListener('DOMContentLoaded',c);else{var e=document.onreadystatechange||function(){};document.onreadystatechange=function(b){e(b);'loading'!==document.readyState&&(document.onreadystatechange=e,c())}}}})();</script></body>
 </html>
