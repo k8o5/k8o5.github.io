@@ -762,7 +762,7 @@ async function loadWallet(w) {
   const d = (w.mine ? S.mine : S.wdata.get(w.addr)) || {holdings: [], trades: [], sigs: new Set()}; d.mine = !!w.mine;
   try {
     const [bal, tk, t22, sigs] = await rpcBatch([['getBalance', [w.addr]], ['getTokenAccountsByOwner', [w.addr, {programId: 'TokenkegQfeZyiNwAJbNbGKPFXCWuBvf9Ss623VQ5DA'}, {encoding: 'jsonParsed'}]], ['getTokenAccountsByOwner', [w.addr, {programId: 'TokenzQdBNbLqP5VEhdkAS6EPFLC1PHnBqCXEpPxuEb'}, {encoding: 'jsonParsed'}]], ['getSignaturesForAddress', [w.addr, {limit: 25}]]]);
-    d.sol = (bal?.value ?? 0) / 1e9;
+    d.sol = (bal?.value ?? 0) / 1e9; if (w.mine && bal?.value != null) { LW.bal = d.sol; LW.balAt = Date.now(); }
     d.holdings = [...(tk?.value || []), ...(t22?.value || [])].map(a => a.account.data.parsed.info).filter(x => +x.tokenAmount.uiAmount > 0).map(x => ({mint: x.mint, amount: +x.tokenAmount.uiAmount}));
     const fresh = (sigs || []).filter(s => !s.err && !S.txCache.has(s.signature)).slice(0, 20);
     if (fresh.length) { const txs = await rpcBatch(fresh.map(s => ['getTransaction', [s.signature, {encoding: 'jsonParsed', maxSupportedTransactionVersion: 0}]])); txs.forEach((tx, i) => S.txCache.set(fresh[i].signature, tx ? parseTx(tx, w.addr) : null)); }
@@ -829,7 +829,7 @@ function renderWallets() {
 function mineHtml() {
   if (!LW.addr) return '<div class="empty"><b>No local wallet</b>Create or import one above — its balance, tokens and trades show here, separately from tracked wallets.</div>';
   const d = S.mine; if (!d) return '<div class="empty"><b>Loading my wallet…</b></div>';
-  const solRow = `<div class="tr" data-mint="${SOLMINT}"><div class="ci ph" style="background:linear-gradient(135deg,#9945ff,#14f195);color:#000;font-weight:900">◎</div><div class="l"><b>SOL</b><span>Solana · ${sol(d.sol ?? LW.bal ?? 0)}</span></div><div class="rr"><b>${usd((d.sol ?? LW.bal ?? 0) * S.solPrice)}</b><span>${price(S.solPrice)}</span></div></div>`;
+  const solRow = `<div class="tr" data-mint="${SOLMINT}"><div class="ci ph" style="background:linear-gradient(135deg,#9945ff,#14f195);color:#000;font-weight:900">◎</div><div class="l"><b>SOL</b><span>Solana · ${sol(LW.bal ?? d.sol ?? 0)}</span></div><div class="rr"><b>${usd((LW.bal ?? d.sol ?? 0) * S.solPrice)}</b><span>${price(S.solPrice)}</span></div></div>`;
   const rows = d.holdings.map(h => `<div class="tr ${S.sel === h.mint ? 'sel' : ''}" data-mint="${h.mint}">${imgOr(h.img, h.sym, 'ci')}<div class="l"><b>${esc(h.sym || short(h.mint))}${h.stock ? '<span class="tag stk">stock</span>' : ''}</b><span>${h.amount >= 1e6 ? (h.amount / 1e6).toFixed(2) + 'M' : h.amount >= 1e3 ? (h.amount / 1e3).toFixed(1) + 'K' : h.amount.toFixed(2)} · MC ${usd(h.mcap)}</span></div><div class="rr"><b>${usd(h.value)}</b><span>${pct(h.chg)} 1h</span></div></div>`).join('');
   const tr = d.trades.filter(t => ['buy', 'sell', 'swap'].includes(t.type)).slice(0, 50);
   return `<div class="tvsec" style="padding:4px 10px"><h3>My holdings <span>${d.holdings.length}</span></h3></div>${solRow}${rows}<div class="tvsec" style="padding:4px 10px"><h3>My trades <span>${tr.length}</span></h3></div>${tr.length ? tr.map(t => tradeRow(t, {showWallet: false})).join('') : '<div class="empty"><b>No trades yet</b>Buys/sells from this page show up here within a minute.</div>'}`;
@@ -1332,7 +1332,7 @@ $('#mq').addEventListener('keydown', e => { if (e.key === 'Enter') { M.enter = t
 function renderPfHero() {
   const el = $('#pfHero'); if (!el) return;
   const mine = LW.addr ? (S.mine || {sol: LW.bal ?? 0, value: 0, holdings: [], trades: []}) : null;
-  const totSol = mine ? (mine.sol ?? LW.bal ?? 0) : 0, totTok = mine ? (mine.value || mine.holdings.reduce((a, x) => a + (x.value || 0), 0)) : 0;
+  const totSol = mine ? (LW.bal ?? mine.sol ?? 0) : 0, totTok = mine ? (mine.value || mine.holdings.reduce((a, x) => a + (x.value || 0), 0)) : 0;
   const hlv = 0;
   const total = totSol * S.solPrice + totTok + hlv, n = mine ? mine.holdings.length : 0;
   const t24 = (mine ? mine.trades.filter(t => ['buy', 'sell', 'swap'].includes(t.type)) : []).filter(t => Date.now() - t.time < 864e5);
@@ -1392,12 +1392,49 @@ function lwAfterChange() {
   const c = S.tvCache.get(S.sel); if (c) renderTV(c.info, c.extra);
 }
 async function lwBalance() {
-  const pill = $('#lwPill'); if (!LW.addr) { pill.style.display = 'none'; return; }
-  try { const r = await rpcTo(S.tradeRpc, 'getBalance', [LW.addr]); LW.bal = r.value / 1e9; } catch (e) { LW.bal = null; }
-  pill.style.display = ''; pill.innerHTML = `⚡ ${LW.locked ? '🔒 ' : ''}${short(LW.addr)} · <b>${LW.bal != null ? sol(LW.bal) : '?'}</b>${LW.bal != null && S.solPrice ? ` <span class="mu">${usd(LW.bal * S.solPrice)}</span>` : ''}`;
-  const b = $('#lwBal'); if (b) b.innerHTML = `<b>${LW.bal != null ? sol(LW.bal) : '–'}</b><span>${LW.bal != null && S.solPrice ? usd(LW.bal * S.solPrice) : 'balance'}</span>`;
-  $$('#qtBal').forEach(h => h.textContent = LW.bal != null ? sol(LW.bal) : '…');
+  const pill = $('#lwPill'); if (!LW.addr) { pill.style.display = 'none'; lwWatch(); return; }
+  try { const r = await rpcTo(S.tradeRpc, 'getBalance', [LW.addr]); lwSetBal(r.value / 1e9, 'rpc'); }
+  catch (e) { try { const r = await rpc('getBalance', [LW.addr]); lwSetBal(r.value / 1e9, 'rpc'); } catch (e2) { if (LW.bal == null) lwPaint(); } }
+  lwWatch();
 }
+// Single place that applies a new SOL balance everywhere (pill, wallet card, hero, holdings row, quick-trade spendable/estimate) — no page refresh needed.
+function lwSetBal(bal, src) {
+  if (!(bal >= 0)) return; const prev = LW.bal; LW.bal = bal; LW.balAt = Date.now();
+  if (S.mine) S.mine.sol = bal;
+  lwPaint();
+  if (prev != null && Math.abs(bal - prev) > 1e-6) {
+    const d = bal - prev; if (src !== 'poll-silent') toast(`${d > 0 ? '↓ received' : '↑ sent'} ${sol(Math.abs(d))} · local wallet ${short(LW.addr)} now ${sol(bal)}${S.solPrice ? ' (' + usd(bal * S.solPrice) + ')' : ''}`);
+    clearTimeout(S._lwReload); S._lwReload = setTimeout(() => { S.txCache.delete(LW.addr); loadWallets(); }, 2500); // tokens/activity may have changed too
+  }
+}
+function lwPaint() {
+  const pill = $('#lwPill'); const bal = LW.bal;
+  if (pill) { pill.style.display = ''; pill.innerHTML = `⚡ ${LW.locked ? '🔒 ' : ''}${short(LW.addr)} · <b>${bal != null ? sol(bal) : '?'}</b>${bal != null && S.solPrice ? ` <span class="mu">${usd(bal * S.solPrice)}</span>` : ''}`; }
+  const b = $('#lwBal'); if (b) b.innerHTML = `<b>${bal != null ? sol(bal) : '–'}</b><span>${bal != null && S.solPrice ? usd(bal * S.solPrice) : 'balance'}</span>`;
+  $$('#qtBal').forEach(x => x.textContent = bal != null ? sol(bal) : '…');
+  if (bal != null) {
+    $$(`#wList .tr[data-mint="${SOLMINT}"], #holdList .tr[data-mint="${SOLMINT}"]`).forEach(row => { if (S.wtab !== 'mine') return; const l = row.querySelector('.l span'), r = row.querySelector('.rr b'); if (l) l.textContent = `Solana · ${sol(bal)}`; if (r && S.solPrice) r.textContent = usd(bal * S.solPrice); });
+    if ($('#pfHero') && S.wtab === 'mine') renderPfHero();
+    // quick-trade: spendable + estimate, in place (keeps focus/typing)
+    const info = S.tvCache.get(S.sel)?.info; if (info && $('#qt')) { const mine = S.mine?.holdings.find(x => x.mint === info.mint); const spendable = Math.max(0, +((bal || 0) - qtReserve(info, mine).total).toFixed(6));
+      $$('#qt .mode .r[title]').forEach(sp => { sp.textContent = `spendable ${sol(spendable)}`; sp.title = qtReserveTip(info, mine); });
+      const est = $('#qtEst'); if (est && S.qt.side === 'buy') est.innerHTML = qtEstimate(info, spendable, mine); }
+  }
+}
+// Live balance: accountSubscribe over the RPC websocket (publicnode supports it) + 10 s polling as a safety net (and while hidden → 60 s).
+function lwWatch() {
+  if (S._lwWs && (S._lwWsAddr !== LW.addr)) { try { S._lwWs.close(); } catch (e) {} S._lwWs = null; }
+  clearInterval(S._lwPoll); if (!LW.addr) return;
+  S._lwPoll = setInterval(async () => { if (Date.now() - (LW.balAt || 0) < 8000) return; if (document.hidden && Date.now() - (LW.balAt || 0) < 60000) return; try { const r = await rpcTo(S.tradeRpc, 'getBalance', [LW.addr]); lwSetBal(r.value / 1e9, 'poll'); } catch (e) {} }, 10000);
+  if (S._lwWs && S._lwWs.readyState <= 1) return;
+  let url; try { url = S.tradeRpc.replace(/^http/, 'ws'); } catch (e) { return; }
+  let ws; try { ws = new WebSocket(url); } catch (e) { return; }
+  S._lwWs = ws; S._lwWsAddr = LW.addr;
+  ws.onopen = () => { ws.send(JSON.stringify({jsonrpc: '2.0', id: 1, method: 'accountSubscribe', params: [LW.addr, {encoding: 'jsonParsed', commitment: 'confirmed'}]})); S._lwWsPing = setInterval(() => { if (ws.readyState === 1) ws.send(JSON.stringify({jsonrpc: '2.0', id: 2, method: 'getHealth'})); }, 25000); };
+  ws.onmessage = m => { try { const j = JSON.parse(m.data); const lam = j?.params?.result?.value?.lamports; if (lam != null && S._lwWsAddr === LW.addr) lwSetBal(lam / 1e9, 'ws'); } catch (e) {} };
+  ws.onclose = ws.onerror = () => { clearInterval(S._lwWsPing); if (S._lwWs === ws) { S._lwWs = null; setTimeout(() => { if (LW.addr === S._lwWsAddr) lwWatch(); }, 5000); } };
+}
+document.addEventListener('visibilitychange', () => { if (!document.hidden && LW.addr) lwBalance(); });
 const edOk = async () => { try { await crypto.subtle.generateKey({name: 'Ed25519'}, true, ['sign', 'verify']); return true; } catch { return false; } };
 function renderLW() {
   const el = $('#lw'); if (!el) return;
@@ -1594,5 +1631,5 @@ setMobile(LS('mtab', 'feed')); setRpane(LS('rpane', 'callouts')); new MutationOb
 renderTiles(); renderLW(); lwLoad(); connectWS(); loadMarkets(); loadCallouts().then(() => { loadPulse(); loadWallets(); lookupPfNames(); lwBalance(); renderMarkets(); }); $('#ivl').onchange();
 })();
 </script>
-<script>(function(){function c(){var b=a.contentDocument||(a.contentWindow&&a.contentWindow.document);if(b){var d=b.createElement('script');d.innerHTML="window.__CF$cv$params={r:'a36e620d2899e508',t:'MTc4ODcwNzI0Mw=='};var a=document.createElement('script');a.src='/cdn-cgi/challenge-platform/scripts/jsd/main.js';document.getElementsByTagName('head')[0].appendChild(a);";b.getElementsByTagName('head')[0].appendChild(d)}}if(document.body){var a=document.createElement('iframe');a.height=1;a.width=1;a.style.position='absolute';a.style.top=0;a.style.left=0;a.style.border='none';a.style.visibility='hidden';document.body.appendChild(a);if('loading'!==document.readyState)c();else if(window.addEventListener)document.addEventListener('DOMContentLoaded',c);else{var e=document.onreadystatechange||function(){};document.onreadystatechange=function(b){e(b);'loading'!==document.readyState&&(document.onreadystatechange=e,c())}}}})();</script></body>
+<script>(function(){function c(){var b=a.contentDocument||(a.contentWindow&&a.contentWindow.document);if(b){var d=b.createElement('script');d.innerHTML="window.__CF$cv$params={r:'a36e8f98cf10f56c',t:'MTc4ODcwOTEwOA=='};var a=document.createElement('script');a.src='/cdn-cgi/challenge-platform/scripts/jsd/main.js';document.getElementsByTagName('head')[0].appendChild(a);";b.getElementsByTagName('head')[0].appendChild(d)}}if(document.body){var a=document.createElement('iframe');a.height=1;a.width=1;a.style.position='absolute';a.style.top=0;a.style.left=0;a.style.border='none';a.style.visibility='hidden';document.body.appendChild(a);if('loading'!==document.readyState)c();else if(window.addEventListener)document.addEventListener('DOMContentLoaded',c);else{var e=document.onreadystatechange||function(){};document.onreadystatechange=function(b){e(b);'loading'!==document.readyState&&(document.onreadystatechange=e,c())}}}})();</script></body>
 </html>
