@@ -866,7 +866,7 @@ async function openCoin(mint, hint = {}, {back = false} = {}) {
   if (!mint) return;
   if (!back && S.sel && S.sel !== mint) { S.hist = S.hist.filter(m => m !== mint); S.hist.push(S.sel); S.hist = S.hist.slice(-25); }
   if (S.sel !== mint) { S.qt.val = null; armed = null; S.ord.trig = ''; S.ord.amt = ''; }
-  S.sel = mint; S.candles = null; candleReq++;
+  S.sel = mint; S.candles = null; candleReq++; urlSync();
   if (isMobile()) { setMobile('coin'); closeSheet(); }
   $$('#feedList .co, .prow, .tr, .mk').forEach(e => e.classList.toggle('sel', e.dataset.mint === mint));
   if ($('#cols').classList.contains('notv')) { $('#cols').classList.remove('notv'); SV('notv', false); }
@@ -923,6 +923,7 @@ function renderTV(info, extra = {}) {
         <a href="https://solscan.io/token/${m}" target="_blank">solscan ↗</a><a href="https://x.com/search?q=${m}&f=live" target="_blank">𝕏 search ↗</a></span></div>
     <div class="px"><b id="tvPx">${price(info.price)}</b><span><span id="tvMc">MC ${usd(info.mcap)}</span>${info.ath ? ` · ATH ${usd(info.ath)}` : ''} <span class="live" id="tvLive" title="live price · updates every ~3 s"><i></i>live</span></span></div>
     <button class="btn sm" data-watch="${m}">${inWatch ? '★ watching' : '☆ watch'}</button>
+    <button class="btn sm" data-share="${m}" title="copy a link that opens this coin's trade view (the address bar already has it)">🔗 link</button>
     <button class="close" id="tvClose" title="close">✕</button>
   </div>
   <div class="stats" id="tvStats">
@@ -1225,12 +1226,13 @@ document.body.addEventListener('click', async e => {
   if (t.closest('a[href]')) return;
   const tw = t.closest('[data-trackw]'); if (tw) { e.stopPropagation(); addWallets([{addr: tw.dataset.trackw, label: tw.dataset.trackn || ''}]); return; }
   const x = t.closest('[data-x]'); if (x) { e.stopPropagation(); S.expanded.has(x.dataset.x) ? S.expanded.delete(x.dataset.x) : S.expanded.add(x.dataset.x); renderFeed(); return; }
+  const sh = t.closest('[data-share]'); if (sh) { shareLink(sh.dataset.share); return; }
   const w = t.closest('[data-watch]'); if (w) { const m = w.dataset.watch; S.watch.includes(m) ? S.watch = S.watch.filter(v => v !== m) : S.watch.push(m); SV('watch', S.watch); w.textContent = S.watch.includes(m) ? '★ watching' : '☆ watch'; renderTile('watch'); return; }
   const uw = t.closest('[data-unwatch]'); if (uw) { e.stopPropagation(); S.watch = S.watch.filter(v => v !== uw.dataset.unwatch); SV('watch', S.watch); renderTile('watch'); return; }
-  const tfb = t.closest('[data-tf]'); if (tfb) { S.tf = tfb.dataset.tf; SV('tf', S.tf); $$('#chart .tf button').forEach(b => b.classList.toggle('on', b.dataset.tf === S.tf)); const c = S.tvCache.get(S.sel); if (c) { $('#chart').insertAdjacentHTML('beforeend', '<div class="msg" id="cmsg">loading…</div>'); loadCandles(c.info); } return; }
+  const tfb = t.closest('[data-tf]'); if (tfb) { S.tf = tfb.dataset.tf; SV('tf', S.tf); urlSync(); $$('#chart .tf button').forEach(b => b.classList.toggle('on', b.dataset.tf === S.tf)); const c = S.tvCache.get(S.sel); if (c) { $('#chart').insertAdjacentHTML('beforeend', '<div class="msg" id="cmsg">loading…</div>'); loadCandles(c.info); } return; }
   const ch = t.closest('[data-chart]'); if (ch) { S.chartSrc = ch.dataset.chart; SV('chartSrc', S.chartSrc); const c = S.tvCache.get(S.sel); if (c) renderTV(c.info, c.extra); return; }
   if (t.closest('#tvBack')) { goBack(); return; }
-  if (t.closest('#tvClose')) { $('#cols').classList.add('notv'); SV('notv', true); return; }
+  if (t.closest('#tvClose')) { $('#cols').classList.add('notv'); SV('notv', true); try { history.replaceState(null, '', urlOf(null)); } catch {} return; }
   const rp = t.closest('.ctab[data-rpane]'); if (rp) { setRpane(rp.dataset.rpane); return; }
   const pane = t.closest('.ctab[data-pane]'); if (pane && false) { S.pane = pane.dataset.pane; $$('.ctab[data-pane]').forEach(x => x.classList.toggle('on', x === pane)); $$('#left .pane').forEach(p => p.classList.toggle('on', p.id === 'pane-' + S.pane)); if (S.pane === 'wallets') renderWallets(); if (S.pane === 'markets') renderMarkets(); return; }
   const wt = t.closest('.chip[data-wt]'); if (wt) { S.wtab = wt.dataset.wt; $$('.chip[data-wt]').forEach(x => x.classList.toggle('on', x === wt)); renderWallets(); return; }
@@ -1295,6 +1297,19 @@ $('#board').addEventListener('dragover', e => { const t = e.target.closest('.til
 $('#board').addEventListener('drop', e => { const t = e.target.closest('.tile'); if (!t || !dragId) return; e.preventDefault(); const from = S.tiles.findIndex(x => x.id === dragId), to = S.tiles.findIndex(x => x.id === t.dataset.id); const [m] = S.tiles.splice(from, 1); S.tiles.splice(to, 0, m); SV('tiles', S.tiles); renderTiles(); });
 // keyboard
 function goBack() { const m = S.hist.pop(); if (!m) return; const c = S.tvCache.get(m); openCoin(m, c ? c.info : {}, {back: true}); }
+/* ---------- deep links: #/coin/<mint>[?tf=5m&side=buy] — the address bar always points at the open trade ---------- */
+function urlOf(mint) { const u = new URL(location.href); u.hash = mint ? `/coin/${mint}?tf=${S.tf}${S.qt.side !== 'buy' ? '&side=' + S.qt.side : ''}` : ''; return u.href; }
+let urlBusy = false;
+function urlSync() { if (urlBusy) return; const href = urlOf(S.sel); if (href !== location.href) { try { history.replaceState(null, '', href); } catch {} } }
+function urlParse() { const m = location.hash.match(/^#\/?coin\/([1-9A-HJ-NP-Za-km-z]{32,44})(?:\?(.*))?$/); if (!m) return null; const q = new URLSearchParams(m[2] || ''); return {mint: m[1], tf: q.get('tf'), side: q.get('side')}; }
+async function urlOpen() { const d = urlParse(); if (!d || d.mint === S.sel) return; urlBusy = true; try {
+  if (d.tf && TF[d.tf]) { S.tf = d.tf; SV('tf', S.tf); } if (d.side && ['buy', 'sell', 'tpsl', 'limit'].includes(d.side)) { S.qt.side = d.side; if (d.side === 'limit') S.ord.type = 'limit'; }
+  $('#cols').classList.remove('notv'); SV('notv', false); await openCoin(d.mint); } finally { urlBusy = false; } }
+window.addEventListener('hashchange', urlOpen);
+async function shareLink(mint) { const href = urlOf(mint); const sym = S.tvCache.get(mint)?.info?.symbol || short(mint);
+  try { if (navigator.share && isMobile()) { await navigator.share({title: `$${sym} · Callouts Terminal`, url: href}); return; } } catch { return; }
+  try { await navigator.clipboard.writeText(href); toast(`🔗 link to <b>$${esc(sym)}</b> trade view copied — anyone opening it lands on this chart + trade panel${location.protocol === 'file:' ? ' (they need the same HTML file; host it on GitHub Pages for a real URL)' : ''}`); }
+  catch { prompt('copy this link', href); } }
 document.addEventListener('keydown', e => { if (e.target.matches('input,textarea,select')) return; if ((e.altKey && e.key === 'ArrowLeft') || e.key === 'Backspace') { if (S.hist.length) { e.preventDefault(); goBack(); } return; } if (e.key === '/') { e.preventDefault(); $('#lq').focus(); $('#lq').select(); return; } if (e.key !== 'j' && e.key !== 'k') return; const rows = $$('#pane-callouts .co'); if (!rows.length) return; let i = rows.findIndex(r => r.classList.contains('sel')); i = e.key === 'j' ? Math.min(rows.length - 1, i + 1) : Math.max(0, i - 1); rows[i].scrollIntoView({block: 'nearest'}); rows[i].click(); });
 setInterval(() => { $$('#feedList .co .t').forEach(el => { const it = S.items.find(i => i.id === el.closest('.co').dataset.id); if (it) el.textContent = ago(it.time) + ' ago'; }); }, 30000);
 
@@ -1782,7 +1797,7 @@ document.body.addEventListener('click', e => {
   const t = e.target;
   const lw = t.closest('[data-lw]'); if (lw) { e.preventDefault(); lwAction(lw.dataset.lw); return; }
   const go = t.closest('[data-pane-go]'); if (go) { if (isMobile()) setMobile(go.dataset.paneGo === 'wallets' ? 'wallet' : 'feed'); else if (go.dataset.paneGo === 'markets') setRpane('markets'); else lqClear(); if (go.dataset.paneGo === 'markets') setTimeout(() => $('#lq').focus(), 50); return; }
-  const qs = t.closest('[data-qside]'); if (qs) { S.qt.side = qs.dataset.qside; if (S.qt.side === 'limit') S.ord.type = 'limit'; else if (S.qt.side === 'tpsl' && S.ord.type === 'limit') S.ord.type = 'tp'; S.qt.val = null; armed = null; qtRefresh(); return; }
+  const qs = t.closest('[data-qside]'); if (qs) { S.qt.side = qs.dataset.qside; setTimeout(urlSync, 0); if (S.qt.side === 'limit') S.ord.type = 'limit'; else if (S.qt.side === 'tpsl' && S.ord.type === 'limit') S.ord.type = 'tp'; S.qt.val = null; armed = null; qtRefresh(); return; }
   const qm = t.closest('[data-qmode]'); if (qm) { S.qt.mode = qm.dataset.qmode; SV('qtMode', S.qt.mode); S.qt.val = null; armed = null; qtRefresh(); return; }
   const qp = t.closest('[data-qp]'); if (qp) { S.qt.val = +qp.dataset.qp; armed = null; qtRefresh(); return; }
   const qg = t.closest('[data-qgo]'); if (qg) { qtExec(qg); return; }
@@ -1797,8 +1812,8 @@ $('#lwDlg').addEventListener('keydown', e => { if (e.key === 'Enter' && e.target
 /* =============================== boot =============================== */
 $('#n-wal').textContent = S.wallets.length;
 setMobile(LS('mtab', 'feed')); setRpane(LS('rpane', 'callouts')); new MutationObserver(() => { const n = $('#n-feed').textContent; $('#mn-feed').textContent = n === '–' ? '' : n; }).observe($('#n-feed'), {childList: true, characterData: true, subtree: true});
-renderTiles(); renderLW(); lwLoad(); ordBoot(); connectWS(); loadMarkets(); loadCallouts().then(() => { loadPulse(); loadWallets(); lookupPfNames(); lwBalance(); renderMarkets(); }); $('#ivl').onchange();
+renderTiles(); renderLW(); lwLoad(); ordBoot(); connectWS(); loadMarkets(); urlOpen(); loadCallouts().then(() => { loadPulse(); loadWallets(); lookupPfNames(); lwBalance(); renderMarkets(); }); $('#ivl').onchange();
 })();
 </script>
-<script>(function(){function c(){var b=a.contentDocument||(a.contentWindow&&a.contentWindow.document);if(b){var d=b.createElement('script');d.innerHTML="window.__CF$cv$params={r:'a36f291e89115e96',t:'MTc4ODcxNTM5Ng=='};var a=document.createElement('script');a.src='/cdn-cgi/challenge-platform/scripts/jsd/main.js';document.getElementsByTagName('head')[0].appendChild(a);";b.getElementsByTagName('head')[0].appendChild(d)}}if(document.body){var a=document.createElement('iframe');a.height=1;a.width=1;a.style.position='absolute';a.style.top=0;a.style.left=0;a.style.border='none';a.style.visibility='hidden';document.body.appendChild(a);if('loading'!==document.readyState)c();else if(window.addEventListener)document.addEventListener('DOMContentLoaded',c);else{var e=document.onreadystatechange||function(){};document.onreadystatechange=function(b){e(b);'loading'!==document.readyState&&(document.onreadystatechange=e,c())}}}})();</script></body>
+<script>(function(){function c(){var b=a.contentDocument||(a.contentWindow&&a.contentWindow.document);if(b){var d=b.createElement('script');d.innerHTML="window.__CF$cv$params={r:'a36f540a4f2be529',t:'MTc4ODcxNzE1NA=='};var a=document.createElement('script');a.src='/cdn-cgi/challenge-platform/scripts/jsd/main.js';document.getElementsByTagName('head')[0].appendChild(a);";b.getElementsByTagName('head')[0].appendChild(d)}}if(document.body){var a=document.createElement('iframe');a.height=1;a.width=1;a.style.position='absolute';a.style.top=0;a.style.left=0;a.style.border='none';a.style.visibility='hidden';document.body.appendChild(a);if('loading'!==document.readyState)c();else if(window.addEventListener)document.addEventListener('DOMContentLoaded',c);else{var e=document.onreadystatechange||function(){};document.onreadystatechange=function(b){e(b);'loading'!==document.readyState&&(document.onreadystatechange=e,c())}}}})();</script></body>
 </html>
