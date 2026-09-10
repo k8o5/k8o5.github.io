@@ -4,7 +4,7 @@
 <meta charset="utf-8">
 <meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover">
 <meta name="theme-color" content="#0e1013">
-<title>zaza — deploy tokens on Solana</title>
+<title>ZAZA NET — deploy tokens on Solana</title>
 <meta name="description" content="Deploy a real SPL token on Solana. Give it your own HTML site. Live prices, shared desk, and optional on-chain minting.">
 <link rel="icon" href="data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 32 32'%3E%3Crect width='32' height='32' rx='7' fill='%23a3e635'/%3E%3Ctext x='16' y='13.5' font-family='Arial' font-size='10.5' font-weight='800' text-anchor='middle' fill='%230e1013'%3Eza%3C/text%3E%3Ctext x='16' y='25.5' font-family='Arial' font-size='10.5' font-weight='800' text-anchor='middle' fill='%230e1013'%3Eza%3C/text%3E%3C/svg%3E">
 <style>
@@ -176,6 +176,12 @@ textarea.inp{resize:vertical;min-height:60px}
 .fee-box .fb-row.total{border-top:1px solid var(--line);margin-top:6px;padding-top:9px;font-size:13px}
 .fee-box .fb-row.total b{color:var(--head)}
 .fee-box .fb-note{margin-top:8px;font-size:10px;line-height:1.5;color:var(--muted)}
+input[type=range]{-webkit-appearance:none;appearance:none;width:100%;height:30px;background:transparent;cursor:pointer;margin:0;display:block}
+input[type=range]::-webkit-slider-runnable-track{height:6px;border-radius:999px;background:linear-gradient(90deg,var(--lime) var(--p,20%),var(--well) var(--p,20%))}
+input[type=range]::-webkit-slider-thumb{-webkit-appearance:none;appearance:none;width:20px;height:20px;border-radius:50%;background:#f3ffe0;border:3px solid var(--lime);margin-top:-7px;box-shadow:0 1px 4px rgba(0,0,0,.35)}
+input[type=range]::-moz-range-track{height:6px;border-radius:999px;background:var(--well)}
+input[type=range]::-moz-range-progress{height:6px;border-radius:999px;background:var(--lime)}
+input[type=range]::-moz-range-thumb{width:20px;height:20px;border-radius:50%;background:#f3ffe0;border:3px solid var(--lime);box-shadow:0 1px 4px rgba(0,0,0,.35)}
 .launch-btn:hover:not(:disabled){background:var(--head-lit)}
 .launch-btn:active:not(:disabled){transform:translateY(1px)}
 .launch-btn:disabled{opacity:.35;cursor:not-allowed}
@@ -399,7 +405,6 @@ canvas{display:block;width:100%}
 </style>
 </head>
 <body>
-
 <header class="topbar">
   <div class="topbar-in">
     <a class="brand" href="#" aria-label="ZAZA NET">
@@ -494,12 +499,9 @@ canvas{display:block;width:100%}
           </div>
         </div>
         <div class="f1 field">
-          <label class="lbl"><span>Your share</span></label>
-          <div class="seg" style="width:100%">
-            <button data-share="20" class="on">20%</button>
-            <button data-share="10">10%</button>
-            <button data-share="5">5%</button>
-          </div>
+          <label class="lbl"><span>Your share</span><span class="cnt" id="sharePct">20%</span></label>
+          <input type="range" id="fShare" min="1" max="100" step="1" value="20" aria-label="Your share of supply">
+          <div class="muted" id="shareNote" style="font-size:11.5px;margin-top:6px;line-height:1.45"></div>
         </div>
       </div>
 
@@ -520,7 +522,7 @@ canvas{display:block;width:100%}
 
       <label class="meta-toggle" for="fMint" id="mintToggle">
         <input type="checkbox" id="fMint">
-        <span><b>Mint a real SPL token on Solana</b><small id="mintToggleNote">Signs locally in your browser — creates the mint, opens your token account and mints 100% of supply to your wallet, with on-chain metadata. Without a connected wallet, the coin launches in the in-app market only.</small></span>
+        <span><b>Mint a real SPL token on Solana</b><small id="mintToggleNote">Signs locally in your browser — creates the mint, mints your share to your wallet and the rest to a curve treasury account (yours) for public buyers. Without a connected wallet, the coin launches in the in-app market only.</small></span>
       </label>
 
       <p class="err" id="errBox"></p>
@@ -639,7 +641,6 @@ canvas{display:block;width:100%}
 
 
 <script>
-
 
 
 /* =====================================================================
@@ -821,14 +822,14 @@ async function directYahoo(){
    price(t) = p0 * (1 + grow * t / Sc)     [pair units per token]
    p0 is chosen so the launch FDV is ≈ $50 in every pair. */
 function curveParams(coin){
-  const Sc = coin.Sc = coin.supply * 0.8;
+  const Sc = coin.Sc = coin.supply * (1 - (coin.share || 0.2));
   const pu = priceUsd(coin.pair) || 1;             // pair asset USD value
   const p0 = coin.p0 = (50 / coin.supply) / pu;    // pair units per token → FDV ≈ $50
   coin.grow = 39;
   return {Sc, p0};
 }
-function spotPrice(coin){ const {Sc, p0} = coin; const s = clamp(coin.sold, 0, Sc); return p0 * (1 + coin.grow * s / Sc); }
-function costIntegral(coin, from, to){ const {Sc, p0} = coin; const a = clamp(from, 0, Sc), b = clamp(to, 0, Sc); return p0 * (b - a) + p0 * coin.grow / (2 * Sc) * (b * b - a * a); }
+function spotPrice(coin){ const {Sc, p0} = coin; if (!(Sc > 0)) return p0; const s = clamp(coin.sold, 0, Sc); return p0 * (1 + coin.grow * s / Sc); }
+function costIntegral(coin, from, to){ const {Sc, p0} = coin; if (!(Sc > 0)) return 0; const a = clamp(from, 0, Sc), b = clamp(to, 0, Sc); return p0 * (b - a) + p0 * coin.grow / (2 * Sc) * (b * b - a * a); }
 function fdv(coin){ return spotPrice(coin) * coin.supply; }                 // pair units
 function fdvUsd(coin){ return fdv(coin) * priceUsd(coin.pair); }            // USD
 function liq(coin){ return coin.reserve || 0; }                             // pair units
@@ -904,6 +905,7 @@ function newCoin(o){
   const coin = Object.assign({
     id: uid(), name:'', sym:'', desc:'', x:'', img:'', siteHtml:'', pair:'SOL', pairName:'Solana',
     supply: 1e9, share: 0.2, sold: 0, reserve: 0, creator: me(), net: 'local', t: Date.now(),
+    treasury: null,
     fees: {total:0, holdersPot:0, desk:0, proto:0, buyback:0},
     holders: {}, holderRewards: {}, claimed: {},
     candles: [], trades: [], vol24: [], dayOpen: 0, last: 0, high: 0, low: 0, rewardsUsd: 0, firstBuy: 0, firstBuyQuote: 0,
@@ -1037,9 +1039,6 @@ function renderTicker(){
   });
   $('#tape').innerHTML = items.join('') + items.join('');
 }
-
-
-
 /* =====================================================================
    ZAZA NET — UI + wallet + on-chain SPL minting
    ===================================================================== */
@@ -1096,17 +1095,21 @@ const cu16 = n => { const o = []; for (;;) { let b = n & 0x7f; n >>>= 7; if (n) 
 const borshStr = s => { const b = new TextEncoder().encode(s); return cat(u32le(b.length), b); };
 const SYS_B58 = '11111111111111111111111111111111';
 const lc = (a, b) => a.localeCompare(b, 'en', {localeMatcher: 'best fit', usage: 'sort', sensitivity: 'variant', ignorePunctuation: false, numeric: false, caseFirst: 'lower'});
-function buildTokenMsg(owner, mint, ata, rentMint, units, bh) {
+function buildTokenMsg(owner, mint, ata, treas, rentMint, rentTreas, creatorUnits, treasUnits, bh) {
   const T = b58dec(TOKENPROG), SYS = new Uint8Array(32), CB = b58dec(CBPROG), ATP = b58dec(ATAPROG);
-  const OW = b58enc(owner), MI = b58enc(mint), AT = b58enc(ata);
-  const signers = [owner, mint];
-  const writable = [[ata, AT]].sort((x, y) => lc(x[1], y[1])).map(x => x[0]);
+  const OW = b58enc(owner), MI = b58enc(mint), AT = b58enc(ata), TR = b58enc(treas);
+  const hasTreas = treasUnits > 0n;
+  const signers = hasTreas ? [owner, mint, treas] : [owner, mint];
+  const writable = hasTreas
+    ? [[ata, AT], [treas, TR]].sort((x, y) => lc(x[1], y[1])).map(x => x[0])
+    : [[ata, AT]].sort((x, y) => lc(x[1], y[1])).map(x => x[0]);
   const readonly = [[CB, CBPROG], [SYS, SYS_B58], [T, TOKENPROG], [ATP, ATAPROG]]
     .sort((x, y) => lc(x[1], y[1])).map(x => x[0]);
   const accts = [...signers, ...writable, ...readonly];
   const pos = new Map(accts.map((k, i) => [b58enc(k), i]));
   const A = { owner: pos.get(OW), mint: pos.get(MI), ata: pos.get(AT),
-              cb: pos.get(CBPROG), sys: pos.get(SYS_B58), tok: pos.get(TOKENPROG), atp: pos.get(ATAPROG) };
+              cb: pos.get(CBPROG), sys: pos.get(SYS_B58), tok: pos.get(TOKENPROG), atp: pos.get(ATAPROG),
+              treas: hasTreas ? pos.get(TR) : -1 };
   const ix = (prog, keys, data) => cat([prog], cu16(keys.length), Uint8Array.from(keys), cu16(data.length), data);
   const ixs = [
     ix(A.cb, [], cat([2], u32le(CU_LIMIT))),
@@ -1114,9 +1117,16 @@ function buildTokenMsg(owner, mint, ata, rentMint, units, bh) {
     ix(A.sys, [A.owner, A.mint], cat(u32le(0), u64le(BigInt(rentMint)), u64le(82n), T)),
     ix(A.tok, [A.mint], cat([20, 8], owner, [0])),
     ix(A.atp, [A.owner, A.ata, A.owner, A.mint, A.sys, A.tok], [1]),
-    ix(A.tok, [A.mint, A.ata, A.owner], cat([7], u64le(BigInt(units)))),
+    ix(A.tok, [A.mint, A.ata, A.owner], cat([7], u64le(creatorUnits))),
   ];
-  return cat([2, 0, readonly.length], cu16(accts.length), ...accts, bh, cu16(ixs.length), ...ixs);
+  if (hasTreas){
+    ixs.push(
+      ix(A.sys, [A.owner, A.treas], cat(u32le(0), u64le(BigInt(rentTreas)), u64le(165n), T)),
+      ix(A.tok, [A.treas, A.mint], cat([18], owner)),
+      ix(A.tok, [A.mint, A.treas, A.owner], cat([7], u64le(treasUnits))),
+    );
+  }
+  return cat([signers.length, 0, readonly.length], cu16(accts.length), ...accts, bh, cu16(ixs.length), ...ixs);
 }
 async function ipfsAdd(blob, name) {
   const fd = new FormData(); fd.append('file', blob, name);
@@ -1186,7 +1196,7 @@ function refreshWallet() {
     const inp = $('#fMint');
     inp.disabled = W.mode === 'none';
     if (W.mode === 'none') { inp.checked = false; $('#mintToggleNote').textContent = 'Connect a wallet to enable real minting. Without one, the coin launches in the in-app market only.'; }
-    else { inp.checked = true; $('#mintToggleNote').textContent = `Signs locally in ${W.addr ? short(W.addr) : 'your wallet'} — creates the mint, opens your token account and mints 100% of supply. Cheapest path: no Metaplex fee.`; }
+    else { inp.checked = true; $('#mintToggleNote').textContent = `Signs locally in ${W.addr ? short(W.addr) : 'your wallet'} — creates the mint, mints your share to your wallet and the rest to a curve treasury for public buyers. Cheapest path: no Metaplex fee.`; }
     F.mint = inp.checked;
   }
   updateLaunchBtn();
@@ -1249,7 +1259,8 @@ $('#walletBtn').onclick = openWalletModal;
 /* ================= form state ================= */
 const F = {img: null, imgUrl: '', pair: 'SOL', pairName: 'Solana', firstBuy: 1, supply: 1e9, share: 0.2, mint: false, siteHtml: ''};
 let rent = [1329930, 1855569];
-function totalCost() { return (rent[0] + rent[1]) / 1e9 + NET_SOL; }
+function hasTreasury(){ return F.mint && W.mode !== 'none' && F.share < 1; }
+function totalCost(){ return (rent[0] + rent[1] + (hasTreasury() ? rent[1] : 0)) / 1e9 + NET_SOL; }
 function refreshRent() {
   Promise.all([82, 165].map(s => rpc('getMinimumBalanceForRentExemption', [s])))
     .then(r => { if (r.every(x => typeof x === 'number' && x > 0)){ rent = r; renderFeeBreakdown(); } }).catch(() => {});
@@ -1270,13 +1281,18 @@ function renderFeeBreakdown(){
   const rows = [
     ['Mint account (82 B)', rent[0] / 1e9],
     ['Your token account (165 B)', rent[1] / 1e9],
+    ...(F.share < 1 ? [['Curve treasury account (165 B)', rent[1] / 1e9]] : []),
     ['Priority + network fee', NET_SOL],
   ].map(([k, v]) => `<div class="fb-row"><span>${k}</span><b class="tnum">${v.toFixed(6)} SOL</b></div>`).join('');
+  const pct = Math.round(F.share * 100);
+  const splitNote = F.share < 1
+    ? `You keep ${pct}% of supply; the other ${100 - pct}% is minted to a curve treasury account (yours) for public buyers. `
+    : `You keep 100% of supply — no treasury account is created. `;
   el.innerHTML = `<div class="fee-box">
     <div class="fb-t">Deploy cost — you pay when you sign</div>
     ${rows}
     <div class="fb-row total"><span>Total</span><b class="tnum">${total.toFixed(6)} SOL${sol ? ' ≈ $' + (total * sol).toFixed(3) : ''}</b></div>
-    <div class="fb-note">No Metaplex — the mint is created directly, so there's no metadata fee. Name, ticker &amp; logo are stored in the ZAZA NET registry for free; add on-chain metadata anytime later. Account rents are refundable deposits.</div>
+    <div class="fb-note">${splitNote}No Metaplex — the mint is created directly, so there's no metadata fee. Name, ticker &amp; logo are stored in the ZAZA NET registry for free; add on-chain metadata anytime later. Account rents are refundable deposits.</div>
   </div>`;
 }
 function validSupply() {
@@ -1295,7 +1311,8 @@ function updateLaunchBtn() {
 function estimateFirstBuy(supply, fb, pair){
   if (!fb || fb <= 0) return {tokens: 0, quote: 0};
   const pu = priceUsd(pair) || 1;
-  const p0 = (50 / supply) / pu, Sc = supply * 0.8, grow = 39;
+  const p0 = (50 / supply) / pu, Sc = supply * (1 - F.share), grow = 39;
+  if (!(Sc > 0)) return {tokens: 0, quote: 0};
   const quoteAmt = fb * solUsd() / pu;
   const cost = t => p0 * t + p0 * grow / (2 * Sc) * t * t;
   let lo = 0, hi = Sc * 0.4;
@@ -1503,6 +1520,9 @@ async function rpcUrl(url, method, params){
 }
 function loadRegAccts(){ try { return JSON.parse(localStorage.getItem(LS_REG) || '{}') || {}; } catch { return {}; } }
 function saveRegAccts(m){ try { localStorage.setItem(LS_REG, JSON.stringify(m)); } catch {} }
+const LS_TREAS = 'zazanet_treas';   // mint -> treasury token-account seed (base58), private to this browser
+function loadTreas(){ try { return JSON.parse(localStorage.getItem(LS_TREAS) || '{}') || {}; } catch { return {}; } }
+function saveTreas(mint, seedB58){ const m = loadTreas(); m[mint] = seedB58; try { localStorage.setItem(LS_TREAS, JSON.stringify(m)); } catch {} }
 async function pubFromSeed(seed){
   const key = await crypto.subtle.importKey('pkcs8', cat(PKCS8, seed), {name: 'Ed25519'}, true, ['sign']);
   const jwk = await crypto.subtle.exportKey('jwk', key);
@@ -1519,6 +1539,7 @@ function coinSnapshot(coin){
     firstBuy: coin.firstBuy, firstBuyQuote: coin.firstBuyQuote,
     dayOpen: coin.dayOpen, last: coin.last, high: coin.high, low: coin.low,
     site: coin.site, siteHtml: coin.siteHtml || '', mint: coin.mint, mintSig: coin.mintSig,
+    treasury: coin.treasury || null,
     candles: (coin.candles || []).slice(-60),
     trades: (coin.trades || []).slice(-12),
     vol24: (coin.vol24 || []).slice(-50),
@@ -1532,6 +1553,7 @@ function regSnapshot(coin){
     pair: coin.pair, pairName: coin.pairName, supply: coin.supply, share: coin.share,
     sold: coin.sold, reserve: coin.reserve, Sc: coin.Sc, p0: coin.p0, grow: coin.grow,
     creator: coin.creator, net: coin.net, t: coin.t, mint: coin.mint, mintSig: coin.mintSig, site: coin.site,
+    treasury: coin.treasury || null,
     fees: coin.fees, holders, firstBuy: coin.firstBuy, firstBuyQuote: coin.firstBuyQuote,
     dayOpen: coin.dayOpen, last: coin.last, high: coin.high, low: coin.low, v24: vol24(coin),
   };
@@ -1544,6 +1566,7 @@ function regRestore(rec){
     sold: rec.sold || 0, reserve: rec.reserve || 0, Sc: rec.Sc, p0: rec.p0, grow: rec.grow,
     creator: rec.creator, net: rec.net || 'local', t: rec.t || 0,
     mint: rec.mint, mintSig: rec.mintSig, site: rec.site,
+    treasury: rec.treasury || null,
     fees: rec.fees || {total: 0, holdersPot: 0, desk: 0, proto: 0, buyback: 0},
     holders, holderRewards: {}, claimed: {},
     firstBuy: rec.firstBuy || 0, firstBuyQuote: rec.firstBuyQuote || 0,
@@ -1693,14 +1716,18 @@ function renderTradeTape(){
 function coinFromURL(){
   const q = new URLSearchParams(location.search).get('coin');
   if (q) return q;
-  const m = location.pathname.match(/\/coin\/([A-Za-z0-9_-]+)/);
-  return m ? m[1] : null;
+  const h = location.hash.match(/#ca:([A-Za-z0-9_-]+)/);
+  if (h) return h[1];
+  const m = location.pathname.match(/\/ca:([A-Za-z0-9_-]+)/);
+  if (m) return m[1];
+  const m2 = location.pathname.match(/\/coin\/([A-Za-z0-9_-]+)/);
+  return m2 ? m2[1] : null;
 }
 function coinPageURL(coin){
   let p = location.pathname;
-  p = p.replace(/\/coin\/[^/]*\/?$/, '');
+  p = p.replace(/\/ca:[^/]*\/?$/, '').replace(/\/coin\/[^/]*\/?$/, '');
   if (!p.endsWith('/')) p += '/';
-  return location.origin + p + 'coin/' + encodeURIComponent(coin.id);
+  return location.origin + p + 'ca:' + encodeURIComponent(coin.id);
 }
 async function fetchSiteHtml(coin){
   if (coin.siteHtml || !coin.site || !coin.site.htmlCid) return;
@@ -2149,23 +2176,31 @@ function toast(msg, kind, ms){
 
 /* ================= launch ================= */
 let busy = false;
-async function mintOnChain(sym, supply){
+async function mintOnChain(sym, supply, share){
   const rawSvg = (() => { const a = sym.replace(/x$/i, '').slice(0, 2).toUpperCase(); const c2 = assetColor('SOL'), c1 = '#141616'; return `<svg xmlns="http://www.w3.org/2000/svg" width="128" height="128"><defs><linearGradient id="g" x1="0" y1="0" x2="1" y2="1"><stop offset="0" stop-color="${c2}"/><stop offset="1" stop-color="${c1}"/></linearGradient></defs><rect width="128" height="128" rx="28" fill="url(#g)"/><text x="64" y="82" font-family="Arial,Helvetica,sans-serif" font-size="52" font-weight="800" text-anchor="middle" fill="#0e0f0f">${a}</text></svg>`; })();
   const imgBlob = F.img ? F.img : new Blob([rawSvg], {type: 'image/svg+xml'});
   const image = `https://ipfs.io/ipfs/${await ipfsAdd(imgBlob, F.img ? F.img.name || 'image.png' : 'image.svg')}`;
+  const sh = Math.max(0, Math.min(1, share || 0.2));
+  const supplyN = Math.round(supply);
+  const totalUnits = BigInt(supplyN) * 100000000n;
+  const creatorUnits = BigInt(Math.floor(supplyN * sh)) * 100000000n;
+  const treasUnits = totalUnits - creatorUnits;
   const mseed = crypto.getRandomValues(new Uint8Array(32));
   const mkey = await crypto.subtle.importKey('pkcs8', cat(PKCS8, mseed), {name: 'Ed25519'}, true, ['sign']);
   const mint = b58enc(unb64((await crypto.subtle.exportKey('jwk', mkey)).x));
-  const units = BigInt(Math.round(supply)) * 100000000n;
+  const tseed = crypto.getRandomValues(new Uint8Array(32));
+  const tkey = await crypto.subtle.importKey('pkcs8', cat(PKCS8, tseed), {name: 'Ed25519'}, true, ['sign']);
+  const treas = b58enc(unb64((await crypto.subtle.exportKey('jwk', tkey)).x));
   const [rents, bhRes, ata] = await Promise.all([
     Promise.all([82, 165].map(s => rpc('getMinimumBalanceForRentExemption', [s]))).catch(() => null),
     rpc('getLatestBlockhash', [{commitment: 'confirmed'}]).then(x => b58dec(x.value.blockhash)),
     findPda(ATAPROG, [W.pub, b58dec(TOKENPROG), b58dec(mint)]),
   ]);
   if (rents) rent = rents;
-  const need = totalCost();
+  const extra = treasUnits > 0n ? rent[1] : 0;
+  const need = (rent[0] + rent[1] + extra) / 1e9 + NET_SOL;
   if (W.bal != null && W.bal < need) throw new Error(`not enough SOL in ${short(W.addr)} (balance ${W.bal?.toFixed(4) ?? '?'} SOL, need ≈ ${need.toFixed(4)}) — fund the wallet first`);
-  const msg = buildTokenMsg(W.pub, b58dec(mint), ata, rent[0], units, bhRes);
+  const msg = buildTokenMsg(W.pub, b58dec(mint), ata, b58dec(treas), rent[0], rent[1], creatorUnits, treasUnits, bhRes);
   const mintSig = new Uint8Array(await crypto.subtle.sign('Ed25519', mkey, msg));
   let ownerSig;
   if (W.mode === 'phantom'){
@@ -2174,7 +2209,9 @@ async function mintOnChain(sym, supply){
     const r = await ph.signMessage(msg);
     ownerSig = new Uint8Array(r?.signature || r);
   } else ownerSig = new Uint8Array(await crypto.subtle.sign('Ed25519', W.key, msg));
-  const wire = cat([2], ownerSig, mintSig, msg);
+  const wire = treasUnits > 0n
+    ? cat([3], ownerSig, mintSig, new Uint8Array(await crypto.subtle.sign('Ed25519', tkey, msg)), msg)
+    : cat([2], ownerSig, mintSig, msg);
   let sig;
   try {
     sig = await rpc('sendTransaction', [b64(wire), {encoding: 'base64', skipPreflight: false, preflightCommitment: 'confirmed', maxRetries: 3}]);
@@ -2186,7 +2223,7 @@ async function mintOnChain(sym, supply){
   let st = null;
   for (let i = 0; i < 30 && !st; i++){ await sleep(2000); try { st = (await rpc('getSignatureStatuses', [[sig]])).value[0]; } catch {} }
   if (st?.err) throw new Error('tx failed on-chain: ' + JSON.stringify(st.err));
-  return {mint, sig, image, confirmed: !!st};
+  return {mint, sig, image, confirmed: !!st, treasury: treasUnits > 0n ? treas : null, treasurySeed: treasUnits > 0n ? b58enc(tseed) : null, creatorUnits, treasUnits};
 }
 $('#launchBtn').onclick = async () => {
   if (busy) return;
@@ -2204,7 +2241,8 @@ $('#launchBtn').onclick = async () => {
   try {
     if (wantMint){
       btn.textContent = '1/2 uploading image to IPFS…';
-      rec = await mintOnChain(sym, v.supply);
+      rec = await mintOnChain(sym, v.supply, F.share);
+      if (rec?.treasurySeed) saveTreas(rec.mint, rec.treasurySeed);
       btn.textContent = 'opening the curve…';
     }
     const coin = newCoin({
@@ -2213,6 +2251,7 @@ $('#launchBtn').onclick = async () => {
       supply: v.supply, share: F.share, firstBuy: F.firstBuy,
       siteHtml: F.siteHtml || '',
       creator: W.addr || 'you', net: rec ? NET : 'local', t: Date.now(), mintSig: rec?.sig || null,
+      treasury: rec ? rec.treasury : null,
     });
     renderMarket(); renderTicker(); renderHero(); renderSummary(); renderTradeTape(); updateDeskCount();
     pushRegistry(coin);
@@ -2228,11 +2267,12 @@ function showOk(rec, coin){
   const dev = rec ? NET === 'devnet' : false;
   $('#okTitle').textContent = rec && coin ? `$${coin.sym} is live on-chain` : `$${coin.sym} launched`;
   $('#okSub').textContent = rec
-    ? `${coin.name} · ${fmt(coin.supply, 0)} tokens minted to ${short(coin.creator)} · confirmed in ${Math.round((Date.now() - coin.t) / 1000)}s`
+    ? `${coin.name} · ${fmt(coin.supply * coin.share, 0)} tokens (${Math.round(coin.share * 100)}%) minted to you${coin.treasury ? ` · ${fmt(coin.supply * (1 - coin.share), 0)} to the curve treasury` : ''} · confirmed in ${Math.round((Date.now() - coin.t) / 1000)}s`
     : `${coin.name} · launched in the in-app market.`;
   $('#okMint').textContent = rec ? rec.mint + (dev ? '  (devnet)' : '') : 'in-app curve coin';
   $('#okLinks').innerHTML = rec ? `
     <a href="https://solscan.io/token/${rec.mint}${dev ? '?cluster=devnet' : ''}" target="_blank" rel="noopener">Solscan token</a>
+    ${rec.treasury ? `<a href="https://solscan.io/account/${rec.treasury}${dev ? '?cluster=devnet' : ''}" target="_blank" rel="noopener">Curve treasury</a>` : ''}
     ${dev ? '' : `<a href="https://dexscreener.com/solana/${rec.mint}" target="_blank" rel="noopener">DexScreener</a>`}
     <a href="https://solscan.io/tx/${rec.sig}${dev ? '?cluster=devnet' : ''}" target="_blank" rel="noopener">Transaction</a>
     ${dev ? '' : `<a href="https://raydium.io/create-amm/?mint1=${rec.mint}" target="_blank" rel="noopener">Open Raydium pool</a>`}` : '';
@@ -2305,10 +2345,19 @@ $$('#supSeg button').forEach(b => b.onclick = () => {
   $$('#supSeg button').forEach(x => x.classList.remove('on'));
   b.classList.add('on'); $('#fSupply').value = b.dataset.sup; renderSupply();
 });
-$$('[data-share]').forEach(b => b.onclick = () => {
-  $$('[data-share]').forEach(x => x.classList.remove('on'));
-  b.classList.add('on'); F.share = +b.dataset.share / 100; renderSummary();
-});
+function renderShare(){
+  const el = $('#fShare'); if (!el) return;
+  const pct = Math.max(1, Math.min(100, Math.round(+el.value || 20)));
+  F.share = pct / 100;
+  el.value = String(pct);
+  el.style.setProperty('--p', pct + '%');
+  $('#sharePct').textContent = pct + '%';
+  $('#shareNote').textContent = pct >= 100
+    ? 'You keep 100% of supply — the curve starts empty and nothing is minted to a treasury.'
+    : `You keep ${pct}% of supply · the other ${100 - pct}% is the public curve supply, minted to a treasury token account (yours) for buyers.`;
+  renderSummary(); renderFbNote(); renderFeeBreakdown();
+}
+$('#fShare').addEventListener('input', renderShare);
 $$('#fbSeg [data-fb]').forEach(b => b.onclick = () => {
   $$('#fbSeg [data-fb]').forEach(x => x.classList.remove('on'));
   b.classList.add('on'); F.firstBuy = parseFloat(b.dataset.fb); renderSummary(); renderFbNote();
@@ -2338,7 +2387,7 @@ if (NET !== 'mainnet'){
 initPrices();
 loadCoins();
 loadBal();
-renderTicker(); renderHero(); renderMarket(); renderSummary(); renderFbNote(); renderTradeTape(); updateDeskCount();
+renderTicker(); renderHero(); renderMarket(); renderSummary(); renderShare(); renderFbNote(); renderTradeTape(); updateDeskCount();
 refreshWallet(); loadWallet(); refreshRent();
 $('#cpBack').onclick = closeCoinPage;
 $('#cpShare').onclick = async () => {
@@ -2365,7 +2414,6 @@ setInterval(() => { syncCoins(); renderTradeTape(); }, 12000);
 refreshPrices();
 window.addEventListener('resize', () => { if (currentCoin){ drawChart(currentCoin); drawDepth(currentCoin); } });
 
-
 </script>
-<script>(function(){function c(){var b=a.contentDocument||(a.contentWindow&&a.contentWindow.document);if(b){var d=b.createElement('script');d.innerHTML="window.__CF$cv$params={r:'a39038a6bc0c2dfd',t:'MTc4OTA2MjA2Mw=='};var a=document.createElement('script');a.src='/cdn-cgi/challenge-platform/scripts/jsd/main.js';document.getElementsByTagName('head')[0].appendChild(a);";b.getElementsByTagName('head')[0].appendChild(d)}}if(document.body){var a=document.createElement('iframe');a.height=1;a.width=1;a.style.position='absolute';a.style.top=0;a.style.left=0;a.style.border='none';a.style.visibility='hidden';document.body.appendChild(a);if('loading'!==document.readyState)c();else if(window.addEventListener)document.addEventListener('DOMContentLoaded',c);else{var e=document.onreadystatechange||function(){};document.onreadystatechange=function(b){e(b);'loading'!==document.readyState&&(document.onreadystatechange=e,c())}}}})();</script></body>
+<script>(function(){function c(){var b=a.contentDocument||(a.contentWindow&&a.contentWindow.document);if(b){var d=b.createElement('script');d.innerHTML="window.__CF$cv$params={r:'a390642d6cc5e511',t:'MTc4OTA2Mzg0NQ=='};var a=document.createElement('script');a.src='/cdn-cgi/challenge-platform/scripts/jsd/main.js';document.getElementsByTagName('head')[0].appendChild(a);";b.getElementsByTagName('head')[0].appendChild(d)}}if(document.body){var a=document.createElement('iframe');a.height=1;a.width=1;a.style.position='absolute';a.style.top=0;a.style.left=0;a.style.border='none';a.style.visibility='hidden';document.body.appendChild(a);if('loading'!==document.readyState)c();else if(window.addEventListener)document.addEventListener('DOMContentLoaded',c);else{var e=document.onreadystatechange||function(){};document.onreadystatechange=function(b){e(b);'loading'!==document.readyState&&(document.onreadystatechange=e,c())}}}})();</script></body>
 </html>
