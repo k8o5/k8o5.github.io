@@ -1,0 +1,2345 @@
+<!doctype html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover">
+<meta name="theme-color" content="#0e1013">
+<title>ZAZA NET — deploy tokens on Solana</title>
+<meta name="description" content="Deploy a real SPL token on Solana. Give it your own HTML site. Live prices, shared desk, and optional on-chain minting.">
+<link rel="icon" href="data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 32 32'%3E%3Crect width='32' height='32' rx='7' fill='%23a3e635'/%3E%3Ctext x='16' y='21.5' font-family='Arial' font-size='12' font-weight='700' text-anchor='middle' fill='%230e1013'%3EZA%3C/text%3E%3C/svg%3E">
+<style>
+:root{
+  --bg:#0e1013; --bg2:#14171b; --card:#191d22; --card2:#20252b; --inset:#242a30;
+  --ink:#eef1f4; --muted:#9aa3ad; --faint:#6b7682;
+  --line:#2b3138; --line-soft:#23292f; --well:#23292f;
+  --head:#a3e635; --head-lit:#bef264; --on-fill:#0e1013;
+  --up:#4ee39b; --down:#ff5a52; --gold:#f0b14a; --blue:#7aa2f7; --violet:#c792ea;
+  --pop:0 24px 60px #000000b3; --lift:0 8px 22px #0000008c; --topbar-h:58px;
+  --r:12px;
+}
+*{box-sizing:border-box}
+*{-webkit-tap-highlight-color:transparent}
+html{color-scheme:dark;scroll-behavior:smooth}
+body{margin:0;background:var(--bg);color:var(--ink);font-family:ui-sans-serif,system-ui,"Segoe UI",Roboto,Helvetica,Arial,sans-serif;font-size:15px;line-height:1.5;-webkit-font-smoothing:antialiased;text-rendering:optimizeLegibility}
+a{color:inherit}
+button{font-family:inherit;touch-action:manipulation}
+.tnum{font-variant-numeric:tabular-nums}
+.mono{font-family:ui-monospace,SFMono-Regular,Menlo,Consolas,monospace}
+.up{color:var(--up)} .down{color:var(--down)} .lime{color:var(--head)} .muted{color:var(--muted)}
+.ic{position:relative;overflow:hidden}
+.ic img{position:absolute;inset:0;width:100%;height:100%;object-fit:cover;border-radius:inherit}
+/* ---------- topbar ---------- */
+.topbar{position:sticky;top:0;z-index:40;width:100%;background:rgba(20,23,27,.92);backdrop-filter:blur(12px);border-bottom:1px solid var(--line)}
+.topbar-in{margin:0 auto;width:100%;max-width:1180px;display:flex;align-items:center;gap:12px;padding:10px 20px;flex-wrap:wrap}
+.brand{display:flex;align-items:center;gap:9px;text-decoration:none;font-weight:800;letter-spacing:-.02em;font-size:15px;flex-shrink:0}
+.brand svg{display:block;filter:drop-shadow(0 0 6px #a3e63555)}
+.brand .sub{font-weight:600;color:var(--muted);font-size:12px;margin-left:2px}
+.pills{display:flex;align-items:center;gap:2px;overflow-x:auto;border-radius:999px;background:var(--well);padding:3px;scrollbar-width:none;min-width:0}
+.pills::-webkit-scrollbar{display:none}
+.pills a{white-space:nowrap;border-radius:999px;padding:7px 14px;font-size:12.5px;font-weight:600;color:var(--muted);text-decoration:none;transition:color .15s,background .15s}
+.pills a:hover{color:var(--ink)}
+.pills a.on{background:var(--card2);color:var(--ink);box-shadow:0 1px 2px #00000033}
+.spacer{flex:1}
+.net-badge{font-size:10px;font-weight:800;letter-spacing:.1em;color:var(--on-fill);background:var(--gold);border-radius:5px;padding:4px 7px;text-transform:uppercase}
+.src-pill{font-size:10px;font-weight:800;letter-spacing:.08em;color:var(--up);border:1px solid #4ee39b44;background:#4ee39b14;border-radius:999px;padding:4px 9px;text-transform:uppercase;flex-shrink:0}
+.src-pill.off{color:var(--muted);border-color:var(--line);background:transparent}
+.wallet-btn{display:flex;align-items:center;gap:8px;height:36px;padding:0 14px;border-radius:999px;border:1px solid var(--line);background:var(--card2);color:var(--ink);font:600 12.5px/1 inherit;cursor:pointer;transition:border-color .15s;min-width:150px;justify-content:center}
+.wallet-btn:hover{border-color:var(--muted)}
+.wallet-btn .dot{width:7px;height:7px;border-radius:99px;background:var(--line)}
+.wallet-btn.live .dot{background:var(--up);box-shadow:0 0 8px #4ee39b66}
+/* ---------- tape ---------- */
+.tape-wrap{overflow:hidden;border-bottom:1px solid var(--line);background:var(--bg2)}
+.tape-track{display:flex;width:max-content;animation:tape 55s linear infinite}
+.tape-wrap:hover .tape-track{animation-play-state:paused}
+@keyframes tape{to{transform:translateX(-50%)}}
+.tape-item{display:flex;align-items:center;gap:7px;padding:8px 18px;white-space:nowrap;font-size:12px;color:var(--muted);border-right:1px solid var(--line-soft)}
+.tape-item b{color:var(--ink);font-weight:700}
+.tape-item .ic{width:16px;height:16px;border-radius:4px;display:inline-flex;align-items:center;justify-content:center;font-size:8.5px;font-weight:800;color:#0e1013;flex-shrink:0}
+.tape-item .d{font-size:11px;font-weight:700}
+.tape-wrap.trades{background:var(--card);border-bottom:1px solid var(--line)}
+.tape-wrap.trades .tape-item{border-right:1px dashed var(--line);font-size:11.5px}
+.tape-wrap.trades .tape-item .side{font-weight:800}
+/* ---------- coin page ---------- */
+.cp{max-width:1180px;margin:0 auto;padding:0 20px 64px;min-height:70vh}
+.cp-bar{display:flex;align-items:center;gap:12px;padding:16px 0;border-bottom:1px solid var(--line);margin-bottom:20px;flex-wrap:wrap}
+.cp-back,.cp-btn{font:700 13px/1 inherit;color:var(--ink);background:var(--card2);border:1px solid var(--line);border-radius:11px;padding:10px 15px;cursor:pointer;text-decoration:none;display:inline-flex;align-items:center;gap:6px;transition:border-color .15s}
+.cp-back:hover,.cp-btn:hover{border-color:var(--head)}
+.cp-title{flex:1;min-width:180px;font-weight:800;font-size:15px;color:var(--ink);white-space:nowrap;overflow:hidden;text-overflow:ellipsis}
+.cp-actions{display:flex;gap:8px;flex-wrap:wrap}
+.cp-in{max-width:860px;margin:0 auto}
+.cp-in .stat-grid{grid-template-columns:repeat(3,1fr)}
+@media (max-width:640px){.cp-in .stat-grid{grid-template-columns:repeat(2,1fr)}.cp{min-height:60vh}}
+.site-tools{display:flex;align-items:center;gap:8px;flex-wrap:wrap;margin-top:8px}
+.cp-tabs{display:flex;align-items:center;gap:8px;flex-wrap:wrap;margin:0 0 14px}
+.cp-tabs button{font:700 13px/1 inherit;color:var(--muted);background:var(--bg2);border:1px solid var(--line);border-radius:999px;padding:9px 16px;cursor:pointer;transition:border-color .15s,color .15s,background .15s}
+.cp-tabs button.on{color:var(--on-fill);background:var(--head);border-color:transparent}
+.cp-tabs-sp{flex:1}
+.cp-tab-a{font:700 12px/1 inherit;color:var(--muted);background:var(--bg2);border:1px solid var(--line);border-radius:999px;padding:8px 13px;text-decoration:none;white-space:nowrap}
+.cp-tab-a:hover{color:var(--ink);border-color:var(--head)}
+.site-frame-wrap{width:100%;height:calc(100vh - 150px);min-height:480px;border:1px solid var(--line);border-radius:16px;overflow:hidden;background:#fff}
+.site-frame-wrap iframe{width:100%;height:100%;border:0;display:block}
+.site-bar{display:flex;align-items:center;gap:10px;flex-wrap:wrap;margin-bottom:12px;font-size:12px;color:var(--muted)}
+.site-bar .sb-tag{display:inline-flex;align-items:center;gap:6px;font-size:10.5px;letter-spacing:.1em;text-transform:uppercase;color:var(--head);border:1px solid #a3e63544;background:#a3e63514;border-radius:999px;padding:4px 10px;font-weight:800}
+.site-bar a,.site-bar button{font:700 12px/1 inherit;color:var(--ink);background:var(--card2);border:1px solid var(--line);border-radius:9px;padding:7px 11px;cursor:pointer;text-decoration:none}
+.site-bar a:hover,.site-bar button:hover{border-color:var(--head)}
+/* ---------- layout ---------- */
+.wrap{max-width:1180px;margin:0 auto;padding:0 20px 48px}
+.hero{padding:36px 0 26px;max-width:900px}
+.hero .eyebrow{display:inline-flex;align-items:center;gap:8px;font-size:11px;font-weight:700;letter-spacing:.12em;text-transform:uppercase;color:var(--head);border:1px solid #a3e63544;background:#a3e63514;border-radius:999px;padding:6px 13px;margin-bottom:16px}
+.hero h1{margin:0 0 12px;font-size:clamp(28px,4.2vw,44px);line-height:1.08;letter-spacing:-.03em;font-weight:800}
+.hero h1 .lime{color:var(--head)}
+.hero p{margin:0;max-width:620px;color:var(--muted);font-size:15px}
+.hero .cta{display:flex;flex-wrap:wrap;gap:10px;margin-top:20px}
+.btn{display:inline-flex;align-items:center;justify-content:center;gap:8px;height:46px;padding:0 24px;border-radius:12px;border:1px solid var(--line);background:var(--card2);color:var(--ink);font:700 14px/1 inherit;cursor:pointer;text-decoration:none;transition:border-color .15s,transform .05s,background .15s}
+.btn:hover{border-color:var(--muted)}
+.btn.primary{background:var(--head);color:var(--on-fill);border-color:var(--head);box-shadow:0 6px 20px #a3e6352b}
+.btn.primary:hover{background:var(--head-lit)}
+.btn.ghost{background:transparent}
+.btn:active{transform:translateY(1px)}
+.hero .stats{display:grid;grid-template-columns:repeat(4,1fr);gap:10px;margin-top:24px}
+.stat{border:1px solid var(--line);background:linear-gradient(180deg,#1c2026,#161a1e);border-radius:var(--r);padding:13px 15px}
+.stat .k{font-size:10.5px;letter-spacing:.06em;text-transform:uppercase;color:var(--muted);margin-bottom:7px;font-weight:600}
+.stat b{display:block;color:var(--ink);font-size:20px;letter-spacing:-.02em;line-height:1.1;font-weight:800}
+.stat small{display:block;font-size:11.5px;color:var(--muted);margin-top:4px;font-weight:600}
+.stat small.up{color:var(--up)} .stat small.down{color:var(--down)}
+/* ---------- launch grid ---------- */
+.grid{display:grid;grid-template-columns:minmax(0,1fr);gap:16px;align-items:start}
+.grid > *{min-width:0}
+@media(min-width:960px){.grid{grid-template-columns:minmax(0,1fr) 330px}}
+.card{background:linear-gradient(180deg,var(--card),#161a1e);border:1px solid var(--line);border-radius:var(--r)}
+.form-card{padding:22px;display:flex;flex-direction:column;gap:16px;min-width:0}
+.sec-title{display:flex;align-items:center;gap:9px;font-size:14px;font-weight:800;letter-spacing:-.005em;padding-bottom:2px}
+.sec-title .k{font-size:10px;font-weight:800;color:var(--on-fill);background:var(--head);border-radius:5px;padding:2.5px 7px;letter-spacing:.02em}
+.sec-title .r{margin-left:auto;font-size:11px;font-weight:600;color:var(--muted)}
+.field label{display:block}
+.lbl{display:flex;justify-content:space-between;align-items:baseline;margin-bottom:6px;font-size:10.5px;text-transform:uppercase;letter-spacing:.1em;color:var(--muted);font-weight:600}
+.lbl .cnt{font-variant-numeric:tabular-nums;color:var(--faint);text-transform:none;letter-spacing:0}
+.inp{width:100%;border:1px solid #333b43;background:var(--inset);border-radius:10px;padding:11px 13px;font-size:14px;color:var(--ink);font-family:inherit;transition:border-color .15s,background .15s;outline:none}
+.inp::placeholder{color:#77828d}
+.inp:focus{border-color:var(--head);background:#2a3138}
+textarea.inp{resize:vertical;min-height:60px}
+.row{display:flex;gap:12px}
+.row .f2{flex:2;min-width:0}
+.row .f1{flex:1;min-width:0}
+.img-btn{position:relative;display:flex;height:120px;width:120px;flex-shrink:0;align-items:center;justify-content:center;overflow:hidden;border-radius:12px;border:1.5px dashed #3a4249;background:var(--inset);transition:border-color .15s;cursor:pointer}
+.img-btn:hover{border-color:var(--head)}
+.img-btn img{position:absolute;inset:0;width:100%;height:100%;object-fit:cover}
+.img-btn .ph{display:flex;flex-direction:column;align-items:center;gap:8px;color:var(--muted)}
+.img-btn:hover .ph{color:var(--head)}
+.img-btn .ph small{font-size:9.5px;text-transform:uppercase;letter-spacing:.14em}
+.img-side{flex:1;display:flex;flex-direction:column;gap:12px;min-width:0}
+.seg-row{display:flex;flex-wrap:wrap;align-items:center;gap:8px}
+.seg{display:flex;flex-shrink:0;align-items:center;gap:2px;border-radius:999px;background:var(--well);padding:3px;border:1px solid var(--line-soft)}
+.seg button{height:34px;border:0;border-radius:999px;padding:0 14px;font:600 12.5px/1 inherit;background:transparent;color:var(--muted);cursor:pointer;transition:all .15s;flex-shrink:0}
+.seg button:hover{color:var(--ink)}
+.seg button.on{background:var(--card2);color:var(--ink);box-shadow:0 1px 3px #00000040}
+.seg input{width:74px;height:34px;border:0;border-radius:999px;padding:0 12px;font:600 12.5px/1 inherit;background:var(--inset);color:var(--ink);text-align:right;outline:none;border:1px solid var(--line)}
+.seg input:focus{border-color:var(--head)}
+.pair-list{display:flex;flex-wrap:wrap;gap:8px;max-height:212px;overflow-y:auto;padding:2px;scrollbar-width:thin}
+.pair-list::-webkit-scrollbar{width:6px}
+.pair-chip{display:flex;align-items:center;gap:9px;flex-shrink:0;border:1px solid var(--line);background:var(--bg2);border-radius:11px;padding:8px 12px;cursor:pointer;transition:border-color .15s,background .15s}
+.pair-chip:hover{border-color:var(--muted)}
+.pair-chip.on{border-color:var(--head);background:#a3e63512}
+.pair-chip .ic{width:24px;height:24px;border-radius:7px;display:inline-flex;align-items:center;justify-content:center;font-size:9.5px;font-weight:800;color:#0e1013;flex-shrink:0}
+.pair-chip .t b{display:block;font-size:11.5px;line-height:1.1}
+.pair-chip .t span{font-size:10px;color:var(--muted)}
+.pair-chip .p{font-size:11.5px;font-weight:700;font-variant-numeric:tabular-nums}
+.pair-note{display:flex;gap:10px;align-items:center;border:1px solid var(--line);border-radius:11px;background:var(--bg2);padding:11px 13px}
+.pair-note .ic{width:32px;height:32px;border-radius:8px;display:inline-flex;align-items:center;justify-content:center;font-size:12px;font-weight:800;color:#0e1013;flex-shrink:0}
+.pair-note p{margin:0;font-size:12px;color:var(--muted);line-height:1.5}
+.pair-note p b{color:var(--ink)}
+.err{min-height:18px;margin-top:8px;font-size:12px;line-height:1.45;color:var(--down)}
+.meta-toggle{display:flex;gap:10px;align-items:flex-start;cursor:pointer;border:1px solid var(--line);border-radius:10px;padding:11px 13px;background:var(--bg2)}
+.meta-toggle input{margin-top:2px;width:16px;height:16px;flex-shrink:0;accent-color:var(--head);cursor:pointer}
+.meta-toggle b{display:block;font-size:12.5px;font-weight:700}
+.meta-toggle small{display:block;font-size:11px;color:var(--muted);line-height:1.5}
+/* summary */
+.sum-card{padding:20px;display:flex;flex-direction:column;position:sticky;top:calc(var(--topbar-h) + 16px);min-width:0}
+.sum-card dl{margin:0;display:flex;flex-direction:column;gap:10px;font-size:12.5px}
+.sum-card .kv{display:flex;justify-content:space-between;align-items:baseline;gap:10px}
+.sum-card dt{color:var(--muted);flex-shrink:0}
+.sum-card dd{margin:0;min-width:0;overflow:hidden;text-overflow:ellipsis;white-space:nowrap;text-align:right;font-weight:700;color:var(--ink)}
+.fee-split{margin-top:14px;border-top:1px solid var(--line);padding-top:13px}
+.fee-split .lbl2{font-size:10px;text-transform:uppercase;letter-spacing:.1em;color:var(--muted);margin-bottom:8px;font-weight:600}
+.feebar{display:flex;height:10px;width:100%;overflow:hidden;border-radius:99px;background:#0a0c0e}
+.feebar i{display:block;height:100%}
+.legend{display:flex;flex-direction:column;gap:6px;margin-top:11px;font-size:11px}
+.legend .li{display:flex;align-items:center;gap:7px;color:var(--muted)}
+.legend .li i{width:8px;height:8px;border-radius:2px;flex-shrink:0}
+.legend .li b{margin-left:auto;color:var(--ink);font-weight:700;font-variant-numeric:tabular-nums}
+.launch-btn{margin-top:16px;width:100%;height:50px;border:0;border-radius:12px;background:var(--head);color:var(--on-fill);font:800 14.5px/1 inherit;letter-spacing:.01em;cursor:pointer;transition:background .15s,transform .05s;box-shadow:0 8px 24px #a3e63526}
+.launch-btn:hover:not(:disabled){background:var(--head-lit)}
+.launch-btn:active:not(:disabled){transform:translateY(1px)}
+.launch-btn:disabled{opacity:.35;cursor:not-allowed}
+.sub-note{margin-top:10px;font-size:10.5px;line-height:1.5;color:var(--muted);text-align:center}
+/* ---------- live pairs ---------- */
+.block{margin-top:40px}
+.block h2{font-size:19px;font-weight:800;letter-spacing:-.02em;margin:0 0 4px;display:flex;align-items:center;gap:10px}
+.block .sub{color:var(--muted);font-size:13.5px;margin:0 0 15px}
+.live-grid{display:grid;grid-template-columns:repeat(auto-fill,minmax(180px,1fr));gap:10px}
+.pair-card{border:1px solid var(--line);background:linear-gradient(180deg,var(--card),#15181c);border-radius:var(--r);padding:12px 13px;display:flex;flex-direction:column;gap:9px;transition:border-color .15s,transform .12s}
+.pair-card:hover{border-color:#3d454d;transform:translateY(-1px)}
+.pc-top{display:flex;align-items:flex-start;justify-content:space-between;gap:8px}
+.pc-id{display:flex;align-items:center;gap:8px;min-width:0}
+.pc-id .ic{width:28px;height:28px;border-radius:8px;display:inline-flex;align-items:center;justify-content:center;font-size:10px;font-weight:800;color:#0e1013;flex-shrink:0}
+.pc-id b{display:block;font-size:12.5px;line-height:1.1}
+.pc-id span{display:block;font-size:10px;color:var(--muted);margin-top:1px}
+.pc-price{font-size:15px;font-weight:800;letter-spacing:-.01em;font-variant-numeric:tabular-nums;flex-shrink:0}
+.pc-spark{width:100%;height:38px;display:block}
+.pc-foot{display:flex;align-items:center;justify-content:space-between;font-size:11px;font-weight:700}
+.pc-foot .chg{font-variant-numeric:tabular-nums}
+.pc-foot a{color:var(--faint);text-decoration:none;font-size:13px;padding:2px 6px}
+.pc-foot a:hover{color:var(--ink)}
+/* ---------- your launches ---------- */
+.market-bar{display:flex;flex-wrap:wrap;gap:10px;align-items:center;margin-bottom:14px}
+.mkt-sort{display:flex;gap:2px;border-radius:999px;background:var(--well);padding:3px;border:1px solid var(--line-soft)}
+.mkt-sort button{height:34px;border:0;border-radius:999px;padding:0 14px;font:600 12.5px/1 inherit;background:transparent;color:var(--muted);cursor:pointer}
+.mkt-sort button.on{background:var(--card2);color:var(--ink);box-shadow:0 1px 3px #00000040}
+.sel{height:38px;border:1px solid var(--line);border-radius:999px;background:var(--card2);color:var(--ink);font:600 12.5px/1 inherit;padding:0 12px;cursor:pointer;outline:none}
+.search{height:38px;border:1px solid var(--line);border-radius:999px;background:var(--inset);color:var(--ink);font:500 13px/1 inherit;padding:0 15px;outline:none;width:180px}
+.search:focus{border-color:var(--head)}
+.coin-head,.coin-row{display:grid;grid-template-columns:minmax(0,2fr) 1.1fr 1.1fr 1fr 0.9fr auto;align-items:center;gap:10px;padding:0 16px}
+.coin-head{padding:11px 16px;border-bottom:1px solid var(--line);font-size:10px;text-transform:uppercase;letter-spacing:.12em;color:var(--faint);font-weight:700}
+.coin-head .num{text-align:right}
+.coin-list{min-width:0}
+.coin-row{padding:13px 16px;border-bottom:1px solid var(--line-soft);font-size:13.5px}
+.coin-row:last-child{border-bottom:0}
+.coin-row.click{cursor:pointer;transition:background .12s}
+.coin-row.click:hover{background:#ffffff08}
+.cell{min-width:0}
+.cell.num{text-align:right;font-variant-numeric:tabular-nums}
+.cell.num b{font-weight:700}
+.cell .sub{display:block;font-size:10.5px;color:var(--faint);margin-top:1px}
+.cell .lbl-m{display:none}
+.ctok{display:flex;align-items:center;gap:10px;min-width:0}
+.ctok .ic{width:36px;height:36px;border-radius:999px;background:var(--well);display:flex;align-items:center;justify-content:center;font-size:11px;font-weight:800;flex-shrink:0;overflow:hidden}
+.ctok .ic img{width:100%;height:100%;object-fit:cover}
+.ctok .l{min-width:0}
+.ctok .l b{display:flex;align-items:center;gap:6px;font-size:13.5px;white-space:nowrap;overflow:hidden;text-overflow:ellipsis}
+.ctok .l b .badge{font-size:8.5px;font-weight:800;letter-spacing:.05em;color:var(--blue);border:1px solid #7aa2f755;border-radius:4px;padding:1px 4px;text-transform:uppercase}
+.ctok .l span{display:flex;align-items:center;gap:5px;font-size:10.5px;color:var(--muted);white-space:nowrap;overflow:hidden;text-overflow:ellipsis}
+.ctok .l span .ic{width:12px;height:12px;border-radius:3px;font-size:6.5px}
+.trd-btns{display:flex;gap:6px;justify-content:flex-end}
+.mini-btn{height:32px;border-radius:9px;border:1px solid var(--line);background:var(--card2);color:var(--ink);font:700 11.5px/1 inherit;padding:0 13px;cursor:pointer;transition:border-color .15s,background .15s}
+.mini-btn:hover{border-color:var(--muted)}
+.mini-btn.buy{background:#4ee39b1c;border-color:#4ee39b55;color:var(--up)}
+.mini-btn.buy:hover{background:#4ee39b2e}
+.mini-btn.sell{background:#ff5a521c;border-color:#ff5a5255;color:var(--down)}
+.mini-btn.sell:hover{background:#ff5a522e}
+.empty{border:1px dashed #3a4249;border-radius:12px;padding:30px;text-align:center;color:var(--muted);font-size:13px;line-height:1.6;background:var(--bg2)}
+.empty.row{margin:16px}
+/* ---------- how it works ---------- */
+.how3{display:grid;grid-template-columns:1fr;gap:10px}
+@media(min-width:720px){.how3{grid-template-columns:repeat(3,1fr)}}
+.how3 .step{border:1px solid var(--line);border-radius:12px;background:linear-gradient(180deg,var(--card),#15181c);padding:16px}
+.how3 .n{font-size:10px;font-weight:800;letter-spacing:.14em;color:var(--head);text-transform:uppercase}
+.how3 h4{margin:7px 0 4px;font-size:13.5px;font-weight:700;letter-spacing:-.01em}
+.how3 p{margin:0;font-size:12px;line-height:1.55;color:var(--muted)}
+/* footer */
+footer{margin-top:44px;border-top:1px solid var(--line);background:var(--bg2)}
+.foot-in{max-width:1180px;margin:0 auto;padding:26px 20px;display:flex;flex-wrap:wrap;gap:18px;align-items:flex-start;justify-content:space-between}
+.foot-in .tag{font-size:13px;font-weight:700;letter-spacing:-.01em}
+.foot-in .tag span{color:var(--muted);font-weight:400}
+.foot-nav{display:flex;gap:18px;flex-wrap:wrap}
+.foot-nav a{font-size:12.5px;color:var(--muted);text-decoration:none}
+.foot-nav a:hover{color:var(--ink)}
+.foot-fine{width:100%;font-size:10.5px;color:var(--faint);line-height:1.6}
+/* ---------- modals ---------- */
+.modal-bg{position:fixed;inset:0;z-index:60;background:#000000b0;display:none;align-items:flex-start;justify-content:center;padding:24px 16px;overflow-y:auto}
+.modal-bg.open{display:flex}
+.modal{width:100%;max-width:980px;background:var(--card);border:1px solid var(--line);border-radius:18px;box-shadow:var(--pop);margin:auto}
+.modal.xl{max-width:1040px}
+.modal.sm{max-width:430px;padding:22px}
+.modal.sm h3{margin:0 0 12px;font-size:15px;font-weight:800;letter-spacing:-.01em}
+.modal.sm .mrow{display:flex;flex-direction:column;gap:8px}
+.mbtn{height:44px;border-radius:11px;border:1px solid var(--line);background:var(--bg2);color:var(--ink);font:600 13.5px/1 inherit;cursor:pointer;transition:border-color .15s}
+.mbtn:hover{border-color:var(--muted)}
+.mbtn.primary{background:var(--head);color:var(--on-fill);border-color:var(--head);font-weight:800}
+.mbtn.primary:hover{background:var(--head-lit)}
+.modal.sm .fine{font-size:10.5px;color:var(--muted);line-height:1.5;margin-top:10px}
+.addrbox{display:flex;gap:8px;align-items:center;border:1px solid var(--line);border-radius:9px;padding:9px 11px;background:var(--inset);font-size:11.5px}
+.addrbox b{flex:1;font-weight:600;word-break:break-all;font-family:ui-monospace,Menlo,monospace;font-size:11px}
+.ok-ico{width:46px;height:46px;border-radius:99px;background:#a3e6351f;display:flex;align-items:center;justify-content:center;margin-bottom:12px}
+.modal-head{display:flex;align-items:flex-start;gap:14px;padding:20px 22px 0}
+.modal-close{margin-left:auto;flex-shrink:0;width:34px;height:34px;border-radius:99px;border:1px solid var(--line);background:var(--bg2);color:var(--muted);font:700 15px/1 inherit;cursor:pointer}
+.modal-close:hover{color:var(--ink)}
+.coin-ident{display:flex;align-items:center;gap:12px}
+.coin-ident .ic{width:48px;height:48px;border-radius:999px;background:var(--well);display:flex;align-items:center;justify-content:center;font-size:14px;font-weight:800;overflow:hidden;border:1px solid var(--line)}
+.coin-ident .ic img{width:100%;height:100%;object-fit:cover}
+.coin-ident h3{margin:0;font-size:20px;font-weight:800;letter-spacing:-.02em;display:flex;align-items:center;gap:8px}
+.coin-ident .s{font-size:12px;color:var(--muted)}
+.price-big{font-size:32px;font-weight:800;letter-spacing:-.03em;line-height:1;margin:8px 0 4px}
+.price-chg{font-size:13px;font-weight:700}
+.cm-body{display:grid;grid-template-columns:1fr;gap:16px;padding:16px 22px 22px}
+@media(min-width:860px){.cm-body{grid-template-columns:minmax(0,1fr) 320px}}
+.chart-box{border:1px solid var(--line);border-radius:12px;background:var(--bg2);padding:12px}
+.chart-tabs{display:flex;gap:4px;margin-bottom:8px}
+.chart-tabs button{height:26px;border:0;border-radius:8px;padding:0 11px;font:600 10.5px/1 inherit;background:transparent;color:var(--muted);cursor:pointer}
+.chart-tabs button.on{background:var(--well);color:var(--ink)}
+canvas{display:block;width:100%}
+#chartCv{height:240px}
+#depthCv{height:90px}
+.depth-box{margin-top:12px}
+.depth-box .t{font-size:10px;text-transform:uppercase;letter-spacing:.12em;color:var(--faint);margin-bottom:4px}
+.stat-grid{display:grid;grid-template-columns:repeat(2,1fr);gap:8px}
+.sstat{border:1px solid var(--line);border-radius:10px;background:var(--bg2);padding:9px 11px}
+.sstat .k{font-size:9.5px;text-transform:uppercase;letter-spacing:.1em;color:var(--faint)}
+.sstat b{display:block;font-size:14px;font-weight:700;margin-top:2px;font-variant-numeric:tabular-nums}
+.progress{height:8px;border-radius:99px;background:#0a0c0e;overflow:hidden;margin-top:10px}
+.progress i{display:block;height:100%;background:linear-gradient(90deg,var(--head),var(--gold));border-radius:99px;transition:width .3s}
+.trade-box{border:1px solid var(--line);border-radius:12px;background:var(--bg2);padding:14px;display:flex;flex-direction:column;gap:10px}
+.ttabs{display:flex;border-radius:999px;background:var(--well);padding:3px;gap:2px}
+.ttabs button{flex:1;height:36px;border:0;border-radius:999px;font:700 12.5px/1 inherit;background:transparent;color:var(--muted);cursor:pointer}
+.ttabs button.on.buy{background:var(--up);color:#08130d}
+.ttabs button.on.sell{background:var(--down);color:#1a0806}
+.amt-box{display:flex;align-items:center;border:1px solid #333b43;border-radius:11px;background:var(--inset);padding:0 13px;height:48px}
+.amt-box input{flex:1;border:0;background:transparent;color:var(--ink);font:600 15px/1 inherit;outline:none;min-width:0}
+.amt-box .cur{font-size:12px;font-weight:700;color:var(--muted);flex-shrink:0}
+.quick{display:flex;gap:6px}
+.quick button{flex:1;height:30px;border-radius:8px;border:1px solid var(--line);background:var(--card2);color:var(--muted);font:600 10.5px/1 inherit;cursor:pointer}
+.quick button:hover{color:var(--ink)}
+.tq{display:flex;justify-content:space-between;font-size:11.5px;color:var(--muted)}
+.tq b{color:var(--ink);font-weight:600;font-variant-numeric:tabular-nums}
+.conv-box{display:flex;align-items:center;gap:8px;border:1px dashed var(--line);border-radius:10px;background:var(--paper);padding:7px 9px;font-size:11px;color:var(--muted)}
+.conv-box input{width:64px;height:30px;border:1px solid var(--line);border-radius:8px;background:var(--inset);color:var(--ink);font:600 12px/1 inherit;padding:0 9px;outline:none;text-align:right}
+.conv-box input:focus{border-color:var(--head)}
+.conv-box span{flex:1;min-width:0;overflow:hidden;text-overflow:ellipsis;white-space:nowrap}
+.conv-box button{height:30px;border-radius:8px;border:1px solid var(--line);background:var(--card2);color:var(--ink);font:700 11px/1 inherit;padding:0 10px;cursor:pointer}
+.conv-box button:hover{border-color:var(--head);color:var(--head)}
+.trade-go{height:44px;border:0;border-radius:11px;font:800 14px/1 inherit;cursor:pointer}
+.trade-go.buy{background:var(--up);color:#08130d}
+.trade-go.sell{background:var(--down);color:#1a0806}
+.trade-go:disabled{opacity:.4;cursor:not-allowed}
+.pos-box{border:1px solid var(--line);border-radius:12px;background:var(--bg2);padding:14px;margin-top:12px}
+.pos-box h4{margin:0 0 10px;font-size:12px;font-weight:800;letter-spacing:-.01em}
+.reward-box{border:1px solid #a3e63544;border-radius:12px;background:#a3e6350f;padding:12px 14px;margin-top:12px}
+.reward-box h4{margin:0 0 6px;font-size:12px;font-weight:800;color:var(--head);display:flex;align-items:center;gap:6px}
+.reward-box p{margin:0;font-size:11.5px;color:var(--muted);line-height:1.5}
+.claim-btn{margin-top:10px;height:34px;border-radius:9px;border:1px solid #a3e63555;background:#a3e6351c;color:var(--head);font:800 11.5px/1 inherit;cursor:pointer}
+.claim-btn:hover{background:#a3e6352b}
+.link-row{display:flex;flex-wrap:wrap;gap:8px;margin-top:10px}
+.link-row a{font-size:11.5px;font-weight:600;color:var(--ink);border:1px solid var(--line);border-radius:999px;padding:7px 13px;text-decoration:none;transition:border-color .15s}
+.link-row a:hover{border-color:var(--head);color:var(--head)}
+.toasts{position:fixed;bottom:18px;right:18px;z-index:90;display:flex;flex-direction:column;gap:8px;max-width:320px}
+.toast{background:var(--card2);border:1px solid var(--line);border-left:3px solid var(--head);border-radius:10px;padding:11px 15px;font-size:12.5px;box-shadow:var(--pop);animation:tin .18s ease}
+.toast.err{border-left-color:var(--down)}
+.toast.ok{border-left-color:var(--up)}
+@keyframes tin{from{opacity:0;transform:translateY(6px)}}
+/* ---------- mobile ---------- */
+@media(max-width:720px){
+  .topbar-in{gap:10px;padding:10px 14px}
+  .brand .sub{display:none}
+  .pills{order:5;flex-basis:100%;margin:0 -14px;padding:4px 14px;background:transparent;border-radius:0}
+  .pills a{padding:7px 13px}
+  .wallet-btn{min-width:0;flex:0 1 auto;padding:0 13px}
+  .hero{padding-top:28px}
+  .hero h1{font-size:32px}
+  .hero p{font-size:14.5px}
+  .hero .cta{gap:8px}
+  .hero .cta .btn{flex:1;height:50px}
+  .hero .stats{grid-template-columns:repeat(2,1fr);gap:8px}
+  .stat{padding:12px 14px}
+  .stat b{font-size:18px}
+  .form-card,.sum-card{padding:16px}
+  .row{flex-direction:column}
+  .img-btn{margin:0 auto}
+  .seg{width:100%!important}
+  .seg button{height:40px;flex:1;padding:0 12px}
+  .seg input{height:40px}
+  .sum-card{position:static}
+  .launch-btn{height:54px;font-size:15.5px}
+  .live-grid{grid-template-columns:repeat(2,1fr);gap:8px}
+  .pair-card{padding:11px}
+  .block{margin-top:32px}
+  .market-bar{gap:8px}
+  .mkt-sort{width:100%;overflow-x:auto;scrollbar-width:none}
+  .mkt-sort::-webkit-scrollbar{display:none}
+  .mkt-sort button{flex:0 0 auto}
+  .sel{flex:1;min-width:0}
+  .search{flex:1;min-width:0;width:auto}
+  .market-card{background:transparent;border:0;box-shadow:none;overflow:visible}
+  .coin-head{display:none}
+  .coin-list{display:flex;flex-direction:column;gap:10px}
+  .coin-row{grid-template-columns:1fr auto;grid-template-areas:"tok price" "fdv chg" "vol acts";gap:9px 12px;padding:14px;border:1px solid var(--line);border-radius:14px;background:linear-gradient(180deg,var(--card),#161a1e)}
+  .coin-row.click:hover{background:linear-gradient(180deg,var(--card),#161a1e)}
+  .c-token{grid-area:tok}
+  .c-price{grid-area:price;text-align:right}
+  .c-fdv{grid-area:fdv}
+  .c-vol{grid-area:vol}
+  .c-chg{grid-area:chg;text-align:right}
+  .c-act{grid-area:acts}
+  .coin-row .cell.num{text-align:left}
+  .coin-row .c-price,.coin-row .c-chg{text-align:right}
+  .cell .sub{display:none}
+  .cell .lbl-m{display:block;font-size:9.5px;text-transform:uppercase;letter-spacing:.1em;color:var(--faint);margin-bottom:2px}
+  .trd-btns{justify-content:stretch;gap:8px}
+  .trd-btns .mini-btn{flex:1;height:44px;font-size:12.5px;border-radius:11px}
+  .modal-bg{padding:0;align-items:flex-end}
+  .modal{width:100%;max-width:100%;border-radius:20px 20px 0 0;max-height:92vh;overflow-y:auto}
+  .modal.sm{padding:20px 16px calc(20px + env(safe-area-inset-bottom))}
+  .modal-head{padding:16px 14px 8px}
+  .coin-ident .ic{width:42px;height:42px}
+  .coin-ident h3{font-size:17px}
+  .price-big{font-size:25px}
+  .cm-body{padding:12px 14px calc(18px + env(safe-area-inset-bottom))}
+  #chartCv{height:170px}
+  #depthCv{height:70px}
+  .inp,.search,.sel,.amt-box input,.seg input,textarea.inp{font-size:16px}
+  .toasts{left:16px;right:16px;bottom:calc(16px + env(safe-area-inset-bottom));max-width:none}
+  .foot-in{gap:14px}
+}
+</style>
+</head>
+<body>
+
+<header class="topbar">
+  <div class="topbar-in">
+    <a class="brand" href="#" aria-label="ZAZA NET">
+      <svg width="26" height="26" viewBox="0 0 32 32" aria-hidden="true"><rect width="32" height="32" rx="7" fill="#a3e635"/><text x="16" y="21.5" font-family="Arial, sans-serif" font-size="12" font-weight="700" text-anchor="middle" fill="#0c0d0e">ZA</text></svg>
+      <b>ZAZA <span class="sub">NET</span></b>
+    </a>
+    <nav class="pills" aria-label="pages">
+      <a href="#launch" class="on">Launch</a>
+      <a href="#launches">The desk</a>
+      <a href="#how">How it works</a>
+    </nav>
+    <div class="spacer"></div>
+    <span class="src-pill" id="srcPill" title="price feed source">LIVE</span>
+    <button class="wallet-btn" id="walletBtn" type="button"><span class="dot"></span><span id="walletBtnTxt">Connect wallet</span></button>
+  </div>
+</header>
+
+<div class="tape-wrap" aria-hidden="true"><div class="tape-track" id="tape"></div></div>
+<div class="tape-wrap trades" aria-hidden="true"><div class="tape-track" id="tradeTape"></div></div>
+
+<div class="wrap">
+  <div class="hero">
+    <div class="eyebrow">Solana token deploy · live prices</div>
+    <h1>Deploy tokens on <span class="lime">Solana.</span></h1>
+    <p>Launch a real SPL token in one form — name, ticker, supply — and optionally attach your own HTML site that becomes the token's page. Every deployed token is listed on the desk, and minting is signed in your browser straight to mainnet.</p>
+    <div class="cta">
+      <a class="btn primary" href="#launch">+ Deploy a token</a>
+      <a class="btn ghost" href="#how">How it works →</a>
+    </div>
+    <div class="stats">
+      <div class="stat"><div class="k">Solana · live</div><b class="tnum" id="statSol">—</b><small class="tnum" id="statSolChg">—</small></div>
+      <div class="stat"><div class="k">Bitcoin · live</div><b class="tnum" id="statBtc">—</b><small class="tnum" id="statBtcChg">—</small></div>
+      <div class="stat"><div class="k">Ethereum · live</div><b class="tnum" id="statEth">—</b><small class="tnum" id="statEthChg">—</small></div>
+      <div class="stat"><div class="k">Top mover 24h</div><b id="statMove">—</b><small class="tnum" id="statMoveChg">—</small></div>
+    </div>
+  </div>
+
+  <div class="grid" id="launch">
+    <section class="card form-card" aria-label="launch form">
+      <div class="sec-title"><span class="k">01</span> Deploy a token <span class="r">SPL · Solana</span></div>
+
+      <div class="row">
+        <button class="img-btn" id="imgBtn" type="button" title="Add image">
+          <span class="ph" id="imgPh">
+            <svg width="26" height="26" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.6" aria-hidden="true"><rect x="3" y="3" width="18" height="18" rx="2.5"/><circle cx="8.8" cy="8.8" r="1.7"/><path d="m21 15.5-4.5-4.5L6 21.5"/></svg>
+            <small>Add image</small>
+          </span>
+          <input type="file" id="imgFile" accept="image/*" hidden>
+        </button>
+        <div class="img-side">
+          <div class="row">
+            <div class="f2 field">
+              <label class="lbl" for="fName"><span>Name</span><span class="cnt tnum" id="cName">0/32</span></label>
+              <input class="inp" id="fName" maxlength="32" placeholder="Token name" autocomplete="off">
+            </div>
+            <div class="f1 field">
+              <label class="lbl" for="fSym"><span>Ticker</span><span class="cnt tnum" id="cSym">0/13</span></label>
+              <input class="inp" id="fSym" maxlength="13" placeholder="SYMBOL" autocomplete="off" style="text-transform:uppercase">
+            </div>
+          </div>
+          <div class="field">
+            <label class="lbl" for="fDesc"><span>Description</span><span class="cnt tnum" id="cDesc">0/500</span></label>
+            <textarea class="inp" id="fDesc" maxlength="500" rows="2" placeholder="what is this coin about?"></textarea>
+          </div>
+          <div class="field">
+            <label class="lbl" for="fX"><span>X / twitter (optional)</span><span class="cnt tnum" id="cX">0/120</span></label>
+            <input class="inp" id="fX" maxlength="120" placeholder="https://x.com/…" autocomplete="off">
+          </div>
+        </div>
+      </div>
+
+      <div class="field" style="border:1px solid var(--line);border-radius:12px;padding:12px 14px;background:var(--bg2)">
+        <label class="lbl"><span>🌐 YOUR SITE — insert or upload 1 HTML</span><span class="cnt" id="siteCount">auto page</span></label>
+        <div class="site-tools" style="margin-top:8px">
+          <button class="mbtn" id="siteUploadBtn" type="button" style="border-color:var(--head);color:var(--head)">⬆ Upload .html file</button>
+          <input type="file" id="siteFile" accept=".html,text/html" hidden>
+          <span class="muted" style="font-size:10.5px">…or paste it below</span>
+          <button class="mbtn" id="siteClear" type="button" style="color:var(--down);margin-left:auto">Clear</button>
+        </div>
+        <textarea class="inp" id="siteHtml" rows="3" placeholder="<!doctype html>…  — paste a full HTML document; it becomes your token's own page/tab." style="font-family:ui-monospace,Menlo,Consolas,monospace;font-size:11px;line-height:1.5;margin-top:8px"></textarea>
+        <span class="muted" style="font-size:10.5px" id="siteNote"></span>
+      </div>
+
+      <div class="row">
+        <div class="f2 field">
+          <label class="lbl" for="fSupply"><span>Supply</span><span class="cnt">8 decimals</span></label>
+          <div class="seg" style="width:100%" id="supSeg">
+            <input id="fSupply" inputmode="numeric" value="1000000000">
+            <button data-sup="1000000000" class="on">1B</button>
+            <button data-sup="100000000">100M</button>
+            <button data-sup="10000000">10M</button>
+          </div>
+        </div>
+        <div class="f1 field">
+          <label class="lbl"><span>Your share</span></label>
+          <div class="seg" style="width:100%">
+            <button data-share="20" class="on">20%</button>
+            <button data-share="10">10%</button>
+            <button data-share="5">5%</button>
+          </div>
+        </div>
+      </div>
+
+      <div class="field">
+        <label class="lbl"><span>Your first buy</span><span class="cnt">in SOL</span></label>
+        <div class="seg-row" id="fbSeg">
+          <div class="seg">
+            <button data-fb="0">None</button>
+            <button data-fb="0.5">0.5 SOL</button>
+            <button data-fb="1" class="on">1 SOL</button>
+            <button data-fb="2">2 SOL</button>
+            <button data-fb="5">5 SOL</button>
+            <input id="fbCustom" inputmode="decimal" placeholder="custom" style="width:84px">
+          </div>
+          <span class="muted" style="font-size:11.5px" id="fbNote"></span>
+        </div>
+      </div>
+
+      <label class="meta-toggle" for="fMint" id="mintToggle">
+        <input type="checkbox" id="fMint">
+        <span><b>Mint a real SPL token on Solana</b><small id="mintToggleNote">Signs locally in your browser — creates the mint, opens your token account and mints 100% of supply to your wallet, with on-chain metadata. Without a connected wallet, the coin launches in the in-app market only.</small></span>
+      </label>
+
+      <p class="err" id="errBox"></p>
+    </section>
+
+    <aside>
+      <div class="card sum-card">
+        <div class="sec-title" style="margin-bottom:12px"><span class="k">02</span> Launch summary</div>
+        <dl>
+          <div class="kv"><dt>Your share</dt><dd id="sShare" class="tnum">20%</dd></div>
+          <div class="kv"><dt>First buy</dt><dd id="sFirstBuy" class="tnum">1 SOL</dd></div>
+          <div class="kv"><dt>Supply</dt><dd id="sSupply" class="tnum">1,000,000,000</dd></div>
+          <div class="kv"><dt>Market</dt><dd id="sMarket">in-app curve + real mint</dd></div>
+        </dl>
+        <div class="fee-split">
+          <p class="lbl2">Where the 1% trade fees go</p>
+          <div class="feebar" role="img" aria-label="fee split">
+            <i style="background:var(--head);width:70%"></i>
+            <i style="background:var(--violet);width:15%"></i>
+            <i style="background:var(--gold);width:10%"></i>
+            <i style="background:var(--down);width:5%"></i>
+          </div>
+          <div class="legend">
+            <div class="li"><i style="background:var(--head)"></i>Holders, in SOL<b>70%</b></div>
+            <div class="li"><i style="background:var(--violet)"></i>Protocol<b>15%</b></div>
+            <div class="li"><i style="background:var(--gold)"></i>Desk pot<b>10%</b></div>
+            <div class="li"><i style="background:var(--down)"></i>Buybacks<b>5%</b></div>
+          </div>
+        </div>
+        <button class="launch-btn" id="launchBtn" type="button">Deploy</button>
+        <p class="sub-note">The curve opens the moment it deploys — buy &amp; sell with live depth. Minting adds the real SPL token; opening a Raydium pool is one click after that.</p>
+      </div>
+    </aside>
+  </div>
+
+  <section class="block" id="launches">
+    <h2>The desk</h2>
+    <p class="sub">Every token deployed here appears for everyone — prices come from each token's bonding curve, no simulated numbers. <b id="deskCount"></b></p>
+    <div class="market-bar">
+      <div class="mkt-sort" id="sortSeg">
+        <button data-sort="fdv" class="on">FDV</button>
+        <button data-sort="recent">Recent</button>
+        <button data-sort="vol">Volume</button>
+        <button data-sort="gainers">Gainers</button>
+      </div>
+      <input class="search" id="searchBox" placeholder="Search…" autocomplete="off">
+    </div>
+    <div class="card market-card">
+      <div class="coin-head">
+        <span>Token</span><span class="num">Price (SOL)</span><span class="num">FDV</span><span class="num">24h vol</span><span class="num">24h %</span><span></span>
+      </div>
+      <div class="coin-list" id="coinRows"></div>
+    </div>
+  </section>
+
+  <section class="block" id="how">
+    <h2>How it works</h2>
+    <p class="sub">Deploy a token on a live bonding curve — plus, optionally, a real SPL mint. The one thing that can't change: 1% of every trade buys SOL for your holders.</p>
+    <div class="how3">
+      <div class="step"><div class="n">01 · Deploy</div><h4>One form, optional site</h4><p>Set the name, ticker, supply and your first buy — and optionally insert or upload one HTML file that becomes the token's own page. The token opens on a bonding curve instantly.</p></div>
+      <div class="step"><div class="n">02 · Trade</div><h4>Live depth, real slippage</h4><p>Buy and sell against the curve with a visible depth chart, price impact and a 1% fee. Every trade is recorded into real candles — no simulated numbers anywhere.</p></div>
+      <div class="step"><div class="n">03 · Earn</div><h4>Holders get paid in SOL</h4><p>70% of every fee buys SOL for holders, proportional to their share — no swap, it arrives in SOL already. Plus: mint the real SPL token and open a real Raydium pool.</p></div>
+    </div>
+  </section>
+</div>
+
+<section class="cp" id="coinPage" hidden>
+  <div class="cp-bar">
+    <button class="cp-back" id="cpBack" type="button">← Desk</button>
+    <div class="cp-title" id="cpTitle">Coin</div>
+    <div class="cp-actions">
+      <button class="cp-btn" id="cpShare" type="button">🔗 Share</button>
+      <a class="cp-btn" id="cpDesk" href="./">Open desk ↗</a>
+    </div>
+  </div>
+  <div class="cp-in" id="coinPageBody"></div>
+</section>
+
+<footer>
+  <div class="foot-in">
+    <div class="tag">ZAZA NET <span>— deploy tokens on Solana.</span></div>
+    <nav class="foot-nav">
+      <a href="#launch">Deploy</a>
+      <a href="#launches">The desk</a>
+      <a href="https://github.com/k8o5" target="_blank" rel="noopener">GitHub</a>
+    </nav>
+    <div class="foot-fine">Non-custodial. Real SPL mints are signed locally on Solana (mainnet or <code>?net=devnet</code>); the in-app curve is a self-custody market running in your browser. Market prices are live from Kraken &amp; Yahoo Finance when available, otherwise the last-known value is shown and labelled. Nothing here is financial advice. © 2026 ZAZA NET</div>
+  </div>
+</footer>
+
+<!-- wallet modal -->
+<div class="modal-bg" id="walletModal"><div class="modal sm"><h3 id="wmTitle">Connect a wallet</h3><div class="mrow" id="wmBody"></div></div></div>
+
+<!-- coin modal -->
+<div class="modal-bg" id="coinModal"><div class="modal xl" id="coinModalCard"></div></div>
+
+<!-- trade modal -->
+<div class="modal-bg" id="tradeModal"><div class="modal sm"><div id="tradeBody"></div></div></div>
+
+<!-- success modal -->
+<div class="modal-bg" id="okModal">
+  <div class="modal sm">
+    <div class="ok-ico"><svg width="22" height="22" viewBox="0 0 24 24" fill="none" stroke="#a3e635" stroke-width="2.4" stroke-linecap="round" stroke-linejoin="round"><path d="M20 6 9 17l-5-5"/></svg></div>
+    <h3 id="okTitle">Live on-chain</h3>
+    <p style="margin:0 0 10px;font-size:12px;color:var(--muted)" id="okSub"></p>
+    <div class="addrbox"><b id="okMint"></b><button class="mbtn" id="okCopy" type="button" style="height:28px;padding:0 10px;flex-shrink:0">copy</button></div>
+    <div class="link-row" id="okLinks"></div>
+    <button class="mbtn primary" id="okTrade" type="button" style="margin-top:10px;width:100%">Trade it on the curve</button>
+    <button class="mbtn" id="okSite" type="button" style="margin-top:8px;width:100%">🌐 Publish coin site (free)</button>
+    <button class="mbtn" id="okClose" type="button" style="margin-top:8px;width:100%">Launch another</button>
+  </div>
+</div>
+
+<div class="toasts" id="toasts"></div>
+
+
+<script>
+
+
+
+/* =====================================================================
+   ZAZA NET — engine: live prices (Kraken + Yahoo) · bonding curve · trading
+   No simulated assets. Every number is either live market data or the
+   result of the user's own real actions.
+   ===================================================================== */
+'use strict';
+const $ = s => document.querySelector(s);
+const $$ = s => [...document.querySelectorAll(s)];
+const esc = s => String(s ?? '').replace(/[&<>"']/g, c => ({'&':'&amp;','<':'&lt;','>':'&gt;','"':'&quot;',"'":'&#39;'}[c]));
+const short = a => a ? a.slice(0, 4) + '…' + a.slice(-4) : '—';
+const fmt = (n, d = 4) => n == null ? '—' : Number(n).toLocaleString('en-US', {maximumFractionDigits: d});
+const fmtUsd = (n, d = 2) => n == null ? '—' : '$' + Number(n).toLocaleString('en-US', {maximumFractionDigits: d});
+const fmtSol = n => { if (n == null) return '—'; if (n >= 100) return n.toFixed(2); if (n >= 1) return n.toFixed(4); if (n >= 0.001) return n.toFixed(6); if (n >= 1e-6) return n.toFixed(9); return n.toExponential(2); };
+/* human-readable amounts in any pair asset — never blanks on tiny fractions.
+   BTC shows sats (1 BTC = 100,000,000 sats), with fractional sats below 1 sat. */
+function fmtDec(x, maxd){
+  let s = x.toFixed(maxd);
+  s = s.replace(/(\.\d*?)0+$/, '$1').replace(/\.$/, '');
+  return s;
+}
+function human(amt, sym){
+  if (amt == null || !isFinite(amt)) return '—';
+  const u = sym ? ' ' + sym : '';
+  if (sym === 'BTC'){
+    if (amt >= 1) return fmt(amt, 6) + ' BTC';
+    if (amt <= 0) return '0 BTC';
+    const sats = amt * 1e8;
+    if (sats >= 1) return Math.round(sats).toLocaleString('en-US') + ' sats';
+    if (sats >= 1e-6) return fmtDec(sats, 6) + ' sats';
+    return sats.toExponential(3) + ' sats';
+  }
+  if (amt >= 1) return fmt(amt, 3) + u;
+  if (amt >= 0.001) return fmt(amt, 5) + u;
+  if (amt >= 0.000001) return fmt(amt, 7) + u;
+  return fmtDec(amt, 10) + u;
+}
+const ago = t => { const s = (Date.now() - t) / 1000; if (s < 90) return 'just now'; if (s < 3600) return Math.round(s / 60) + 'm ago'; if (s < 86400) return Math.round(s / 3600) + 'h ago'; return Math.round(s / 86400) + 'd ago'; };
+const sleep = ms => new Promise(r => setTimeout(r, ms));
+const uid = () => 'id' + Math.random().toString(36).slice(2, 10);
+const clamp = (n, a, b) => Math.min(b, Math.max(a, n));
+const LS_COINS = 'k8desk_coins_v2', LS_W = 'k8desk_w', LS_COINS_OLD = 'k8desk_coins';
+
+/* ================= assets & live prices =================
+   Every asset below trades on a public market — price + 24h change are
+   fetched live. `base` is only the last-known value used while offline. */
+const ASSETS = [
+  // ---- tokenized stocks (xStocks by Backed Finance, 1:1 share-backed SPL tokens) ----
+  // price source: the underlying equity (Yahoo) — xStocks are backed 1:1 and track it
+  {sym:'AAPLx',  name:'Apple',         kind:'stock', base:315.34,  src:'AAPL'},
+  {sym:'MSFTx',  name:'Microsoft',     kind:'stock', base:491.65,  src:'MSFT'},
+  {sym:'NVDAx',  name:'NVIDIA',        kind:'stock', base:223.67,  src:'NVDA'},
+  {sym:'AMZNx',  name:'Amazon',        kind:'stock', base:252.40,  src:'AMZN'},
+  {sym:'GOOGLx', name:'Alphabet',      kind:'stock', base:330.65,  src:'GOOGL'},
+  {sym:'METAx',  name:'Meta',          kind:'stock', base:653.69,  src:'META'},
+  {sym:'TSLAx',  name:'Tesla',         kind:'stock', base:367.81,  src:'TSLA'},
+  {sym:'AMDx',   name:'AMD',           kind:'stock', base:521.10,  src:'AMD'},
+  {sym:'NFLXx',  name:'Netflix',       kind:'stock', base:76.03,   src:'NFLX'},
+  {sym:'INTCx',  name:'Intel',         kind:'stock', base:106.24,  src:'INTC'},
+  {sym:'COINx',  name:'Coinbase',      kind:'stock', base:174.72,  src:'COIN'},
+  {sym:'MSTRx',  name:'Strategy',      kind:'stock', base:132.70,  src:'MSTR'},
+  {sym:'PLTRx',  name:'Palantir',      kind:'stock', base:169.53,  src:'PLTR'},
+  {sym:'GMEx',   name:'GameStop',      kind:'stock', base:19.89,   src:'GME'},
+  {sym:'HOODx',  name:'Robinhood',     kind:'stock', base:115.28,  src:'HOOD'},
+  {sym:'RBLXx',  name:'Roblox',        kind:'stock', base:44.52,   src:'RBLX'},
+  {sym:'UBERx',  name:'Uber',          kind:'stock', base:71.08,   src:'UBER'},
+  {sym:'CRMx',   name:'Salesforce',    kind:'stock', base:244.16,  src:'CRM'},
+  {sym:'ORCLx',  name:'Oracle',        kind:'stock', base:161.63,  src:'ORCL'},
+  {sym:'AVGOx',  name:'Broadcom',      kind:'stock', base:364.38,  src:'AVGO'},
+  {sym:'MUx',    name:'Micron',        kind:'stock', base:1027.77, src:'MU'},
+  {sym:'CRCLx',  name:'Circle',        kind:'stock', base:92.99,   src:'CRCL'},
+  {sym:'SPCXx',  name:'SpaceX',        kind:'stock', base:147.55,  src:'SPCX'},
+  {sym:'TTWOx',  name:'Take-Two',      kind:'stock', base:211.14,  src:'TTWO'},
+  {sym:'BAx',    name:'Boeing',        kind:'stock', base:206.42,  src:'BA'},
+  {sym:'DISx',   name:'Disney',        kind:'stock', base:104.18,  src:'DIS'},
+  {sym:'JPMx',   name:'JPMorgan',      kind:'stock', base:354.71,  src:'JPM'},
+  {sym:'Vx',     name:'Visa',          kind:'stock', base:367.39,  src:'V'},
+  {sym:'SPYx',   name:'S&P 500 ETF',   kind:'stock', base:762.40,  src:'SPY'},
+  {sym:'QQQx',   name:'Nasdaq 100 ETF',kind:'stock', base:716.31,  src:'QQQ'},
+  {sym:'IWMx',   name:'Russell 2000 ETF',kind:'stock', base:290.64, src:'IWM'},
+  {sym:'SOXXx',  name:'Semicond. ETF', kind:'stock', base:532.00,  src:'SOXX'},
+  {sym:'SMHx',   name:'VanEck Semi ETF',kind:'stock', base:574.29, src:'SMH'},
+  // ---- crypto (Kraken) ----
+  {sym:'SOL',    name:'Solana',        kind:'crypto', base:101.02,  src:'SOLUSD'},
+  {sym:'BTC',    name:'Bitcoin',       kind:'crypto', base:77968.70,src:'XXBTZUSD'},
+  {sym:'ETH',    name:'Ethereum',      kind:'crypto', base:2468.51, src:'XETHZUSD'},
+  {sym:'ZEC',    name:'Zcash',         kind:'crypto', base:1219.25, src:'XZECZUSD'},
+  {sym:'DOGE',   name:'Dogecoin',      kind:'crypto', base:0.08492, src:'XDGUSD'},
+  {sym:'XRP',    name:'XRP',           kind:'crypto', base:1.3764,  src:'XXRPZUSD'},
+  {sym:'ADA',    name:'Cardano',       kind:'crypto', base:0.2132,  src:'ADAUSD'},
+  {sym:'LTC',    name:'Litecoin',      kind:'crypto', base:52.28,   src:'XLTCZUSD'},
+  {sym:'LINK',   name:'Chainlink',     kind:'crypto', base:11.784,  src:'LINKUSD'},
+  // ---- stable ----
+  {sym:'USDC',   name:'USD Coin',      kind:'stable', base:1.00,    src:'USDC'},
+];
+ASSETS.forEach(a => {
+  if (a.kind === 'stock') a.logo = 'https://xstocks-metadata.backed.fi/logos/tokens/' + a.sym + '.png';
+});
+const ASSET_BY = {}; ASSETS.forEach(a => ASSET_BY[a.sym] = a);
+const PALETTE = ['#a3e635','#4ee39b','#7aa2f7','#e8a33f','#c792ea','#f04438','#f7c948','#63e2f7','#f472b6','#86efac','#fda4af','#e8eaed'];
+const PRICES = {};   // sym -> {usd, chg, spark:[..], src:'live'|'base'}
+let PRICE_LIVE = false;
+
+function icLetters(sym){ return sym.replace(/x$/i, '').slice(0, 2).toUpperCase(); }
+function assetColor(sym){ const i = ASSETS.findIndex(a => a.sym === sym); return PALETTE[(i < 0 ? 0 : i) % PALETTE.length]; }
+function assetIcon(sym, size){
+  const a = ASSET_BY[sym];
+  const c = assetColor(sym);
+  const showLogo = a && a.logo && size >= 20;
+  const logo = showLogo ? `<img src="${a.logo}" alt="" loading="lazy" onerror="this.remove()">` : '';
+  return `<span class="ic" style="background:${c};width:${size}px;height:${size}px;font-size:${Math.round(size*0.36)}px">${esc(icLetters(sym))}${logo}</span>`;
+}
+function initPrices(){ ASSETS.forEach(a => PRICES[a.sym] = {usd: a.base, chg: 0, spark: null, src: 'base'}); }
+function priceUsd(sym){ return PRICES[sym] ? PRICES[sym].usd : (ASSET_BY[sym]?.base ?? 1); }
+function chgPct(sym){ return PRICES[sym] ? PRICES[sym].chg : 0; }
+const solUsd = () => priceUsd('SOL');
+
+/* ================= live price fetching =================
+   Order of attempts: local proxy (/api/prices — works in the preview),
+   then the public APIs directly (works on a real host), then last-known. */
+async function refreshPrices(){
+  let got = false;
+  try {
+    const r = await fetch('/api/prices', {cache: 'no-store'});
+    if (r.ok) { const j = await r.json(); if (j && j.ok) { applyPriceFeed(j); got = true; } }
+  } catch {}
+  if (!got) {
+    try { await directKraken(); } catch {}
+    try { await directYahoo(); } catch {}
+    got = Object.values(PRICES).some(p => p.src === 'live');
+  }
+  PRICE_LIVE = got || Object.values(PRICES).some(p => p.src === 'live');
+  const pill = $('#srcPill');
+  if (pill) { pill.textContent = PRICE_LIVE ? 'LIVE' : 'DELAYED'; pill.classList.toggle('off', !PRICE_LIVE); }
+  const ms = $('#mktSrc'); if (ms) ms.textContent = PRICE_LIVE ? 'LIVE' : 'LAST-KNOWN';
+  renderTicker(); renderHero();
+  if (typeof renderMarket === 'function') renderMarket();
+}
+function applyPriceFeed(j){
+  for (const sym in (j.crypto || {})) if (PRICES[sym]) setLive(sym, j.crypto[sym]);
+  for (const sym in (j.stocks || {})) if (PRICES[sym]) setLive(sym, j.stocks[sym]);
+  for (const sym in (j.spark || {})) if (PRICES[sym]) setSpark(sym, j.spark[sym]);
+}
+function setLive(sym, d){ if (!PRICES[sym] || !isFinite(d.usd) || d.usd <= 0) return; PRICES[sym].usd = d.usd; PRICES[sym].chg = isFinite(d.chg) ? d.chg : 0; PRICES[sym].src = 'live'; }
+function setSpark(sym, arr){ if (Array.isArray(arr) && arr.length) PRICES[sym].spark = arr.map(Number).filter(isFinite); }
+async function directKraken(){
+  const pairs = ASSETS.filter(a => a.kind === 'crypto').map(a => a.src).join(',');
+  const r = await fetch('https://api.kraken.com/0/public/Ticker?pair=' + pairs);
+  if (!r.ok) return; const j = await r.json();
+  const bySrc = {}; ASSETS.filter(a => a.kind === 'crypto').forEach(a => bySrc[a.src] = a.sym);
+  for (const k in j.result){ const t = j.result[k]; const sym = bySrc[k]; if (!sym || !t || typeof t !== 'object') continue;
+    const c = parseFloat(t.c[0]), o = parseFloat(t.o);
+    setLive(sym, {usd: c, chg: o ? (c - o) / o * 100 : 0});
+  }
+}
+async function directYahoo(){
+  const stocks = ASSETS.filter(a => a.kind === 'stock');
+  const yahooUrl = tk => `https://query1.finance.yahoo.com/v8/finance/chart/${tk}?interval=1d&range=1d`;
+  const jobs = stocks.map(async a => {
+    let j = null;
+    try {
+      const r = await fetch(yahooUrl(a.src), {headers:{'User-Agent':'Mozilla/5.0'}});
+      if (r.ok) j = await r.json();
+    } catch {}
+    if (!j){
+      try { const r = await fetch('https://api.allorigins.win/raw?url=' + encodeURIComponent(yahooUrl(a.src))); if (r.ok) j = await r.json(); } catch {}
+    }
+    const m = j?.chart?.result?.[0]?.meta; if (!m) return;
+    setLive(a.sym, {usd: m.regularMarketPrice, chg: m.regularMarketChangePercent ?? 0});
+  });
+  await Promise.all(jobs);
+}
+
+/* ================= bonding curve (denominated in the PAIR asset) =================
+   The curve is priced in the coin's quote asset (AAPLx, BTC, SOL, USDC, …).
+   You spend the pair asset to buy; selling returns the pair asset.
+   price(t) = p0 * (1 + grow * t / Sc)     [pair units per token]
+   p0 is chosen so the launch FDV is ≈ $50 in every pair. */
+function curveParams(coin){
+  const Sc = coin.Sc = coin.supply * 0.8;
+  const pu = priceUsd(coin.pair) || 1;             // pair asset USD value
+  const p0 = coin.p0 = (50 / coin.supply) / pu;    // pair units per token → FDV ≈ $50
+  coin.grow = 39;
+  return {Sc, p0};
+}
+function spotPrice(coin){ const {Sc, p0} = coin; const s = clamp(coin.sold, 0, Sc); return p0 * (1 + coin.grow * s / Sc); }
+function costIntegral(coin, from, to){ const {Sc, p0} = coin; const a = clamp(from, 0, Sc), b = clamp(to, 0, Sc); return p0 * (b - a) + p0 * coin.grow / (2 * Sc) * (b * b - a * a); }
+function fdv(coin){ return spotPrice(coin) * coin.supply; }                 // pair units
+function fdvUsd(coin){ return fdv(coin) * priceUsd(coin.pair); }            // USD
+function liq(coin){ return coin.reserve || 0; }                             // pair units
+function tokensFor(coin, quoteUnits){
+  const Sc = coin.Sc; let lo = 0, hi = Sc - coin.sold;
+  if (hi <= 0 || quoteUnits <= 0) return 0;
+  if (costIntegral(coin, coin.sold, coin.sold + hi) <= quoteUnits) return hi;
+  for (let i = 0; i < 70; i++){ const mid = (lo + hi) / 2; if (costIntegral(coin, coin.sold, coin.sold + mid) <= quoteUnits) lo = mid; else hi = mid; }
+  return lo;
+}
+
+/* ================= paper balances (in-app, clearly-labelled) ================= */
+const LS_BAL = 'k8desk_bal';
+let BAL = {};
+function loadBal(){
+  try { BAL = JSON.parse(localStorage.getItem(LS_BAL) || '{}') || {}; } catch { BAL = {}; }
+  if (!('SOL' in BAL)) BAL.SOL = 10;  // starter PAPER sol so you can convert into any pair
+  saveBal();
+}
+function saveBal(){ try { localStorage.setItem(LS_BAL, JSON.stringify(BAL)); } catch {} }
+function balOf(sym){ return BAL[sym] || 0; }
+function credit(sym, amt){ BAL[sym] = (BAL[sym] || 0) + amt; saveBal(); }
+function debit(sym, amt){ if (balOf(sym) < amt) return false; BAL[sym] -= amt; saveBal(); return true; }
+/* convert PAPER sol <-> pair at the live market rate (this is how a real launch
+   would source the pair asset: spend SOL, buy the pair on the way in) */
+function solToPair(sym, sol){
+  const pu = priceUsd(sym) || 1;
+  const units = sol * solUsd() / pu;
+  if (!debit('SOL', sol)) return null;
+  credit(sym, units);
+  return units;
+}
+function pairToSol(sym, units){
+  const pu = priceUsd(sym) || 1;
+  const sol = units * pu / solUsd();
+  if (!debit(sym, units)) return null;
+  credit('SOL', sol);
+  return sol;
+}
+
+/* ================= coins store ================= */
+let COINS = [];
+function loadCoins(){
+  // fresh key (v2) so no leftover demo/seed coins from older builds can appear
+  try { localStorage.removeItem(LS_COINS_OLD); } catch {}
+  let raw = [];
+  try { raw = JSON.parse(localStorage.getItem(LS_COINS) || '[]') || []; } catch { raw = []; }
+  // only keep valid coins with a known settlement asset (SOL)
+  COINS = (Array.isArray(raw) ? raw : []).filter(c =>
+    c && typeof c === 'object' &&
+    c.name && c.sym &&
+    ASSET_BY[c.pair] &&
+    !/^seed_/.test(c.id || '') && !/^seed_/.test(c.creator || '')
+  ).map(c => {
+    // migrate older SOL-denominated coins to the pair-denominated model
+    if (c.reserve == null && c.reserveSol != null) c.reserve = c.reserveSol;
+    return c;
+  });
+}
+function saveCoins(){ try { localStorage.setItem(LS_COINS, JSON.stringify(COINS.filter(c => !c._remote))); } catch {} }
+function findCoin(id){ return COINS.find(c => c.id === id); }
+function me(){ return W && W.addr ? W.addr : 'you'; }
+function myBal(coin){ return coin.holders[me()] || 0; }
+
+/* ================= launch (in-app) ================= */
+function makeAvatar(sym, color){
+  const a = sym.replace(/x$/i, '').slice(0, 2).toUpperCase();
+  const c2 = color, c1 = '#141616';
+  const svg = `<svg xmlns="http://www.w3.org/2000/svg" width="128" height="128"><defs><linearGradient id="g" x1="0" y1="0" x2="1" y2="1"><stop offset="0" stop-color="${c2}"/><stop offset="1" stop-color="${c1}"/></linearGradient></defs><rect width="128" height="128" rx="28" fill="url(#g)"/><text x="64" y="82" font-family="Arial,Helvetica,sans-serif" font-size="52" font-weight="800" text-anchor="middle" fill="#0e0f0f">${a}</text></svg>`;
+  return 'data:image/svg+xml;utf8,' + encodeURIComponent(svg);
+}
+function newCoin(o){
+  const coin = Object.assign({
+    id: uid(), name:'', sym:'', desc:'', x:'', img:'', siteHtml:'', pair:'SOL', pairName:'Solana',
+    supply: 1e9, share: 0.2, sold: 0, reserve: 0, creator: me(), net: 'local', t: Date.now(),
+    fees: {total:0, holdersPot:0, desk:0, proto:0, buyback:0},
+    holders: {}, holderRewards: {}, claimed: {},
+    candles: [], trades: [], vol24: [], dayOpen: 0, last: 0, high: 0, low: 0, rewardsUsd: 0, firstBuy: 0, firstBuyQuote: 0,
+  }, o);
+  curveParams(coin);
+  coin.img = coin.img || makeAvatar(coin.sym, assetColor(coin.pair));
+  coin.holders[coin.creator] = (coin.holders[coin.creator] || 0) + Math.floor(coin.supply * coin.share);
+  if (coin.firstBuy > 0){
+    // first buy is in SOL → spend SOL, buy the pair asset at the live rate on the way in
+    const pu = priceUsd(coin.pair) || 1;
+    const spendSol = Math.min(coin.firstBuy, balOf('SOL'));
+    if (spendSol > 0){
+      const quoteAmt = spendSol * solUsd() / pu;
+      const q = Math.floor(tokensFor(coin, quoteAmt / 1.01));
+      if (q > 0){
+        debit('SOL', spendSol);
+        coin.sold += q; coin.reserve += quoteAmt / 1.01;
+        coin.holders[coin.creator] = (coin.holders[coin.creator] || 0) + q;
+        coin.firstBuyQuote = quoteAmt;
+        applyFees(coin, quoteAmt - quoteAmt / 1.01);
+        tryDistribute(coin);
+      }
+    }
+  }
+  coin.dayOpen = coin.firstBuy > 0 ? spotPrice(coin) / 1.35 : spotPrice(coin);
+  coin.last = spotPrice(coin); coin.high = coin.last; coin.low = coin.last;
+  pushCandle(coin, coin.last, 0);
+  COINS.unshift(coin); saveCoins();
+  return coin;
+}
+
+/* ================= candles ================= */
+function pushCandle(coin, price, vol){
+  const bucket = 15000, now = Date.now();
+  let c = coin.candles[coin.candles.length - 1];
+  if (!c || now - c.t >= bucket){
+    c = {t: now - (now % bucket), o: price, h: price, l: price, c: price, v: 0};
+    coin.candles.push(c);
+    if (coin.candles.length > 260) coin.candles.shift();
+  }
+  c.h = Math.max(c.h, price); c.l = Math.min(c.l, price); c.c = price; c.v += vol;
+}
+function addVol(coin, amt){ const now = Date.now(); coin.vol24.push({t: now, v: amt}); coin.vol24 = coin.vol24.filter(x => now - x.t < 86400000); }
+function vol24(coin){ return coin.vol24.reduce((s, x) => s + x.v, 0); }
+
+/* ================= trading (pair-denominated) ================= */
+function executeTrade(coin, side, amount, trader){
+  const FEERATE = 0.01, quote = coin.pair;
+  if (side === 'buy'){
+    // amount = pair units to spend
+    const spent = Math.min(amount, balOf(quote));
+    if (spent <= 0) return {err: `not enough ${quote} — convert SOL → ${quote} first`};
+    const curve = spent / (1 + FEERATE);
+    const q = Math.floor(tokensFor(coin, curve));
+    if (q <= 0) return {err: 'curve is fully sold — wait for a sell'};
+    if (!debit(quote, spent)) return {err: `not enough ${quote}`};
+    coin.sold += q; coin.reserve += curve;
+    coin.holders[trader] = (coin.holders[trader] || 0) + q;
+    applyFees(coin, spent - curve);
+    const px = curve / q;
+    afterTrade(coin, px, curve, 'buy', trader);
+    return {ok: true, q, spent, fee: spent - curve, px};
+  } else {
+    const have = coin.holders[trader] || 0;
+    let q = Math.min(amount, have, coin.sold);
+    if (q <= 0) return {err: 'nothing to sell'};
+    const gross = costIntegral(coin, coin.sold - q, coin.sold);
+    const fee = gross * FEERATE, net = gross - fee;
+    coin.sold -= q; coin.reserve = Math.max(0, coin.reserve - gross);
+    coin.holders[trader] -= q; if (!coin.holders[trader]) delete coin.holders[trader];
+    credit(quote, net);
+    applyFees(coin, fee);
+    const px = net / q;
+    afterTrade(coin, px, gross, 'sell', trader);
+    return {ok: true, q, net, fee, px};
+  }
+}
+function afterTrade(coin, px, vol, side, trader){
+  coin.last = spotPrice(coin);
+  coin.high = Math.max(coin.high, coin.last); coin.low = Math.min(coin.low, coin.last);
+  pushCandle(coin, coin.last, vol);
+  addVol(coin, vol);
+  coin.trades.unshift({t: Date.now(), side, amt: vol, price: coin.last, trader: short(trader)});
+  if (coin.trades.length > 40) coin.trades.pop();
+  tryDistribute(coin);
+  saveCoins();
+  if (typeof schedulePush === 'function') schedulePush(coin);
+}
+function applyFees(coin, fee){
+  coin.fees.total += fee;
+  coin.fees.holdersPot += fee * 0.70;
+  coin.fees.proto += fee * 0.15;
+  coin.fees.desk += fee * 0.10;
+  coin.fees.buyback += fee * 0.05;
+}
+/* fees are already in the pair asset — distribute directly, no swap, no minimum,
+   no rounding anyone out (like otcdesks: "no minimum and no rounding you out") */
+function tryDistribute(coin){
+  const pot = coin.fees.holdersPot;
+  if (pot <= 0) return;
+  const tot = Object.values(coin.holders).reduce((s, v) => s + v, 0);
+  if (tot <= 0) { coin.fees.holdersPot = 0; return; }
+  for (const a in coin.holders) coin.holderRewards[a] = (coin.holderRewards[a] || 0) + pot * (coin.holders[a] / tot);
+  coin.rewardsUsd += pot * priceUsd(coin.pair);
+  coin.fees.holdersPot = 0;
+}
+
+/* ================= hero (real, live) ================= */
+function renderHero(){
+  const setStat = (id, chgId, price, pct, usd = true) => {
+    const el = $('#' + id), cel = $('#' + chgId);
+    if (el) el.textContent = usd ? (price >= 1000 ? '$' + price.toLocaleString('en-US', {maximumFractionDigits: 0}) : '$' + price.toFixed(price < 1 ? 4 : 2)) : price;
+    if (cel){ cel.textContent = (pct >= 0 ? '+' : '') + pct.toFixed(2) + '% 24h'; cel.className = 'tnum ' + (pct >= 0 ? 'up' : 'down'); }
+  };
+  setStat('statSol', 'statSolChg', priceUsd('SOL'), chgPct('SOL'));
+  setStat('statBtc', 'statBtcChg', priceUsd('BTC'), chgPct('BTC'));
+  setStat('statEth', 'statEthChg', priceUsd('ETH'), chgPct('ETH'));
+  // top mover among all live assets by |24h change|
+  const mover = ASSETS.map(a => ({sym: a.sym, chg: chgPct(a.sym)})).sort((a, b) => Math.abs(b.chg) - Math.abs(a.chg))[0];
+  const mEl = $('#statMove'), mCel = $('#statMoveChg');
+  if (mEl && mover) mEl.textContent = mover.sym;
+  if (mCel && mover){ mCel.textContent = (mover.chg >= 0 ? '+' : '') + mover.chg.toFixed(2) + '% 24h'; mCel.className = 'tnum ' + (mover.chg >= 0 ? 'up' : 'down'); }
+}
+
+/* ================= ticker (real, live) ================= */
+function renderTicker(){
+  const items = ASSETS.map(a => {
+    const p = priceUsd(a.sym), ch = chgPct(a.sym);
+    const cls = ch > 0 ? 'up' : ch < 0 ? 'down' : 'muted';
+    return `<span class="tape-item">${assetIcon(a.sym, 15)}<b>${esc(a.sym)}</b><span class="tnum">${p >= 1000 ? p.toLocaleString('en-US', {maximumFractionDigits: 0}) : p.toFixed(p < 1 ? 4 : 2)}</span><span class="d ${cls}">${ch >= 0 ? '+' : ''}${ch.toFixed(1)}%</span></span>`;
+  });
+  $('#tape').innerHTML = items.join('') + items.join('');
+}
+
+
+
+/* =====================================================================
+   ZAZA NET — UI + wallet + on-chain SPL minting
+   ===================================================================== */
+/* ---- base58 / hashing / ed25519 helpers (ported from the original) ---- */
+const B58A = '123456789ABCDEFGHJKLMNPQRSTUVWXYZabcdefghijkmnopqrstuvwxyz';
+const b58enc = b => { let n = 0n; for (const x of b) n = n * 256n + BigInt(x); let s = ''; while (n > 0n) { s = B58A[Number(n % 58n)] + s; n /= 58n; } for (const x of b) { if (x) break; s = '1' + s; } return s; };
+const b58dec = s => { let n = 0n; for (const c of s) { const i = B58A.indexOf(c); if (i < 0) throw new Error('bad base58'); n = n * 58n + BigInt(i); } const out = []; while (n > 0n) { out.unshift(Number(n % 256n)); n /= 256n; } for (const c of s) { if (c !== '1') break; out.unshift(0); } return new Uint8Array(out); };
+const cat = (...parts) => { const a = parts.map(p => p instanceof Uint8Array ? p : Uint8Array.from(p)); const o = new Uint8Array(a.reduce((n, x) => n + x.length, 0)); let i = 0; for (const x of a) { o.set(x, i); i += x.length; } return o; };
+const b64 = b => btoa(String.fromCharCode(...b)), unb64 = s => Uint8Array.from(atob(s.replace(/-/g, '+').replace(/_/g, '/')), c => c.charCodeAt(0));
+const sha256 = b => crypto.subtle.digest('SHA-256', b).then(x => new Uint8Array(x));
+const PKCS8 = [0x30, 0x2e, 0x02, 0x01, 0x00, 0x30, 0x05, 0x06, 0x03, 0x2b, 0x65, 0x70, 0x04, 0x22, 0x04, 0x20];
+
+/* ---- network ---- */
+const NETS = { mainnet: 'https://solana-rpc.publicnode.com', devnet: 'https://api.devnet.solana.com' };
+const NET = new URLSearchParams(location.search).get('net') === 'devnet' ? 'devnet' : 'mainnet';
+const RPC = NETS[NET];
+const TOKENPROG = 'TokenkegQfeZyiNwAJbNbGKPFXCWuBvf9Ss623VQ5DA';
+const ATAPROG = 'ATokenGPvbdGVxr1b2hvZbsiqW5xWH25efTNsLJA8knL';
+const METAPLEX = 'metaqbxxUerdq28cj1RbAWkYQm3ybzjb6a8bt518x1s';
+const CBPROG = 'ComputeBudget111111111111111111111111111111';
+const CU_LIMIT = 400000, CU_PRICE = 250000, METADATA_SIZE = 607, META_FEE = 10_000_000;
+const NET_SOL = 0.000005 + (CU_LIMIT * CU_PRICE / 1e6) / 1e9;
+async function rpc(method, params) {
+  const r = await fetch(RPC, {method: 'POST', headers: {'Content-Type': 'application/json'}, body: JSON.stringify({jsonrpc: '2.0', id: 1, method, params})});
+  const j = await r.json();
+  if (j.error) { const e = new Error(j.error.message); e.logs = j.error.data?.logs; throw e; }
+  return j.result;
+}
+const powmod = (b, e, m) => { let r = 1n, x = BigInt(b) % m; while (e > 0n) { if (e & 1n) r = r * x % m; x = x * x % m; e >>= 1n; } return r; };
+const ED_P = 2n ** 255n - 19n, ED_D = (ED_P - 121665n * powmod(121666n, ED_P - 2n, ED_P) % ED_P) % ED_P, ED_SQRTM1 = powmod(2n, (ED_P - 1n) / 4n, ED_P), MASK255 = (1n << 255n) - 1n;
+const le2big = b => { let n = 0n; for (let i = b.length - 1; i >= 0; i--) n = (n << 8n) | BigInt(b[i]); return n; };
+function edOnCurve(pt) {
+  const sign = (pt[31] >> 7) & 1, y = le2big(pt) & MASK255;
+  if (y >= ED_P) return false;
+  const y2 = y * y % ED_P, u = (y2 + ED_P - 1n) % ED_P, v = (ED_D * y2 + 1n) % ED_P;
+  if (v === 0n) return false;
+  const x2 = u * powmod(v, ED_P - 2n, ED_P) % ED_P;
+  if (x2 === 0n) return sign === 0;
+  let x = powmod(x2, (ED_P + 3n) / 8n, ED_P);
+  if (x * x % ED_P !== x2) { x = x * ED_SQRTM1 % ED_P; if (x * x % ED_P !== x2) return false; }
+  return true;
+}
+async function findPda(progB58, seeds) {
+  const P = b58dec(progB58), tag = new TextEncoder().encode('ProgramDerivedAddress');
+  for (let b = 255; b >= 0; b--) {
+    const h = await sha256(cat(...seeds, [b], P, tag));
+    if (!edOnCurve(h)) return h;
+  }
+  throw new Error('PDA not found');
+}
+const u64le = n => { const o = new Uint8Array(8); for (let i = 0; i < 8; i++) o[i] = Number(n & 255n), n >>= 8n; return o; };
+const u32le = n => new Uint8Array([n & 255, (n >> 8) & 255, (n >> 16) & 255, (n >> 24) & 255]);
+const u16le = n => new Uint8Array([n & 255, (n >> 8) & 255]);
+const cu16 = n => { const o = []; for (;;) { let b = n & 0x7f; n >>>= 7; if (n) b |= 0x80; o.push(b); if (!n) return new Uint8Array(o); } };
+const borshStr = s => { const b = new TextEncoder().encode(s); return cat(u32le(b.length), b); };
+const SYS_B58 = '11111111111111111111111111111111';
+const lc = (a, b) => a.localeCompare(b, 'en', {localeMatcher: 'best fit', usage: 'sort', sensitivity: 'variant', ignorePunctuation: false, numeric: false, caseFirst: 'lower'});
+function buildTokenMsg(owner, mint, ata, metaPda, rentMint, units, bh, metaFields) {
+  const T = b58dec(TOKENPROG), SYS = new Uint8Array(32), CB = b58dec(CBPROG), ATP = b58dec(ATAPROG);
+  const wm = !!metaFields;
+  const OW = b58enc(owner), MI = b58enc(mint), AT = b58enc(ata), MP = wm ? b58enc(metaPda) : null;
+  const signers = [owner, mint];
+  const writable = (wm ? [[ata, AT], [metaPda, MP]] : [[ata, AT]]).sort((x, y) => lc(x[1], y[1])).map(x => x[0]);
+  const readonly = [[CB, CBPROG], [SYS, SYS_B58], [T, TOKENPROG], [ATP, ATAPROG], ...(wm ? [[b58dec(METAPLEX), METAPLEX]] : [])]
+    .sort((x, y) => lc(x[1], y[1])).map(x => x[0]);
+  const accts = [...signers, ...writable, ...readonly];
+  const pos = new Map(accts.map((k, i) => [b58enc(k), i]));
+  const A = { owner: pos.get(OW), mint: pos.get(MI), ata: pos.get(AT), meta: MP != null ? pos.get(MP) : -1,
+              cb: pos.get(CBPROG), sys: pos.get(SYS_B58), tok: pos.get(TOKENPROG), atp: pos.get(ATAPROG), mpl: wm ? pos.get(METAPLEX) : -1 };
+  const ix = (prog, keys, data) => cat([prog], cu16(keys.length), Uint8Array.from(keys), cu16(data.length), data);
+  const ixs = [
+    ix(A.cb, [], cat([2], u32le(CU_LIMIT))),
+    ix(A.cb, [], cat([3], u64le(BigInt(CU_PRICE)))),
+    ix(A.sys, [A.owner, A.mint], cat(u32le(0), u64le(BigInt(rentMint)), u64le(82n), T)),
+    ix(A.tok, [A.mint], cat([20, 8], owner, [0])),
+    ix(A.atp, [A.owner, A.ata, A.owner, A.mint, A.sys, A.tok], [1]),
+  ];
+  if (wm) ixs.push(ix(A.mpl, [A.meta, A.mint, A.owner, A.owner, A.owner, A.sys],
+    cat([33], borshStr(metaFields.name), borshStr(metaFields.sym), borshStr(metaFields.uri),
+        u16le(0), [0], [0], [0], [1], [0])));
+  ixs.push(ix(A.tok, [A.mint, A.ata, A.owner], cat([7], u64le(BigInt(units)))));
+  return cat([2, 0, readonly.length], cu16(accts.length), ...accts, bh, cu16(ixs.length), ...ixs);
+}
+async function ipfsAdd(blob, name) {
+  const fd = new FormData(); fd.append('file', blob, name);
+  const r = await fetch('https://api.thegraph.com/ipfs/api/v0/add', {method: 'POST', body: fd});
+  if (!r.ok) throw new Error('IPFS upload failed (' + r.status + ')');
+  const j = await r.json();
+  if (!j.Hash) throw new Error('IPFS upload returned no hash');
+  return j.Hash;
+}
+
+/* ================= wallet ================= */
+const W = {mode: 'none', key: null, seed: null, pub: null, addr: '', bal: null};
+function loadWallet() {
+  let d = null;
+  try { d = JSON.parse(localStorage.getItem(LS_W) || 'null'); } catch {}
+  if (!d?.addr || !d?.seedB58) return Promise.resolve();
+  const seed = b58dec(d.seedB58);
+  return crypto.subtle.importKey('pkcs8', cat(PKCS8, seed), {name: 'Ed25519'}, true, ['sign'])
+    .then(key => crypto.subtle.exportKey('jwk', key))
+    .then(j => { Object.assign(W, {mode: 'key', key, seed, pub: unb64(j.x), addr: d.addr}); refreshWallet(); fetchBal(); })
+    .catch(() => {});
+}
+function walletAdapter() { return window.phantom?.solana || window.solana || null; }
+async function connectBrowser() {
+  const ph = walletAdapter();
+  if (!ph) throw new Error('no browser wallet found — import a key instead');
+  const res = await ph.connect();
+  W.mode = 'phantom'; W.key = null; W.seed = null;
+  W.addr = (res?.publicKey?.toString() || ph.publicKey?.toString() || '').trim();
+  W.pub = b58dec(W.addr);
+  if (!W.addr) throw new Error('wallet returned no address');
+  refreshWallet(); fetchBal();
+}
+async function importKey(txt) {
+  let b;
+  if (txt instanceof Uint8Array) b = txt.slice();
+  else {
+    const s = String(txt).trim();
+    if (s.startsWith('[')) b = Uint8Array.from(JSON.parse(s));
+    else if (/^[0-9a-fA-F]{64}$/.test(s)) b = Uint8Array.from(s.match(/../g).map(x => parseInt(x, 16)));
+    else b = b58dec(s.replace(/\s+/g, ''));
+  }
+  if (b.length === 64) b = b.slice(0, 32);
+  if (b.length !== 32) throw new Error('expected a 32-byte seed (hex, base58 or JSON array)');
+  let key;
+  try { key = await crypto.subtle.importKey('pkcs8', cat(PKCS8, b), {name: 'Ed25519'}, true, ['sign']); }
+  catch { throw new Error('this browser does not support Ed25519 in WebCrypto — update it (Chrome 137+, Firefox 130+, Safari 17+)'); }
+  const jwk = await crypto.subtle.exportKey('jwk', key);
+  const pub = unb64(jwk.x);
+  Object.assign(W, {mode: 'key', key, seed: b, pub, addr: b58enc(pub)});
+  localStorage.setItem(LS_W, JSON.stringify({addr: W.addr, seedB58: b58enc(b)}));
+  refreshWallet(); fetchBal();
+}
+async function newWallet() { const seed = crypto.getRandomValues(new Uint8Array(32)); await importKey(seed); }
+async function fetchBal() {
+  if (!W.addr) return;
+  try { W.bal = (await rpc('getBalance', [W.addr])).value / 1e9; } catch { W.bal = null; }
+  refreshWallet();
+}
+function disconnect() { Object.assign(W, {mode: 'none', key: null, seed: null, pub: null, addr: '', bal: null}); localStorage.removeItem(LS_W); refreshWallet(); }
+function refreshWallet() {
+  const btn = $('#walletBtn');
+  if (W.mode === 'none') { btn.classList.remove('live'); $('#walletBtnTxt').textContent = 'Connect wallet'; }
+  else { btn.classList.add('live'); $('#walletBtnTxt').textContent = `${short(W.addr)}${W.bal != null ? ' · ' + W.bal.toFixed(3) : ''}`; }
+  const mt = $('#mintToggle');
+  if (mt){
+    const inp = $('#fMint');
+    inp.disabled = W.mode === 'none';
+    if (W.mode === 'none') { inp.checked = false; $('#mintToggleNote').textContent = 'Connect a wallet to enable real minting. Without one, the coin launches in the in-app market only.'; }
+    else { inp.checked = true; $('#mintToggleNote').textContent = `Signs locally in ${W.addr ? short(W.addr) : 'your wallet'} — creates the mint, opens your token account and mints 100% of supply, with on-chain metadata.`; }
+  }
+  updateLaunchBtn();
+}
+function paperBalancesHtml(){
+  const rows = Object.keys(BAL).filter(s => BAL[s] > 1e-12 && ASSET_BY[s]).map(s =>
+    `<div class="kv"><dt>${assetIcon(s, 14)} ${esc(s)}</dt><dd class="tnum">${human(BAL[s], s)}</dd></div>`
+  ).join('');
+  return `<div class="reward-box" style="margin:0 0 10px;border-color:var(--line);background:var(--bg2)">
+    <h4 style="color:var(--muted)">In-app paper balances</h4>
+    ${rows || '<p style="margin:0">Empty — convert SOL in any trade panel.</p>'}
+    <p style="margin-top:6px">Paper funds for the in-app curve only — not real money, not on-chain. Convert SOL ↔ any pair in a coin's trade panel at the live rate.</p>
+  </div>`;
+}
+function openWalletModal() {
+  const m = $('#walletModal'), body = $('#wmBody');
+  const paper = paperBalancesHtml();
+  if (W.mode === 'none') {
+    $('#wmTitle').textContent = 'Connect a wallet';
+    const hasPh = !!walletAdapter();
+    body.innerHTML = `
+      ${hasPh ? '<button class="mbtn primary" id="mPhantom" type="button">Browser wallet (Phantom / Solflare)</button>' : '<p style="margin:0;font-size:11.5px;color:var(--muted)">No browser wallet detected — import a key below.</p>'}
+      <button class="mbtn" id="mNew" type="button">Create new wallet</button>
+      <button class="mbtn" id="mImport" type="button">Import 32-byte key</button>
+      <div id="mImportBox" hidden style="display:flex;flex-direction:column;gap:8px;margin-top:4px">
+        <textarea id="mKey" class="inp mono" rows="2" placeholder="32-byte seed: base58, hex or JSON array" style="font-size:11px"></textarea>
+        <button class="mbtn primary" id="mImportGo" type="button">Import</button>
+      </div>
+      <p class="fine">Imported keys are stored in this browser's localStorage, plain text. For real launches use a dedicated wallet.</p>
+      ${paper}`;
+    const ph = $('#mPhantom'); if (ph) ph.onclick = async () => { try { await connectBrowser(); closeModal($('#walletModal')); } catch (e) { alert(e.message); } };
+    $('#mNew').onclick = async () => { try { await newWallet(); closeModal($('#walletModal')); } catch (e) { alert(e.message); } };
+    $('#mImport').onclick = () => { const b = $('#mImportBox'); b.hidden = !b.hidden; b.style.display = b.hidden ? '' : 'flex'; };
+    $('#mImportGo').onclick = async () => { try { await importKey($('#mKey').value); closeModal($('#walletModal')); } catch (e) { alert(e.message); } };
+  } else {
+    $('#wmTitle').textContent = 'Wallet';
+    body.innerHTML = `
+      <div class="addrbox"><b>${esc(W.addr)}</b></div>
+      <div style="font-size:12px;color:var(--muted)">On-chain balance: <b style="color:var(--ink)" class="tnum">${W.bal != null ? fmtSol(W.bal) + ' SOL' : '—'}</b> · mode: ${W.mode === 'phantom' ? 'browser wallet' : 'local key'}${NET !== 'mainnet' ? ' · <b style="color:var(--gold)">' + NET + '</b>' : ''}</div>
+      ${W.seed ? '<button class="mbtn" id="mExport" type="button">Copy private key (base58)</button>' : ''}
+      ${NET === 'devnet' ? '<button class="mbtn" id="mAir" type="button">Airdrop 2 SOL (devnet faucet)</button>' : ''}
+      <button class="mbtn" id="mRefresh" type="button">Refresh balance</button>
+      <button class="mbtn" id="mOut" type="button" style="color:var(--down)">Disconnect</button>
+      ${paper}`;
+    const ex = $('#mExport'); if (ex) ex.onclick = async () => { await navigator.clipboard.writeText(b58enc(W.seed)); ex.textContent = 'copied ✓'; };
+    const air = $('#mAir'); if (air) air.onclick = async () => {
+      air.disabled = true; air.textContent = 'requesting…';
+      try { await rpc('requestAirdrop', [W.addr, 2e9]); await sleep(4000); await fetchBal(); air.textContent = 'airdropped ✓'; }
+      catch (e) { air.disabled = false; air.textContent = 'airdrop failed — try again'; }
+    };
+    $('#mRefresh').onclick = async () => { await fetchBal(); refreshWallet(); };
+    $('#mOut').onclick = () => { disconnect(); closeModal($('#walletModal')); };
+  }
+  m.classList.add('open');
+}
+function closeModal(m) { m.classList.remove('open'); }
+document.querySelectorAll('.modal-bg').forEach(m => m.addEventListener('click', e => { if (e.target === m) m.classList.remove('open'); }));
+$('#walletBtn').onclick = openWalletModal;
+
+/* ================= form state ================= */
+const F = {img: null, imgUrl: '', pair: 'SOL', pairName: 'Solana', firstBuy: 1, supply: 1e9, share: 0.2, mint: false, siteHtml: ''};
+let rent = [1329930, 1855569, 4654755];
+function totalCost() { return (rent[0] + rent[1] + rent[2] + META_FEE) / 1e9 + NET_SOL; }
+function refreshRent() {
+  Promise.all([82, 165, METADATA_SIZE].map(s => rpc('getMinimumBalanceForRentExemption', [s])))
+    .then(r => { if (r.every(x => typeof x === 'number' && x > 0)) rent = r; }).catch(() => {});
+}
+function validSupply() {
+  const v = parseFloat($('#fSupply').value);
+  if (!isFinite(v) || v < 1) return {ok: false, why: 'supply must be at least 1 token'};
+  if (v > 9e10) return {ok: false, why: 'supply too large (max ≈ 90,000,000,000 with 8 decimals)'};
+  return {ok: true, units: Math.round(v), supply: Math.round(v)};
+}
+function setErr(msg) { $('#errBox').textContent = msg || ''; updateLaunchBtn(); }
+function updateLaunchBtn() {
+  const ok = $('#fName').value.trim() && $('#fSym').value.trim() && validSupply().ok;
+  $('#launchBtn').disabled = !ok;
+  return ok;
+}
+function estimateFirstBuy(supply, fb, pair){
+  if (!fb || fb <= 0) return {tokens: 0, quote: 0};
+  const pu = priceUsd(pair) || 1;
+  const p0 = (50 / supply) / pu, Sc = supply * 0.8, grow = 39;
+  const quoteAmt = fb * solUsd() / pu;
+  const cost = t => p0 * t + p0 * grow / (2 * Sc) * t * t;
+  let lo = 0, hi = Sc * 0.4;
+  for (let i = 0; i < 60; i++){ const mid = (lo + hi) / 2; if (cost(mid) > quoteAmt / 1.01) hi = mid; else lo = mid; }
+  return {tokens: lo, quote: quoteAmt};
+}
+
+/* ================= ticker ================= */
+function renderTicker(){
+  const items = ASSETS.map(a => {
+    const p = priceUsd(a.sym), ch = chgPct(a.sym);
+    const cls = ch > 0 ? 'up' : ch < 0 ? 'down' : 'muted';
+    const sign = ch > 0 ? '+' : '';
+    return `<span class="tape-item">${assetIcon(a.sym, 15)}<b>${esc(a.sym)}</b><span class="tnum">${p >= 1000 ? p.toLocaleString('en-US', {maximumFractionDigits: 0}) : p.toFixed(p < 1 ? 4 : 2)}</span><span class="d ${cls}">${sign}${ch.toFixed(1)}%</span></span>`;
+  });
+  const all = items.join('');
+  $('#tape').innerHTML = all + all;
+}
+
+/* ================= summary ================= */
+function renderSummary(){
+  $('#sShare').textContent = Math.round(F.share * 100) + '%';
+  if (F.firstBuy > 0){
+    const est = estimateFirstBuy(F.supply, F.firstBuy, F.pair);
+    $('#sFirstBuy').textContent = F.firstBuy + ' SOL → ' + human(est.quote, F.pair) + ' ' + F.pair;
+  } else $('#sFirstBuy').textContent = 'None';
+  $('#sSupply').textContent = fmt(validSupply().supply || 0, 0);
+}
+function renderFbNote(){
+  const fb = F.firstBuy;
+  if (!fb || fb <= 0){ $('#fbNote').textContent = 'no first buy — you keep 100% of the creator share, curve starts empty'; return; }
+  const est = estimateFirstBuy(F.supply, fb, F.pair);
+  $('#fbNote').textContent = `${fb} SOL → ≈ ${human(est.quote, F.pair)} ${F.pair} at launch (live rate) · buys ≈ ${fmt(est.tokens, 0)} tokens`;
+}
+
+/* ================= market table ================= */
+function renderMarket(){
+  const sort = $('#sortSeg .on')?.dataset.sort || 'fdv';
+  const filter = ($('#filterSel') && $('#filterSel').value) || 'all';
+  const q = ($('#searchBox').value || '').toLowerCase();
+  let list = COINS.slice();
+  if (filter === 'paired') list = list.filter(c => c.pair !== 'SOL');
+  if (filter === 'sol') list = list.filter(c => c.pair === 'SOL');
+  if (q) list = list.filter(c => (c.name + ' ' + c.sym + ' ' + c.pair).toLowerCase().includes(q));
+  const chg = c => c.dayOpen ? (spotPrice(c) - c.dayOpen) / c.dayOpen * 100 : 0;
+  if (sort === 'fdv') list.sort((a, b) => fdvUsd(b) - fdvUsd(a));
+  else if (sort === 'recent') list.sort((a, b) => b.t - a.t);
+  else if (sort === 'vol') list.sort((a, b) => vol24(b) - vol24(a));
+  else if (sort === 'gainers') list.sort((a, b) => chg(b) - chg(a));
+  $('#coinRows').innerHTML = list.length ? list.map(c => {
+    const p = spotPrice(c), c24 = chg(c), cls = c24 > 0 ? 'up' : c24 < 0 ? 'down' : 'muted';
+    const usd = p * priceUsd(c.pair);
+    return `<div class="coin-row click" data-id="${esc(c.id)}">
+      <div class="c-token"><div class="ctok">
+        <div class="ic">${c.img ? `<img src="${c.img}" alt="">` : icLetters(c.sym)}</div>
+        <div class="l"><b>$${esc(c.sym)}</b>
+        <span>${esc(c.name)}</span></div>
+      </div></div>
+      <div class="cell num c-price"><b class="tnum">${human(p, c.pair)}</b><span class="sub">${usd >= 0.01 ? '$' + usd.toFixed(4) : '$' + usd.toPrecision(2)}</span></div>
+      <div class="cell num c-fdv"><span class="lbl-m">FDV</span><b class="tnum">$${fmt(fdvUsd(c), 2)}</b><span class="sub">${human(fdv(c), c.pair)}</span></div>
+      <div class="cell num c-vol"><span class="lbl-m">24h vol</span><b class="tnum">${human(vol24(c), c.pair)}</b></div>
+      <div class="cell num c-chg"><span class="lbl-m">24h</span><b class="tnum ${cls}">${c24 >= 0 ? '+' : ''}${c24.toFixed(1)}%</b></div>
+      <div class="c-act"><div class="trd-btns"><button class="mini-btn buy" data-act="buy">Buy</button><button class="mini-btn sell" data-act="sell">Sell</button></div></div>
+    </div>`;
+  }).join('') : `<div class="empty row">No coins yet. Launch one above — it appears here the moment it's on the curve.</div>`;
+  $$('#coinRows .coin-row').forEach(tr => tr.onclick = e => {
+    if (e.target.closest('.mini-btn')) return;
+    openCoin(findCoin(tr.dataset.id));
+  });
+  $$('#coinRows .mini-btn').forEach(b => b.onclick = e => {
+    e.stopPropagation();
+    const coin = findCoin(b.closest('.coin-row').dataset.id);
+    quickTrade(coin, b.dataset.act);
+  });
+}
+
+/* ================= live pairs (real data) ================= */
+const CG_SLUG = {SOL:'solana', BTC:'bitcoin', ETH:'ethereum', ZEC:'zcash', DOGE:'dogecoin', XRP:'ripple', ADA:'cardano', LTC:'litecoin', LINK:'chainlink', USDC:'usd-coin'};
+function extLink(sym){
+  const a = ASSET_BY[sym]; if (!a) return null;
+  if (a.kind === 'stock') return 'https://finance.yahoo.com/quote/' + a.src;
+  if (a.kind === 'crypto' || a.kind === 'stable') return 'https://www.coingecko.com/en/coins/' + (CG_SLUG[sym] || '');
+  return null;
+};
+function drawSpark(cv, arr, up){
+  if (!cv) return;
+  const dpr = window.devicePixelRatio || 1;
+  const cssH = 36, w = cv.clientWidth || 120;
+  cv.width = w * dpr; cv.height = cssH * dpr;
+  const ctx = cv.getContext('2d'); ctx.scale(dpr, dpr);
+  ctx.clearRect(0, 0, w, cssH);
+  const rgb = up ? '78,227,155' : '240,68,56';
+  if (!arr || arr.length < 2){
+    ctx.strokeStyle = '#222527'; ctx.lineWidth = 1;
+    ctx.beginPath(); ctx.moveTo(0, cssH / 2); ctx.lineTo(w, cssH / 2); ctx.stroke();
+    return;
+  }
+  const lo = Math.min(...arr), hi = Math.max(...arr), rng = (hi - lo) || 1;
+  const X = i => w * i / (arr.length - 1);
+  const Y = v => cssH - 2 - ((v - lo) / rng) * (cssH - 4);
+  const g = ctx.createLinearGradient(0, 0, 0, cssH);
+  g.addColorStop(0, `rgba(${rgb},0.28)`); g.addColorStop(1, 'rgba(0,0,0,0)');
+  ctx.beginPath(); ctx.moveTo(X(0), cssH);
+  arr.forEach((v, i) => ctx.lineTo(X(i), Y(v)));
+  ctx.lineTo(X(arr.length - 1), cssH); ctx.closePath();
+  ctx.fillStyle = g; ctx.fill();
+  ctx.beginPath(); arr.forEach((v, i) => i ? ctx.lineTo(X(i), Y(v)) : ctx.moveTo(X(0), Y(v)));
+  ctx.strokeStyle = `rgb(${rgb})`; ctx.lineWidth = 1.5; ctx.stroke();
+}
+
+/* ================= trade math (pair-denominated preview) ================= */
+function fmtPair(coin, amt){ return human(amt, coin.pair); }
+function quoteBuy(coin, T){
+  const curve = T / 1.01, q = tokensFor(coin, curve), fee = T - curve, spot = spotPrice(coin);
+  const px = q > 0 ? curve / q : 0;
+  return {q, fee, total: T, px, impact: spot ? (px - spot) / spot * 100 : 0, spot};
+}
+function quoteSell(coin, q){
+  const gross = costIntegral(coin, coin.sold - q, coin.sold), fee = gross * 0.01, net = gross - fee, spot = spotPrice(coin);
+  const px = q > 0 ? net / q : 0;
+  return {q, gross, fee, net, px, impact: spot ? (px - spot) / spot * 100 : 0, spot};
+}
+
+/* ================= trade box (inline + modal) ================= */
+const TQ = {side: 'buy', amt: ''};
+function renderTradeInto(el, coin){
+  const s = TQ.side;
+  const quote = coin.pair;
+  const qBal = balOf(quote), solBal = balOf('SOL');
+  const spot = spotPrice(coin), spotUsd = spot * priceUsd(quote);
+  el.innerHTML = `
+    <div class="ttabs">
+      <button data-side="buy" class="${s === 'buy' ? 'on buy' : ''}">Buy with ${esc(quote)}</button>
+      <button data-side="sell" class="${s === 'sell' ? 'on sell' : ''}">Sell</button>
+    </div>
+    <div class="amt-box"><input id="tqAmt" inputmode="decimal" placeholder="0.00" value="${TQ.amt}"><span class="cur">${s === 'buy' ? esc(quote) : 'tokens'}</span></div>
+    <div class="quick">
+      <button data-q="0.25">25%</button><button data-q="0.5">50%</button><button data-q="max">Max</button>
+    </div>
+    <div class="tq"><span>Spot price</span><b class="tnum">${human(spot, quote)} per token · ${spotUsd >= 0.01 ? '$' + spotUsd.toFixed(4) : '$' + spotUsd.toPrecision(2)}</b></div>
+    <div class="tq"><span>${s === 'buy' ? 'You receive' : 'You get'}</span><b class="tnum" id="tqQuote">—</b></div>
+    <div class="tq"><span>Price impact</span><b class="tnum" id="tqImpact">—</b></div>
+    <div class="tq"><span>Fee (1%)</span><b class="tnum" id="tqFee">—</b></div>
+    <div class="tq"><span>Your balance</span><b class="tnum">${human(qBal, quote)} ${quote} · ${human(solBal, 'SOL')} SOL</b></div>
+    <button class="trade-go ${s}" id="tqGo">${s === 'buy' ? 'Buy' : 'Sell'}</button>`;
+  const amt = el.querySelector('#tqAmt');
+  const upd = () => {
+    const v = parseFloat(amt.value);
+    TQ.amt = amt.value;
+    const qEl = el.querySelector('#tqQuote'), iEl = el.querySelector('#tqImpact'), fEl = el.querySelector('#tqFee');
+    if (!isFinite(v) || v <= 0){ qEl.textContent = '—'; iEl.textContent = '—'; fEl.textContent = '—'; return; }
+    if (s === 'buy'){
+      const r = quoteBuy(coin, Math.min(v, qBal));
+      qEl.textContent = fmt(r.q, 0) + ' tokens'; iEl.textContent = r.impact.toFixed(2) + '%'; fEl.textContent = human(r.fee, quote);
+    } else {
+      const r = quoteSell(coin, Math.min(v, myBal(coin)));
+      qEl.textContent = human(r.net, quote); iEl.textContent = r.impact.toFixed(2) + '%'; fEl.textContent = human(r.fee, quote);
+    }
+  };
+  amt.oninput = upd;
+  el.querySelectorAll('.ttabs button').forEach(b => b.onclick = () => { TQ.side = b.dataset.side; renderTradeInto(el, coin); });
+  el.querySelectorAll('.quick button').forEach(b => b.onclick = () => {
+    const max = s === 'buy' ? qBal : myBal(coin);
+    if (b.dataset.q === 'max') amt.value = String(max);
+    else amt.value = String(max * parseFloat(b.dataset.q));
+    upd();
+  });
+  el.querySelector('#tqGo').onclick = () => {
+    const v = parseFloat(amt.value);
+    if (!isFinite(v) || v <= 0) return toast('enter an amount', 'err');
+    let res;
+    if (s === 'buy'){ const r = quoteBuy(coin, Math.min(v, qBal)); res = executeTrade(coin, 'buy', r.total, me()); }
+    else res = executeTrade(coin, 'sell', Math.min(v, myBal(coin)), me());
+    if (res.err) return toast(res.err, 'err');
+    toast(`${s === 'buy' ? 'Bought' : 'Sold'} ${fmt(res.q, 0)} ${coin.sym} for ${s === 'buy' ? human(res.spent, quote) : human(res.net, quote)} ${quote}`, 'ok');
+    TQ.amt = ''; renderTradeInto(el, coin);
+    renderMarket(); renderHero();
+    if (currentCoin) updateCoinLive(coin);
+  };
+  upd();
+}
+
+/* ================= shared desk registry (every coin is seen) =================
+   Two backends, tried in order:
+   1) server (/api/coins) when a backend exists (the preview server)
+   2) SOLANA ITSELF as the database — coin records are written to real accounts
+      on-chain, and discovered by scanning for a known tag. No server needed,
+      so it works on GitHub Pages.
+   Each coin gets one 1024-byte account owned by the coin's own keypair
+   (creator signs updates). Readers find every record via a filtered
+   getProgramAccounts scan for the K8DESKV1 tag. */
+let REG_READY = false, _pushTimer = null, _lastSync = 0;
+let REG_SRC = 'local';               // 'server' | 'solana' | 'local'
+const REG_SPACE = 1024;              // fixed account size (the scan filter matches it exactly)
+const REG_TAG = 'K8DESKV1';          // magic bytes at offset 0
+const REG_TAG_B58 = (() => { let n = 0n; for (let i = 0; i < REG_TAG.length; i++) n = n * 256n + BigInt(REG_TAG.charCodeAt(i)); let s = ''; while (n > 0n) { s = B58A[Number(n % 58n)] + s; n /= 58n; } for (let i = 0; i < REG_TAG.length; i++) { if (REG_TAG.charCodeAt(i)) break; s = '1' + s; } return s; })();
+const REG_RPC = NET === 'devnet' ? 'https://api.devnet.solana.com' : 'https://api.mainnet-beta.solana.com';
+const LS_REG = 'k8desk_regacct';     // coinId -> account seed (base58)
+
+async function rpcUrl(url, method, params){
+  const r = await fetch(url, {method: 'POST', headers: {'Content-Type': 'application/json'}, body: JSON.stringify({jsonrpc: '2.0', id: 1, method, params})});
+  const j = await r.json();
+  if (j.error) { const e = new Error(j.error.message); e.logs = j.error.data?.logs; throw e; }
+  return j.result;
+}
+function loadRegAccts(){ try { return JSON.parse(localStorage.getItem(LS_REG) || '{}') || {}; } catch { return {}; } }
+function saveRegAccts(m){ try { localStorage.setItem(LS_REG, JSON.stringify(m)); } catch {} }
+async function pubFromSeed(seed){
+  const key = await crypto.subtle.importKey('pkcs8', cat(PKCS8, seed), {name: 'Ed25519'}, true, ['sign']);
+  const jwk = await crypto.subtle.exportKey('jwk', key);
+  return {key, pub: unb64(jwk.x)};
+}
+function coinSnapshot(coin){
+  return {
+    id: coin.id, name: coin.name, sym: coin.sym, desc: coin.desc, x: coin.x,
+    img: coin.img, pair: coin.pair, pairName: coin.pairName,
+    supply: coin.supply, share: coin.share, sold: coin.sold, reserve: coin.reserve,
+    Sc: coin.Sc, p0: coin.p0, grow: coin.grow,
+    creator: coin.creator, net: coin.net, t: coin.t,
+    fees: coin.fees, holders: coin.holders, holderRewards: coin.holderRewards, claimed: coin.claimed,
+    firstBuy: coin.firstBuy, firstBuyQuote: coin.firstBuyQuote,
+    dayOpen: coin.dayOpen, last: coin.last, high: coin.high, low: coin.low,
+    site: coin.site, siteHtml: coin.siteHtml || '', mint: coin.mint, mintSig: coin.mintSig,
+    candles: (coin.candles || []).slice(-60),
+    trades: (coin.trades || []).slice(-12),
+    vol24: (coin.vol24 || []).slice(-50),
+  };
+}
+/* slim on-chain record — small enough for one 1024-byte account */
+function regSnapshot(coin){
+  const holders = Object.entries(coin.holders || {}).sort((a, b) => b[1] - a[1]).slice(0, 20).map(([k, v]) => [k, v]);
+  return {
+    v: 1, id: coin.id, name: coin.name, sym: coin.sym, desc: (coin.desc || '').slice(0, 80),
+    pair: coin.pair, pairName: coin.pairName, supply: coin.supply, share: coin.share,
+    sold: coin.sold, reserve: coin.reserve, Sc: coin.Sc, p0: coin.p0, grow: coin.grow,
+    creator: coin.creator, net: coin.net, t: coin.t, mint: coin.mint, mintSig: coin.mintSig, site: coin.site,
+    fees: coin.fees, holders, firstBuy: coin.firstBuy, firstBuyQuote: coin.firstBuyQuote,
+    dayOpen: coin.dayOpen, last: coin.last, high: coin.high, low: coin.low, v24: vol24(coin),
+  };
+}
+function regRestore(rec){
+  const holders = {}; (rec.holders || []).forEach(([k, v]) => { holders[k] = v; });
+  const c = {
+    id: rec.id, name: rec.name, sym: rec.sym, desc: rec.desc || '', x: '', img: '',
+    pair: rec.pair, pairName: rec.pairName, supply: rec.supply, share: rec.share,
+    sold: rec.sold || 0, reserve: rec.reserve || 0, Sc: rec.Sc, p0: rec.p0, grow: rec.grow,
+    creator: rec.creator, net: rec.net || 'local', t: rec.t || 0,
+    mint: rec.mint, mintSig: rec.mintSig, site: rec.site,
+    fees: rec.fees || {total: 0, holdersPot: 0, desk: 0, proto: 0, buyback: 0},
+    holders, holderRewards: {}, claimed: {},
+    firstBuy: rec.firstBuy || 0, firstBuyQuote: rec.firstBuyQuote || 0,
+    dayOpen: rec.dayOpen || 0, last: rec.last || 0, high: rec.high || 0, low: rec.low || 0,
+    candles: [], trades: [],
+    vol24: rec.v24 ? [{t: Date.now(), v: rec.v24}] : [],
+    _remote: true,
+  };
+  c.img = makeAvatar(c.sym, assetColor(c.pair));
+  return c;
+}
+/* build a legacy Solana message: [feePayer, coinAcct] sign; system createAccount + write */
+function buildRegMsg(feePayer, acct, isCreate, space, lamports, dataBytes, bh){
+  const SYS = new Uint8Array(32), CB = b58dec(CBPROG);
+  const signers = [feePayer, acct];
+  const readonly = [[SYS, SYS_B58], [CB, CBPROG]].sort((x, y) => lc(x[1], y[1])).map(x => x[0]);
+  const accts = [...signers, ...readonly];
+  const pos = new Map(accts.map((k, i) => [b58enc(k), i]));
+  const A = {fee: pos.get(b58enc(feePayer)), acct: pos.get(b58enc(acct)), sys: pos.get(SYS_B58), cb: pos.get(CBPROG)};
+  const rix = (prog, keys, data) => cat([prog], cu16(keys.length), Uint8Array.from(keys), cu16(data.length), data);
+  const ixs = [
+    rix(A.cb, [], cat([2], u32le(CU_LIMIT))),
+    rix(A.cb, [], cat([3], u64le(BigInt(CU_PRICE)))),
+  ];
+  if (isCreate) ixs.push(rix(A.sys, [A.fee, A.acct], cat(u32le(0), u64le(BigInt(lamports)), u64le(BigInt(space)), SYS)));
+  ixs.push(rix(A.sys, [A.acct], cat(u32le(1), u64le(0n), dataBytes)));
+  return cat([2, 0, readonly.length], cu16(accts.length), ...accts, bh, cu16(ixs.length), ...ixs);
+}
+/* write (or update) a coin's record on-chain */
+async function regWriteOnChain(coin){
+  if (W.mode === 'none') return;
+  const REG = loadRegAccts();
+  let seed = REG[coin.id] ? b58dec(REG[coin.id]) : crypto.getRandomValues(new Uint8Array(32));
+  if (!REG[coin.id]){ REG[coin.id] = b58enc(seed); saveRegAccts(REG); }
+  const {key, pub} = await pubFromSeed(seed);
+  coin.regAcct = b58enc(pub);
+  let exists = false;
+  try { const info = await rpc('getAccountInfo', [coin.regAcct, {encoding: 'base64'}]); exists = !!info?.value; } catch {}
+  const json = new TextEncoder().encode(JSON.stringify(regSnapshot(coin)));
+  const buf = new Uint8Array(REG_SPACE);
+  buf.set(cat(new TextEncoder().encode(REG_TAG), json).slice(0, REG_SPACE));
+  const [lamports, bhRes] = await Promise.all([
+    rpc('getMinimumBalanceForRentExemption', [REG_SPACE]),
+    rpc('getLatestBlockhash', [{commitment: 'confirmed'}]),
+  ]);
+  const msg = buildRegMsg(W.pub, pub, !exists, REG_SPACE, lamports, buf, b58dec(bhRes.value.blockhash));
+  let feeSig;
+  if (W.mode === 'phantom'){ const ph = walletAdapter(); const r = await ph.signMessage(msg); feeSig = new Uint8Array(r?.signature || r); }
+  else feeSig = new Uint8Array(await crypto.subtle.sign('Ed25519', W.key, msg));
+  const acctSig = new Uint8Array(await crypto.subtle.sign('Ed25519', key, msg));
+  const wire = cat([2], feeSig, acctSig, msg);
+  return await rpc('sendTransaction', [b64(wire), {encoding: 'base64', skipPreflight: true, preflightCommitment: 'confirmed', maxRetries: 3}]);
+}
+/* read every coin record from the chain via a tag scan */
+async function regScanOnChain(){
+  const res = await rpcUrl(REG_RPC, 'getProgramAccounts', [SYS_B58, {
+    encoding: 'base64',
+    filters: [{dataSize: REG_SPACE}, {memcmp: {offset: 0, bytes: REG_TAG_B58}}],
+  }]);
+  const out = [];
+  for (const a of (res || [])){
+    try {
+      const raw = unb64(a.account.data[0]);
+      if (new TextDecoder().decode(raw.slice(0, 8)) !== REG_TAG) continue;
+      const rec = JSON.parse(new TextDecoder().decode(raw.slice(8)).replace(/\0+$/, ''));
+      if (rec && rec.id && rec.sym && rec.name && ASSET_BY[rec.pair]) out.push(regRestore(rec));
+    } catch {}
+  }
+  return out;
+}
+async function pushRegistry(coin){
+  if (!coin || coin._remote || (coin.id || '').startsWith('seed_')) return;
+  try {
+    const r = await fetch('/api/coins', {
+      method: 'POST',
+      headers: {'Content-Type': 'application/json'},
+      body: JSON.stringify({coin: coinSnapshot(coin)}),
+    });
+    if (r.ok){ REG_SRC = 'server'; return; }
+  } catch {}
+  if (W.mode !== 'none'){
+    try {
+      if (coin.siteHtml && !coin.site?.htmlCid){
+        try {
+          const cid = await ipfsAdd(new Blob([coin.siteHtml], {type: 'text/html'}), (coin.sym || 'site').toLowerCase() + '.html');
+          coin.site = Object.assign({}, coin.site, {htmlCid: cid, htmlUrl: 'https://ipfs.io/ipfs/' + cid});
+        } catch {}
+      }
+      await regWriteOnChain(coin); REG_SRC = 'solana';
+    } catch (e) { console.warn('reg write failed', e.message); }
+  }
+}
+function schedulePush(coin){
+  if (_pushTimer) clearTimeout(_pushTimer);
+  _pushTimer = setTimeout(() => pushRegistry(coin), 1200);
+}
+function mergeRemoteCoins(coins){
+  let changed = false;
+  for (const rc of coins || []){
+    if (!rc || !rc.id || !rc.sym || !rc.name || !ASSET_BY[rc.pair]) continue;
+    if (findCoin(rc.id)) continue;                       // local copy is authoritative
+    let c = rc;
+    if (Array.isArray(rc.holders)) c = regRestore(rc);   // slim on-chain record
+    else {
+      c._remote = true;
+      if (c.reserve == null && c.reserveSol != null) c.reserve = c.reserveSol;
+    }
+    COINS.push(c);
+    changed = true;
+  }
+  if (changed){ renderMarket(); renderTradeTape(); updateDeskCount(); }
+}
+async function syncCoins(force){
+  if (!force && Date.now() - _lastSync < 10000) return;
+  _lastSync = Date.now();
+  // 1) server backend
+  try {
+    const r = await fetch('/api/coins', {cache: 'no-store'});
+    if (r.ok){
+      const j = await r.json();
+      if (j.ok && Array.isArray(j.coins)){ REG_SRC = 'server'; mergeRemoteCoins(j.coins); return; }
+    }
+  } catch {}
+  // 2) Solana as the database
+  try { const coins = await regScanOnChain(); REG_SRC = 'solana'; mergeRemoteCoins(coins); } catch { REG_SRC = 'local'; }
+}
+function updateDeskCount(){
+  const el = $('#deskCount');
+  if (!el) return;
+  const mine = COINS.filter(c => !c._remote).length;
+  const src = REG_SRC === 'server' ? 'synced live' : REG_SRC === 'solana' ? 'synced on-chain' : 'local';
+  el.textContent = COINS.length + ' on the desk · ' + mine + ' yours · ' + src;
+}
+
+/* ================= global trade tape ================= */
+function renderTradeTape(){
+  const all = [];
+  COINS.forEach(c => (c.trades || []).forEach(tr => all.push({sym: c.sym, pair: c.pair, side: tr.side, amt: tr.amt, t: tr.t})));
+  all.sort((a, b) => b.t - a.t);
+  const items = all.slice(0, 24).map(tr =>
+    `<span class="tape-item trade"><b>$${esc(tr.sym)}</b><span class="side ${tr.side === 'buy' ? 'up' : 'down'}">${tr.side === 'buy' ? '▲ buy' : '▼ sell'}</span><span class="tnum">${human(tr.amt, tr.pair)} ${esc(tr.pair)}</span></span>`
+  ).join('');
+  $('#tradeTape').innerHTML = items ? items + items : '<span class="tape-item trade">No trades yet — launch a coin or make the first buy.</span>';
+}
+
+/* ================= per-coin page (like otc desk) ================= */
+function coinFromURL(){
+  const q = new URLSearchParams(location.search).get('coin');
+  if (q) return q;
+  const m = location.pathname.match(/\/coin\/([A-Za-z0-9_-]+)/);
+  return m ? m[1] : null;
+}
+function coinPageURL(coin){
+  let p = location.pathname;
+  p = p.replace(/\/coin\/[^/]*\/?$/, '');
+  if (!p.endsWith('/')) p += '/';
+  return location.origin + p + 'coin/' + encodeURIComponent(coin.id);
+}
+async function fetchSiteHtml(coin){
+  if (coin.siteHtml || !coin.site || !coin.site.htmlCid) return;
+  const cid = coin.site.htmlCid;
+  const urls = [coin.site.htmlUrl, 'https://ipfs.io/ipfs/' + cid, 'https://' + cid + '.ipfs.dweb.link', 'https://cloudflare-ipfs.com/ipfs/' + cid].filter(Boolean);
+  for (const u of urls){
+    try { const r = await fetch(u); if (r.ok){ coin.siteHtml = await r.text(); break; } } catch {}
+  }
+  if (coin.siteHtml){
+    if (location.hash === '#site') cpTab = 'site';
+    if (currentCoin === coin && $('#coinPage') && !$('#coinPage').hidden) renderCoinPage(coin);
+  }
+}
+function renderCoinPage(coin){
+  const el = $('#coinPageBody');
+  const p = spotPrice(coin), usd = p * priceUsd(coin.pair);
+  const c24 = coin.dayOpen ? (p - coin.dayOpen) / coin.dayOpen * 100 : 0;
+  const dev = coin.net === 'devnet', mint = (coin.net && coin.net !== 'local') ? coin.id : (coin.mint || '');
+  const url = coinPageURL(coin);
+  const custom = coin.siteHtml || '';
+  if (cpTab !== 'site' || !custom) cpTab = 'trade';
+  $('#cpTitle').innerHTML = `$${esc(coin.sym)} · ${esc(coin.name)}`;
+  el.innerHTML = `
+    <div class="cp-tabs">
+      <button data-tab="trade" class="${cpTab === 'trade' ? 'on' : ''}">◈ Desk</button>
+      ${custom ? `<button data-tab="site" class="${cpTab === 'site' ? 'on' : ''}">◈ ${esc(coin.sym)} site</button>` : ''}
+      <span class="cp-tabs-sp"></span>
+      <a class="cp-tab-a" href="${url}" target="_blank" rel="noopener">Open page ↗</a>
+      ${mint ? `<a class="cp-tab-a" href="https://solscan.io/token/${mint}${dev ? '?cluster=devnet' : ''}" target="_blank" rel="noopener">Solscan ↗</a>` : ''}
+    </div>
+    <div id="cpTabBody"></div>`;
+  el.querySelectorAll('.cp-tabs button').forEach(b => b.onclick = () => {
+    cpTab = b.dataset.tab;
+    try { history.replaceState({coin: coin.id}, '', url + (cpTab === 'site' ? '#site' : '')); } catch {}
+    renderCoinPage(coin);
+  });
+  if (cpTab === 'site') renderSiteTab($('#cpTabBody'), coin, url);
+  else renderDeskTab($('#cpTabBody'), coin, url);
+}
+function renderSiteTab(el, coin, url){
+  const custom = coin.siteHtml || '';
+  el.innerHTML = `
+    <div class="site-bar">
+      <span class="sb-tag">◈ ${esc(coin.sym)} site</span>
+      <span>The coin's own page — this HTML was supplied by its creator.</span>
+      <a href="${url}" target="_blank" rel="noopener">Open in new tab ↗</a>
+    </div>
+    <div class="site-frame-wrap"><iframe id="siteFrame" sandbox="allow-scripts allow-popups allow-forms allow-modals" srcdoc="${esc(custom)}" title="${esc(coin.name)} site"></iframe></div>`;
+}
+function renderDeskTab(el, coin, url){
+  const p = spotPrice(coin), usd = p * priceUsd(coin.pair);
+  const c24 = coin.dayOpen ? (p - coin.dayOpen) / coin.dayOpen * 100 : 0;
+  const prog = coin.Sc ? coin.sold / coin.Sc * 100 : 0;
+  const my = myBal(coin), accrued = coin.holderRewards[me()] || 0;
+  const dev = coin.net === 'devnet', mint = (coin.net && coin.net !== 'local') ? coin.id : (coin.mint || '');
+  const links = [
+    mint ? `<a href="https://solscan.io/token/${mint}${dev ? '?cluster=devnet' : ''}" target="_blank" rel="noopener">Solscan</a>` : '',
+    mint && !dev ? `<a href="https://dexscreener.com/solana/${mint}" target="_blank" rel="noopener">DexScreener</a>` : '',
+    `<a href="${mint ? 'https://raydium.io/create-amm/?mint1=' + mint : 'https://raydium.io/create-amm/'}" target="_blank" rel="noopener">Raydium pool</a>`,
+    coin.pair === 'SOL' ? `<a href="https://jup.ag/swap/SOL-${mint || 'So11111111111111111111111111111111111111112'}" target="_blank" rel="noopener">Jupiter</a>` : '',
+    `<a href="javascript:void 0" onclick="publishCoinSite(findCoin('${coin.id}'))">🌐 Publish site</a>`,
+  ].filter(Boolean).join('');
+  el.innerHTML = `
+    <div class="card" style="margin-bottom:16px">
+      <div class="coin-ident">
+        <div class="ic" style="width:64px;height:64px;border-radius:18px;font-size:24px">${coin.img ? `<img src="${coin.img}" alt="" style="width:100%;height:100%;object-fit:cover;border-radius:18px">` : icLetters(coin.sym)}</div>
+        <div>
+          <h3 style="font-size:24px">$${esc(coin.sym)}</h3>
+          <div class="s">${esc(coin.name)}</div>
+          <div class="price-big tnum" style="margin-top:6px">${human(p, coin.pair)}</div>
+          <div class="price-chg ${c24 >= 0 ? 'up' : 'down'}">${c24 >= 0 ? '+' : ''}${c24.toFixed(2)}% 24h · ${usd >= 0.01 ? '$' + usd.toFixed(4) : '$' + usd.toPrecision(2)}</div>
+        </div>
+      </div>
+    </div>
+    <div class="cp-grid" style="display:grid;grid-template-columns:1fr;gap:16px">
+      <div class="card">
+        <div class="chart-box">
+          <div class="chart-tabs">
+            ${[['1m', 60], ['5m', 120], ['15m', 180], ['1h', 260]].map(([l, n]) => `<button data-tf="${n}" class="${n === chartTf ? 'on' : ''}">${l}</button>`).join('')}
+          </div>
+          <canvas id="pchartCv"></canvas>
+          <div class="depth-box"><div class="t">Depth · curve (in ${esc(coin.pair)})</div><canvas id="pdepthCv"></canvas></div>
+        </div>
+        <div class="stat-grid">
+          <div class="sstat"><div class="k">FDV</div><b class="tnum">$${fmt(fdvUsd(coin), 2)}</b></div>
+          <div class="sstat"><div class="k">Curve liquidity</div><b class="tnum">${human(liq(coin), coin.pair)}</b></div>
+          <div class="sstat"><div class="k">24h volume</div><b class="tnum">${human(vol24(coin), coin.pair)}</b></div>
+          <div class="sstat"><div class="k">Holders</div><b class="tnum">${Object.keys(coin.holders).length}</b></div>
+          <div class="sstat"><div class="k">24h high / low</div><b class="tnum">${human(coin.high, coin.pair)} / ${human(coin.low, coin.pair)}</b></div>
+          <div class="sstat"><div class="k">Your balance</div><b class="tnum">${fmt(my, 0)}</b></div>
+        </div>
+        <div class="progress"><i style="width:${clamp(prog, 0, 100)}%"></i></div>
+        <div class="muted" style="font-size:10.5px;margin-top:6px">Curve progress ${prog.toFixed(1)}% · supply ${fmt(coin.supply, 0)} · creator ${short(coin.creator)}</div>
+        <div class="reward-box">
+          <h4>✦ Rewards</h4>
+          <p>Every trade's 1% fee sends <b>70% to holders as ${esc(coin.pair)}</b> — no swap, it arrives in ${esc(coin.pair)} already. You hold <b class="tnum">${fmt(my, 0)}</b> tokens → accrued <b class="tnum">${human(accrued, coin.pair)}</b>. ${coin.fees.holdersPot > 0 ? `Another ${human(coin.fees.holdersPot, coin.pair)} is in the pot for the next distribution.` : ''}</p>
+          ${accrued > 0 ? `<button class="claim-btn" id="cpClaim">Claim ${human(accrued, coin.pair)}</button>` : ''}
+        </div>
+        <div class="link-row" style="margin-top:12px">${links}</div>
+        <div class="pos-box" style="margin-top:12px"><h4>About this coin</h4><p style="margin:0;font-size:11px;color:var(--muted);line-height:1.55">${esc(coin.desc || 'No description.')}</p>
+          ${coin.x ? `<div class="link-row" style="margin-top:8px"><a href="${esc(coin.x)}" target="_blank" rel="noopener">X / Twitter</a></div>` : ''}
+        </div>
+        <div class="muted" style="font-size:10.5px;margin-top:10px">This coin's own page: <a href="${url}" style="color:var(--blue)">${url}</a></div>
+      </div>
+      <div class="card"><div class="trade-box" id="pTradeBox"></div></div>
+    </div>`;
+  el.querySelectorAll('.chart-tabs button').forEach(b => b.onclick = () => { chartTf = +b.dataset.tf; renderDeskTab(el, coin, url); });
+  if (coin.site && coin.site.htmlCid && !coin.siteHtml) fetchSiteHtml(coin);
+  const cbtn = el.querySelector('#cpClaim');
+  if (cbtn) cbtn.onclick = () => {
+    coin.claimed[me()] = (coin.claimed[me()] || 0) + (coin.holderRewards[me()] || 0);
+    toast(`Claimed ${human(coin.holderRewards[me()] || 0, coin.pair)} (in-app ledger)`, 'ok');
+    coin.holderRewards[me()] = 0; saveCoins(); renderDeskTab(el, coin, url);
+  };
+  renderTradeInto(el.querySelector('#pTradeBox'), coin);
+  requestAnimationFrame(() => { drawChart(coin, 'p'); drawDepth(coin, 'p'); });
+}
+function openCoinPage(coin){
+  if (!coin) return;
+  currentCoin = coin;
+  cpTab = (location.hash === '#site' && coin.siteHtml) ? 'site' : 'trade';
+  document.querySelector('.wrap').hidden = true;
+  document.querySelector('.tape-wrap').hidden = true;
+  document.querySelector('.tape-wrap.trades').hidden = true;
+  document.querySelector('footer').hidden = true;
+  $('#coinPage').hidden = false;
+  renderCoinPage(coin);
+  try { window.scrollTo({top: 0}); } catch {}
+  try { history.replaceState({coin: coin.id}, '', coinPageURL(coin) + (cpTab === 'site' ? '#site' : '')); } catch {}
+}
+function closeCoinPage(){
+  $('#coinPage').hidden = true;
+  document.querySelector('.wrap').hidden = false;
+  document.querySelector('.tape-wrap').hidden = false;
+  document.querySelector('.tape-wrap.trades').hidden = false;
+  document.querySelector('footer').hidden = false;
+  try { history.replaceState({}, '', location.pathname + location.search); } catch {}
+  renderMarket(); renderTradeTape();
+}
+
+/* ================= coin modal ================= */
+let currentCoin = null, chartTf = 60, cpTab = 'trade';
+
+function openCoin(coin, side){
+  if (!coin) return;
+  currentCoin = coin;
+  if (side) TQ.side = side; else TQ.side = 'buy';
+  TQ.amt = '';
+  renderCoin(coin);
+  $('#coinModal').classList.add('open');
+}
+function renderCoin(coin){
+  const card = $('#coinModalCard');
+  const p = spotPrice(coin), usd = p * priceUsd(coin.pair);
+  const c24 = coin.dayOpen ? (p - coin.dayOpen) / coin.dayOpen * 100 : 0;
+  const holders = Object.keys(coin.holders).length;
+  const prog = coin.Sc ? coin.sold / coin.Sc * 100 : 0;
+  const my = myBal(coin);
+  const accrued = coin.holderRewards[me()] || 0;
+  const usdStr = usd >= 0.01 ? '$' + usd.toFixed(4) : '$' + usd.toPrecision(2);
+  card.innerHTML = `
+    <div class="modal-head">
+      <div class="coin-ident">
+        <div class="ic">${coin.img ? `<img src="${coin.img}" alt="">` : icLetters(coin.sym)}</div>
+        <div>
+          <h3>$${esc(coin.sym)}</h3>
+          <div class="s">${esc(coin.name)}</div>
+          <div class="price-big tnum">${human(p, coin.pair)}</div>
+          <div class="price-chg ${c24 >= 0 ? 'up' : 'down'}">${c24 >= 0 ? '+' : ''}${c24.toFixed(2)}% 24h · ${usdStr}</div>
+        </div>
+      </div>
+      <button class="modal-close" id="cmClose">×</button>
+    </div>
+    <div class="cm-body">
+      <div>
+        <div class="chart-box">
+          <div class="chart-tabs">
+            ${[['1m', 60], ['5m', 120], ['15m', 180], ['1h', 260]].map(([l, n]) => `<button data-tf="${n}" class="${n === chartTf ? 'on' : ''}">${l}</button>`).join('')}
+          </div>
+          <canvas id="chartCv"></canvas>
+          <div class="depth-box"><div class="t">Depth · curve (in ${esc(coin.pair)})</div><canvas id="depthCv"></canvas></div>
+        </div>
+        <div class="stat-grid">
+          <div class="sstat"><div class="k">FDV</div><b class="tnum">$${fmt(fdvUsd(coin), 2)}</b></div>
+          <div class="sstat"><div class="k">Curve liquidity</div><b class="tnum">${human(liq(coin), coin.pair)}</b></div>
+          <div class="sstat"><div class="k">24h volume</div><b class="tnum">${human(vol24(coin), coin.pair)}</b></div>
+          <div class="sstat"><div class="k">Holders</div><b class="tnum">${holders}</b></div>
+          <div class="sstat"><div class="k">24h high / low</div><b class="tnum">${human(coin.high, coin.pair)} / ${human(coin.low, coin.pair)}</b></div>
+          <div class="sstat"><div class="k">Your balance</div><b class="tnum">${fmt(my, 0)}</b></div>
+        </div>
+        <div class="progress"><i style="width:${clamp(prog, 0, 100)}%"></i></div>
+        <div class="muted" style="font-size:10.5px;margin-top:6px">Curve progress ${prog.toFixed(1)}% · supply ${fmt(coin.supply, 0)} · creator ${short(coin.creator)}</div>
+        <div class="reward-box">
+          <h4>✦ Rewards</h4>
+          <p>Every trade's 1% fee sends <b>70% to holders as ${esc(coin.pair)}</b> — no swap, it arrives in ${esc(coin.pair)} already. You hold <b class="tnum">${fmt(my, 0)}</b> tokens → accrued <b class="tnum">${human(accrued, coin.pair)}</b>. ${coin.fees.holdersPot > 0 ? `Another ${human(coin.fees.holdersPot, coin.pair)} is in the pot for the next distribution.` : ''}</p>
+          ${accrued > 0 ? `<button class="claim-btn" id="claimBtn">Claim ${human(accrued, coin.pair)}</button>` : ''}
+        </div>
+        <div class="link-row" id="coinLinks"></div>
+      </div>
+      <div>
+        <div class="trade-box" id="inlineTrade"></div>
+        <div class="pos-box"><h4>About this coin</h4><p style="margin:0;font-size:11px;color:var(--muted);line-height:1.55">${esc(coin.desc || 'No description.')}</p>
+          ${coin.x ? `<div class="link-row" style="margin-top:8px"><a href="${esc(coin.x)}" target="_blank" rel="noopener">X / Twitter</a></div>` : ''}
+        </div>
+      </div>
+    </div>`;
+  $('#cmClose').onclick = () => closeModal($('#coinModal'));
+  card.querySelectorAll('.chart-tabs button').forEach(b => b.onclick = () => { chartTf = +b.dataset.tf; renderCoin(coin); });
+  const claim = $('#claimBtn');
+  if (claim) claim.onclick = () => {
+    coin.claimed[me()] = (coin.claimed[me()] || 0) + (coin.holderRewards[me()] || 0);
+    toast(`Claimed ${human(coin.holderRewards[me()] || 0, coin.pair)} (in-app ledger)`, 'ok');
+    coin.holderRewards[me()] = 0; saveCoins(); renderCoin(coin);
+  };
+  renderTradeInto($('#inlineTrade'), coin);
+  renderCoinLinks(coin);
+  requestAnimationFrame(() => { drawChart(coin); drawDepth(coin); });
+}
+function renderCoinLinks(coin){
+  const el = $('#coinLinks');
+  const dev = coin.net === 'devnet';
+  if (coin.net === 'local'){
+    el.innerHTML = `<a href="javascript:void 0" onclick="publishCoinSite(findCoin('${coin.id}'))">🌐 Publish site</a><a href="javascript:void 0" onclick="toast('Mint the real SPL token from the launcher to open DEX links','err')">Solscan (after mint)</a><a href="https://raydium.io/create-amm/" target="_blank" rel="noopener">Raydium · create pool</a>`;
+    return;
+  }
+  el.innerHTML = `
+    <a href="javascript:void 0" onclick="publishCoinSite(findCoin('${coin.id}'))">🌐 Publish site</a>
+    <a href="https://solscan.io/token/${coin.id}${dev ? '?cluster=devnet' : ''}" target="_blank" rel="noopener">Solscan</a>
+    ${dev ? '' : `<a href="https://dexscreener.com/solana/${coin.id}" target="_blank" rel="noopener">DexScreener</a>`}
+    <a href="https://raydium.io/create-amm/?mint1=${coin.id}" target="_blank" rel="noopener">Open Raydium pool</a>`;
+}
+/* ================= coin website — cheapest host + auto domain ================= */
+function coinSiteHTML(coin){
+  const mint = (coin.net && coin.net !== 'local') ? coin.id : '';
+  const dev = coin.net === 'devnet';
+  const img = coin.img || '';
+  const letters = coin.sym.replace(/x$/i, '').slice(0, 2).toUpperCase();
+  const created = coin.t ? new Date(coin.t).toUTCString() : '';
+  const pair = coin.pair || 'SOL';
+  const esc2 = s => String(s ?? '').replace(/[&<>"']/g, c => ({'&':'&amp;','<':'&lt;','>':'&gt;','"':'&quot;',"'":'&#39;'}[c]));
+  const deskUrl = location.origin + location.pathname;
+  const logo = img ? `<img src="${esc2(img)}" alt="" onerror="this.replaceWith(Object.assign(document.createElement('span'),{textContent:'${esc2(letters)}',className:'lg'}))">` : `<span>${esc2(letters)}</span>`;
+  const solscan = mint ? `https://solscan.io/token/${mint}${dev ? '?cluster=devnet' : ''}` : '';
+  const dex = (mint && !dev) ? `https://dexscreener.com/solana/${mint}` : '';
+  const jup = mint ? `https://jup.ag/swap/SOL-${mint}` : '';
+  const pool = mint ? `https://raydium.io/create-amm/?mint1=${mint}` : 'https://raydium.io/create-amm/';
+  const stats = [
+    ['Supply', fmt(coin.supply, 0)],
+    ['Decimals', '8'],
+    ['Paired with', pair],
+    ['Holders', String(Math.max(1, Object.keys(coin.holders || {}).length))],
+  ].map(([k, v]) => `<div class="st"><b>${esc2(v)}</b><span>${esc2(k)}</span></div>`).join('');
+  const mintBox = mint ? `<div class="mint"><input id="m" readonly value="${esc2(mint)}"><button onclick="navigator.clipboard&&navigator.clipboard.writeText(document.getElementById('m').value)">copy</button></div>
+    <div class="links">
+      ${jup ? `<a class="cta" href="${jup}" target="_blank" rel="noopener">Buy / trade</a>` : ''}
+      ${pool ? `<a href="${pool}" target="_blank" rel="noopener">Create Raydium pool</a>` : ''}
+      ${solscan ? `<a href="${solscan}" target="_blank" rel="noopener">Solscan</a>` : ''}
+      ${dex ? `<a href="${dex}" target="_blank" rel="noopener">DexScreener</a>` : ''}
+      <a href="${esc2(deskUrl)}" target="_blank" rel="noopener">Trade on the desk</a>
+    </div>` : `<div class="mint" style="border-style:dashed">in-app coin — mint it from the desk to get a mint address</div>
+    <div class="links"><a class="cta" href="${esc2(deskUrl)}" target="_blank" rel="noopener">Trade on the desk</a></div>`;
+  return `<!doctype html>
+<html lang="en"><head><meta charset="utf-8"><meta name="viewport" content="width=device-width,initial-scale=1">
+<title>$${esc2(coin.sym)} — ${esc2(coin.name)}</title>
+<meta name="description" content="${esc2(coin.desc || coin.name + ' — a Solana token created on ZAZA NET')}">
+<style>
+  :root{color-scheme:dark;--bg:#0c0e0e;--card:#151818;--card2:#1a1f1e;--line:#2a3330;--lime:#a3e635;--txt:#e8ecea;--muted:#8fa39a;--blue:#7aa2f7}
+  *{box-sizing:border-box;margin:0;padding:0}
+  body{min-height:100vh;background:radial-gradient(1200px 600px at 70% -10%,#a3e63514,transparent 60%),radial-gradient(900px 500px at 10% 110%,#7aa2f712,transparent 60%),var(--bg);color:var(--txt);font-family:-apple-system,BlinkMacSystemFont,'Segoe UI',Roboto,Helvetica,Arial,sans-serif;display:flex;flex-direction:column;align-items:center;padding:24px 16px 40px}
+  .wrap{width:100%;max-width:520px}
+  .tag{display:inline-flex;align-items:center;gap:6px;font-size:11px;letter-spacing:.14em;text-transform:uppercase;color:var(--muted);border:1px solid var(--line);border-radius:999px;padding:5px 12px}
+  .dot{width:6px;height:6px;border-radius:999px;background:var(--lime);box-shadow:0 0 8px var(--lime)}
+  .card{margin-top:16px;background:linear-gradient(180deg,var(--card2),var(--card));border:1px solid var(--line);border-radius:20px;padding:28px 24px}
+  .head{display:flex;align-items:center;gap:16px}
+  .lg,.head img{width:72px;height:72px;border-radius:20px;object-fit:cover;display:flex;align-items:center;justify-content:center;font-weight:800;font-size:26px;color:#0e0f0f;background:linear-gradient(135deg,var(--lime),#4ee39b);flex-shrink:0}
+  h1{font-size:26px;font-weight:800;letter-spacing:-.02em;line-height:1.05}
+  .sym{font-size:13px;color:var(--lime);font-weight:700;margin-top:4px}
+  .desc{margin-top:16px;font-size:14px;line-height:1.6;color:var(--muted)}
+  .grid{margin-top:20px;display:grid;grid-template-columns:repeat(2,1fr);gap:10px}
+  .st{background:var(--bg);border:1px solid var(--line);border-radius:14px;padding:12px 14px}
+  .st b{display:block;font-size:16px;font-weight:800}
+  .st span{display:block;font-size:11px;color:var(--muted);margin-top:2px}
+  .mint{margin-top:20px;display:flex;gap:8px;background:var(--bg);border:1px solid var(--line);border-radius:14px;padding:10px 12px;align-items:center}
+  .mint input{flex:1;min-width:0;background:transparent;border:0;outline:0;color:var(--txt);font-family:ui-monospace,Menlo,Consolas,monospace;font-size:12.5px}
+  .mint button,.links a{font:inherit;font-size:13px;font-weight:700;color:var(--txt);background:#222b28;border:1px solid var(--line);border-radius:999px;padding:8px 14px;text-decoration:none;white-space:nowrap}
+  .links{display:flex;flex-wrap:wrap;gap:8px;margin-top:12px}
+  .links .cta{background:var(--lime);color:#0e0f0f;border-color:transparent}
+  .foot{margin-top:22px;text-align:center;font-size:11.5px;color:var(--muted);line-height:1.7}
+  .foot a{color:var(--blue);text-decoration:none}
+</style></head><body>
+  <div class="wrap">
+    <span class="tag"><span class="dot"></span>minted on Solana${dev ? ' · devnet' : ''}</span>
+    <div class="card">
+      <div class="head"><div class="lg">${logo}</div><div><h1>${esc2(coin.name)}</h1><div class="sym">$${esc2(coin.sym)}</div></div></div>
+      ${coin.desc ? `<div class="desc">${esc2(coin.desc)}</div>` : ''}
+      <div class="grid">${stats}</div>
+      ${mintBox}
+    </div>
+    <div class="foot">Created on <a href="${esc2(deskUrl)}" target="_blank" rel="noopener">ZAZA NET</a>${created ? ' · ' + esc2(created) : ''}<br>This page is a static file pinned to IPFS — its address <b>is</b> the domain.</div>
+  </div>
+</body></html>`;
+}
+async function publishCoinSite(coin){
+  if (!coin) coin = currentCoin;
+  const btn = $('#okSite') || $('#siteBtn');
+  if (btn){ btn.disabled = true; btn.textContent = 'publishing to IPFS…'; }
+  try {
+    const html = coinSiteHTML(coin);
+    const cid = await ipfsAdd(new Blob([html], {type: 'text/html'}), (coin.sym || 'site').toLowerCase() + '.html');
+    const url = 'https://ipfs.io/ipfs/' + cid;
+    const mirror = 'https://' + cid + '.ipfs.dweb.link';
+    coin.site = {cid, url, mirror};
+    saveCoins();
+    try { await navigator.clipboard.writeText(url); } catch {}
+    if (btn){ btn.textContent = 'site live · copy link again'; }
+    const s = $('#siteUrl');
+    if (s){ s.textContent = url; s.href = url; s.hidden = false; }
+    toast(`Site published — ${url}`, 'ok');
+    toast(`Clean free domain: drop it in your repo at coins/${esc(coin.sym)}/index.html → https://k8o5.github.io/coins/${esc(coin.sym)}/`, 'ok', 6000);
+    return url;
+  } catch (e) {
+    if (btn){ btn.textContent = '🌐 Publish coin site (free)'; }
+    toast('publish failed: ' + (e.message || String(e)), 'err');
+    throw e;
+  } finally { if (btn) btn.disabled = false; }
+}
+function updateCoinLive(coin){
+  if (!currentCoin || !coin) return;
+  drawChart(coin); drawDepth(coin);
+  // refresh the small bits without nuking the input
+  const p = spotPrice(coin); const c24 = coin.dayOpen ? (p - coin.dayOpen) / coin.dayOpen * 100 : 0;
+  const pb = $('.price-big'); if (pb) pb.textContent = human(p, coin.pair);
+  const pc = $('.price-chg'); if (pc){ const usd = p * priceUsd(coin.pair); pc.className = 'price-chg ' + (c24 >= 0 ? 'up' : 'down'); pc.textContent = `${c24 >= 0 ? '+' : ''}${c24.toFixed(2)}% 24h · ` + (usd >= 0.01 ? '$' + usd.toFixed(4) : '$' + usd.toPrecision(2)); }
+  const prog = coin.Sc ? coin.sold / coin.Sc * 100 : 0;
+  const bar = $('.progress i'); if (bar) bar.style.width = clamp(prog, 0, 100) + '%';
+}
+
+/* ================= quick trade modal ================= */
+function quickTrade(coin, side){
+  TQ.side = side; TQ.amt = '';
+  const body = $('#tradeBody');
+  body.innerHTML = `
+    <div style="display:flex;align-items:center;gap:10px;margin-bottom:12px">
+      <div class="ic" style="width:34px;height:34px;border-radius:999px;display:flex;align-items:center;justify-content:center;overflow:hidden;background:var(--well)">${coin.img ? `<img src="${coin.img}" style="width:100%;height:100%;object-fit:cover">` : icLetters(coin.sym)}</div>
+      <div><b>$${esc(coin.sym)}</b> · ${esc(coin.name)}<br><span class="muted" style="font-size:11px">${human(spotPrice(coin), coin.pair)} per token · ${esc(coin.pair)}</span></div>
+      <button class="modal-close" id="qtClose" style="width:30px;height:30px">×</button>
+    </div>`;
+  $('#qtClose').onclick = () => closeModal($('#tradeModal'));
+  const box = document.createElement('div'); box.className = 'trade-box'; body.appendChild(box);
+  renderTradeInto(box, coin);
+  $('#tradeModal').classList.add('open');
+}
+
+/* ================= charts ================= */
+function prepCanvas(cv, cssH){
+  const dpr = window.devicePixelRatio || 1;
+  const w = cv.clientWidth || 600;
+  cv.width = w * dpr; cv.height = cssH * dpr;
+  const ctx = cv.getContext('2d'); ctx.scale(dpr, dpr);
+  return {ctx, w, h: cssH};
+}
+function drawChart(coin, pre){
+  const cv = $('#' + (pre || '') + 'chartCv'); if (!cv) return;
+  const cssH = window.innerWidth < 680 ? 170 : 240;
+  const {ctx, w, h} = prepCanvas(cv, cssH);
+  ctx.clearRect(0, 0, w, h);
+  const data = coin.candles.slice(-chartTf);
+  if (!data.length) return;
+  const padL = 6, padR = 6, padT = 8, padB = 30;
+  let lo = Math.min(...data.map(d => d.l)), hi = Math.max(...data.map(d => d.h));
+  if (hi <= lo) hi = lo * 1.02 + 1e-12, lo = lo * 0.98;
+  const range = hi - lo;
+  const X = i => padL + (w - padL - padR) * i / Math.max(1, data.length - 1);
+  const Y = p => padT + (h - padT - padB) * (1 - (p - lo) / range);
+  // grid + price labels
+  ctx.font = '9px ui-monospace, Menlo, monospace'; ctx.fillStyle = '#5c6269';
+  for (let g = 0; g <= 4; g++){
+    const p = lo + range * g / 4, y = Y(p);
+    ctx.strokeStyle = '#ffffff08'; ctx.beginPath(); ctx.moveTo(padL, y); ctx.lineTo(w - padR, y); ctx.stroke();
+    ctx.fillText(human(p, coin.pair), padL + 2, y - 2);
+  }
+  // volume bars
+  const vmax = Math.max(...data.map(d => d.v), 1e-12);
+  data.forEach((d, i) => {
+    const x = X(i), bw = Math.max(1, (w - padL - padR) / data.length * 0.6);
+    const vh = (d.v / vmax) * (padB - 6);
+    ctx.fillStyle = d.c >= d.o ? '#4ee39b44' : '#f0443844';
+    ctx.fillRect(x - bw / 2, h - 6 - vh, bw, vh);
+  });
+  // candles
+  data.forEach((d, i) => {
+    const x = X(i), bw = Math.max(1.5, (w - padL - padR) / data.length * 0.55);
+    const up = d.c >= d.o; ctx.strokeStyle = ctx.fillStyle = up ? '#4ee39b' : '#f04438';
+    ctx.lineWidth = 1;
+    ctx.beginPath(); ctx.moveTo(x, Y(d.h)); ctx.lineTo(x, Y(d.l)); ctx.stroke();
+    const yo = Y(d.o), yc = Y(d.c);
+    ctx.fillRect(x - bw / 2, Math.min(yo, yc), bw, Math.max(1, Math.abs(yc - yo)));
+  });
+  // close line
+  ctx.strokeStyle = '#a3e635'; ctx.lineWidth = 1.2; ctx.beginPath();
+  data.forEach((d, i) => { const x = X(i), y = Y(d.c); i ? ctx.lineTo(x, y) : ctx.moveTo(x, y); });
+  ctx.stroke();
+}
+function drawDepth(coin, pre){
+  const cv = $('#' + (pre || '') + 'depthCv'); if (!cv) return;
+  const cssH = window.innerWidth < 680 ? 70 : 90;
+  const {ctx, w, h} = prepCanvas(cv, cssH);
+  ctx.clearRect(0, 0, w, h);
+  const spot = spotPrice(coin), {Sc, p0, grow} = coin;
+  const tOf = price => clamp((price / p0 - 1) * Sc / grow, 0, Sc);
+  const tNow = tOf(spot);
+  const pMax = p0 * (1 + grow);           // price at 100% sold
+  const mid = w / 2;
+  // sell side (red): from spot down to p0, cumulative tokens sellable = t(spot) - t(price)
+  ctx.fillStyle = '#f0443855'; ctx.strokeStyle = '#f04438'; ctx.beginPath();
+  ctx.moveTo(mid, h);
+  for (let i = 0; i <= 30; i++){
+    const price = p0 + (spot - p0) * i / 30;
+    const tokens = tNow - tOf(price);
+    const x = mid - (mid - 10) * (i / 30), y = h - (tokens / Sc) * (h - 8);
+    ctx.lineTo(x, y);
+  }
+  ctx.lineTo(10, h); ctx.closePath(); ctx.fill(); ctx.stroke();
+  // buy side (green): from spot up to pMax
+  ctx.fillStyle = '#4ee39b55'; ctx.strokeStyle = '#4ee39b'; ctx.beginPath();
+  ctx.moveTo(mid, h);
+  for (let i = 0; i <= 30; i++){
+    const price = spot + (pMax - spot) * i / 30;
+    const tokens = tOf(price) - tNow;
+    const x = mid + (w / 2 - 10) * (i / 30), y = h - (tokens / Sc) * (h - 8);
+    ctx.lineTo(x, y);
+  }
+  ctx.lineTo(w - 10, h); ctx.closePath(); ctx.fill(); ctx.stroke();
+  // center line
+  ctx.strokeStyle = '#8b9199'; ctx.lineWidth = 1; ctx.beginPath(); ctx.moveTo(mid, 6); ctx.lineTo(mid, h); ctx.stroke();
+}
+
+/* ================= toast ================= */
+function toast(msg, kind, ms){
+  const t = document.createElement('div');
+  t.className = 'toast ' + (kind || '');
+  t.textContent = msg;
+  $('#toasts').appendChild(t);
+  setTimeout(() => { t.style.opacity = '0'; t.style.transition = 'opacity .3s'; setTimeout(() => t.remove(), 320); }, ms || 2600);
+}
+
+/* ================= launch ================= */
+let busy = false;
+async function mintOnChain(name, sym, desc, x, supply){
+  const rawSvg = (() => { const a = sym.replace(/x$/i, '').slice(0, 2).toUpperCase(); const c2 = assetColor(F.pair), c1 = '#141616'; return `<svg xmlns="http://www.w3.org/2000/svg" width="128" height="128"><defs><linearGradient id="g" x1="0" y1="0" x2="1" y2="1"><stop offset="0" stop-color="${c2}"/><stop offset="1" stop-color="${c1}"/></linearGradient></defs><rect width="128" height="128" rx="28" fill="url(#g)"/><text x="64" y="82" font-family="Arial,Helvetica,sans-serif" font-size="52" font-weight="800" text-anchor="middle" fill="#0e0f0f">${a}</text></svg>`; })();
+  const imgBlob = F.img ? F.img : new Blob([rawSvg], {type: 'image/svg+xml'});
+  const image = `https://ipfs.io/ipfs/${await ipfsAdd(imgBlob, F.img ? F.img.name || 'image.png' : 'image.svg')}`;
+  const meta = {name, symbol: sym, description: desc, image, showName: true, createdOn: location.origin + location.pathname};
+  if (x) meta.twitter = x;
+  const uri = `https://ipfs.io/ipfs/${await ipfsAdd(new Blob([JSON.stringify(meta)], {type: 'application/json'}), 'metadata.json')}`;
+  if (name.length > 32 || sym.length > 13 || uri.length > 200) throw new Error('on-chain metadata limits: name ≤ 32, ticker ≤ 13, uri ≤ 200 chars');
+  const mseed = crypto.getRandomValues(new Uint8Array(32));
+  const mkey = await crypto.subtle.importKey('pkcs8', cat(PKCS8, mseed), {name: 'Ed25519'}, true, ['sign']);
+  const mint = b58enc(unb64((await crypto.subtle.exportKey('jwk', mkey)).x));
+  const metaFields = {name, sym, uri};
+  const units = BigInt(Math.round(supply)) * 100000000n;
+  const [rents, bhRes, ata, metaPda] = await Promise.all([
+    Promise.all([82, 165, METADATA_SIZE].map(s => rpc('getMinimumBalanceForRentExemption', [s]))).catch(() => null),
+    rpc('getLatestBlockhash', [{commitment: 'confirmed'}]).then(x => b58dec(x.value.blockhash)),
+    findPda(ATAPROG, [W.pub, b58dec(TOKENPROG), b58dec(mint)]),
+    findPda(METAPLEX, [new TextEncoder().encode('metadata'), b58dec(METAPLEX), b58dec(mint)]),
+  ]);
+  if (rents) rent = rents;
+  const need = totalCost();
+  if (W.bal != null && W.bal < need) throw new Error(`not enough SOL in ${short(W.addr)} (balance ${W.bal?.toFixed(4) ?? '?'} SOL, need ≈ ${need.toFixed(4)}) — fund the wallet first`);
+  const msg = buildTokenMsg(W.pub, b58dec(mint), ata, metaPda, rent[0], units, bhRes, metaFields);
+  const mintSig = new Uint8Array(await crypto.subtle.sign('Ed25519', mkey, msg));
+  let ownerSig;
+  if (W.mode === 'phantom'){
+    const ph = walletAdapter();
+    if (typeof ph.signMessage !== 'function') throw new Error('browser wallet does not support message signing');
+    const r = await ph.signMessage(msg);
+    ownerSig = new Uint8Array(r?.signature || r);
+  } else ownerSig = new Uint8Array(await crypto.subtle.sign('Ed25519', W.key, msg));
+  const wire = cat([2], ownerSig, mintSig, msg);
+  let sig;
+  try {
+    sig = await rpc('sendTransaction', [b64(wire), {encoding: 'base64', skipPreflight: false, preflightCommitment: 'confirmed', maxRetries: 3}]);
+  } catch (e) {
+    let m = e.message.replace(/^Transaction simulation failed: /, '');
+    if (/insufficient (lamports|funds)|prior credit/i.test(m + (e.logs || []).join(' '))) m = `not enough SOL in ${short(W.addr)} — fund the wallet first`;
+    throw new Error(m + (e.logs?.length ? ' — ' + e.logs.filter(l => /Error|failed/i.test(l)).slice(-2).join(' · ') : ''));
+  }
+  let st = null;
+  for (let i = 0; i < 30 && !st; i++){ await sleep(2000); try { st = (await rpc('getSignatureStatuses', [[sig]])).value[0]; } catch {} }
+  if (st?.err) throw new Error('tx failed on-chain: ' + JSON.stringify(st.err));
+  return {mint, sig, uri, confirmed: !!st};
+}
+$('#launchBtn').onclick = async () => {
+  if (busy) return;
+  const name = $('#fName').value.trim(), sym = $('#fSym').value.trim().toUpperCase(), desc = $('#fDesc').value.trim(), x = $('#fX').value.trim();
+  const v = validSupply();
+  if (!name) return setErr('give the coin a name');
+  if (!sym) return setErr('give it a ticker');
+  if (!v.ok) return setErr(v.why);
+  busy = true;
+  const btn = $('#launchBtn');
+  btn.disabled = true;
+  const wantMint = F.mint && W.mode !== 'none';
+  const t0 = Date.now();
+  let rec = null;
+  try {
+    if (wantMint){
+      btn.textContent = '1/4 uploading image to IPFS…';
+      rec = await mintOnChain(name, sym, desc, x, v.supply);
+      btn.textContent = 'opening the curve…';
+    }
+    const coin = newCoin({
+      id: rec ? rec.mint : uid(), name, sym, desc, x,
+      img: F.imgUrl || '', pair: F.pair, pairName: F.pairName,
+      supply: v.supply, share: F.share, firstBuy: F.firstBuy,
+      siteHtml: F.siteHtml || '',
+      creator: W.addr || 'you', net: rec ? NET : 'local', t: Date.now(), mintSig: rec?.sig || null,
+    });
+    renderMarket(); renderTicker(); renderHero(); renderSummary(); renderTradeTape(); updateDeskCount();
+    pushRegistry(coin);
+    toast(`$${sym} is live on the curve${rec ? ' and minted on ' + NET : ''}`, 'ok');
+    if (rec) showOk(rec, coin); else openCoin(coin);
+    resetForm();
+  } catch (e) {
+    setErr(e.message || String(e));
+    if (wantMint) toast('mint failed — uncheck "Mint a real SPL token" to launch in-app only', 'err');
+  } finally { busy = false; btn.textContent = 'Launch'; btn.disabled = false; }
+};
+function showOk(rec, coin){
+  const dev = rec ? NET === 'devnet' : false;
+  $('#okTitle').textContent = rec && coin ? `$${coin.sym} is live on-chain` : `$${coin.sym} launched`;
+  $('#okSub').textContent = rec
+    ? `${coin.name} · ${fmt(coin.supply, 0)} tokens minted to ${short(coin.creator)} · confirmed in ${Math.round((Date.now() - coin.t) / 1000)}s`
+    : `${coin.name} · launched in the in-app market.`;
+  $('#okMint').textContent = rec ? rec.mint + (dev ? '  (devnet)' : '') : 'in-app curve coin';
+  $('#okLinks').innerHTML = rec ? `
+    <a href="https://solscan.io/token/${rec.mint}${dev ? '?cluster=devnet' : ''}" target="_blank" rel="noopener">Solscan token</a>
+    ${dev ? '' : `<a href="https://dexscreener.com/solana/${rec.mint}" target="_blank" rel="noopener">DexScreener</a>`}
+    <a href="https://solscan.io/tx/${rec.sig}${dev ? '?cluster=devnet' : ''}" target="_blank" rel="noopener">Transaction</a>
+    ${dev ? '' : `<a href="https://raydium.io/create-amm/?mint1=${rec.mint}" target="_blank" rel="noopener">Open Raydium pool</a>`}` : '';
+  $('#okCopy').onclick = async () => { await navigator.clipboard.writeText(rec ? rec.mint : coin.id); $('#okCopy').textContent = 'copied ✓'; setTimeout(() => $('#okCopy').textContent = 'copy', 1500); };
+  $('#okSite').onclick = async () => { try { await publishCoinSite(coin); } catch {} };
+  $('#okTrade').onclick = () => { closeModal($('#okModal')); openCoin(coin); };
+  $('#okModal').classList.add('open');
+}
+$('#okClose').onclick = () => { closeModal($('#okModal')); };
+function resetForm(){
+  ['fName', 'fSym', 'fDesc', 'fX'].forEach(id => $('#' + id).value = '');
+  ['cName', 'cSym', 'cDesc', 'cX'].forEach((cid, i) => $('#' + cid).textContent = '0/' + [32, 13, 500, 120][i]);
+  F.img = null; F.imgUrl = '';
+  $('#imgFile').value = '';
+  F.siteHtml = ''; $('#siteHtml').value = ''; $('#siteFile').value = '';
+  updateSiteNote();
+  if ($('#imgPh')?.tagName === 'IMG') $('#imgPh').outerHTML = `<span class="ph" id="imgPh"><svg width="26" height="26" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.6"><rect x="3" y="3" width="18" height="18" rx="2.5"/><circle cx="8.8" cy="8.8" r="1.7"/><path d="m21 15.5-4.5-4.5L6 21.5"/></svg><small>Add image</small></span>`;
+  renderSupply(); renderFbNote(); setErr(''); updateLaunchBtn();
+}
+/* ---- form wiring ---- */
+[['fName', 'cName', 32], ['fSym', 'cSym', 13], ['fDesc', 'cDesc', 500], ['fX', 'cX', 120]].forEach(([id, cid, max]) => {
+  $('#' + id).addEventListener('input', () => { $('#' + cid).textContent = $('#' + id).value.length + '/' + max; updateLaunchBtn(); });
+});
+$('#imgBtn').onclick = () => $('#imgFile').click();
+$('#imgFile').onchange = e => {
+  const f = e.target.files[0];
+  if (!f) return;
+  if (f.size > 4 * 1024 * 1024){ setErr('image must be under 4 MB'); e.target.value = ''; return; }
+  F.img = f;
+  const img = new Image(); const url = URL.createObjectURL(f);
+  img.onload = () => {
+    const c = document.createElement('canvas'); c.width = c.height = 128;
+    const cx = c.getContext('2d');
+    const s = Math.min(img.width, img.height); cx.drawImage(img, (img.width - s) / 2, (img.height - s) / 2, s, s, 0, 0, 128, 128);
+    F.imgUrl = c.toDataURL('image/png');
+    $('#imgPh').outerHTML = `<img id="imgPh" src="${F.imgUrl}" alt="preview">`;
+    setErr(''); updateLaunchBtn();
+  };
+  img.src = url;
+};
+/* ---- coin site (optional HTML) ---- */
+const SITE_MAX = 200 * 1024;
+function updateSiteNote(){
+  const n = F.siteHtml ? F.siteHtml.length : 0;
+  $('#siteCount').textContent = n ? fmt(n, 0) + ' B · custom' : 'auto page';
+  $('#siteNote').textContent = n
+    ? `Custom site ready (${fmt(n, 0)} bytes) — it becomes a “site” tab on the coin's own page.`
+    : 'Optional. Insert or upload one HTML file (max ~200 KB). Left empty, a page is auto-generated.';
+}
+function setSiteHtml(txt){
+  F.siteHtml = txt || '';
+  $('#siteHtml').value = F.siteHtml;
+  updateSiteNote();
+}
+$('#siteUploadBtn').onclick = () => $('#siteFile').click();
+$('#siteFile').onchange = e => {
+  const f = e.target.files[0];
+  if (!f) return;
+  if (f.size > SITE_MAX){ setErr('site HTML must be under 200 KB'); e.target.value = ''; return; }
+  const rd = new FileReader();
+  rd.onload = () => { setSiteHtml(String(rd.result || '')); setErr(''); };
+  rd.onerror = () => setErr('could not read that file');
+  rd.readAsText(f);
+};
+$('#siteHtml').addEventListener('input', () => { F.siteHtml = $('#siteHtml').value; updateSiteNote(); });
+$('#siteClear').onclick = () => { setSiteHtml(''); $('#siteFile').value = ''; };
+
+$('#fSupply').addEventListener('input', () => { $$('#supSeg button').forEach(b => b.classList.remove('on')); renderSupply(); });
+$$('#supSeg button').forEach(b => b.onclick = () => {
+  $$('#supSeg button').forEach(x => x.classList.remove('on'));
+  b.classList.add('on'); $('#fSupply').value = b.dataset.sup; renderSupply();
+});
+$$('[data-share]').forEach(b => b.onclick = () => {
+  $$('[data-share]').forEach(x => x.classList.remove('on'));
+  b.classList.add('on'); F.share = +b.dataset.share / 100; renderSummary();
+});
+$$('#fbSeg [data-fb]').forEach(b => b.onclick = () => {
+  $$('#fbSeg [data-fb]').forEach(x => x.classList.remove('on'));
+  b.classList.add('on'); F.firstBuy = parseFloat(b.dataset.fb); renderSummary(); renderFbNote();
+});
+$('#fbCustom').addEventListener('input', () => {
+  const v = parseFloat($('#fbCustom').value);
+  if (isFinite(v) && v >= 0){ $$('#fbSeg [data-fb]').forEach(x => x.classList.remove('on')); F.firstBuy = v; }
+  renderSummary(); renderFbNote();
+});
+$('#fMint').addEventListener('change', () => { F.mint = $('#fMint').checked; updateLaunchBtn(); });
+function renderSupply(){ const v = validSupply(); if (v.ok){ F.supply = v.supply; $('#sSupply').textContent = fmt(v.supply, 0); setErr(''); } else setErr(v.why); renderFbNote(); updateLaunchBtn(); }
+/* sort / filter / search */
+$('#sortSeg').addEventListener('click', e => {
+  const b = e.target.closest('button'); if (!b) return;
+  $$('#sortSeg button').forEach(x => x.classList.remove('on'));
+  b.classList.add('on'); renderMarket();
+});
+const _fs = $('#filterSel'); if (_fs) _fs.onchange = renderMarket;
+$('#searchBox').oninput = renderMarket;
+
+/* ================= init ================= */
+if (NET !== 'mainnet'){
+  const badge = document.createElement('span');
+  badge.className = 'net-badge'; badge.textContent = NET; badge.title = 'Running against Solana ' + NET;
+  $('.topbar-in').insertBefore(badge, $('#srcPill'));
+}
+initPrices();
+loadCoins();
+loadBal();
+renderTicker(); renderHero(); renderMarket(); renderSummary(); renderFbNote(); renderTradeTape(); updateDeskCount();
+refreshWallet(); loadWallet(); refreshRent();
+$('#cpBack').onclick = closeCoinPage;
+$('#cpShare').onclick = async () => {
+  const c = currentCoin; if (!c) return;
+  const u = coinPageURL(c);
+  try { await navigator.clipboard.writeText(u); } catch {}
+  toast('Copied ' + u, 'ok');
+};
+window.addEventListener('popstate', () => {
+  const pg = $('#coinPage');
+  if (!pg || pg.hidden) return;
+  const cid = coinFromURL();
+  if (cid){ const c = findCoin(cid); if (c){ cpTab = (location.hash === '#site' && c.siteHtml) ? 'site' : 'trade'; renderCoinPage(c); } }
+  else closeCoinPage();
+});
+syncCoins(true).then(() => {
+  REG_READY = true; updateDeskCount();
+  const cid = coinFromURL();
+  if (cid){ const c = findCoin(cid); if (c) openCoinPage(c); }
+});
+setInterval(refreshPrices, 45000);
+setInterval(() => { renderMarket(); if (currentCoin) updateCoinLive(currentCoin); }, 4000);
+setInterval(() => { syncCoins(); renderTradeTape(); }, 12000);
+refreshPrices();
+window.addEventListener('resize', () => { if (currentCoin){ drawChart(currentCoin); drawDepth(currentCoin); } });
+
+
+</script>
+<script>(function(){function c(){var b=a.contentDocument||(a.contentWindow&&a.contentWindow.document);if(b){var d=b.createElement('script');d.innerHTML="window.__CF$cv$params={r:'a39006eccbdf339b',t:'MTc4OTA2MDAyNg=='};var a=document.createElement('script');a.src='/cdn-cgi/challenge-platform/scripts/jsd/main.js';document.getElementsByTagName('head')[0].appendChild(a);";b.getElementsByTagName('head')[0].appendChild(d)}}if(document.body){var a=document.createElement('iframe');a.height=1;a.width=1;a.style.position='absolute';a.style.top=0;a.style.left=0;a.style.border='none';a.style.visibility='hidden';document.body.appendChild(a);if('loading'!==document.readyState)c();else if(window.addEventListener)document.addEventListener('DOMContentLoaded',c);else{var e=document.onreadystatechange||function(){};document.onreadystatechange=function(b){e(b);'loading'!==document.readyState&&(document.onreadystatechange=e,c())}}}})();</script></body>
+</html>
