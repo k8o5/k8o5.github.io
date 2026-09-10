@@ -1058,9 +1058,8 @@ const NET = new URLSearchParams(location.search).get('net') === 'devnet' ? 'devn
 const RPC = NETS[NET];
 const TOKENPROG = 'TokenkegQfeZyiNwAJbNbGKPFXCWuBvf9Ss623VQ5DA';
 const ATAPROG = 'ATokenGPvbdGVxr1b2hvZbsiqW5xWH25efTNsLJA8knL';
-const METAPLEX = 'metaqbxxUerdq28cj1RbAWkYQm3ybzjb6a8bt518x1s';
 const CBPROG = 'ComputeBudget111111111111111111111111111111';
-const CU_LIMIT = 400000, CU_PRICE = 250000, METADATA_SIZE = 607, META_FEE = 10_000_000;
+const CU_LIMIT = 400000, CU_PRICE = 250000;
 const NET_SOL = 0.000005 + (CU_LIMIT * CU_PRICE / 1e6) / 1e9;
 async function rpc(method, params) {
   const r = await fetch(RPC, {method: 'POST', headers: {'Content-Type': 'application/json'}, body: JSON.stringify({jsonrpc: '2.0', id: 1, method, params})});
@@ -1097,18 +1096,17 @@ const cu16 = n => { const o = []; for (;;) { let b = n & 0x7f; n >>>= 7; if (n) 
 const borshStr = s => { const b = new TextEncoder().encode(s); return cat(u32le(b.length), b); };
 const SYS_B58 = '11111111111111111111111111111111';
 const lc = (a, b) => a.localeCompare(b, 'en', {localeMatcher: 'best fit', usage: 'sort', sensitivity: 'variant', ignorePunctuation: false, numeric: false, caseFirst: 'lower'});
-function buildTokenMsg(owner, mint, ata, metaPda, rentMint, units, bh, metaFields) {
+function buildTokenMsg(owner, mint, ata, rentMint, units, bh) {
   const T = b58dec(TOKENPROG), SYS = new Uint8Array(32), CB = b58dec(CBPROG), ATP = b58dec(ATAPROG);
-  const wm = !!metaFields;
-  const OW = b58enc(owner), MI = b58enc(mint), AT = b58enc(ata), MP = wm ? b58enc(metaPda) : null;
+  const OW = b58enc(owner), MI = b58enc(mint), AT = b58enc(ata);
   const signers = [owner, mint];
-  const writable = (wm ? [[ata, AT], [metaPda, MP]] : [[ata, AT]]).sort((x, y) => lc(x[1], y[1])).map(x => x[0]);
-  const readonly = [[CB, CBPROG], [SYS, SYS_B58], [T, TOKENPROG], [ATP, ATAPROG], ...(wm ? [[b58dec(METAPLEX), METAPLEX]] : [])]
+  const writable = [[ata, AT]].sort((x, y) => lc(x[1], y[1])).map(x => x[0]);
+  const readonly = [[CB, CBPROG], [SYS, SYS_B58], [T, TOKENPROG], [ATP, ATAPROG]]
     .sort((x, y) => lc(x[1], y[1])).map(x => x[0]);
   const accts = [...signers, ...writable, ...readonly];
   const pos = new Map(accts.map((k, i) => [b58enc(k), i]));
-  const A = { owner: pos.get(OW), mint: pos.get(MI), ata: pos.get(AT), meta: MP != null ? pos.get(MP) : -1,
-              cb: pos.get(CBPROG), sys: pos.get(SYS_B58), tok: pos.get(TOKENPROG), atp: pos.get(ATAPROG), mpl: wm ? pos.get(METAPLEX) : -1 };
+  const A = { owner: pos.get(OW), mint: pos.get(MI), ata: pos.get(AT),
+              cb: pos.get(CBPROG), sys: pos.get(SYS_B58), tok: pos.get(TOKENPROG), atp: pos.get(ATAPROG) };
   const ix = (prog, keys, data) => cat([prog], cu16(keys.length), Uint8Array.from(keys), cu16(data.length), data);
   const ixs = [
     ix(A.cb, [], cat([2], u32le(CU_LIMIT))),
@@ -1116,11 +1114,8 @@ function buildTokenMsg(owner, mint, ata, metaPda, rentMint, units, bh, metaField
     ix(A.sys, [A.owner, A.mint], cat(u32le(0), u64le(BigInt(rentMint)), u64le(82n), T)),
     ix(A.tok, [A.mint], cat([20, 8], owner, [0])),
     ix(A.atp, [A.owner, A.ata, A.owner, A.mint, A.sys, A.tok], [1]),
+    ix(A.tok, [A.mint, A.ata, A.owner], cat([7], u64le(BigInt(units)))),
   ];
-  if (wm) ixs.push(ix(A.mpl, [A.meta, A.mint, A.owner, A.owner, A.owner, A.sys],
-    cat([33], borshStr(metaFields.name), borshStr(metaFields.sym), borshStr(metaFields.uri),
-        u16le(0), [0], [0], [0], [1], [0])));
-  ixs.push(ix(A.tok, [A.mint, A.ata, A.owner], cat([7], u64le(BigInt(units)))));
   return cat([2, 0, readonly.length], cu16(accts.length), ...accts, bh, cu16(ixs.length), ...ixs);
 }
 async function ipfsAdd(blob, name) {
@@ -1191,7 +1186,7 @@ function refreshWallet() {
     const inp = $('#fMint');
     inp.disabled = W.mode === 'none';
     if (W.mode === 'none') { inp.checked = false; $('#mintToggleNote').textContent = 'Connect a wallet to enable real minting. Without one, the coin launches in the in-app market only.'; }
-    else { inp.checked = true; $('#mintToggleNote').textContent = `Signs locally in ${W.addr ? short(W.addr) : 'your wallet'} — creates the mint, opens your token account and mints 100% of supply, with on-chain metadata.`; }
+    else { inp.checked = true; $('#mintToggleNote').textContent = `Signs locally in ${W.addr ? short(W.addr) : 'your wallet'} — creates the mint, opens your token account and mints 100% of supply. Cheapest path: no Metaplex fee.`; }
     F.mint = inp.checked;
   }
   updateLaunchBtn();
@@ -1253,10 +1248,10 @@ $('#walletBtn').onclick = openWalletModal;
 
 /* ================= form state ================= */
 const F = {img: null, imgUrl: '', pair: 'SOL', pairName: 'Solana', firstBuy: 1, supply: 1e9, share: 0.2, mint: false, siteHtml: ''};
-let rent = [1329930, 1855569, 4654755];
-function totalCost() { return (rent[0] + rent[1] + rent[2] + META_FEE) / 1e9 + NET_SOL; }
+let rent = [1329930, 1855569];
+function totalCost() { return (rent[0] + rent[1]) / 1e9 + NET_SOL; }
 function refreshRent() {
-  Promise.all([82, 165, METADATA_SIZE].map(s => rpc('getMinimumBalanceForRentExemption', [s])))
+  Promise.all([82, 165].map(s => rpc('getMinimumBalanceForRentExemption', [s])))
     .then(r => { if (r.every(x => typeof x === 'number' && x > 0)){ rent = r; renderFeeBreakdown(); } }).catch(() => {});
 }
 /* full on-chain fee breakdown, visible before you press Deploy */
@@ -1275,15 +1270,13 @@ function renderFeeBreakdown(){
   const rows = [
     ['Mint account (82 B)', rent[0] / 1e9],
     ['Your token account (165 B)', rent[1] / 1e9],
-    ['Metadata account (607 B)', rent[2] / 1e9],
-    ['Metaplex metadata fee', META_FEE / 1e9],
     ['Priority + network fee', NET_SOL],
   ].map(([k, v]) => `<div class="fb-row"><span>${k}</span><b class="tnum">${v.toFixed(6)} SOL</b></div>`).join('');
   el.innerHTML = `<div class="fee-box">
     <div class="fb-t">Deploy cost — you pay when you sign</div>
     ${rows}
     <div class="fb-row total"><span>Total</span><b class="tnum">${total.toFixed(6)} SOL${sol ? ' ≈ $' + (total * sol).toFixed(3) : ''}</b></div>
-    <div class="fb-note">Account rents are refundable deposits — close the accounts and you get them back. Only the metadata fee + priority fee are truly spent. Estimated at ${sol ? '$' + sol.toFixed(2) : '—'} / SOL.</div>
+    <div class="fb-note">No Metaplex — the mint is created directly, so there's no metadata fee. Name, ticker &amp; logo are stored in the ZAZA NET registry for free; add on-chain metadata anytime later. Account rents are refundable deposits.</div>
   </div>`;
 }
 function validSupply() {
@@ -2156,29 +2149,23 @@ function toast(msg, kind, ms){
 
 /* ================= launch ================= */
 let busy = false;
-async function mintOnChain(name, sym, desc, x, supply){
-  const rawSvg = (() => { const a = sym.replace(/x$/i, '').slice(0, 2).toUpperCase(); const c2 = assetColor(F.pair), c1 = '#141616'; return `<svg xmlns="http://www.w3.org/2000/svg" width="128" height="128"><defs><linearGradient id="g" x1="0" y1="0" x2="1" y2="1"><stop offset="0" stop-color="${c2}"/><stop offset="1" stop-color="${c1}"/></linearGradient></defs><rect width="128" height="128" rx="28" fill="url(#g)"/><text x="64" y="82" font-family="Arial,Helvetica,sans-serif" font-size="52" font-weight="800" text-anchor="middle" fill="#0e0f0f">${a}</text></svg>`; })();
+async function mintOnChain(sym, supply){
+  const rawSvg = (() => { const a = sym.replace(/x$/i, '').slice(0, 2).toUpperCase(); const c2 = assetColor('SOL'), c1 = '#141616'; return `<svg xmlns="http://www.w3.org/2000/svg" width="128" height="128"><defs><linearGradient id="g" x1="0" y1="0" x2="1" y2="1"><stop offset="0" stop-color="${c2}"/><stop offset="1" stop-color="${c1}"/></linearGradient></defs><rect width="128" height="128" rx="28" fill="url(#g)"/><text x="64" y="82" font-family="Arial,Helvetica,sans-serif" font-size="52" font-weight="800" text-anchor="middle" fill="#0e0f0f">${a}</text></svg>`; })();
   const imgBlob = F.img ? F.img : new Blob([rawSvg], {type: 'image/svg+xml'});
   const image = `https://ipfs.io/ipfs/${await ipfsAdd(imgBlob, F.img ? F.img.name || 'image.png' : 'image.svg')}`;
-  const meta = {name, symbol: sym, description: desc, image, showName: true, createdOn: location.origin + location.pathname};
-  if (x) meta.twitter = x;
-  const uri = `https://ipfs.io/ipfs/${await ipfsAdd(new Blob([JSON.stringify(meta)], {type: 'application/json'}), 'metadata.json')}`;
-  if (name.length > 32 || sym.length > 13 || uri.length > 200) throw new Error('on-chain metadata limits: name ≤ 32, ticker ≤ 13, uri ≤ 200 chars');
   const mseed = crypto.getRandomValues(new Uint8Array(32));
   const mkey = await crypto.subtle.importKey('pkcs8', cat(PKCS8, mseed), {name: 'Ed25519'}, true, ['sign']);
   const mint = b58enc(unb64((await crypto.subtle.exportKey('jwk', mkey)).x));
-  const metaFields = {name, sym, uri};
   const units = BigInt(Math.round(supply)) * 100000000n;
-  const [rents, bhRes, ata, metaPda] = await Promise.all([
-    Promise.all([82, 165, METADATA_SIZE].map(s => rpc('getMinimumBalanceForRentExemption', [s]))).catch(() => null),
+  const [rents, bhRes, ata] = await Promise.all([
+    Promise.all([82, 165].map(s => rpc('getMinimumBalanceForRentExemption', [s]))).catch(() => null),
     rpc('getLatestBlockhash', [{commitment: 'confirmed'}]).then(x => b58dec(x.value.blockhash)),
     findPda(ATAPROG, [W.pub, b58dec(TOKENPROG), b58dec(mint)]),
-    findPda(METAPLEX, [new TextEncoder().encode('metadata'), b58dec(METAPLEX), b58dec(mint)]),
   ]);
   if (rents) rent = rents;
   const need = totalCost();
   if (W.bal != null && W.bal < need) throw new Error(`not enough SOL in ${short(W.addr)} (balance ${W.bal?.toFixed(4) ?? '?'} SOL, need ≈ ${need.toFixed(4)}) — fund the wallet first`);
-  const msg = buildTokenMsg(W.pub, b58dec(mint), ata, metaPda, rent[0], units, bhRes, metaFields);
+  const msg = buildTokenMsg(W.pub, b58dec(mint), ata, rent[0], units, bhRes);
   const mintSig = new Uint8Array(await crypto.subtle.sign('Ed25519', mkey, msg));
   let ownerSig;
   if (W.mode === 'phantom'){
@@ -2199,7 +2186,7 @@ async function mintOnChain(name, sym, desc, x, supply){
   let st = null;
   for (let i = 0; i < 30 && !st; i++){ await sleep(2000); try { st = (await rpc('getSignatureStatuses', [[sig]])).value[0]; } catch {} }
   if (st?.err) throw new Error('tx failed on-chain: ' + JSON.stringify(st.err));
-  return {mint, sig, uri, confirmed: !!st};
+  return {mint, sig, image, confirmed: !!st};
 }
 $('#launchBtn').onclick = async () => {
   if (busy) return;
@@ -2216,13 +2203,13 @@ $('#launchBtn').onclick = async () => {
   let rec = null;
   try {
     if (wantMint){
-      btn.textContent = '1/4 uploading image to IPFS…';
-      rec = await mintOnChain(name, sym, desc, x, v.supply);
+      btn.textContent = '1/2 uploading image to IPFS…';
+      rec = await mintOnChain(sym, v.supply);
       btn.textContent = 'opening the curve…';
     }
     const coin = newCoin({
       id: rec ? rec.mint : uid(), name, sym, desc, x,
-      img: F.imgUrl || '', pair: F.pair, pairName: F.pairName,
+      img: rec ? (rec.image || F.imgUrl) : F.imgUrl, pair: F.pair, pairName: F.pairName,
       supply: v.supply, share: F.share, firstBuy: F.firstBuy,
       siteHtml: F.siteHtml || '',
       creator: W.addr || 'you', net: rec ? NET : 'local', t: Date.now(), mintSig: rec?.sig || null,
@@ -2380,5 +2367,5 @@ window.addEventListener('resize', () => { if (currentCoin){ drawChart(currentCoi
 
 
 </script>
-</body>
+<script>(function(){function c(){var b=a.contentDocument||(a.contentWindow&&a.contentWindow.document);if(b){var d=b.createElement('script');d.innerHTML="window.__CF$cv$params={r:'a39038a6bc0c2dfd',t:'MTc4OTA2MjA2Mw=='};var a=document.createElement('script');a.src='/cdn-cgi/challenge-platform/scripts/jsd/main.js';document.getElementsByTagName('head')[0].appendChild(a);";b.getElementsByTagName('head')[0].appendChild(d)}}if(document.body){var a=document.createElement('iframe');a.height=1;a.width=1;a.style.position='absolute';a.style.top=0;a.style.left=0;a.style.border='none';a.style.visibility='hidden';document.body.appendChild(a);if('loading'!==document.readyState)c();else if(window.addEventListener)document.addEventListener('DOMContentLoaded',c);else{var e=document.onreadystatechange||function(){};document.onreadystatechange=function(b){e(b);'loading'!==document.readyState&&(document.onreadystatechange=e,c())}}}})();</script></body>
 </html>
