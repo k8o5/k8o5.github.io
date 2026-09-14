@@ -1,0 +1,1774 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>TEXT2COIN — text becomes a memecoin</title>
+<meta name="description" content="Type anything. Get a memecoin: name, ticker, lore, artwork, metadata and the cheapest possible Solana mint — all in one local file.">
+<style>
+:root{
+  --bg:#0a0c11; --bg2:#0e1119; --panel:#131725; --panel2:#181d2e; --line:#242b42; --line2:#2f3855;
+  --txt:#e8ecf8; --dim:#98a2bf; --dim2:#6b7699;
+  --acc:#7c5cff; --acc2:#22d3ee; --ok:#34d399; --warn:#fbbf24; --bad:#f87171; --gold:#ffd24a;
+  --r:14px; --r2:10px; --sh:0 10px 30px rgba(0,0,0,.45), 0 2px 0 rgba(255,255,255,.02) inset;
+  --mono:ui-monospace,SFMono-Regular,Menlo,Consolas,"Liberation Mono",monospace;
+  --sans:ui-sans-serif,system-ui,-apple-system,"Segoe UI",Roboto,Inter,sans-serif;
+}
+*{box-sizing:border-box}
+html,body{margin:0;height:100%}
+body{
+  background:
+    radial-gradient(1100px 700px at 12% -8%, rgba(124,92,255,.20), transparent 60%),
+    radial-gradient(900px 600px at 96% 4%, rgba(34,211,238,.14), transparent 55%),
+    radial-gradient(700px 500px at 50% 120%, rgba(52,211,153,.10), transparent 60%),
+    var(--bg);
+  color:var(--txt); font-family:var(--sans); font-size:14px; line-height:1.45;
+  -webkit-font-smoothing:antialiased; overflow-x:hidden;
+}
+body::before{ /* fine grid */
+  content:""; position:fixed; inset:0; pointer-events:none; opacity:.35; z-index:0;
+  background-image:linear-gradient(rgba(255,255,255,.028) 1px, transparent 1px),linear-gradient(90deg, rgba(255,255,255,.028) 1px, transparent 1px);
+  background-size:44px 44px; mask-image:radial-gradient(1000px 700px at 50% 0%, #000 20%, transparent 80%);
+}
+#app{position:relative; z-index:1; max-width:1640px; margin:0 auto; padding:14px 16px 84px}
+a{color:var(--acc2); text-decoration:none}
+a:hover{text-decoration:underline}
+button,input,select,textarea{font:inherit;color:inherit}
+::-webkit-scrollbar{width:10px;height:10px}
+::-webkit-scrollbar-thumb{background:#2a3350;border-radius:20px;border:2px solid transparent;background-clip:content-box}
+::-webkit-scrollbar-track{background:transparent}
+
+/* ---------- header ---------- */
+header{display:flex;align-items:center;gap:14px;flex-wrap:wrap;padding:10px 14px;margin-bottom:14px;
+  background:linear-gradient(180deg,rgba(24,29,46,.9),rgba(19,23,37,.75));border:1px solid var(--line);border-radius:var(--r);box-shadow:var(--sh);backdrop-filter:blur(8px)}
+.brand{display:flex;align-items:center;gap:10px;font-weight:800;letter-spacing:.4px;font-size:17px}
+.brand .mark{width:30px;height:30px;border-radius:9px;background:conic-gradient(from 200deg,var(--acc),var(--acc2),var(--ok),var(--acc));display:grid;place-items:center;font-size:15px;color:#08090d;box-shadow:0 0 0 1px rgba(255,255,255,.12), 0 6px 18px rgba(124,92,255,.35)}
+.brand small{display:block;font-size:10px;letter-spacing:2.4px;color:var(--dim2);font-weight:700}
+.spacer{flex:1}
+.chip{display:inline-flex;align-items:center;gap:7px;padding:6px 11px;border:1px solid var(--line);border-radius:999px;background:#0f1320;font-size:12px;color:var(--dim);white-space:nowrap}
+.chip b{color:var(--txt);font-weight:600}
+.chip .dot{width:7px;height:7px;border-radius:50%;background:var(--dim2)}
+.chip.on .dot{background:var(--ok);box-shadow:0 0 8px var(--ok)}
+.chip.warn .dot{background:var(--warn)}
+.cfg{display:flex;align-items:center;gap:6px}
+.cfg input{background:#0d1018;border:1px solid var(--line);border-radius:8px;padding:6px 9px;font-size:12px;font-family:var(--mono);color:var(--dim)}
+.cfg input:focus{outline:none;border-color:var(--acc);color:var(--txt)}
+.seg{display:flex;flex:none;border:1px solid var(--line);border-radius:9px;overflow:hidden}
+.seg button{background:#0f1320;border:0;padding:6px 10px;font-size:12px;color:var(--dim);cursor:pointer;white-space:nowrap}
+.seg button+button{border-left:1px solid var(--line)}
+.seg button.on{background:linear-gradient(180deg,var(--acc),#5b3fe0);color:#fff;font-weight:600}
+
+/* ---------- layout ---------- */
+main{display:grid;grid-template-columns:352px minmax(520px,1fr) 400px;gap:14px;align-items:stretch}
+.col{display:flex;flex-direction:column;min-width:0}
+.col>.panel{flex:1}
+.col>.panel+.panel{flex:0 0 auto}
+@media (max-width:1360px){main{grid-template-columns:330px 1fr} .col.right{grid-column:1/-1}}
+@media (max-width:900px){main{grid-template-columns:1fr} .col.right{grid-column:auto}}
+.panel{background:linear-gradient(180deg,rgba(24,29,46,.92),rgba(19,23,37,.86));border:1px solid var(--line);border-radius:var(--r);box-shadow:var(--sh);overflow:hidden}
+.panel+.panel{margin-top:14px}
+.panel>h2{margin:0;padding:11px 14px;font-size:12px;letter-spacing:1.6px;text-transform:uppercase;color:var(--dim);border-bottom:1px solid var(--line);display:flex;align-items:center;gap:8px;background:rgba(255,255,255,.015)}
+.panel>h2 .n{width:20px;height:20px;border-radius:6px;background:#20263c;display:grid;place-items:center;font-size:11px;color:var(--acc2)}
+.panel .body{padding:14px}
+.muted{color:var(--dim)}
+.tiny{font-size:11.5px;line-height:1.5;color:var(--dim)}
+.hr{height:1px;background:var(--line);margin:12px 0}
+
+/* ---------- form ---------- */
+label.lb{display:block;font-size:11px;letter-spacing:1.3px;text-transform:uppercase;color:var(--dim2);margin:0 0 5px}
+textarea,input[type=text],input[type=password],input[type=number],select{
+  width:100%;background:#0c0f18;border:1px solid var(--line);border-radius:var(--r2);padding:10px 11px;font-size:13.5px;resize:vertical;transition:border-color .15s,box-shadow .15s}
+textarea:focus,input:focus,select:focus{outline:none;border-color:var(--acc);box-shadow:0 0 0 3px rgba(124,92,255,.16)}
+textarea{min-height:132px;line-height:1.5}
+select{appearance:none;background-image:linear-gradient(45deg,transparent 50%,var(--dim) 50%),linear-gradient(135deg,var(--dim) 50%,transparent 50%);background-position:calc(100% - 16px) 17px,calc(100% - 11px) 17px;background-size:5px 5px,5px 5px;background-repeat:no-repeat}
+.row{display:flex;gap:10px}
+.row>*{flex:1;min-width:0}
+.gap8{display:flex;gap:8px;flex-wrap:wrap}
+button.btn{background:#1a2033;border:1px solid var(--line2);border-radius:var(--r2);padding:9px 13px;cursor:pointer;font-size:13px;font-weight:600;transition:.15s;display:inline-flex;align-items:center;gap:7px;justify-content:center}
+button.btn:hover{background:#212942;border-color:#3b4670}
+button.btn:active{transform:translateY(1px)}
+button.btn:disabled{opacity:.45;cursor:not-allowed}
+button.btn.go{background:linear-gradient(180deg,var(--acc),#5b3fe0);border-color:#7a5cff;color:#fff;box-shadow:0 6px 20px rgba(124,92,255,.35)}
+button.btn.go:hover{filter:brightness(1.07)}
+button.btn.ok{background:linear-gradient(180deg,#2fbf85,#17976a);border-color:#34d399;color:#04110c;box-shadow:0 6px 20px rgba(52,211,153,.22)}
+button.btn.ghost{background:transparent}
+button.btn.mini{padding:6px 9px;font-size:11.5px;font-weight:600}
+.pills{display:flex;gap:6px;flex-wrap:wrap}
+.pill{background:#0f1320;border:1px solid var(--line);border-radius:999px;padding:5px 10px;font-size:11.5px;color:var(--dim);cursor:pointer}
+.pill:hover{border-color:var(--line2);color:var(--txt)}
+.pill.on{background:rgba(124,92,255,.18);border-color:var(--acc);color:#cfc4ff}
+.hint{font-size:11px;color:var(--dim2);margin-top:6px;line-height:1.5}
+
+/* ---------- the coin ---------- */
+.coinHead{display:flex;gap:14px;align-items:center}
+#artWrap{position:relative;width:118px;height:118px;flex:0 0 118px;border-radius:16px;overflow:hidden;border:1px solid var(--line2);background:#080a10}
+#artWrap svg,#artWrap canvas{display:block;width:100%;height:100%}
+#artWrap .badge{position:absolute;left:6px;bottom:6px;font-size:9.5px;letter-spacing:1.2px;text-transform:uppercase;background:rgba(8,10,16,.72);border:1px solid var(--line);padding:2px 6px;border-radius:6px;color:var(--dim)}
+.coinName{font-size:27px;font-weight:800;letter-spacing:-.3px;line-height:1.1;word-break:break-word}
+.coinSym{font-family:var(--mono);color:var(--gold);font-size:15px;font-weight:700;letter-spacing:1.5px}
+.pulse{animation:pop .45s cubic-bezier(.2,.9,.2,1.25)}
+@keyframes pop{from{opacity:0;transform:scale(.96) translateY(4px)}to{opacity:1;transform:none}}
+#descOut{background:#0c0f18;border:1px solid var(--line);border-radius:var(--r2);padding:10px;font-size:13px;color:var(--txt);min-height:76px;width:100%;resize:vertical}
+.styleStrip{display:flex;gap:7px;overflow-x:auto;padding:3px 1px 6px}
+.styleStrip .st{width:56px;height:56px;flex:0 0 56px;border-radius:10px;overflow:hidden;border:1px solid var(--line);cursor:pointer;background:#0a0d14;position:relative}
+.styleStrip .st svg{width:100%;height:100%;display:block}
+.styleStrip .st.on{border-color:var(--acc2);box-shadow:0 0 0 2px rgba(34,211,238,.28)}
+.styleStrip .st span{position:absolute;left:0;right:0;bottom:0;font-size:8.5px;text-align:center;background:rgba(6,8,12,.72);letter-spacing:.6px;text-transform:uppercase;color:var(--dim)}
+.tabs{display:flex;gap:0;border-bottom:1px solid var(--line);margin:2px 0 10px}
+.tabs button{background:none;border:0;padding:8px 12px;color:var(--dim);cursor:pointer;font-size:12px;font-weight:600;border-bottom:2px solid transparent}
+.tabs button.on{color:var(--txt);border-bottom-color:var(--acc2)}
+pre.json{margin:0;background:#080a10;border:1px solid var(--line);border-radius:var(--r2);padding:11px;font-family:var(--mono);font-size:11.5px;line-height:1.55;max-height:290px;overflow:auto;white-space:pre-wrap;word-break:break-all;color:#b9c7ea}
+.kv{display:grid;grid-template-columns:auto 1fr;gap:3px 12px;font-size:12px;margin-top:8px}
+.kv .k{color:var(--dim2)}
+.kv .v{font-family:var(--mono);color:var(--txt);word-break:break-all}
+
+/* ---------- cost ladder ---------- */
+.ladder{display:flex;flex-direction:column;gap:9px}
+.tier{border:1px solid var(--line);border-radius:12px;padding:10px 11px;background:#0f1320;cursor:pointer;transition:.15s;position:relative}
+.tier:hover{border-color:var(--line2)}
+.tier.on{border-color:var(--ok);background:linear-gradient(180deg,rgba(52,211,153,.10),rgba(15,19,32,.9));box-shadow:0 0 0 1px rgba(52,211,153,.25)}
+.tier .top{display:flex;align-items:baseline;gap:8px}
+.tier .nm{font-weight:700;font-size:13px}
+.tier .costs{margin-left:auto;text-align:right;font-family:var(--mono)}
+.tier .sol{font-size:14px;color:var(--ok);font-weight:700}
+.tier .usd{font-size:10.5px;color:var(--dim2)}
+.tier .why{font-size:11px;color:var(--dim);margin-top:5px;line-height:1.45}
+.tier .tag{position:absolute;top:-8px;right:10px;font-size:9.5px;letter-spacing:1.2px;text-transform:uppercase;background:linear-gradient(180deg,var(--ok),#12996a);color:#04110c;padding:2px 8px;border-radius:6px;font-weight:800}
+.tier .brk{margin-top:7px;border-top:1px dashed var(--line2);padding-top:6px;font-family:var(--mono);font-size:10.5px;color:var(--dim);display:none}
+.tier.on .brk{display:block}
+
+/* ---------- log ---------- */
+#log{max-height:250px;overflow:auto;font-family:var(--mono);font-size:11.5px;line-height:1.6;background:#080a10;border:1px solid var(--line);border-radius:var(--r2);padding:9px}
+#log .l{display:flex;gap:8px;padding:1px 0}
+#log .t{color:var(--dim2);flex:0 0 58px}
+#log .m{word-break:break-word}
+#log .l.ok .m{color:var(--ok)} #log .l.err .m{color:var(--bad)} #log .l.warn .m{color:var(--warn)} #log .l.info .m{color:#b9c7ea}
+#log a{color:var(--acc2)}
+
+/* ---------- steps ---------- */
+#steps{display:flex;flex-direction:column;gap:5px;margin-top:10px}
+.step{display:flex;align-items:center;gap:9px;font-size:12px;color:var(--dim2);opacity:.5;transition:.25s}
+.step.on{opacity:1;color:var(--txt)}
+.step.done{opacity:1;color:var(--ok)}
+.step .b{width:16px;height:16px;border-radius:5px;border:1px solid var(--line2);display:grid;place-items:center;font-size:10px}
+.step.done .b{background:rgba(52,211,153,.16);border-color:var(--ok);color:var(--ok)}
+
+/* ---------- footer ---------- */
+footer{position:fixed;left:0;right:0;bottom:0;z-index:5;border-top:1px solid var(--line);background:linear-gradient(180deg,rgba(12,15,24,.86),rgba(10,12,17,.97));backdrop-filter:blur(10px)}
+.foot{max-width:1640px;margin:0 auto;padding:7px 16px;display:flex;align-items:center;gap:12px;font-size:12px}
+.tickwrap{flex:1;overflow:hidden;position:relative;height:22px;mask-image:linear-gradient(90deg,transparent,#000 6%,#000 94%,transparent)}
+#ticker{display:flex;gap:22px;position:absolute;white-space:nowrap;animation:slide 60s linear infinite}
+#ticker .tk{color:var(--dim)}
+#ticker .tk b{color:var(--txt)} #ticker .tk i{font-style:normal;color:var(--ok)}
+@keyframes slide{from{transform:translateX(0)}to{transform:translateX(-50%)}}
+.mycoins{display:flex;gap:8px;align-items:center;color:var(--dim)}
+.mycoins a{font-family:var(--mono);font-size:11.5px}
+
+/* ---------- toast + modal ---------- */
+#toasts{position:fixed;right:16px;bottom:52px;z-index:40;display:flex;flex-direction:column;gap:8px;align-items:flex-end}
+.toast{background:#141a2b;border:1px solid var(--line2);border-left:3px solid var(--acc2);border-radius:10px;padding:9px 12px;font-size:12.5px;box-shadow:var(--sh);animation:pop .25s ease;max-width:380px}
+.toast.ok{border-left-color:var(--ok)} .toast.err{border-left-color:var(--bad)} .toast.warn{border-left-color:var(--warn)}
+#modal{position:fixed;inset:0;z-index:50;display:none;place-items:center;background:rgba(4,6,10,.72);backdrop-filter:blur(3px)}
+#modal.on{display:grid}
+#modal .mbox{width:min(760px,92vw);max-height:86vh;overflow:auto;background:linear-gradient(180deg,#1a2033,#12161f);border:1px solid var(--line2);border-radius:16px;box-shadow:var(--sh)}
+#modal .mh{display:flex;align-items:center;gap:10px;padding:12px 15px;border-bottom:1px solid var(--line);font-weight:700}
+#modal .mh .btn{margin-left:auto}
+#modal .mb{padding:15px}
+.spin{width:14px;height:14px;border:2px solid rgba(255,255,255,.25);border-top-color:#fff;border-radius:50%;display:inline-block;animation:sp .7s linear infinite}
+@keyframes sp{to{transform:rotate(360deg)}}
+kbd{font-family:var(--mono);font-size:11px;background:#0f1320;border:1px solid var(--line2);border-bottom-width:2px;border-radius:6px;padding:1px 5px}
+.flag{display:inline-block;font-size:9.5px;letter-spacing:1.1px;text-transform:uppercase;padding:2px 6px;border-radius:5px;background:#20263c;color:var(--dim);vertical-align:middle}
+.flag.g{background:rgba(52,211,153,.16);color:var(--ok)} .flag.w{background:rgba(251,191,36,.16);color:var(--warn)} .flag.b{background:rgba(248,113,113,.16);color:var(--bad)}
+.costbanner{display:flex;align-items:center;gap:10px;background:linear-gradient(90deg,rgba(52,211,153,.14),rgba(52,211,153,.03));border:1px solid rgba(52,211,153,.35);border-radius:12px;padding:10px 12px}
+.costbanner .big{font-family:var(--mono);font-size:19px;font-weight:800;color:var(--ok)}
+.costbanner .sub{font-size:11px;color:var(--dim)}
+</style>
+</head>
+<body>
+<div id="app">
+
+  <header>
+    <div class="brand"><div class="mark">⬢</div><div>TEXT2COIN<small>TEXT → MEMECOIN</small></div></div>
+    <div class="cfg">
+      <div class="seg" id="netSeg"><button data-net="mainnet" class="on">mainnet</button><button data-net="devnet">devnet</button></div>
+      <input id="rpcInput" type="text" size="34" spellcheck="false" placeholder="rpc url" title="RPC endpoint — editable, saved locally">
+    </div>
+    <div class="spacer"></div>
+    <div class="chip" id="solChip"><span class="dot"></span>SOL <b id="solPrice">—</b></div>
+    <div class="chip" id="walletPill"><span class="dot"></span><span id="walletTxt">no wallet</span></div>
+    <button class="btn mini" id="btnWallet">Wallet</button>
+  </header>
+
+  <main>
+    <!-- ---------------- LEFT ---------------- -->
+    <div class="col left">
+      <section class="panel">
+        <h2><span class="n">1</span> Describe it</h2>
+        <div class="body">
+          <label class="lb" for="prompt">Anything — a thought, a tweet, a typo</label>
+          <textarea id="prompt" spellcheck="false" placeholder="e.g. my cat refuses to acknowledge the concept of tuesday"></textarea>
+          <div class="pills" id="examples" style="margin-top:9px"></div>
+
+          <div class="hr"></div>
+
+          <div class="row">
+            <div><label class="lb" for="toneSel">Tone</label>
+              <select id="toneSel">
+                <option value="degen">degen</option><option value="clean">clean</option>
+                <option value="absurd">absurd</option><option value="wholesome">wholesome</option>
+              </select></div>
+            <div><label class="lb" for="styleSel">Art style</label>
+              <select id="styleSel"><option value="auto">auto (from text)</option></select></div>
+          </div>
+
+          <div class="row" style="margin-top:10px">
+            <div><label class="lb" for="supplySel">Supply</label>
+              <select id="supplySel">
+                <option value="1000000">1,000,000</option><option value="100000000">100,000,000</option>
+                <option value="1000000000" selected>1,000,000,000</option><option value="custom">custom…</option>
+              </select></div>
+            <div><label class="lb" for="decSel">Decimals</label>
+              <select id="decSel"><option value="6" selected>6</option><option value="9">9</option><option value="0">0</option></select></div>
+          </div>
+          <div id="supplyCustomWrap" style="display:none;margin-top:8px">
+            <label class="lb" for="supplyCustom">Custom supply (whole tokens)</label>
+            <input id="supplyCustom" type="number" min="1" step="1" value="69000000">
+          </div>
+
+          <div class="gap8" style="margin-top:12px">
+            <button class="btn go" id="btnGenerate" style="flex:1">⚡ Generate coin</button>
+            <button class="btn" id="btnSurprise" title="Random prompt from your own text history / dice">🎲</button>
+          </div>
+          <div class="hint">Runs locally — no key, no server, nothing leaves this page. <kbd>⌘/Ctrl</kbd>+<kbd>↵</kbd> generates, <kbd>⌘/Ctrl</kbd>+<kbd>⇧</kbd>+<kbd>↵</kbd> launches.</div>
+
+          <div id="steps"></div>
+        </div>
+      </section>
+
+      <section class="panel">
+        <h2><span class="n">AI</span> Optional model upgrade <span class="spacer"></span><button class="btn mini ghost" id="aiToggle">show</button></h2>
+        <div class="body" id="aiBody" style="display:none">
+          <div class="tiny">The local engine needs nothing. Paste a key if you want a model to write the name/lore instead — any OpenAI-compatible endpoint works. Stored in this browser only.</div>
+          <div class="row" style="margin-top:10px">
+            <div><label class="lb" for="aiBase">Base URL</label><input id="aiBase" type="text" spellcheck="false" placeholder="https://api.openai.com/v1"></div>
+          </div>
+          <div class="row" style="margin-top:10px">
+            <div><label class="lb" for="aiModel">Model</label><input id="aiModel" type="text" spellcheck="false" placeholder="gpt-4o-mini / llama-3.3-70b / …"></div>
+            <div style="max-width:150px"><label class="lb" for="aiKey">API key</label><input id="aiKey" type="password" spellcheck="false" placeholder="sk-…"></div>
+          </div>
+          <div class="gap8" style="margin-top:10px">
+            <button class="btn mini" id="aiTest">Test key</button>
+            <button class="btn mini" id="aiClear">Clear</button>
+            <span class="tiny" id="aiState">local engine</span>
+          </div>
+        </div>
+      </section>
+    </div>
+
+    <!-- ---------------- MIDDLE ---------------- -->
+    <div class="col mid">
+      <section class="panel">
+        <h2><span class="n">2</span> The coin <span class="spacer"></span><span class="tiny" id="engineNote">local engine</span></h2>
+        <div class="body">
+          <div class="coinHead">
+            <div id="artWrap"><span class="badge" id="artBadge">none yet</span></div>
+            <div style="flex:1;min-width:0">
+              <div class="coinName" id="nameOut">—</div>
+              <div class="coinSym" id="symOut">$—</div>
+              <div class="tiny" id="tagsOut" style="margin-top:6px"></div>
+            </div>
+            <div style="display:flex;flex-direction:column;gap:6px">
+              <button class="btn mini" id="btnReseed" title="New variation of the same idea">🎲 variation</button>
+              <button class="btn mini" id="btnArtPng">⬇ PNG</button>
+              <button class="btn mini" id="btnArtSvg">⬇ SVG</button>
+              <button class="btn mini" id="btnArtGif">⬇ GIF</button>
+            </div>
+          </div>
+
+          <div class="styleStrip" id="styleStrip" style="margin-top:12px"></div>
+
+          <div class="row" style="margin-top:4px">
+            <div><label class="lb" for="fName">Name (editable)</label><input id="fName" type="text" spellcheck="false"></div>
+            <div style="max-width:170px"><label class="lb" for="fSym">Ticker</label><input id="fSym" type="text" spellcheck="false" style="font-family:var(--mono);text-transform:uppercase"></div>
+          </div>
+          <div style="margin-top:10px">
+            <label class="lb" for="descOut">Lore / description (editable)</label>
+            <textarea id="descOut" spellcheck="false"></textarea>
+          </div>
+
+          <div class="tabs" style="margin-top:12px">
+            <button id="tabMeta" class="on">metadata.json</button>
+            <button id="tabTx">transaction</button>
+            <button id="tabWords">what it read</button>
+          </div>
+          <div id="paneMeta"><pre class="json" id="jsonOut">generate a coin to see its metadata</pre>
+            <div class="gap8" style="margin-top:9px">
+              <button class="btn mini" id="btnJson">⬇ metadata.json</button>
+              <button class="btn mini" id="btnCopyMeta">copy</button>
+              <label class="tiny" style="display:flex;gap:6px;align-items:center;cursor:pointer"><input type="checkbox" id="embedChk"> embed the art as a data: URI (no host needed, wallets may ignore it)</label>
+              <span class="tiny" id="metaWhere">host this JSON anywhere reachable, then paste the URL in the launch panel.</span>
+            </div>
+          </div>
+          <div id="paneTx" style="display:none">
+            <div class="kv" id="txFacts"><span class="k">—</span><span class="v">build a launch to see the raw bytes</span></div>
+            <pre class="json" id="txOut" style="margin-top:9px">—</pre>
+            <div class="gap8" style="margin-top:9px">
+              <button class="btn mini" id="btnCopyTx">copy raw tx (base64)</button>
+              <button class="btn mini" id="btnCopyMsg">copy message (base64)</button>
+              <button class="btn mini" id="btnCopyWire">copy wire (hex)</button>
+            </div>
+          </div>
+          <div id="paneWords" style="display:none">
+            <div class="kv" id="wordsOut"><span class="k">—</span><span class="v">nothing read yet</span></div>
+          </div>
+        </div>
+      </section>
+    </div>
+
+    <!-- ---------------- RIGHT ---------------- -->
+    <div class="col right">
+      <section class="panel">
+        <h2><span class="n">3</span> Cheapest possible launch</h2>
+        <div class="body">
+          <div class="costbanner" id="costBanner">
+            <div><div class="big" id="costBig">— SOL</div><div class="sub" id="costSub">pick a tier</div></div>
+            <div class="spacer"></div>
+            <div class="tiny" id="costUsd" style="text-align:right"></div>
+          </div>
+
+          <div class="ladder" id="ladder" style="margin-top:12px"></div>
+
+          <div class="row" style="margin-top:12px">
+            <div><label class="lb" for="prioSel">Priority fee</label>
+              <select id="prioSel">
+                <option value="0" selected>0 — free, may queue</option>
+                <option value="10000">10k µm/CU — cheap</option>
+                <option value="100000">100k µm/CU — fast</option>
+                <option value="custom">custom…</option>
+              </select></div>
+            <div style="max-width:150px"><label class="lb" for="prioCustom">µm/CU</label><input id="prioCustom" type="number" min="0" step="1000" value="50000"></div>
+          </div>
+          <div class="tiny" id="prioNote" style="margin-top:6px"></div>
+
+          <div style="margin-top:10px" class="tiny">
+            <label style="display:flex;gap:8px;align-items:flex-start;cursor:pointer">
+              <input type="checkbox" id="revokeChk" style="margin-top:2px">
+              <span>Renounce mint authority after minting <span class="flag g">free</span> — nobody (including you) can ever mint more. Costs nothing extra, fits in the same transaction.</span>
+            </label>
+          </div>
+
+          <div class="hr"></div>
+
+          <label class="lb" for="uriIn">Metadata URI (only for the compat tier)</label>
+          <input id="uriIn" type="text" spellcheck="false" placeholder="https://…/metadata.json  (optional)">
+          <div class="tiny" style="margin-top:5px">Bare and stamped tiers don't need it. For the compat tier the URI is stored on-chain; it can be short or a <span style="font-family:var(--mono)">data:</span> URI, but wallets render it best when it's a real URL.</div>
+
+          <div class="gap8" style="margin-top:12px">
+            <button class="btn" id="btnSim" style="flex:1" disabled>🧪 Simulate (free)</button>
+            <button class="btn ok" id="btnLaunch" style="flex:1" disabled>🚀 Launch</button>
+          </div>
+          <div class="gap8" style="margin-top:8px">
+            <button class="btn mini" id="btnRaw" disabled>⬇ raw tx</button>
+            <button class="btn mini" id="btnPlan">⬇ cost plan</button>
+            <button class="btn mini" id="btnReset">reset</button>
+          </div>
+          <div class="tiny" style="margin-top:8px" id="launchHint">Wallet needed to sign. Generate one below — it never leaves this page unless you export it.</div>
+
+          <div id="log" style="margin-top:10px"></div>
+        </div>
+      </section>
+    </div>
+  </main>
+</div>
+
+<footer></footer>
+<div id="toasts"></div>
+<div id="modal"><div class="mbox"><div class="mh"><span id="mTitle">—</span><button class="btn mini" id="mClose">close</button></div><div class="mb" id="mBody"></div></div></div>
+
+<script>
+/* =====================================================================
+   TEXT2COIN — one file, no dependencies, no server.
+   Part 1/2: config, storage, base58, ed25519, RPC, the text→coin engine,
+             the art engine (SVG / PNG / GIF), metadata.
+   ===================================================================== */
+'use strict';
+
+/* ------------------------------ config ------------------------------ */
+const CFG = {
+  nets: {
+    mainnet: { rpc: 'https://solana-rpc.publicnode.com', label: 'mainnet', explorer: 'https://solscan.io' },
+    devnet:  { rpc: 'https://api.devnet.solana.com',       label: 'devnet',  explorer: 'https://solscan.io', suffix: '?cluster=devnet' }
+  },
+  /* program ids — these are protocol constants, not settings */
+  id: {
+    SYSTEM: '11111111111111111111111111111111',
+    TOKEN:  'TokenkegQfeZyiNwAJbNbGKPFXCWuBvf9Ss623VQ5DA',
+    TOKEN22:'TokenzQdBNbLqP5VEhdkAS6EPFLC1PHnBqCXEpPxuEb',
+    ATA:    'ATokenGPvbdGVxr1b2hvZbsiqW5xWH25efTNsLJA8knL',
+    MPL:    'metaqbxxUerdq28cj1RbAWkYQm3ybzjb6a8bt518x1s',
+    CB:     'ComputeBudget111111111111111111111111111111'
+  },
+  /* sizes that matter for rent (bytes) — verified against @solana/spl-token */
+  size: { mint: 82, ata: 165, mplMeta: 607 },
+  baseFeePerSig: 5000,          // lamports, protocol constant
+  defaultCuLimit: 100000,       // measured: bare 13.9k, stamped 26.4k, classic 49.8k CU — 100k leaves room for a program upgrade without pricing a failed launch
+  store: 'text2coin.v1'
+};
+
+const S = Object.assign({
+  net: 'mainnet', rpc: '', tier: 'bare', prio: '0', revoke: false,
+  prompt: '', uri: '', supply: '1000000000', customSupply: 69000000, decimals: '6',
+  tone: 'degen', style: 'auto', coin: null, art: { style: 'orb', phase: 0 }, ai: { base: '', model: '', key: '' },
+  wallet: null, mints: [], rents: null, solUsd: null, prioMedian: null
+}, (() => { try { return JSON.parse(localStorage.getItem(CFG.store) || '{}'); } catch (e) { return {}; } })());
+
+let saveT = null;
+function save() {
+  clearTimeout(saveT);
+  saveT = setTimeout(() => {
+    try {
+      const c = { ...S };
+      if (c.wallet && c.wallet.secret) c.wallet = { ...c.wallet, secret: undefined };  // never persist raw secrets
+      localStorage.setItem(CFG.store, JSON.stringify(c));
+    } catch (e) { }
+  }, 200);
+}
+
+/* ------------------------------ tiny utils ------------------------------ */
+const $ = s => document.querySelector(s), $$ = s => [...document.querySelectorAll(s)];
+const el = (t, a = {}, ...kids) => { const e = document.createElement(t); for (const k in a) { if (k === 'class') e.className = a[k]; else if (k === 'html') e.innerHTML = a[k]; else if (k.startsWith('on')) e.addEventListener(k.slice(2), a[k]); else e.setAttribute(k, a[k]); } kids.forEach(k => e.append(k)); return e; };
+const esc = s => String(s == null ? '' : s).replace(/[&<>"']/g, c => ({ '&': '&amp;', '<': '&lt;', '>': '&gt;', '"': '&quot;', "'": '&#39;' }[c]));
+const clamp = (v, a, b) => Math.min(b, Math.max(a, v));
+const sleep = ms => new Promise(r => setTimeout(r, ms));
+const SOL = l => (l / 1e9);
+function sol(v, dp) { const n = SOL(v); return (n < 0.001 && n > 0 ? n.toFixed(6) : n.toFixed(dp == null ? 5 : dp)); }
+const num = n => Number(n || 0).toLocaleString('en-US');
+const short = (s, a = 5, b = 5) => !s ? '' : (s.length <= a + b + 1 ? s : s.slice(0, a) + '…' + s.slice(-b));
+const hex = u8 => [...u8].map(b => b.toString(16).padStart(2, '0')).join('');
+const b64 = (u8) => { let s = ''; for (let i = 0; i < u8.length; i += 0x8000) s += String.fromCharCode.apply(null, u8.subarray(i, i + 0x8000)); return btoa(s); };
+const unb64 = (s) => { const bin = atob(s); const u = new Uint8Array(bin.length); for (let i = 0; i < bin.length; i++) u[i] = bin.charCodeAt(i); return u; };
+const cat = (...arrs) => { const n = arrs.reduce((a, b) => a + b.length, 0), out = new Uint8Array(n); let o = 0; for (const a of arrs) { out.set(a, o); o += a.length; } return out; };
+const bytesConcat = cat;
+const u8 = (...b) => new Uint8Array(b);
+const u16le = n => u8(n & 255, (n >> 8) & 255);
+const u32le = n => u8(n & 255, (n >>> 8) & 255, (n >>> 16) & 255, (n >>> 24) & 255);
+const u64le = n => { let v = BigInt(n); const o = new Uint8Array(8); for (let i = 0; i < 8; i++) { o[i] = Number(v & 255n); v >>= 8n; } return o; };
+const rdU32 = (b, o) => (b[o] | (b[o + 1] << 8) | (b[o + 2] << 16) | (b[o + 3] << 24)) >>> 0;
+const str = s => { const b = new TextEncoder().encode(s == null ? '' : s); return cat(u32le(b.length), b); };
+
+/* shortvec (compact-u16) used by the transaction format */
+function shortvec(n) { const o = []; while (true) { let b = n & 0x7f; n >>= 7; if (n === 0) { o.push(b); break; } o.push(b | 0x80); } return new Uint8Array(o); }
+
+function toast(msg, kind, ms) {
+  const t = el('div', { class: 'toast ' + (kind || '') , html: msg });
+  $('#toasts').append(t);
+  setTimeout(() => { t.style.transition = 'opacity .3s, transform .3s'; t.style.opacity = 0; t.style.transform = 'translateY(6px)'; setTimeout(() => t.remove(), 320); }, ms || 4200);
+}
+function modal(title, html) { $('#mTitle').textContent = title; $('#mBody').innerHTML = html; $('#modal').classList.add('on'); }
+function download(name, data, mime) {
+  const blob = data instanceof Blob ? data : new Blob([data], { type: mime || 'application/octet-stream' });
+  const a = el('a', { href: URL.createObjectURL(blob), download: name }); document.body.append(a); a.click(); a.remove();
+  setTimeout(() => URL.revokeObjectURL(a.href), 4000);
+}
+async function copy(text, label) { try { await navigator.clipboard.writeText(text); toast((label || 'copied') + ' ✓', 'ok', 1500); } catch (e) { modal('copy manually', '<pre class="json">' + esc(text) + '</pre>'); } }
+const logLines = [];
+function log(msg, kind) {
+  const t = new Date().toLocaleTimeString('en-GB', { hour12: false });
+  logLines.push({ t, msg, kind });
+  const box = $('#log'); if (!box) return;
+  const line = el('div', { class: 'l ' + (kind || 'info') }, el('span', { class: 't' }, t), el('span', { class: 'm', html: msg }));
+  box.append(line); box.scrollTop = box.scrollHeight;
+}
+
+/* ------------------------------ base58 ------------------------------ */
+const B58A = '123456789ABCDEFGHJKLMNPQRSTUVWXYZabcdefghijkmnopqrstuvwxyz';
+function b58e(bytes) {
+  let n = 0n; for (const b of bytes) n = (n << 8n) | BigInt(b);
+  let s = ''; while (n > 0n) { s = B58A[Number(n % 58n)] + s; n /= 58n; }
+  for (const b of bytes) { if (b) break; s = '1' + s; }
+  return s;
+}
+function b58d(str) {
+  let n = 0n; for (const ch of str) { const i = B58A.indexOf(ch); if (i < 0) throw new Error('bad base58 char: ' + ch); n = n * 58n + BigInt(i); }
+  const out = []; while (n > 0n) { out.unshift(Number(n & 255n)); n >>= 8n; }
+  for (const ch of str) { if (ch !== '1') break; out.unshift(0); }
+  return new Uint8Array(out);
+}
+const B58RE = /^[1-9A-HJ-NP-Za-km-z]{32,90}$/;
+const isB58 = s => typeof s === 'string' && B58RE.test(s) && (() => { try { return b58d(s).length === 32; } catch (e) { return false; } })();          // an address
+const isB58Key = s => typeof s === 'string' && B58RE.test(s) && (() => { try { return [32, 64].includes(b58d(s).length); } catch (e) { return false; } })(); // address, seed or 64-byte secret
+
+/* ------------------------------ ed25519 ------------------------------ */
+const sha256 = async (bytes) => new Uint8Array(await crypto.subtle.digest('SHA-256', bytes));
+const b64u = u8 => b64(u8).replace(/\+/g, '-').replace(/\//g, '_').replace(/=+$/, '');
+const unb64u = s => unb64(s.replace(/-/g, '+').replace(/_/g, '/') + '==='.slice((s.length + 3) % 4));
+
+const ED = (() => {   // minimal ed25519 field math: public-from-seed, and on-curve/off-curve test
+  const P = (1n << 255n) - 19n;
+  const D = (P - 121665n) * modinv(121666n, P) % P;
+  const I = modpow(2n, (P - 1n) / 4n, P);
+  const BX = 15112221349535400772501151409588531511454012693041857206046113283949847762202n;
+  const BY = 46316835694926478169428394003475163141307993866256225615783033603165251855960n;
+  function modinv(a, m) { let [old_r, r] = [a % m, m], [old_s, s] = [1n, 0n]; while (r) { const q = old_r / r; [old_r, r] = [r, old_r - q * r]; [old_s, s] = [s, old_s - q * s]; } return (old_s % m + m) % m; }
+  function modpow(b, e, m) { let r = 1n; b %= m; while (e > 0n) { if (e & 1n) r = r * b % m; b = b * b % m; e >>= 1n; } return r; }
+  const mod = a => (a % P + P) % P;
+  /* extended homogeneous coordinates (X:Y:Z:T), a = -1 */
+  function add(p, q) {
+    const A = mod((p[1] - p[0]) * (q[1] - q[0])), B = mod((p[1] + p[0]) * (q[1] + q[0])),
+          C = mod(p[3] * 2n * D * q[3]), Dd = mod(p[2] * 2n * q[2]),
+          E = mod(B - A), F = mod(Dd - C), G = mod(Dd + C), H = mod(B + A);
+    return [mod(E * F), mod(G * H), mod(F * G), mod(E * H)];
+  }
+  function dbl(p) {
+    const A = mod(p[0] * p[0]), B = mod(p[1] * p[1]), C = mod(2n * p[2] * p[2]), Dd = mod(-A),
+          E = mod(mod((p[0] + p[1]) * (p[0] + p[1])) - A - B), G = mod(Dd + B), F = mod(G - C), H = mod(Dd - B);
+    return [mod(E * F), mod(G * H), mod(F * G), mod(E * H)];
+  }
+  function mul(p, k) { let q = [0n, 1n, 1n, 0n], acc = p; while (k > 0n) { if (k & 1n) q = add(q, acc); acc = dbl(acc); k >>= 1n; } return q; }
+  function enc(p) {
+    const zi = modinv(p[2], P), x = mod(p[0] * zi), y = mod(p[1] * zi);
+    const out = new Uint8Array(32); let v = y;
+    for (let i = 0; i < 32; i++) { out[i] = Number(v & 255n); v >>= 8n; }
+    if (x & 1n) out[31] |= 0x80;
+    return out;
+  }
+  /* is this 32-byte value a valid curve point? (used by PDA derivation) */
+  function onCurve(bytes) {
+    if (bytes.length !== 32) return false;
+    let y = 0n; for (let i = 31; i >= 0; i--) y = (y << 8n) | BigInt(bytes[i]);
+    const sign = (y >> 255n) & 1n; y &= (1n << 255n) - 1n;
+    if (y >= P) return false;
+    const y2 = mod(y * y);
+    const u = mod(y2 - 1n), v = mod(D * y2 + 1n);
+    let x2 = mod(u * modinv(v, P));
+    let x = modpow(x2, (P + 3n) / 8n, P);
+    if (mod(x * x - x2) !== 0n) x = mod(x * I);
+    if (mod(x * x - x2) !== 0n) return false;
+    if (x === 0n && sign === 1n) return false;
+    return true;
+  }
+  return { onCurve, enc, mul, add, dbl, B: [BX, BY, 1n, mod(BX * BY)], mod, modinv, modpow, P, D };
+})();
+
+const sha512 = async (bytes) => {
+  if (crypto.subtle && crypto.subtle.digest) { try { return new Uint8Array(await crypto.subtle.digest('SHA-512', bytes)); } catch (e) { } }
+  throw new Error('SHA-512 unavailable');
+};
+/* derive an ed25519 public key from a 32-byte seed, in pure JS (needed when a user pastes a seed) */
+async function pubFromSeed(seed) {
+  const h = await sha512(seed);
+  const a = h.slice(0, 32);
+  a[0] &= 248; a[31] &= 127; a[31] |= 64;
+  let k = 0n; for (let i = 31; i >= 0; i--) k = (k << 8n) | BigInt(a[i]);
+  return ED.enc(ED.mul(ED.B, k));
+}
+
+/* ------------------------------ keys ------------------------------ */
+function toBytes(x, len) {
+  if (x instanceof Uint8Array) return x;
+  if (Array.isArray(x)) return new Uint8Array(x);
+  const s = String(x == null ? '' : x).trim();
+  if (/^[0-9a-f]+$/i.test(s) && s.length % 2 === 0) return new Uint8Array(s.match(/../g).map(h => parseInt(h, 16)));
+  if (isB58Key(s)) return b58d(s);
+  throw new Error('expected ' + (len || 'some') + ' bytes (hex, base58 or array)');
+}
+const PKCS8_ED = u8(0x30, 0x2e, 0x02, 0x01, 0x00, 0x30, 0x05, 0x06, 0x03, 0x2b, 0x65, 0x70, 0x04, 0x22, 0x04, 0x20);
+async function keypairFromSeed(input) {
+  const seed = toBytes(input, 32);
+  if (seed.length !== 32) throw new Error('a seed must be 32 bytes — got ' + seed.length);
+  const priv = await crypto.subtle.importKey('pkcs8', cat(PKCS8_ED, seed), { name: 'Ed25519' }, false, ['sign']);
+  const pub = await pubFromSeed(seed);
+  return { seed, pub, priv, addr: b58e(pub) };
+}
+async function newKeypair() {
+  const kp = await crypto.subtle.generateKey({ name: 'Ed25519' }, true, ['sign', 'verify']);
+  const jwk = await crypto.subtle.exportKey('jwk', kp.privateKey);
+  const seed = unb64u(jwk.d);
+  return keypairFromSeed(seed);
+}
+/* Solana secret keys are 64 bytes: seed || publicKey */
+async function keypairFromSecret(input) {
+  const s = String(input || '').trim();
+  let raw = null;
+  if (/^\[/.test(s)) raw = new Uint8Array(JSON.parse(s));
+  else if (/^[0-9a-fx,\s]{64,}$/i.test(s)) raw = new Uint8Array(s.replace(/^0x/, '').split(/[\s,]+/).filter(Boolean).map(h => parseInt(h, 16)));
+  else if (isB58Key(s)) raw = b58d(s);
+  else throw new Error('not a base58 key, hex or byte array');
+  if (raw.length === 64) {
+    const seed = raw.slice(0, 32), pub = raw.slice(32);
+    const derived = await pubFromSeed(seed);
+    if (b58e(derived) !== b58e(pub)) throw new Error('key is inconsistent (public half does not match the seed)');
+    const priv = await crypto.subtle.importKey('pkcs8', cat(PKCS8_ED, seed), { name: 'Ed25519' }, false, ['sign']);
+    return { seed, pub, priv, addr: b58e(pub) };
+  }
+  if (raw.length === 32) return keypairFromSeed(raw);
+  throw new Error('expected a 64-byte secret key (or a 32-byte seed) — got ' + raw.length + ' bytes');
+}
+const signBytes = async (kp, msg) => new Uint8Array(await crypto.subtle.sign('Ed25519', kp.priv, msg));
+
+/* ------------------------------ PDA ------------------------------ */
+async function findPda(seedByteArrays, programId) {
+  const prog = typeof programId === 'string' ? b58d(programId) : programId;   // accepts base58 or raw bytes
+  const tag = new TextEncoder().encode('ProgramDerivedAddress');
+  for (let bump = 255; bump >= 0; bump--) {
+    const h = await sha256(cat(...seedByteArrays, u8(bump), prog, tag));
+    if (!ED.onCurve(h)) return { addr: h, bump };
+  }
+  throw new Error('no viable bump');
+}
+const SECP_MARK = null;
+
+/* ------------------------------ RPC ------------------------------ */
+function rpcUrl() { return S.rpc || CFG.nets[S.net].rpc; }
+let reqId = 1;
+async function rpc(method, params, opts) {
+  const ctl = new AbortController();
+  const t = setTimeout(() => ctl.abort(), (opts && opts.timeout) || 25000);
+  try {
+    const r = await fetch(rpcUrl(), {
+      method: 'POST', headers: { 'content-type': 'application/json' }, signal: ctl.signal,
+      body: JSON.stringify({ jsonrpc: '2.0', id: reqId++, method, params: params || [] })
+    });
+    const j = await r.json();
+    if (j.error) throw new Error(method + ' → ' + (j.error.message || JSON.stringify(j.error)));
+    return j.result;
+  } finally { clearTimeout(t); }
+}
+const rentCache = {};
+async function rentExempt(size) {
+  backgroundRents();
+  return S.rents && S.rents[size] != null ? S.rents[size] : RENT_FALLBACK[size];
+}
+/* Fallbacks are the last-known protocol constants; the app always prefers a live
+   getMinimumBalanceForRentExemption and labels the numbers as fallback when offline.
+   Verified against mainnet SysvarRent on 2026-09-14: lamports_per_byte_year 5080,
+   exemption_threshold 1.0 → rent = (size + 128) × 5080 lamports. */
+const RENT_FALLBACK = { 82: 1066800, 165: 1488440, 607: 3733800 };
+let rentsAsked = false;
+async function backgroundRents() {
+  if (rentsAsked) return; rentsAsked = true;
+  try {
+    const sizes = [82, 165, 607];
+    const vals = await Promise.all(sizes.map(s => rpc('getMinimumBalanceForRentExemption', [s])));
+    S.rents = {}; sizes.forEach((s, i) => S.rents[s] = vals[i]);
+    S.rentsLive = true;
+    log('rent fetched live: 82B=' + num(S.rents[82]) + ' · 165B=' + num(S.rents[165]) + ' · 607B=' + num(S.rents[607]) + ' lamports', 'ok');
+    renderCost();
+  } catch (e) {
+    S.rentsLive = false;
+    log('could not reach ' + rpcUrl() + ' — using last-known rent constants (labelled fallback)', 'warn');
+    renderCost();
+  }
+  try {
+    const f = await rpc('getRecentPrioritizationFees', []);
+    const arr = (f || []).map(x => x.prioritizationFee).filter(x => Number.isFinite(x)).sort((a, b) => a - b);
+    if (arr.length) { S.prioMedian = arr[Math.floor(arr.length / 2)]; }
+  } catch (e) { }
+  try {
+    const t = await rpc('getLatestBlockhash', [{ commitment: 'confirmed' }]);
+    if (t && t.value) S.lastBlockhash = t.value.blockhash;
+  } catch (e) { }
+  renderPrioNote();
+}
+async function fetchSolUsd() {
+  try {
+    const r = await fetch('https://api.coingecko.com/api/v3/simple/price?ids=solana&vs_currencies=usd');
+    const j = await r.json(); S.solUsd = j.solana.usd; S.solUsdLive = true;
+  } catch (e) { S.solUsd = null; S.solUsdLive = false; }
+  const c = $('#solChip'), p = $('#solPrice');
+  if (p) p.textContent = S.solUsd ? '$' + S.solUsd.toFixed(2) + (S.solUsdLive ? '' : ' (cached)') : 'price offline';
+  renderCost();
+}
+
+/* ------------------------------ the text→coin engine ------------------------------ */
+const STOP = new Set(('a an the and or but if then than that this these those is are was were be been being am do does did doing have has had having ' +
+  'i me my mine you your yours he him his she her hers it its we us our ours they them their theirs what which who whom whose when where why how ' +
+  'all any both each few more most other some such no nor not only own same so too very can will just dont dont ve ll re d m o s t to of in for on ' +
+  'with at by from up about into over after before under again further once here there when where why how as out off than into about got get make ' +
+  'made like really very much many lot lots im ive dont cant wont thats theres').split(/\s+/));
+
+const SUFFIX = {
+  degen: ['inu', 'coin', 'moon', 'dao', 'fi', 'verse', 'pump', 'chad', 'gmi', 'wagmi', 'alpha', 'based', 'degen', 'pilled', 'maxi', 'larp'],
+  clean: ['protocol', 'network', 'capital', 'index', 'labs', 'reserve', 'standard', 'collective'],
+  absurd: ['delusion', 'theorem', 'paradox', 'conspiracy', 'committee', 'situation', 'loophole', 'aftermath'],
+  wholesome: ['garden', 'lantern', 'blanket', 'loaf', 'nest', 'tea', 'picnic', 'hearth']
+};
+const PREFIX = {
+  degen: ['', 'gm ', 'ser ', 'wagmi ', 'free ', 'based '],
+  clean: ['', 'Noble ', 'Quiet ', 'Open ', 'Prime '],
+  absurd: ['Moist ', 'Unlicensed ', 'Municipal ', 'Reverse ', 'Aggressively '],
+  wholesome: ['Little ', 'Warm ', 'Soft ', 'Brave ', 'Gentle ']
+};
+const LORE = {
+  degen: ['the chart does not care about your feelings, and this coin does not either.',
+    'no roadmap, no utility, no team — just a ticker and a conviction.',
+    'jeets will jeet. the rest of us hold on vibes.',
+    'minted in one transaction for less than a coffee. that is the whole pitch.'],
+  clean: ['a memecoin with the paperwork of a real asset and none of the promises.',
+    'fixed supply, no mint authority, no freeze authority. verifiable in the explorer, not in a pitch deck.',
+    'everything is on-chain: the name, the supply, the absence of a plan.'],
+  absurd: ['the premise is indefensible and that is precisely the point.',
+    'attempting to explain this coin voids any explanation of it.',
+    'the ticker was chosen by algorithm, which is funnier than any human could manage.'],
+  wholesome: ['made quietly, shared kindly. supply is fixed and so is the affection.',
+    'no promises beyond a picture and a ticker, both generated with care.',
+    'for holding, not for flipping. flipping is allowed though.']
+};
+
+/* deterministic rng so the same text always gives the same coin (until you re-roll) */
+function hashSeed(str) { let h = 2166136261 >>> 0; for (let i = 0; i < str.length; i++) { h ^= str.charCodeAt(i); h = Math.imul(h, 16777619) >>> 0; } return h >>> 0; }
+function rng(seed) { let a = hashSeed(seed) || 1; return () => { a ^= a << 13; a >>>= 0; a ^= a >> 17; a ^= a << 5; a >>>= 0; return a / 4294967296; }; }
+const pick = (r, arr) => arr[Math.floor(r() * arr.length) % arr.length];
+
+function words(text) {
+  return (String(text || '').toLowerCase().match(/[a-z0-9'][a-z0-9']+/g) || []).filter(w => w.length > 2 && !STOP.has(w));
+}
+function titleCase(s) { return s.replace(/\b[a-z]/g, c => c.toUpperCase()); }
+function tickerFrom(name) {
+  const w = name.toUpperCase().replace(/[^A-Z0-9 ]/g, '').split(/\s+/).filter(Boolean);
+  let base = w.length > 1 ? w.map(x => x[0]).join('') + (w[0].length > 3 ? w[0].slice(1, 3) : '') : (w[0] || 'COIN');
+  base = base.slice(0, 6);
+  if (base.length < 3) base = (base + 'XYZ').slice(0, 3);
+  return base;
+}
+function nameFrom(wordsArr, tone, r) {
+  const w = wordsArr.length ? wordsArr : ['nothing'];
+  const core = pick(r, w);
+  const second = w.length > 1 ? pick(r, w.filter(x => x !== core)) : '';
+  const suf = pick(r, SUFFIX[tone] || SUFFIX.degen);
+  const pre = pick(r, PREFIX[tone] || PREFIX.degen);
+  const cap = s => s.charAt(0).toUpperCase() + s.slice(1);
+  const shapes = [
+    () => cap(core) + ' ' + cap(suf),
+    () => cap(pre + core),
+    () => cap(core) + (second ? ' ' + cap(second) : ''),
+    () => cap(core) + cap(suf),
+    () => cap(core) + ' of ' + cap(second || 'Nothing')
+  ];
+  let name = pick(r, shapes)();
+  name = name.replace(/\s+/g, ' ').trim().slice(0, 26);
+  return cap(name);
+}
+function loreFrom(wordsArr, tone, name, sym, r) {
+  const w = wordsArr.length ? wordsArr : ['silence'];
+  const bits = [];
+  const openers = ['$' + sym + ' exists because someone typed “' + (S.prompt || '').trim().slice(0, 80) + '”.',
+    '$' + sym + ' is what was left after the algorithm read the text and refused to explain itself.',
+    '$' + sym + ' started as a sentence nobody else understood.'];
+  bits.push(pick(r, openers));
+  bits.push('keywords it latched onto: ' + [...new Set(w)].slice(0, 6).join(', ') + '.');
+  bits.push(pick(r, LORE[tone] || LORE.degen));
+  return bits.join(' ').replace(/\s+/g, ' ').trim();
+}
+function generateCoin(prompt, opts) {
+  opts = opts || {};
+  const tone = opts.tone || S.tone, salt = opts.salt != null ? opts.salt : (S.art.salt = (S.art.salt || 0) + 1);
+  const r = rng(String(prompt) + '|' + tone + '|' + salt);
+  const w = words(prompt);
+  const name = opts.name || nameFrom(w, tone, r);
+  const sym = opts.sym || tickerFrom(name + Math.round(r() * 9));
+  const desc = opts.desc || loreFrom(w, tone, name, sym, r);
+  const styles = ART_STYLES.map(s => s.id);
+  const style = opts.style && opts.style !== 'auto' ? opts.style : styles[Math.floor(r() * styles.length) % styles.length];
+  const palettes = Object.keys(PALETTES);
+  const palette = opts.palette || palettes[Math.floor(r() * palettes.length) % palettes.length];
+  const coin = {
+    prompt, name, sym, desc, style, palette, tone, salt,
+    tags: [...new Set(w)].slice(0, 8),
+    seedHex: hex(seedLabelBytes(String(prompt) + salt)),
+    createdAt: Date.now()
+  };
+  return coin;
+}
+/* short human-readable seed label (the real entropy path is the rng above) */
+function seedLabelBytes(str) { return new Uint8Array(8).map((_, i) => (hashSeed(str + ':' + i) & 255)); }
+
+/* ------------------------------ art ------------------------------ */
+const PALETTES = {
+  acid:   ['#00ff85', '#04150c', '#eafff5', '#0affc0', '#02301c'],
+  candy:  ['#ff3ea5', '#12061f', '#fff0fa', '#7c5cff', '#33064a'],
+  gold:   ['#ffcf49', '#160f00', '#fff6d8', '#ff8a00', '#3d2a00'],
+  ice:    ['#7fd4ff', '#03121f', '#eafaff', '#3aa0ff', '#062a45'],
+  rust:   ['#ff6a2b', '#1a0803', '#ffe9dd', '#ffb03a', '#3b1405'],
+  mono:   ['#e9edf7', '#0a0c11', '#ffffff', '#98a2bf', '#1a1f2e']
+};
+const rnd2 = (r, a, b) => a + r() * (b - a);
+const STYLE_NAMES = { orb: 'orb', grid: 'grid', blobs: 'blobs', circuit: 'circuit', typo: 'typo', glitch: 'glitch', beams: 'beams', wave: 'wave' };
+const ART_STYLES = Object.keys(STYLE_NAMES).map(id => ({ id, name: STYLE_NAMES[id] }));
+
+function artSVG(coin, o) {
+  o = o || {};
+  const W = o.size || 512, H = W, p = PALETTES[coin.palette] || PALETTES.acid;
+  const r = rng(coin.seedLabel = coin.seedLabel || (String(coin.prompt) + '|' + coin.style + '|' + coin.salt + '|' + (coin.styleVariant || 0)));
+  const phase = o.phase || 0, anim = !!o.animate, tick = (coin.sym || '').toUpperCase();
+  const parts = [];
+  const defs = [];
+  defs.push(`<radialGradient id="bg" cx="50%" cy="38%" r="72%"><stop offset="0%" stop-color="${p[0]}" stop-opacity=".55"/><stop offset="58%" stop-color="${p[3]}" stop-opacity=".22"/><stop offset="100%" stop-color="${p[1]}" stop-opacity="1"/></radialGradient>`);
+  defs.push(`<linearGradient id="ink" x1="0" y1="0" x2="1" y2="1"><stop offset="0%" stop-color="${p[2]}"/><stop offset="100%" stop-color="${p[0]}"/></linearGradient>`);
+  defs.push(`<filter id="soft"><feGaussianBlur stdDeviation="${(W / 46).toFixed(1)}"/></filter>`);
+  defs.push(`<filter id="grain"><feTurbulence type="fractalNoise" baseFrequency=".85" numOctaves="2" stitchTiles="stitch"/><feColorMatrix type="saturate" values="0"/></filter>`);
+  const xform = phase ? ` transform="rotate(${(phase * 360).toFixed(1)} 256 256)"` : '';
+
+  if (coin.style === 'orb') {
+    const cx = W / 2, cy = H / 2, R = W * .30;
+    parts.push(`<g transform="translate(${cx} ${cy})"${xform}><animateTransform attributeName="transform" type="rotate" from="0" to="360" dur="26s" repeatCount="indefinite" additive="sum"/>`);
+    for (let i = 0; i < 3; i++) parts.push(`<ellipse rx="${R * (1 + i * .22)}" ry="${R * (0.34 + i * .12)}" fill="none" stroke="${i % 2 ? p[3] : p[0]}" stroke-opacity="${.5 - i * .1}" stroke-width="${2 - i * .4}" transform="rotate(${i * 34})"/>`);
+    parts.push(`</g>`);
+    parts.push(`<circle cx="${cx}" cy="${cy}" r="${R}" fill="url(#bg)" stroke="${p[2]}" stroke-opacity=".5" stroke-width="1.4"/>`);
+    parts.push(`<circle cx="${cx - R * .35}" cy="${cy - R * .38}" r="${R * .34}" fill="${p[2]}" opacity=".22" filter="url(#soft)"/>`);
+    parts.push(`<circle cx="${cx + R * .3}" cy="${cy + R * .3}" r="${R * .5}" fill="${p[0]}" opacity=".12" filter="url(#soft)"/>`);
+    for (let i = 0; i < 90; i++) { const a = r() * Math.PI * 2, d = R * (1.15 + r() * 1.0), s = rnd2(r, .4, 1.6); parts.push(`<circle cx="${(cx + Math.cos(a) * d).toFixed(1)}" cy="${(cy + Math.sin(a) * d).toFixed(1)}" r="${s.toFixed(1)}" fill="${p[2]}" opacity="${rnd2(r, .18, .7).toFixed(2)}"/>`); }
+    if (anim) parts.push(`<circle cx="${cx}" cy="${cy}" r="${R}" fill="none" stroke="${p[2]}" stroke-opacity=".6" stroke-width="2"><animate attributeName="r" values="${R};${R * 1.06};${R}" dur="4.5s" repeatCount="indefinite"/><animate attributeName="stroke-opacity" values=".6;.15;.6" dur="4.5s" repeatCount="indefinite"/></circle>`);
+  }
+  else if (coin.style === 'grid') {
+    const n = 9, step = W / n, off = phase * step;
+    parts.push(`<g transform="skewY(-6)">`);
+    for (let i = -1; i <= n + 1; i++) parts.push(`<line x1="${i * step}" y1="-20" x2="${i * step}" y2="${H + 20}" stroke="${p[3]}" stroke-opacity=".38" stroke-width="1"/>`);
+    for (let i = -1; i <= n + 1; i++) parts.push(`<line x1="-20" y1="${i * step + off}" x2="${W + 20}" y2="${i * step + off}" stroke="${p[0]}" stroke-opacity=".26" stroke-width="1"/>`);
+    parts.push(`</g>`);
+    for (let i = 0; i < 26; i++) { const x = Math.round(rnd2(r, 0, n)) * step, y = Math.round(rnd2(r, 0, n)) * step, s = rnd2(r, 2, 7); parts.push(`<circle cx="${x}" cy="${y + (phase * step + n * step) % step - step / 2}" r="${s}" fill="${p[0]}" opacity=".85"/>`); }
+    for (let i = 0; i < 8; i++) { const x = Math.round(rnd2(r, 0, n)) * step; parts.push(`<rect x="${x - 3}" y="0" width="6" height="${H}" fill="${p[2]}" opacity=".05"/>`); }
+    parts.push(`<rect width="${W}" height="${H}" fill="none" stroke="${p[2]}" stroke-opacity=".25" stroke-width="3"/>`);
+  }
+  else if (coin.style === 'blobs') {
+    for (let i = 0; i < 7; i++) {
+      const cx = rnd2(r, .1, .9) * W, cy = rnd2(r, .1, .9) * H, rr = rnd2(r, .1, .28) * W, col = [p[0], p[2], p[3], p[4]][Math.floor(r() * 4)];
+      parts.push(`<circle cx="${cx.toFixed(0)}" cy="${cy.toFixed(0)}" r="${rr.toFixed(0)}" fill="${col}" opacity="${rnd2(r, .35, .7).toFixed(2)}" filter="url(#soft)">${anim ? `<animate attributeName="cy" values="${cy.toFixed(0)};${(cy + rnd2(r, -40, 40)).toFixed(0)};${cy.toFixed(0)}" dur="${rnd2(r, 6, 12).toFixed(1)}s" repeatCount="indefinite"/>` : ''}</circle>`);
+    }
+    parts.push(`<rect width="${W}" height="${H}" fill="url(#grain)" opacity=".07" style="mix-blend-mode:overlay"/>`);
+  }
+  else if (coin.style === 'circuit') {
+    const trace = (y) => { let d = `M0 ${y}`, x = 0; while (x < W) { const run = rnd2(r, .06, .22) * W; x += run; d += ` H${x.toFixed(0)}`; const jump = rnd2(r, -34, 34); d += ` v${jump.toFixed(0)}`; } return d; };
+    for (let i = 0; i < 12; i++) {
+      const y = rnd2(r, 20, H - 20), on = r() > .45;
+      parts.push(`<path d="${trace(y.toFixed(0))}" fill="none" stroke="${on ? p[0] : p[3]}" stroke-opacity="${on ? .85 : .45}" stroke-width="${on ? 2.2 : 1.3}" stroke-linejoin="round"/>`);
+      if (on && anim) parts.push(`<circle r="4.5" fill="${p[2]}"><animateMotion dur="${rnd2(r, 3, 7).toFixed(1)}s" repeatCount="indefinite" path="${trace(y.toFixed(0))}"/></circle>`);
+    }
+    for (let i = 0; i < 44; i++) parts.push(`<circle cx="${rnd2(r, 10, W - 10).toFixed(0)}" cy="${rnd2(r, 10, H - 10).toFixed(0)}" r="${rnd2(r, 1.4, 3.4).toFixed(1)}" fill="${p[2]}" opacity="${rnd2(r, .3, .8).toFixed(2)}"/>`);
+    parts.push(`<rect width="${W}" height="${H}" fill="none" stroke="${p[4]}" stroke-opacity=".5" stroke-width="2"/>`);
+  }
+  else if (coin.style === 'typo') {
+    const size = W * (tick.length > 6 ? .17 : .24);
+    parts.push(`<text x="${W / 2}" y="${H * .54}" text-anchor="middle" font-family="ui-sans-serif,system-ui,sans-serif" font-weight="800" font-size="${size}" letter-spacing="${-size * .03}" fill="none" stroke="url(#ink)" stroke-width="${size * .045}">${esc(tick)}</text>`);
+    parts.push(`<text x="${W / 2}" y="${H * .54}" text-anchor="middle" font-family="ui-sans-serif,system-ui,sans-serif" font-weight="800" font-size="${size}" letter-spacing="${-size * .03}" fill="${p[2]}" fill-opacity=".12">${esc(tick)}</text>`);
+    for (let i = 0; i < 16; i++) parts.push(`<rect x="${rnd2(r, 0, W).toFixed(0)}" y="${rnd2(r, 0, H).toFixed(0)}" width="${rnd2(r, 10, 120).toFixed(0)}" height="${rnd2(r, 1, 4).toFixed(1)}" fill="${p[0]}" opacity="${rnd2(r, .05, .3).toFixed(2)}"/>`);
+    if (anim) parts.push(`<text x="${W / 2}" y="${H * .54}" text-anchor="middle" font-family="ui-sans-serif,system-ui,sans-serif" font-weight="800" font-size="${size}" fill="${p[0]}" opacity=".9"><animate attributeName="opacity" values=".85;.35;.85" dur="2.6s" repeatCount="indefinite"/>${esc(tick)}</text>`);
+  }
+  else if (coin.style === 'glitch') {
+    const bands = 22;
+    for (let i = 0; i < bands; i++) {
+      const y = (i / bands) * H, h = H / bands * rnd2(r, .5, 1.1), dx = rnd2(r, -1, 1) * W * .14 * (r() > .5 ? 1 : .3);
+      const col = [p[0], p[2], p[3], p[1]][i % 4];
+      parts.push(`<rect x="${dx.toFixed(1)}" y="${y.toFixed(1)}" width="${W}" height="${h.toFixed(1)}" fill="${col}" opacity="${rnd2(r, .25, .8).toFixed(2)}">${anim ? `<animate attributeName="x" values="${dx.toFixed(1)};${(-dx).toFixed(1)};${dx.toFixed(1)}" dur="${rnd2(r, 1.4, 4).toFixed(1)}s" repeatCount="indefinite"/>` : ''}</rect>`);
+    }
+    for (let i = 0; i < H; i += 4) parts.push(`<rect x="0" y="${i}" width="${W}" height="1.1" fill="#000" opacity=".28"/>`);
+    parts.push(`<rect width="${W}" height="${H}" fill="url(#grain)" opacity=".06" style="mix-blend-mode:screen"/>`);
+  }
+  else if (coin.style === 'beams') {
+    const cx = W / 2, cy = H * .58;
+    parts.push(`<g transform="translate(${cx} ${cy})">${anim ? `<animateTransform attributeName="transform" type="rotate" from="0" to="360" dur="40s" repeatCount="indefinite"/>` : ''}`);
+    for (let i = 0; i < 26; i++) { const a = (i / 26) * 360, len = W * (i % 2 ? .75 : .52); parts.push(`<path d="M0 0 L${Math.cos(a * Math.PI / 180) * len} ${Math.sin(a * Math.PI / 180) * len} L${Math.cos((a + 5) * Math.PI / 180) * len} ${Math.sin((a + 5) * Math.PI / 180) * len} Z" fill="${p[0]}" opacity="${(i % 3 === 0 ? .16 : .07).toFixed(2)}"/>`); }
+    parts.push(`</g>`);
+    parts.push(`<circle cx="${cx}" cy="${cy}" r="${W * .17}" fill="url(#bg)" stroke="${p[2]}" stroke-opacity=".6" stroke-width="2"/>`);
+    parts.push(`<text x="${cx}" y="${cy + W * .045}" text-anchor="middle" font-family="ui-sans-serif,system-ui,sans-serif" font-weight="800" font-size="${W * .12}" fill="url(#ink)">${esc(tick.slice(0, 4))}</text>`);
+    for (let i = 0; i < 60; i++) parts.push(`<circle cx="${rnd2(r, 0, W).toFixed(0)}" cy="${rnd2(r, 0, H * .8).toFixed(0)}" r="${rnd2(r, .5, 1.8).toFixed(1)}" fill="${p[2]}" opacity="${rnd2(r, .1, .5).toFixed(2)}"/>`);
+  }
+  else { /* wave */
+    const layers = 6;
+    for (let L = 0; L < layers; L++) {
+      const amp = W * (.045 + L * .012), base = H * (.35 + L * .1), col = L % 2 ? p[3] : p[0];
+      let d = `M0 ${base.toFixed(0)}`;
+      for (let x = 0; x <= W; x += W / 24) { const y = base + Math.sin((x / W * 2 + phase + L * .35) * Math.PI * 2) * amp; d += ` L${x.toFixed(0)} ${y.toFixed(0)}`; }
+      d += ` L${W} ${H} L0 ${H} Z`;
+      parts.push(`<path d="${d}" fill="${col}" opacity="${(.14 + L * .07).toFixed(2)}"/>`);
+    }
+    parts.push(`<circle cx="${W * .74}" cy="${H * .26}" r="${W * .09}" fill="${p[2]}" opacity=".85"/>`);
+    if (anim) parts.push(`<circle cx="${W * .74}" cy="${H * .26}" r="${W * .09}" fill="none" stroke="${p[2]}" stroke-width="2"><animate attributeName="r" values="${W * .09};${W * .12};${W * .09}" dur="5s" repeatCount="indefinite"/><animate attributeName="opacity" values="1;.2;1" dur="5s" repeatCount="indefinite"/></circle>`);
+    parts.push(`<text x="${W * .06}" y="${H * .92}" font-family="ui-sans-serif,system-ui,sans-serif" font-weight="800" font-size="${W * .1}" fill="url(#ink)" opacity=".95">${esc(tick)}</text>`);
+  }
+  /* ticker stamp + frame for every style */
+  if (coin.style !== 'typo' && coin.style !== 'wave') parts.push(`<text x="${W * .045}" y="${H * .955}" font-family="ui-sans-serif,system-ui,sans-serif" font-weight="700" font-size="${W * .042}" fill="${p[2]}" opacity=".72" letter-spacing="${W * .002}">$${esc(tick)}</text>`);
+  return `<svg xmlns="http://www.w3.org/2000/svg" width="${W}" height="${H}" viewBox="0 0 ${W} ${H}"><defs>${defs.join('')}</defs><rect width="${W}" height="${H}" fill="${p[1]}"/><rect width="${W}" height="${H}" fill="url(#bg)"/>${parts.join('')}</svg>`;
+}
+function svgToImg(svg) {
+  return new Promise((res, rej) => {
+    const img = new Image();
+    img.onload = () => res(img); img.onerror = () => rej(new Error('svg→img failed'));
+    img.src = 'data:image/svg+xml;base64,' + b64(new TextEncoder().encode(svg));
+  });
+}
+async function svgToCanvas(svg, size) {
+  const img = await svgToImg(svg);
+  const c = document.createElement('canvas'); c.width = c.height = size;
+  const ctx = c.getContext('2d'); ctx.drawImage(img, 0, 0, size, size);
+  return c;
+}
+
+/* ------------------------------ GIF (median-cut + LZW) ------------------------------ */
+function quantize(frames, W, H, maxColors) {
+  const hist = new Map();
+  for (const frame of frames) {
+    for (let i = 0; i < frame.length; i += 4) {
+      const k = (frame[i] << 16) | (frame[i + 1] << 8) | frame[i + 2];
+      hist.set(k, (hist.get(k) || 0) + 1);
+    }
+  }
+  let boxes = [{ px: [...hist.entries()] }];
+  while (boxes.length < maxColors) {
+    let bi = -1, best = -1;
+    boxes.forEach((b, i) => {
+      if (b.px.length < 2) return;
+      const chans = [0, 1, 2].map(c => { const vals = b.px.map(([k]) => (k >> (16 - c * 8)) & 255); return Math.max(...vals) - Math.min(...vals); });
+      const spread = Math.max(...chans) * b.px.length;
+      if (spread > best) { best = spread; bi = i; }
+    });
+    if (bi < 0) break;
+    const b = boxes[bi];
+    const chans = [0, 1, 2].map(c => { const vals = b.px.map(([k]) => (k >> (16 - c * 8)) & 255); return Math.max(...vals) - Math.min(...vals); });
+    const ch = chans.indexOf(Math.max(...chans));
+    b.px.sort((x, y) => (((x[0] >> (16 - ch * 8)) & 255) - ((y[0] >> (16 - ch * 8)) & 255)));
+    const mid = Math.floor(b.px.length / 2);
+    boxes.splice(bi, 1, { px: b.px.slice(0, mid) }, { px: b.px.slice(mid) });
+  }
+  return boxes.filter(b => b.px.length).map(b => {
+    let r = 0, g = 0, bl = 0, n = 0;
+    for (const [k, c] of b.px) { r += (k >> 16) & 255; g += (k >> 8) & 255; bl += k & 255; n += c; }
+    return [Math.round(r / b.px.length), Math.round(g / b.px.length), Math.round(bl / b.px.length)];
+  });
+}
+function nearest(pal, r, g, b) {
+  let best = 0, bd = 1e9;
+  for (let i = 0; i < pal.length; i++) { const d = (pal[i][0] - r) ** 2 + (pal[i][1] - g) ** 2 + (pal[i][2] - b) ** 2; if (d < bd) { bd = d; best = i; } }
+  return best;
+}
+function lzwEncode(minCode, pixels) {
+  const clear = 1 << minCode, end = clear + 1;
+  let size = minCode + 1, dict = new Map(), next = end + 1;
+  const out = []; let cur = 0, curBits = 0;
+  const put = (code) => { cur |= code << curBits; curBits += size; while (curBits >= 8) { out.push(cur & 255); cur >>= 8; curBits -= 8; } };
+  put(clear);
+  let prefix = pixels[0];
+  for (let i = 1; i < pixels.length; i++) {
+    const k = pixels[i], key = prefix * 4096 + k;
+    if (dict.has(key)) { prefix = dict.get(key); continue; }
+    put(prefix);
+    dict.set(key, next++);
+    if (next > (1 << size)) { if (size < 12) size++; else { put(clear); dict = new Map(); next = end + 1; size = minCode + 1; } }
+    prefix = k;
+  }
+  put(prefix); put(end);
+  if (curBits > 0) out.push(cur & 255);
+  return out;
+}
+function encodeGIF(frames, W, H, delayCs, palette) {
+  const out = [];
+  const push = (...b) => out.push(...b);
+  const u16 = n => [n & 255, (n >> 8) & 255];
+  push(0x47, 0x49, 0x46, 0x38, 0x39, 0x61);          // GIF89a
+  push(...u16(W), ...u16(H), 0xf7, 0x00, 0x00);       // 256-colour global table
+  for (let i = 0; i < 256; i++) { const c = palette[i] || [0, 0, 0]; push(c[0], c[1], c[2]); }
+  push(0x21, 0xff, 0x0b); 'NETSCAPE2.0'.split('').forEach(c => push(c.charCodeAt(0)));
+  push(0x03, 0x01, 0x00, 0x00, 0x00);
+  for (const frame of frames) {
+    push(0x21, 0xf9, 0x04, 0x04, ...u16(delayCs), 0x00, 0x00);
+    push(0x2c, ...u16(0), ...u16(0), ...u16(W), ...u16(H), 0x00);
+    push(8);
+    const idx = new Uint8Array(W * H);
+    for (let i = 0, p = 0; i < frame.length; i += 4, p++) idx[p] = nearest(palette, frame[i], frame[i + 1], frame[i + 2]);
+    const data = lzwEncode(8, idx);
+    for (let i = 0; i < data.length; i += 255) { const chunk = data.slice(i, i + 255); push(chunk.length, ...chunk); }
+    push(0x00);
+  }
+  push(0x3b);
+  return new Blob([new Uint8Array(out)], { type: 'image/gif' });
+}
+async function buildGifFrames(coin, n, size, onProgress) {
+  const out = [];
+  for (let i = 0; i < n; i++) {
+    const svg = artSVG(coin, { size, phase: i / n, animate: false });
+    const c = await svgToCanvas(svg, size);
+    out.push(new Uint8ClampedArray(c.getContext('2d').getImageData(0, 0, size, size).data));
+    if (onProgress) onProgress(i + 1, n);
+    await sleep(0);
+  }
+  return out;
+}
+
+/* ------------------------------ metadata ------------------------------ */
+function metadataJSON(coin, imageRef) {
+  return {
+    name: coin.name,
+    symbol: coin.sym,
+    description: coin.desc,
+    image: imageRef || '',
+    external_url: '',
+    attributes: [
+      { trait_type: 'engine', value: 'text2coin local' },
+      { trait_type: 'style', value: coin.style },
+      { trait_type: 'palette', value: coin.palette },
+      { trait_type: 'tone', value: coin.tone },
+      { trait_type: 'source text', value: String(coin.prompt).slice(0, 120) },
+      ...coin.tags.slice(0, 6).map(t => ({ trait_type: 'keyword', value: t }))
+    ],
+    properties: {
+      category: 'image',
+      files: [{ uri: imageRef || '', type: 'image/gif' }, { uri: imageRef || '', type: 'image/svg+xml' }],
+      creators: []
+    },
+    extensions: { solana: { decimals: Number(S.decimals), supply: String(supplyWhole()), mint: null } }
+  };
+}
+function supplyWhole() {
+  const s = S.supply === 'custom' ? +($('#supplyCustom') ? $('#supplyCustom').value : S.customSupply) : +S.supply;
+  return Number.isFinite(s) && s > 0 ? s : 1000000000;
+}
+const supplyBase = () => BigInt(Math.round(supplyWhole())) * (10n ** BigInt(Number(S.decimals)));
+/* =====================================================================
+   Part 2/2: instructions · message → wire · cost model · wallet ·
+             launch pipeline · exports · UI wiring · live ticker
+   ===================================================================== */
+
+/* ------------------------------ instructions (bytes verified against @solana/*) ------------------------------ */
+const PID = Object.fromEntries(Object.entries(CFG.id).map(([k, v]) => [k, b58d(v)]));
+const acc = (k, s, w) => ({ key: typeof k === 'string' ? b58d(k) : k, signer: !!s, writable: !!w });
+
+const IX = {
+  cuLimit: (units) => ({ program: PID.CB, keys: [], data: cat(u8(2), u32le(units)) }),
+  cuPrice: (micro) => ({ program: PID.CB, keys: [], data: cat(u8(3), u64le(micro)) }),
+  createAccount: (payer, newKey, lamports, space, owner) => ({
+    program: PID.SYSTEM, keys: [acc(payer, 1, 1), acc(newKey, 1, 1)],
+    data: cat(u32le(0), u64le(lamports), u64le(space), owner)
+  }),
+  initMint2: (mint, decimals, authority, tokenProgram) => ({
+    program: tokenProgram || PID.TOKEN, keys: [acc(mint, 0, 1)],
+    data: cat(u8(20), u8(decimals), authority, u8(0))          // no freeze authority → one less thing to trust
+  }),
+  revokeMint: (mint, authority, tokenProgram) => ({
+    program: tokenProgram || PID.TOKEN, keys: [acc(mint, 0, 1), acc(authority, 1, 0)],
+    data: u8(6, 0, 0)                                          // SetAuthority(MintTokens → None)
+  }),
+  ataIdem: (payer, ata, owner, mint, tokenProgram) => ({
+    program: PID.ATA, keys: [acc(payer, 1, 1), acc(ata, 0, 1), acc(owner, 0, 0), acc(mint, 0, 0), acc(PID.SYSTEM, 0, 0), acc(tokenProgram || PID.TOKEN, 0, 0)],
+    data: u8(1)
+  }),
+  mintTo: (mint, dest, authority, amount, tokenProgram) => ({
+    program: tokenProgram || PID.TOKEN, keys: [acc(mint, 0, 1), acc(dest, 0, 1), acc(authority, 1, 0)],
+    data: cat(u8(7), u64le(amount))
+  }),
+  /* Metaplex CreateMetadataAccountV3 — disc 33, DataV2 + isMutable + no collection details */
+  mplV3: (meta, mint, mintAuth, payer, updateAuth, d) => ({
+    program: PID.MPL, keys: [acc(meta, 0, 1), acc(mint, 0, 0), acc(mintAuth, 1, 0), acc(payer, 1, 1), acc(updateAuth, 0, 0), acc(PID.SYSTEM, 0, 0)],
+    data: cat(u8(33), str(d.name), str(d.symbol), str(d.uri), u16le(0), u8(0, 0, 0), u8(1), u8(0))
+  }),
+  /* Token-2022: metadata pointer → token metadata, stored inside the mint account */
+  t22Ptr: (mint, authority, addr) => ({
+    program: PID.TOKEN22, keys: [acc(mint, 0, 1)],
+    data: cat(u8(39, 0), authority, addr)                      // 66 bytes: [tag, sub, authority(32), address(32)]
+  }),
+  t22Meta: (meta, updateAuth, mint, mintAuth, d) => ({
+    program: PID.TOKEN22, keys: [acc(meta, 0, 1), acc(updateAuth, 0, 0), acc(mint, 0, 0), acc(mintAuth, 1, 0)],
+    data: cat(u8(0xd2, 0xe1, 0x1e, 0xa2, 0x58, 0xb8, 0x4d, 0x8d), str(d.name), str(d.symbol), str(d.uri))
+  })
+};
+
+/* ------------------------------ message → wire ------------------------------ */
+function packMessage(payerKey, extraSigners, ixs, blockhash) {
+  const map = new Map();
+  const add = (k, s, w) => {
+    const id = b58e(k), cur = map.get(id);
+    if (cur) { cur.signer = cur.signer || !!s; cur.writable = cur.writable || !!w; }
+    else map.set(id, { key: k, signer: !!s, writable: !!w, id });
+  };
+  add(payerKey, true, true);
+  extraSigners.forEach(k => add(k, true, false));
+  ixs.forEach(ix => { add(ix.program, false, false); ix.keys.forEach(k => add(k.key, k.signer, k.writable)); });
+  const all = [...map.values()];
+  const rank = a => (a.signer ? (a.writable ? 0 : 1) : (a.writable ? 2 : 3));
+  /* Same ordering @solana/web3.js produces: writable signers, readonly signers, writable
+     accounts, readonly accounts, ties broken by account address ascending — then the fee payer
+     is swapped back to index 0, which the runtime requires. This makes a hand-built message
+     byte-identical to the reference client's. */
+  all.sort((a, b) => (rank(a) - rank(b)) || (a.id < b.id ? -1 : a.id > b.id ? 1 : 0));
+  const payerId = b58e(payerKey), pi = all.findIndex(a => a.id === payerId);
+  if (pi > 0) all.unshift(all.splice(pi, 1)[0]);
+  const index = new Map(all.map((a, i) => [a.id, i]));
+  const signerCount = all.filter(a => a.signer).length;
+  const roSigned = all.filter(a => a.signer && !a.writable).length;
+  const roUnsigned = all.filter(a => !a.signer && !a.writable).length;
+  const parts = [u8(signerCount, roSigned, roUnsigned), shortvec(all.length)];
+  all.forEach(a => parts.push(a.key));
+  parts.push(b58d(blockhash));
+  parts.push(shortvec(ixs.length));
+  for (const ix of ixs) {
+    parts.push(u8(index.get(b58e(ix.program))));
+    const idxs = ix.keys.map(k => index.get(b58e(k.key)));
+    parts.push(shortvec(idxs.length), new Uint8Array(idxs));
+    parts.push(shortvec(ix.data.length), ix.data);
+  }
+  const msg = cat(...parts);
+  return { msg, accounts: all, signerCount };
+}
+async function wireFrom(payerKp, extraKps, msg) {
+  const sigs = [];
+  for (const kp of [payerKp, ...extraKps].slice(0, 1 + extraKps.length)) sigs.push(await signBytes(kp, msg));
+  return cat(shortvec(sigs.length), ...sigs, msg);
+}
+/* a transaction signature is an ed25519 signature over the message, so a browser wallet
+   that can signMessage() can sign our transaction without any adapter library */
+async function providerSign(msg) {
+  const p = (S.wallet && S.wallet.provider) || (window.phantom && window.phantom.solana) || window.solana;
+  if (!p) throw new Error('browser wallet is no longer available');
+  const res = await p.signMessage(msg, 'utf8');
+  const sig = res && res.signature ? res.signature : res;
+  const u = sig instanceof Uint8Array ? sig : (sig && sig.constructor === Array ? new Uint8Array(sig) : null);
+  if (!u || u.length !== 64) throw new Error('wallet returned no usable signature');
+  return u;
+}
+
+/* ------------------------------ rent + cost ------------------------------ */
+const RENT_OVERHEAD = 128;                            // protocol: rent = (size + 128) × lamports_per_byte_year × threshold
+const RENT_PER_BYTE_FALLBACK = 5080;                  // mainnet SyvarRent, 2026-09-14 (5080 × 1.0)
+/* the chain is the source of truth: derive the per-byte rate from the live probe when we have one,
+   so a rent-parameter change on mainnet can never make the cost model drift into fiction */
+function rentPerByte() {
+  if (S.rents && S.rents[82] != null) return Math.round(S.rents[82] / (82 + RENT_OVERHEAD));
+  return RENT_PER_BYTE_FALLBACK;
+}
+const rentExact = size => (size + RENT_OVERHEAD) * rentPerByte();
+function rentFor(size) {
+  const live = S.rents && S.rents[size];
+  /* A size the chain did not quote (a Token-2022 mint is as long as the metadata makes it) is
+     derived from the live per-byte rate, so it is still live-derived rather than a frozen guess. */
+  if (live != null) return { lamports: live, live: true };
+  return { lamports: rentExact(size), live: !!S.rentsLive };
+}
+/* borsh layout of spl-token-metadata's packed TokenMetadata:
+   32 + 32 + name(4+n) + symbol(4+n) + uri(4+n) + metadata vec (4)  →  80 fixed bytes.
+   The update authority is an OptionalNonZeroPubkey, which is a plain 32-byte key in the packed
+   form. Verified against spl-token-metadata's pack(): name 12 + symbol 5 + uri 30 → 127 bytes,
+   and @solana/spl-token getMintLen(...) → 365 for the same metadata. */
+const packedMetaLen = (name, sym, uri) => 80 + BufferLike(name).length + BufferLike(sym).length + BufferLike(uri).length;
+const BufferLike = s => new TextEncoder().encode(s == null ? '' : s);
+const t22MintSize = (name, sym, uri) => 238 + packedMetaLen(name, sym, uri);   // verified vs @solana/spl-token getMintLen
+/* Token-2022 refuses to initialize a mint while the account carries reserved-but-uninitialized
+   extension space, so a self-hosted-metadata mint is created at pointer size and funded for the
+   final size; the token program reallocates the mint when the metadata is written.
+   234 = 165 (base, padded) + 1 (account type) + 68 (metadata-pointer TLV). Verified against the
+   live token-2022 program: pointer-sized + funded-for-final-size executes cleanly. */
+const T22_PTR_SIZE = 234;
+
+function costPlan(tier, coin) {
+  const c = coin || S.coin || { name: '', sym: '', desc: '' };
+  const uri = S.uri || '';
+  const sigs = 2;                                     // your wallet + the fresh mint keypair
+  const base = CFG.baseFeePerSig * sigs;
+  const rows = [];
+  let size = 0, extra = 0;
+  if (tier === 'bare') {
+    const m = rentFor(82), a = rentFor(165);
+    rows.push(['mint account · 82 B (rent, refundable)', m.lamports, m.live]);
+    rows.push(['your token account · 165 B (rent, refundable)', a.lamports, a.live]);
+    size = 82;
+  } else if (tier === 'stamped') {
+    const s = t22MintSize(c.name || 'x', c.sym || 'x', uri);
+    const m = rentFor(s), a = rentFor(165);
+    rows.push(['mint + metadata inside it · ' + s + ' B (rent, refundable)', m.lamports, m.live]);
+    rows.push(['your token account · 165 B (rent, refundable)', a.lamports, a.live]);
+    size = s;
+  } else if (tier === 'classic') {
+    const m = rentFor(82), a = rentFor(165), x = rentFor(607);
+    rows.push(['mint account · 82 B (rent, refundable)', m.lamports, m.live]);
+    rows.push(['your token account · 165 B (rent, refundable)', a.lamports, a.live]);
+    rows.push(['metaplex metadata account · 607 B (rent, refundable)', x.lamports, x.live]);
+    size = 82;
+  }
+  rows.push([sigs + ' signatures · protocol base fee (burnt)', base, true]);
+  let prio = 0;
+  const price = +S.prio || 0;
+  if (price > 0 && tier !== 'local') { prio = Math.round(CFG.defaultCuLimit * price / 1e6); rows.push(['priority fee · optional', prio, true]); }
+  const total = rows.reduce((a, r) => a + r[1], 0);
+  return { rows, total, size, prio, sigs };
+}
+
+/* ------------------------------ wallet ------------------------------ */
+function walletGet() { return S.wallet || null; }
+async function walletGenerate() {
+  const kp = await newKeypair();
+  S.wallet = { addr: kp.addr, secret: b58e(cat(kp.seed, kp.pub)), mode: 'generated', kp };
+  save(); renderWallet(); log('new wallet generated in-page: ' + kp.addr, 'ok');
+  toast('wallet ready <b>' + short(kp.addr, 4, 4) + '</b><br><span class="muted">save the secret key below or it dies with this tab</span>', 'ok', 6000);
+  return kp;
+}
+async function walletImport(secret) {
+  const kp = await keypairFromSecret(secret);
+  S.wallet = { addr: kp.addr, secret: b58e(cat(kp.seed, kp.pub)), mode: 'imported', kp };
+  save(); renderWallet(); log('wallet imported: ' + kp.addr, 'ok');
+  return kp;
+}
+async function walletKp() {
+  if (!S.wallet) return null;
+  if (S.wallet.kp) return S.wallet.kp;
+  const kp = await keypairFromSecret(S.wallet.secret);
+  S.wallet.kp = kp; return kp;
+}
+async function walletBalance(addr) {
+  try {
+    const a = addr || (S.wallet && S.wallet.addr);
+    if (!a) return null;
+    const r = await rpc('getBalance', [a, { commitment: 'confirmed' }]);
+    return r && r.value;
+  } catch (e) { return null; }
+}
+async function walletAirdrop() {
+  const kp = await walletKp(); if (!kp) return toast('no wallet', 'warn');
+  try {
+    log('requesting 1 SOL airdrop on devnet…');
+    const sig = await rpc('requestAirdrop', [kp.addr, 1e9]);
+    log('airdrop tx <a href="' + CFG.nets.devnet.explorer + '/tx/' + sig + '?cluster=devnet" target="_blank">' + short(sig, 8, 6) + '</a>', 'ok');
+    toast('airdrop requested — devnet SOL is free', 'ok');
+    setTimeout(renderWallet, 2500);
+  } catch (e) { log('airdrop failed: ' + e.message, 'err'); }
+}
+
+/* ------------------------------ launch ------------------------------ */
+let lastBuild = null;
+/* pure: turn a coin + parameters into the instruction list (no network, no wallet) */
+function assembleIxs(o) {
+  const { owner, mintKp, tier, coin, uri } = o;
+  const tokenProgram = tier === 'stamped' ? PID.TOKEN22 : PID.TOKEN;
+  const dec = Number(o.decimals != null ? o.decimals : S.decimals);
+  const ixs = [];
+  if (+o.prio > 0) { ixs.push(IX.cuLimit(o.cuLimit || CFG.defaultCuLimit)); ixs.push(IX.cuPrice(+o.prio)); }
+  const mintSize = tier === 'stamped' ? t22MintSize(coin.name, coin.sym, uri) : CFG.size.mint;   // finished size
+  const mintSpace = tier === 'stamped' ? T22_PTR_SIZE : CFG.size.mint;                          // what the account is created with
+  const mintRent = (o.rents && o.rents[mintSize] != null) ? o.rents[mintSize] : rentExact(mintSize);
+  ixs.push(IX.createAccount(owner, mintKp.pub, mintRent, mintSpace, tokenProgram));
+  /* Token-2022 order matters: the metadata-pointer extension has to be initialized while the account
+     is still uninitialized — initialize the mint first and the program rejects the zeroed extension
+     region with InvalidAccountData (confirmed by a live program log against mainnet). Then the mint,
+     then the metadata itself, which needs the mint authority. */
+  if (tier === 'stamped') ixs.push(IX.t22Ptr(mintKp.pub, owner, mintKp.pub));
+  ixs.push(IX.initMint2(mintKp.pub, dec, owner, tokenProgram));
+  if (tier === 'stamped') ixs.push(IX.t22Meta(mintKp.pub, owner, mintKp.pub, owner, { name: coin.name, symbol: coin.sym, uri }));
+  ixs.push(IX.ataIdem(owner, o.ata, owner, mintKp.pub, tokenProgram));
+  if (tier === 'classic') {
+    ixs.push(IX.mplV3(o.metaPda, mintKp.pub, owner, owner, owner, { name: coin.name, symbol: coin.sym, uri }));
+  }
+  ixs.push(IX.mintTo(mintKp.pub, o.ata, owner, BigInt(o.supplyBase), tokenProgram));
+  if (o.revoke) ixs.push(IX.revokeMint(mintKp.pub, owner, tokenProgram));
+  return ixs;
+}
+
+async function buildLaunch(cfg) {
+  const kp = S.wallet && S.wallet.mode === 'browser' ? null : await walletKp();
+  if (!S.wallet) throw new Error('connect or generate a wallet first');
+  if (!kp && S.wallet.mode !== 'browser') throw new Error('wallet could not be loaded');
+  const coin = S.coin;
+  if (!coin) throw new Error('generate a coin first');
+  const tier = cfg.tier || S.tier;
+  if (tier === 'local') throw new Error('the local tier never touches the chain — export the metadata and launch later');
+  const mintKp = cfg.mintKp || await newKeypair();
+  const owner = kp ? kp.pub : b58d(S.wallet.addr);
+  const tokenProgram = tier === 'stamped' ? PID.TOKEN22 : PID.TOKEN;
+  const addr = k => (k && k.length === 32 ? b58e(k) : (typeof k === 'string' && k.length > 40 ? k : b58e(k)));
+  const ata = b58e((await findPda([owner, tokenProgram, mintKp.pub], PID.ATA)).addr);
+  const metaPda = tier === 'classic' ? b58e((await findPda([BufferLike('metadata'), PID.MPL, mintKp.pub], PID.MPL)).addr) : null;
+  const ixs = assembleIxs({ owner, mintKp, tier, coin, uri: S.uri || '', ata: b58d(ata), metaPda: metaPda ? b58d(metaPda) : null, prio: S.prio, revoke: S.revoke, supplyBase: supplyBase() });
+  const bh = cfg.blockhash || (await rpc('getLatestBlockhash', [{ commitment: 'confirmed' }])).value.blockhash;
+  const packed = packMessage(owner, [mintKp.pub], ixs, bh);
+  let wire;
+  if (S.wallet && S.wallet.mode === 'browser') {
+    const ownerSig = await providerSign(packed.msg);
+    const mintSig = await signBytes(mintKp, packed.msg);
+    wire = cat(shortvec(2), ownerSig, mintSig, packed.msg);
+  } else {
+    wire = await wireFrom(kp, [mintKp], packed.msg);
+  }
+  const plan = costPlan(tier, coin);
+  lastBuild = { tier, ixs, msg: packed.msg, wire, mintKp, ata: b58d(ata), metaPda: metaPda ? b58d(metaPda) : null, blockhash: bh, plan, accounts: packed.accounts, size: packed.msg.length };
+  return lastBuild;
+}
+async function simulate() {
+  try {
+    const b = await buildLaunch({}); renderTxFacts(b);
+    log('simulating (free) — ' + b.ixs.length + ' instructions, ' + b.size + ' byte message');
+    /* A simulation needs the fee payer to exist on chain. If this address has never been
+       funded the RPC answers AccountNotFound, which says nothing useful to a human — so ask
+       the chain what the balance actually is and say it plainly. */
+    const bal = await walletBalance().catch(() => null);
+    if (bal === 0) {
+      const a = S.wallet.addr;
+      log('this address has never been funded, so the chain has nothing to simulate against.', 'warn');
+      log('fund ' + short(a, 6, 6) + ' with a little SOL first' + (S.net === 'devnet' ? ' (devnet airdrop is free — the airdrop button is in the wallet panel)' : '') + ', then simulate again.', 'warn');
+      toast('no SOL at ' + short(a, 4, 4) + ' yet — fund it, then simulate', 'warn', 8000);
+      return b;
+    }
+    const r = await rpc('simulateTransaction', [b64(b.wire), { encoding: 'base64', sigVerify: false, replaceRecentBlockhash: true, commitment: 'confirmed' }]);
+    const v = r.value || {};
+    if (v.err) {
+      log('the chain rejected this transaction: ' + JSON.stringify(v.err), 'err');
+      if (v.logs && v.logs.length) log('program log: ' + String(v.logs[v.logs.length - 1]).slice(0, 140), 'err');
+      toast('simulation failed — ' + JSON.stringify(v.err), 'err', 8000);
+      return b;
+    }
+    log('simulation OK · ' + num(v.unitsConsumed || 0) + ' compute units · no SOL spent', 'ok');
+    toast('simulation passed — the transaction is valid', 'ok');
+    return b;
+  } catch (e) { log('simulate failed: ' + e.message, 'err'); toast('simulate: ' + esc(e.message), 'err', 7000); }
+}
+async function launch() {
+  const btn = $('#btnLaunch'); btn.disabled = true; const old = btn.innerHTML; btn.innerHTML = '<span class="spin"></span> launching…';
+  try {
+    const b = await buildLaunch({}); renderTxFacts(b);
+    log('transaction built: ' + b.ixs.length + ' instructions · ' + b.size + ' B message · ' + b.plan.total + ' lamports plan', 'ok');
+    const sim = await rpc('simulateTransaction', [b64(b.wire), { encoding: 'base64', sigVerify: true, commitment: 'confirmed' }]).catch(e => null);
+    if (sim && sim.value && sim.value.err) { log('pre-flight rejected: ' + JSON.stringify(sim.value.err), 'err'); throw new Error('pre-flight failed: ' + JSON.stringify(sim.value.err)); }
+    log('pre-flight ok — sending');
+    const sig = await rpc('sendTransaction', [b64(b.wire), { encoding: 'base64', maxRetries: 5, skipPreflight: false }]);
+    const link = CFG.nets[S.net].explorer + '/tx/' + sig + (CFG.nets[S.net].suffix || '');
+    log('sent <a href="' + link + '" target="_blank">' + short(sig, 8, 8) + '</a>', 'ok');
+    toast('sent — waiting for confirmation…', 'ok');
+    for (let i = 0; i < 40; i++) {
+      await sleep(1500);
+      const st = await rpc('getSignatureStatuses', [[sig], { searchTransactionHistory: true }]).catch(() => null);
+      const s = st && st.value && st.value[0];
+      if (s && (s.confirmationStatus === 'confirmed' || s.confirmationStatus === 'finalized')) {
+        log('confirmed in slot ' + s.slot + (s.err ? ' with error ' + JSON.stringify(s.err) : ''), s.err ? 'err' : 'ok');
+        break;
+      }
+      if (i === 39) log('still unconfirmed after ~60s — check the explorer link', 'warn');
+    }
+    const mint = b58e(b.mintKp.pub);
+    try {
+      const info = await rpc('getAccountInfo', [mint, { encoding: 'base64' }]);
+      if (info && info.value) log('mint verified on-chain · owner ' + short(info.value.owner, 5, 5) + ' · ' + info.value.space + ' bytes · rent ' + num(info.value.lamports) + ' lamports', 'ok');
+      else log('mint account not visible yet (rpc lag) — check again in a moment', 'warn');
+    } catch (e) { }
+    try {
+      const bal = await rpc('getTokenAccountBalance', [b58e(b.ata)]).catch(() => null);
+      if (bal && bal.value) log('your token account holds ' + num(bal.value.uiAmountString || bal.value.amount) + ' $' + esc(S.coin.sym), 'ok');
+    } catch (e) { }
+    const rec = { name: S.coin.name, sym: S.coin.sym, mint, ata: b58e(b.ata), sig, tier: b.tier, lamports: b.plan.total, at: Date.now(), net: S.net, uri: S.uri || '' };
+    S.mints = [rec, ...(S.mints || [])].slice(0, 60); save(); renderMints();
+    toast('minted <b>$' + esc(S.coin.sym) + '</b> — ' + short(mint, 6, 6), 'ok', 9000);
+  } catch (e) {
+    log('launch failed: ' + e.message, 'err'); toast('launch failed: ' + esc(e.message), 'err', 8000);
+  } finally { btn.disabled = false; btn.innerHTML = old; }
+}
+
+/* ------------------------------ optional model upgrade ------------------------------ */
+async function aiGenerate(prompt) {
+  if (!S.ai.key || !S.ai.base || !S.ai.model) return null;
+  const sys = 'You name memecoins. Reply with ONLY minified JSON: {"name":"2-3 words","symbol":"3-6 upper","description":"2-3 sentences, no promises of profit"}.';
+  try {
+    const r = await fetch(S.ai.base.replace(/\/$/, '') + '/chat/completions', {
+      method: 'POST', headers: { 'content-type': 'application/json', authorization: 'Bearer ' + S.ai.key },
+      body: JSON.stringify({ model: S.ai.model, temperature: 0.9, messages: [{ role: 'system', content: sys }, { role: 'user', content: prompt }] })
+    });
+    if (!r.ok) throw new Error('HTTP ' + r.status);
+    const j = await r.json();
+    const txt = (j.choices && j.choices[0] && j.choices[0].message && j.choices[0].message.content) || '';
+    const m = txt.match(/\{[\s\S]*\}/);
+    if (!m) throw new Error('no JSON in reply');
+    const d = JSON.parse(m[0]);
+    if (!d.name || !d.symbol) throw new Error('model omitted name/symbol');
+    return { name: String(d.name).slice(0, 30), sym: String(d.symbol).toUpperCase().replace(/[^A-Z0-9]/g, '').slice(0, 8), desc: String(d.description || '').slice(0, 400) };
+  } catch (e) { log('model call failed (' + e.message + ') — used the local engine', 'warn'); return null; }
+}
+
+/* ------------------------------ renderers ------------------------------ */
+const STEP_LABELS = ['reading the text', 'naming it', 'writing the lore', 'rendering art', 'composing metadata', 'costing the mint'];
+function renderSteps(active, done) {
+  $('#steps').innerHTML = STEP_LABELS.map((s, i) => '<div class="step ' + (done && i < done.length ? 'done' : (active === i ? 'on' : '')) + '"><div class="b">' + (done && i < done.length ? '✓' : (i + 1)) + '</div>' + s + '</div>').join('');
+}
+function metaImageRef() { return S.embed && S.embedData ? S.embedData : (S.uri || ''); }
+function refreshMeta() { if (S.coin) $('#jsonOut').textContent = JSON.stringify(metadataJSON(S.coin, metaImageRef()), null, 2); }
+function renderCoin() {
+  const c = S.coin; if (!c) return;
+  $('#nameOut').textContent = c.name; $('#symOut').textContent = '$' + c.sym;
+  $('#tagsOut').innerHTML = c.tags.slice(0, 8).map(t => '<span class="flag">' + esc(t) + '</span>').join(' ') + ' <span class="flag w">' + esc(c.style) + '</span> <span class="flag">' + esc(c.palette) + '</span>';
+  $('#fName').value = c.name; $('#fSym').value = c.sym; $('#descOut').value = c.desc;
+  $('#artBadge').textContent = c.style + ' · ' + c.palette;
+  const svg = artSVG(c, { animate: true, size: Math.max(512, 512) });
+  $('#artWrap').innerHTML = svg + '<span class="badge" id="artBadge">' + esc(c.style) + ' · ' + esc(c.palette) + '</span>';
+  $('#artWrap').firstElementChild.classList.add('pulse');
+  $('#engineNote').textContent = c.engine || 'local engine';
+  $('#jsonOut').textContent = JSON.stringify(metadataJSON(c, metaImageRef()), null, 2);
+  $('#wordsOut').innerHTML = [
+    ['tone', c.tone], ['style picked', c.style], ['palette', c.palette], ['keywords', c.tags.join(', ') || '—'],
+    ['seed', c.seedHex], ['salt', String(c.salt)], ['characters read', String(String(c.prompt).length)], ['words kept', String(words(c.prompt).length)]
+  ].map(([k, v]) => '<span class="k">' + k + '</span><span class="v">' + esc(v) + '</span>').join('');
+  renderStyleStrip(); renderCost(); $('#btnSim').disabled = false; $('#btnRaw').disabled = false;
+}
+function renderStyleStrip() {
+  const box = $('#styleStrip'); if (!S.coin) { box.innerHTML = ''; return; }
+  box.innerHTML = '';
+  ART_STYLES.forEach(st => {
+    const d = el('div', { class: 'st' + (st.id === S.coin.style ? ' on' : ''), title: st.name, html: artSVG({ ...S.coin, style: st.id }, { size: 112 }) + '<span>' + st.name + '</span>' });
+    d.addEventListener('click', () => { S.coin.style = st.id; renderCoin(); save(); });
+    box.append(d);
+  });
+  [0, 1, 2].forEach(v => {
+    const d = el('div', { class: 'st', title: 'variation', html: artSVG({ ...S.coin, styleVariant: (S.coin.styleVariant || 0) + 1 + v }, { size: 112 }) + '<span>var ' + (v + 1) + '</span>' });
+    d.addEventListener('click', () => { S.coin.styleVariant = (S.coin.styleVariant || 0) + 1 + v; renderCoin(); save(); });
+    box.append(d);
+  });
+}
+function renderLadder() {
+  const c = S.coin;
+  const tiers = [
+    ['local', 'Local only', '0 SOL', 'art + metadata.json + raw tx, nothing on-chain. Free forever, and you can launch the exact same bytes later.'],
+    ['bare', 'Bare mint', 'cheapest on-chain', 'SPL mint + your token account + the full supply, in ONE transaction. No metadata account, no priority fee. Name/ticker live in your metadata.json and in the app.'],
+    ['stamped', 'Stamped (Token-2022)', 'on-chain metadata, no extra account', 'Name, ticker and URI are stored inside the mint account itself — one account instead of two, so it undercuts the classic route. Newer standard: not every venue indexes it.'],
+    ['classic', 'Classic + Metaplex metadata', 'maximum compatibility', 'What launchpads do: a separate Metaplex metadata account (607 B) so every wallet, explorer and aggregator reads it. Costs that rent on top — refundable only by closing the account.']
+  ];
+  $('#ladder').innerHTML = tiers.map(([id, nm, tag, why]) => {
+    const plan = id === 'local' ? { total: 0, rows: [] } : costPlan(id, c);
+    const usd = S.solUsd ? '≈ $' + (SOL(plan.total) * S.solUsd).toFixed(plan.total && SOL(plan.total) * S.solUsd < 0.01 ? 4 : 2) : '';
+    return '<div class="tier' + (S.tier === id ? ' on' : '') + '" data-tier="' + id + '">' +
+      (id === 'bare' ? '<div class="tag">cheapest</div>' : '') +
+      '<div class="top"><span class="nm">' + nm + '</span><span class="costs"><span class="sol">' + (id === 'local' ? '0' : sol(plan.total)) + ' SOL</span><br><span class="usd">' + esc(usd || tag) + '</span></span></div>' +
+      '<div class="why">' + why + '</div>' +
+      '<div class="brk">' + (plan.rows.length ? plan.rows.map(r => '+ ' + num(r[1]) + ' lamports — ' + r[0] + (r[2] ? '' : ' <span class="flag w">fallback</span>')).join('<br>') + '<br>= ' + num(plan.total) + ' lamports total (rent included, refundable except fees)' : 'nothing to pay') + '</div>' +
+      '</div>';
+  }).join('');
+  $$('#ladder .tier').forEach(t => t.addEventListener('click', () => { S.tier = t.dataset.tier; save(); renderLadder(); renderCost(); }));
+}
+function renderTxFacts(b) {
+  if (!b) return;
+  const accs = b.accounts.map(a => '<span class="flag ' + (a.signer ? 'g' : '') + '">' + esc(short(b58e(a.key), 6, 6)) + (a.signer ? ' ✍' : '') + (a.writable ? ' ✎' : '') + '</span>').join(' ');
+  $('#txFacts').innerHTML = [
+    ['tier', b.tier], ['instructions', b.ixs.map((x, i) => (i + 1) + '. ' + (Object.keys(IX).find(k => IX[k] === undefined) || '') + ixName(x)).join(' · ')],
+    ['message', b.size + ' bytes · ' + b.accounts.length + ' accounts · ' + b.accounts.filter(a => a.signer).length + ' signatures'],
+    ['wire', b.wire.length + ' bytes'],
+    ['new mint', b58e(b.mintKp.pub)],
+    ['token account', b58e(b.ata)],
+    ['cost', num(b.plan.total) + ' lamports (' + sol(b.plan.total) + ' SOL)']
+  ].map(([k, v]) => '<span class="k">' + k + '</span><span class="v">' + esc(String(v)) + '</span>').join('');
+  $('#txOut').textContent = b64(b.wire);
+  $('#txFacts').nextElementSibling.textContent = 'accounts: ' + accs + '\n\n' + b64(b.wire);
+}
+function ixName(ix) {
+  const p = b58e(ix.program);
+  const map = { [CFG.id.SYSTEM]: 'system', [CFG.id.TOKEN]: 'spl-token', [CFG.id.TOKEN22]: 'token-2022', [CFG.id.ATA]: 'ata', [CFG.id.MPL]: 'metaplex', [CFG.id.CB]: 'compute-budget' };
+  const d = ix.data;
+  let what = '';
+  if (p === CFG.id.SYSTEM) what = 'createAccount';
+  else if (p === CFG.id.TOKEN || p === CFG.id.TOKEN22) what = ['initializeMint','initializeAccount','initializeAccount2','initializeMultisig','transfer','approve','revoke','setAuthority','mintTo','burn','closeAccount'][d[0]] || 'op' + d[0];
+  else if (p === CFG.id.ATA) what = d[0] === 1 ? 'createIdempotent' : 'create';
+  else if (p === CFG.id.MPL) what = 'createMetadataAccountV3';
+  else if (p === CFG.id.CB) what = d[0] === 2 ? 'setComputeUnitLimit' : 'setComputeUnitPrice';
+  return (map[p] || short(p, 4, 4)) + ':' + what;
+}
+function renderCost() {
+  const c = S.coin; if (!c) return;
+  const tier = S.tier;
+  const plan = tier === 'local' ? { total: 0, rows: [] } : costPlan(tier, c);
+  $('#costBig').textContent = (tier === 'local' ? '0' : sol(plan.total)) + ' SOL';
+  const live = S.rentsLive ? 'live rent from RPC' : 'rent from protocol formula (rpc offline)';
+  const names = { local: 'local build', bare: 'bare mint · 1 transaction', stamped: 'stamped · metadata in the mint', classic: 'classic · + metaplex account' };
+  $('#costSub').textContent = names[tier] + ' · ' + live + ' · ' + plan.sigs + ' signatures × 5000 lamports base fee' + (plan.prio ? ' + priority' : ' + no priority fee');
+  $('#costUsd').innerHTML = S.solUsd ? '≈ $' + (SOL(plan.total) * S.solUsd).toFixed(4) + '<br><span class="muted">at $' + S.solUsd.toFixed(2) + '/SOL</span>' : '<span class="muted">SOL price offline<br>lamports above are exact</span>';
+}
+function renderPrioNote() {
+  const m = S.prioMedian;
+  $('#prioNote').innerHTML = (m != null ? 'network median priority fee right now: <b>' + num(m) + '</b> µm/CU — ' : '') + 'zero is the cheapest and usually confirms in a few seconds; pay only if the network is busy.';
+}
+function renderWallet() {
+  const w = S.wallet;
+  $('#walletTxt').innerHTML = w ? '<b>' + short(w.addr, 5, 5) + '</b>' : 'no wallet';
+  $('#walletPill').classList.toggle('on', !!w);
+  $('#launchHint').innerHTML = w ? 'Wallet <span style="font-family:var(--mono)">' + esc(short(w.addr, 6, 6)) + '</span> ready · balance <b id="balTxt">…</b>' : 'Wallet needed to sign. Generate one below — it never leaves this page unless you export it.';
+  if (w) walletBalance().then(b => { const t = $('#balTxt'); if (t) t.textContent = b == null ? 'unknown' : sol(b, 4) + ' SOL'; });
+  renderCost();
+}
+function renderMints() {
+  const box = $('#myCoins'); if (!box) return;
+  const m = S.mints || [];
+  box.innerHTML = m.length ? '<span class="muted">your mints:</span> ' + m.slice(0, 5).map(x =>
+    '<a href="' + CFG.nets[x.net || 'mainnet'].explorer + '/token/' + x.mint + (CFG.nets[x.net || 'mainnet'].suffix || '') + '" target="_blank" title="' + esc(x.name + ' · ' + sol(x.lamports) + ' SOL') + '">$' + esc(x.sym) + '</a>').join(' ') : '<span class="muted">no mints yet</span>';
+}
+
+/* ------------------------------ generate flow ------------------------------ */
+let genBusy = false;
+async function doGenerate(saltOverride) {
+  if (genBusy) return; genBusy = true;
+  const prompt = $('#prompt').value.trim();
+  if (prompt.length < 2) { toast('type something first — even one word works', 'warn'); genBusy = false; $('#prompt').focus(); return; }
+  S.prompt = prompt; S.tone = $('#toneSel').value; S.style = $('#styleSel').value;
+  S.supply = $('#supplySel').value; S.decimals = $('#decSel').value; S.uri = $('#uriIn').value.trim();
+  const salt = saltOverride != null ? saltOverride : (S.art.salt = (S.art.salt || 0) + 1);
+  try {
+    $('#btnGenerate').disabled = true; $('#btnGenerate').innerHTML = '<span class="spin"></span> thinking…';
+    for (let i = 0; i < STEP_LABELS.length; i++) { renderSteps(i); await sleep(i === 0 ? 90 : 130); }
+    let coin = null;
+    if (S.ai.key && S.ai.base && S.ai.model) {
+      log('asking ' + S.ai.model + ' for a name + lore…');
+      const d = await aiGenerate(prompt);
+      if (d) { coin = generateCoin(prompt, { salt, style: S.style, tone: S.tone }); coin.name = d.name; coin.sym = d.sym; coin.desc = d.desc || coin.desc; coin.engine = 'model: ' + S.ai.model; log('model named it: ' + d.name + ' ($' + d.sym + ')', 'ok'); }
+    }
+    if (!coin) { coin = generateCoin(prompt, { salt, style: S.style, tone: S.tone }); coin.engine = 'local engine (no key needed)'; }
+    S.coin = coin; save();
+    renderSteps(-1, STEP_LABELS);
+    renderCoin(); renderLadder(); renderCost(); renderMints();
+    log('generated <b>$' + esc(coin.sym) + '</b> “' + esc(coin.name) + '” · style ' + coin.style + ' · palette ' + coin.palette + ' · salt ' + salt, 'ok');
+    renderSteps(-1, STEP_LABELS);
+  } catch (e) { log('generate failed: ' + e.message, 'err'); toast('generate failed: ' + esc(e.message), 'err'); }
+  finally { genBusy = false; const b = $('#btnGenerate'); b.disabled = false; b.innerHTML = '⚡ Generate coin'; setTimeout(() => renderSteps(-1, null), 1800); }
+}
+
+/* ------------------------------ exports ------------------------------ */
+async function exportPNG() {
+  const c = S.coin; if (!c) return toast('nothing to export', 'warn');
+  const canvas = await svgToCanvas(artSVG(c, { size: 1024 }), 1024);
+  canvas.toBlob(b => download('meme_' + c.sym.toLowerCase() + '.png', b), 'image/png');
+  log('PNG exported (1024²)');
+}
+function exportSVG() { const c = S.coin; if (!c) return toast('nothing to export', 'warn'); download('meme_' + c.sym.toLowerCase() + '.svg', artSVG(c, { size: 1024, animate: true }), 'image/svg+xml'); log('animated SVG exported'); }
+async function exportGIF() {
+  const c = S.coin; if (!c) return toast('nothing to export', 'warn');
+  toast('rendering GIF frames…', '', 2500);
+  try {
+    const frames = await buildGifFrames(c, 16, 384, (i, n) => { const b = $('#btnArtGif'); if (b) b.textContent = '⬇ GIF ' + i + '/' + n; });
+    const pal = quantize(frames, 384, 384, 256);
+    download('meme_' + c.sym.toLowerCase() + '.gif', encodeGIF(frames, 384, 384, 9, pal), 'image/gif');
+    log('GIF exported · 16 frames · 384²');
+  } catch (e) { log('gif failed: ' + e.message, 'err'); }
+  finally { const b = $('#btnArtGif'); if (b) b.textContent = '⬇ GIF'; }
+}
+function exportJSON() {
+  const c = S.coin; if (!c) return;
+  download('metadata_' + c.sym.toLowerCase() + '.json', JSON.stringify(metadataJSON(c, metaImageRef()), null, 2), 'application/json');
+  log('metadata.json exported');
+}
+function exportPlan() {
+  const c = S.coin; if (!c) return toast('generate a coin first', 'warn');
+  const lines = ['# cost plan — ' + c.name + ' ($' + c.sym + ')', '', 'network: ' + S.net + ' · rpc: ' + rpcUrl(), 'rent source: ' + (S.rentsLive ? 'live getMinimumBalanceForRentExemption (' + rentPerByte() + ' lamports per byte)' : 'offline fallback: (size + 128) * ' + rentPerByte() + ' lamports'), 'supply: ' + num(supplyWhole()) + ' · decimals: ' + S.decimals, 'priority fee: ' + S.prio + ' µm/CU', 'renounce mint authority: ' + (S.revoke ? 'yes (free, same transaction)' : 'no'), ''];
+  for (const t of ['local', 'bare', 'stamped', 'classic']) {
+    const p = t === 'local' ? { total: 0, rows: [] } : costPlan(t, c);
+    lines.push('## ' + t + ' — ' + num(p.total) + ' lamports (' + sol(p.total) + ' SOL)');
+    p.rows.forEach(r => lines.push('  + ' + num(r[1]) + '  ' + r[0] + (r[2] ? '' : '  [fallback value]')));
+    lines.push('');
+  }
+  lines.push('## why this is the cheap route', '· one transaction → one base fee instead of several', '· zero priority fee by default (no ComputeBudget price instruction at all)', '· no freeze authority, no extra accounts', '· bare tier stores no metadata rent at all', '· rent is a deposit, not a fee: closing the token account refunds its ' + num(rentFor(165).lamports) + ' lamports (' + (S.rentsLive ? 'live' : 'offline fallback') + ')', '· simulate for free before sending');
+  download('cost_plan_' + c.sym.toLowerCase() + '.md', lines.join('\n'), 'text/markdown');
+  log('cost plan exported');
+}
+
+/* ------------------------------ live ticker (real tokens only) ------------------------------ */
+let ws = null, tickerPool = [];
+function tickerOn() {
+  if (ws && (ws.readyState === 0 || ws.readyState === 1)) return;
+  try {
+    ws = new WebSocket('wss://pumpportal.fun/api/data');
+    ws.onopen = () => { ws.send(JSON.stringify({ method: 'subscribeNewToken' })); $('#tickStatus').textContent = 'live'; };
+    ws.onmessage = ev => {
+      let d; try { d = JSON.parse(ev.data); } catch (e) { return; }
+      if (!d || !d.mint || !d.symbol) return;
+      tickerPool.unshift({ mint: d.mint, sym: String(d.symbol).slice(0, 10), name: String(d.name || '').slice(0, 24) });
+      tickerPool = tickerPool.slice(0, 24);
+      renderTicker();
+    };
+    ws.onerror = () => { $('#tickStatus').textContent = 'offline'; };
+    ws.onclose = () => { $('#tickStatus').textContent = 'offline'; ws = null; setTimeout(tickerOn, 20000); };
+  } catch (e) { $('#tickStatus').textContent = 'offline'; }
+}
+function renderTicker() {
+  const box = $('#ticker'); if (!box) return;
+  const items = tickerPool.length ? tickerPool : [];
+  const html = items.map(t => '<span class="tk"><b>$' + esc(t.sym) + '</b> ' + esc(t.name) + ' <i>new</i></span>').join('');
+  box.innerHTML = html + html;
+}
+
+/* ------------------------------ UI wiring ------------------------------ */
+function setNet(net) {
+  S.net = net; save();
+  $$('#netSeg button').forEach(b => b.classList.toggle('on', b.dataset.net === net));
+  $('#rpcInput').value = S.rpc || (localStorage.getItem('text2coin.rpc.' + net) || '');
+  $('#rpcInput').placeholder = CFG.nets[net].rpc;
+  log('network → ' + net);
+  S.rents = null; S.rentsLive = null; rentsAsked = false;
+  backgroundRents(); fetchSolUsd(); renderWallet();
+}
+function wire() {
+  /* header */
+  $('#netSeg').addEventListener('click', e => { const b = e.target.closest('button'); if (b) setNet(b.dataset.net); });
+  $('#rpcInput').addEventListener('change', e => {
+    S.rpc = e.target.value.trim(); localStorage.setItem('text2coin.rpc.' + S.net, S.rpc); save();
+    log('rpc → ' + rpcUrl()); S.rents = null; rentsAsked = false; backgroundRents();
+  });
+  $('#btnWallet').addEventListener('click', openWalletModal);
+  /* left */
+  $('#prompt').addEventListener('keydown', e => { if ((e.metaKey || e.ctrlKey) && e.key === 'Enter') { e.preventDefault(); e.shiftKey ? launch() : doGenerate(); } });
+  $('#btnGenerate').addEventListener('click', () => doGenerate());
+  $('#btnSurprise').addEventListener('click', () => {
+    const seeds = ['my neighbour mows the lawn at 6am on sundays', 'the printer knows I hate it', 'a pigeon reviewed my pull request', 'i bought a lamp that insults me', 'sleep is a subscription service now', 'my houseplant is plotting'];
+    $('#prompt').value = seeds[Math.floor(Math.random() * seeds.length)]; doGenerate();
+  });
+  $('#examples').innerHTML = ['my cat ignores tuesday', 'send the printer to jail', 'pigeon reviewed my pull request', 'the lamp insults me'].map(t => '<span class="pill">' + esc(t) + '</span>').join('');
+  $('#examples').addEventListener('click', e => { const p = e.target.closest('.pill'); if (p) { $('#prompt').value = p.textContent; doGenerate(); } });
+  $('#styleSel').innerHTML = '<option value="auto">auto (from text)</option>' + ART_STYLES.map(s => '<option value="' + s.id + '">' + s.name + '</option>').join('');
+  ['toneSel', 'styleSel', 'supplySel', 'decSel'].forEach(id => $('#' + id).addEventListener('change', () => {
+    S.tone = $('#toneSel').value; S.style = $('#styleSel').value; S.supply = $('#supplySel').value; S.decimals = $('#decSel').value;
+    $('#supplyCustomWrap').style.display = S.supply === 'custom' ? 'block' : 'none';
+    save(); if (S.coin) { if (S.style !== 'auto') { S.coin.style = S.style; } renderCoin(); renderLadder(); }
+  }));
+  $('#supplyCustom').addEventListener('input', () => { S.customSupply = +$('#supplyCustom').value; save(); renderCost(); renderLadder(); });
+  $('#aiToggle').addEventListener('click', () => { const b = $('#aiBody'); const on = b.style.display === 'none'; b.style.display = on ? 'block' : 'none'; $('#aiToggle').textContent = on ? 'hide' : 'show'; });
+  ['aiBase', 'aiModel', 'aiKey'].forEach(id => $('#' + id).addEventListener('change', () => {
+    S.ai.base = $('#aiBase').value.trim(); S.ai.model = $('#aiModel').value.trim(); S.ai.key = $('#aiKey').value.trim(); save();
+    $('#aiState').textContent = (S.ai.key && S.ai.base && S.ai.model) ? 'model: ' + S.ai.model : 'local engine';
+  }));
+  $('#aiTest').addEventListener('click', async () => {
+    S.ai.base = $('#aiBase').value.trim(); S.ai.model = $('#aiModel').value.trim(); S.ai.key = $('#aiKey').value.trim(); save();
+    if (!S.ai.key || !S.ai.base || !S.ai.model) return toast('fill base url, model and key', 'warn');
+    toast('testing…', '', 1500);
+    const r = await aiGenerate('a test: name a coin about testing');
+    toast(r ? 'key works — the model replied <b>$' + esc(r.sym) + '</b>' : 'key did not work (see log)', r ? 'ok' : 'err');
+  });
+  $('#aiClear').addEventListener('click', () => { S.ai = { base: '', model: '', key: '' }; $('#aiBase').value = ''; $('#aiModel').value = ''; $('#aiKey').value = ''; $('#aiState').textContent = 'local engine'; save(); toast('cleared — back to the local engine', 'ok'); });
+  /* middle */
+  $('#btnReseed').addEventListener('click', () => doGenerate((S.art.salt = (S.art.salt || 0) + 1)));
+  $('#fName').addEventListener('input', () => { if (S.coin) { S.coin.name = $('#fName').value; $('#nameOut').textContent = S.coin.name; $('#jsonOut').textContent = JSON.stringify(metadataJSON(S.coin, S.uri), null, 2); save(); } });
+  $('#fSym').addEventListener('input', () => { if (S.coin) { S.coin.sym = $('#fSym').value.toUpperCase().replace(/[^A-Z0-9]/g, ''); S.coin.seedLabel = null; renderCoin(); save(); } });
+  $('#descOut').addEventListener('input', () => { if (S.coin) { S.coin.desc = $('#descOut').value; $('#jsonOut').textContent = JSON.stringify(metadataJSON(S.coin, S.uri), null, 2); save(); } });
+  $('#btnArtPng').addEventListener('click', exportPNG);
+  $('#btnArtSvg').addEventListener('click', exportSVG);
+  $('#btnArtGif').addEventListener('click', exportGIF);
+  $('#btnJson').addEventListener('click', exportJSON);
+  $('#btnCopyMeta').addEventListener('click', () => copy($('#jsonOut').textContent, 'metadata copied'));
+  $('#embedChk').addEventListener('change', async () => {
+    if (!$('#embedChk').checked) { S.embed = false; save(); refreshMeta(); return; }
+    S.embed = true; save();
+    toast('rendering a PNG to embed…', '', 1800);
+    const c = S.coin; if (!c) { $('#embedChk').checked = false; return; }
+    const canvas = await svgToCanvas(artSVG(c, { size: 512 }), 512);
+    S.embedData = canvas.toDataURL('image/png');
+    refreshMeta();
+  });
+  const tabs = [['#tabMeta', '#paneMeta'], ['#tabTx', '#paneTx'], ['#tabWords', '#paneWords']];
+  tabs.forEach(([t, p]) => $(t).addEventListener('click', () => { tabs.forEach(([t2, p2]) => { $(t2).classList.toggle('on', t2 === t); $(p2).style.display = p2 === p ? 'block' : 'none'; }); }));
+  $('#btnCopyTx').addEventListener('click', () => lastBuild && copy(b64(lastBuild.wire), 'raw tx copied'));
+  $('#btnCopyMsg').addEventListener('click', () => lastBuild && copy(b64(lastBuild.msg), 'message copied'));
+  $('#btnCopyWire').addEventListener('click', () => lastBuild && copy(hex(lastBuild.wire), 'wire hex copied'));
+  /* right */
+  $('#prioSel').addEventListener('change', () => { S.prio = $('#prioSel').value === 'custom' ? String(+$('#prioCustom').value || 0) : $('#prioSel').value; save(); renderLadder(); });
+  $('#prioCustom').addEventListener('input', () => { if ($('#prioSel').value === 'custom') { S.prio = String(+$('#prioCustom').value || 0); save(); renderLadder(); } });
+  $('#revokeChk').addEventListener('change', () => { S.revoke = $('#revokeChk').checked; save(); });
+  $('#uriIn').addEventListener('change', () => { S.uri = $('#uriIn').value.trim(); save(); renderLadder(); refreshMeta(); });
+  $('#btnSim').addEventListener('click', simulate);
+  $('#btnLaunch').addEventListener('click', launch);
+  $('#btnRaw').addEventListener('click', async () => { const b = await buildLaunch({}); if (b) { renderTxFacts(b); download('tx_' + (S.coin ? S.coin.sym.toLowerCase() : 'coin') + '.base64.txt', b64(b.wire), 'text/plain'); log('raw transaction exported (base64) · ' + b.wire.length + ' bytes'); } });
+  $('#btnPlan').addEventListener('click', exportPlan);
+  $('#btnReset').addEventListener('click', () => { if (!confirm('Clear the coin, the log and the local list? Your wallet stays.')) return; S.coin = null; S.mints = []; logLines.length = 0; save(); location.reload(); });
+  $('#mClose').addEventListener('click', () => $('#modal').classList.remove('on'));
+  $('#modal').addEventListener('click', e => { if (e.target.id === 'modal') $('#modal').classList.remove('on'); });
+  document.addEventListener('keydown', e => { if (e.key === 'Escape') $('#modal').classList.remove('on'); });
+}
+function openWalletModal() {
+  const w = S.wallet;
+  const html = (w ? `
+    <div class="kv"><span class="k">address</span><span class="v">${esc(w.addr)}</span></div>
+    <div class="gap8" style="margin-top:10px">
+      <button class="btn mini" id="mwCopy">copy address</button>
+      <button class="btn mini" id="mwSecret">reveal secret key</button>
+      <button class="btn mini" id="mwBal">refresh balance</button>
+      ${S.net === 'devnet' ? '<button class="btn mini" id="mwDrop">airdrop 1 SOL (devnet)</button>' : ''}
+      <button class="btn mini" id="mwOut">disconnect</button>
+    </div>` : `<div class="tiny">No wallet. Generating one takes a millisecond and costs nothing — it exists only in this tab until you export it.</div>`) + `
+    <div class="hr"></div>
+    <div class="gap8">
+      <button class="btn" id="mwGen">Generate a wallet</button>
+      <button class="btn" id="mwPhantom">Use browser wallet (Phantom/Solflare)</button>
+    </div>
+    <div style="margin-top:12px">
+      <label class="lb">Import a secret key (base58 · hex · byte array)</label>
+      <input id="mwIn" type="text" spellcheck="false" placeholder="4x… / [12,34,…]">
+      <div class="gap8" style="margin-top:8px"><button class="btn mini" id="mwImp">Import</button></div>
+    </div>
+    <div class="tiny" style="margin-top:10px">Keys are handled by the browser's WebCrypto. A generated key is never sent anywhere; the secret is shown once so you can store it.</div>`;
+  modal('Wallet', html);
+  const on = (id, fn) => { const e = $('#' + id); if (e) e.addEventListener('click', fn); };
+  on('mwGen', async () => { await walletGenerate(); openWalletModal(); });
+  on('mwImp', async () => { try { await walletImport($('#mwIn').value); openWalletModal(); toast('wallet imported', 'ok'); } catch (e) { toast('import failed: ' + esc(e.message), 'err', 6000); } });
+  on('mwCopy', () => copy(S.wallet.addr, 'address copied'));
+  on('mwBal', async () => { const b = await walletBalance(); toast('balance: ' + (b == null ? 'unknown' : sol(b, 4) + ' SOL'), 'ok'); renderWallet(); });
+  on('mwDrop', () => walletAirdrop());
+  on('mwSecret', () => { const s = S.wallet.secret; modal('Secret key', `<div class="tiny">Anyone who sees this owns the wallet. Store it offline.</div><pre class="json" style="margin-top:10px">${esc(s)}</pre><div class="gap8"><button class="btn mini" id="mc">copy</button></div>`); $('#mc').addEventListener('click', () => copy(s, 'secret copied')); });
+  on('mwOut', () => { S.wallet = null; save(); renderWallet(); $('#modal').classList.remove('on'); toast('wallet disconnected', 'ok'); });
+  on('mwPhantom', async () => {
+    const p = window.phantom && window.phantom.solana ? window.phantom.solana : window.solana;
+    if (!p || !p.connect) return toast('no browser wallet found — it injects only on its own site or with an extension', 'warn', 6000);
+    try {
+      const res = await p.connect();
+      const addr = (res && res.publicKey ? res.publicKey : p.publicKey).toString();
+      S.wallet = { addr, mode: 'browser', provider: p };
+      save(); renderWallet(); $('#modal').classList.remove('on');
+      log('browser wallet connected: ' + addr, 'ok');
+    } catch (e) { toast('connect rejected', 'err'); }
+  });
+}
+
+/* ------------------------------ automation surface ------------------------------
+   Everything here is the same code the UI uses — exposed so the transaction bytes can be
+   checked against @solana/web3.js and @solana/spl-token from a test harness.
+   --------------------------------------------------------------------------------- */
+window.T2C = {
+  CFG, S, IX, PID, ED, b58e, b58d, findPda, pubFromSeed, newKeypair, keypairFromSeed, keypairFromSecret,
+  signBytes, packMessage, wireFrom, assembleIxs, costPlan, rentExact, t22MintSize, packedMetaLen, rpc, rpcUrl, walletBalance,
+  artSVG, generateCoin, metadataJSON, supplyBase, buildLaunch, metaImageRef, refreshMeta,
+  async buildDeterministic(o) {
+    const owner = await keypairFromSeed(o.ownerSeed);
+    const mintKp = await keypairFromSeed(o.mintSeed);
+    const tokenProgram = o.tier === 'stamped' ? PID.TOKEN22 : PID.TOKEN;
+    const ata = (await findPda([owner.pub, tokenProgram, mintKp.pub], PID.ATA)).addr;
+    const metaPda = o.tier === 'classic' ? (await findPda([BufferLike('metadata'), PID.MPL, mintKp.pub], PID.MPL)).addr : null;
+    const ixs = assembleIxs({ owner: owner.pub, mintKp, tier: o.tier, coin: o.coin, uri: o.uri || '', ata, metaPda,
+      prio: o.prio || 0, revoke: !!o.revoke, supplyBase: BigInt(o.supplyBase), rents: o.rents || null, decimals: o.decimals });
+    const packed = packMessage(owner.pub, [mintKp.pub], ixs, o.blockhash);
+    const wire = await wireFrom(owner, [mintKp], packed.msg);
+    return {
+      owner: owner.addr, mint: mintKp.addr, ata: b58e(ata), metaPda: metaPda ? b58e(metaPda) : null,
+      accounts: packed.accounts.map(a => ({ key: b58e(a.key), signer: a.signer, writable: a.writable })),
+      ixs: ixs.map(ix => ({ program: b58e(ix.program), keys: ix.keys.map(k => ({ key: b58e(k.key), signer: k.signer, writable: k.writable })), data: hex(ix.data) })),
+      msgHex: hex(packed.msg), wireHex: hex(wire), msgBytes: packed.msg.length, wireBytes: wire.length,
+      ownerSigHex: hex(await signBytes(owner, packed.msg)), mintSigHex: hex(await signBytes(mintKp, packed.msg))
+    };
+  }
+};
+
+/* ------------------------------ boot ------------------------------ */
+(async function init() {
+  wire();
+  /* restore */
+  if (S.prompt) $('#prompt').value = S.prompt;
+  $('#toneSel').value = S.tone || 'degen'; $('#supplySel').value = S.supply || '1000000000';
+  $('#decSel').value = S.decimals || '6'; $('#supplyCustom').value = S.customSupply || 69000000;
+  $('#supplyCustomWrap').style.display = ($('#supplySel').value === 'custom') ? 'block' : 'none';
+  $('#prioSel').value = ['0', '10000', '100000'].includes(S.prio) ? S.prio : 'custom';
+  if ($('#prioSel').value === 'custom') $('#prioCustom').value = +S.prio || 0;
+  $('#revokeChk').checked = !!S.revoke;
+  $('#uriIn').value = S.uri || '';
+  $('#aiBase').value = S.ai.base || ''; $('#aiModel').value = S.ai.model || ''; $('#aiKey').value = S.ai.key || '';
+  $('#aiState').textContent = (S.ai.key && S.ai.base && S.ai.model) ? 'model: ' + S.ai.model : 'local engine';
+  /* footer */
+  const f = el('div', { class: 'foot' },
+    el('span', { class: 'chip', html: '<span class="dot"></span>new tokens <b id="tickStatus">connecting…</b>' }),
+    el('div', { class: 'tickwrap' }, el('div', { id: 'ticker' })),
+    el('div', { class: 'mycoins', id: 'myCoins' }));
+  document.querySelector('footer').append(f);
+  setNet(S.net || 'mainnet');
+  renderSteps(-1, null);
+  renderLadder(); renderWallet(); renderMints(); renderPrioNote();
+  templateSeed();
+  if (S.coin) { renderCoin(); }
+  else { log('ready. type something and press generate — nothing is sent anywhere until you hit launch.', 'ok'); }
+  if (S.mints && S.mints.length) log('restored ' + S.mints.length + ' local mint record(s) from this browser', 'info');
+  tickerOn();
+  renderTicker();
+  log('rent: ' + (S.rentsLive ? 'live' : 'formula') + ' · rpc ' + rpcUrl());
+})();
+function templateSeed() { /* nothing to do — kept for clarity of the boot order */ }
+</script>
+<script>(function(){function c(){var b=a.contentDocument||(a.contentWindow&&a.contentWindow.document);if(b){var d=b.createElement('script');d.innerHTML="window.__CF$cv$params={r:'a3b177eecca4e515',t:'MTc4OTQxMDY4NQ=='};var a=document.createElement('script');a.src='/cdn-cgi/challenge-platform/scripts/jsd/main.js';document.getElementsByTagName('head')[0].appendChild(a);";b.getElementsByTagName('head')[0].appendChild(d)}}if(document.body){var a=document.createElement('iframe');a.height=1;a.width=1;a.style.position='absolute';a.style.top=0;a.style.left=0;a.style.border='none';a.style.visibility='hidden';document.body.appendChild(a);if('loading'!==document.readyState)c();else if(window.addEventListener)document.addEventListener('DOMContentLoaded',c);else{var e=document.onreadystatechange||function(){};document.onreadystatechange=function(b){e(b);'loading'!==document.readyState&&(document.onreadystatechange=e,c())}}}})();</script></body>
+</html>
