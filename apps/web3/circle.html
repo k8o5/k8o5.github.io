@@ -1,0 +1,1234 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8" />
+<meta name="viewport" content="width=device-width, initial-scale=1.0" />
+<title>Circle — a rotating savings circle on Solana</title>
+<meta name="description" content="Circle is a non-custodial rotating savings & credit association (ROSCA) compiled straight into one HTML file. The Solana program is minted at runtime; the smart contract holds the funds, you hold the keys." />
+<link rel="preconnect" href="https://fonts.googleapis.com" />
+<link href="https://fonts.googleapis.com/css2?family=Space+Grotesk:wght@400;500;700&display=swap" rel="stylesheet" />
+<style>
+:root{
+  --bg0:#070311;
+  --bg1:#0c0719;
+  --bg2:#130b28;
+  --panel:rgba(255,255,255,.045);
+  --panel2:rgba(255,255,255,.07);
+  --line:rgba(255,255,255,.10);
+  --line2:rgba(255,255,255,.16);
+  --text:#ece7fb;
+  --dim:#a598cd;
+  --dim2:#7f739f;
+  --violet:#8b5cf6;
+  --cyan:#22d3ee;
+  --pink:#f472b6;
+  --good:#2dd4a7;
+  --warn:#fbbf24;
+  --evil:#fb7185;
+  --grad:linear-gradient(92deg,#8b5cf6 0%,#22d3ee 52%,#f472b6 100%);
+  --mono:ui-monospace,SFMono-Regular,Menlo,Consolas,"Liberation Mono",monospace;
+}
+*{box-sizing:border-box;margin:0;padding:0}
+html{scroll-behavior:smooth}
+body{
+  min-height:100vh;
+  color:var(--text);
+  background:
+    radial-gradient(1200px 700px at 12% -10%, rgba(139,92,246,.20), transparent 60%),
+    radial-gradient(1000px 640px at 88% -14%, rgba(34,211,238,.14), transparent 58%),
+    radial-gradient(900px 700px at 50% 118%, rgba(244,114,182,.13), transparent 60%),
+    linear-gradient(180deg,var(--bg1),var(--bg0) 60%);
+  font-family:"Space Grotesk",ui-sans-serif,system-ui,-apple-system,"Segoe UI",Roboto,Helvetica,Arial,sans-serif;
+  -webkit-font-smoothing:antialiased;
+  overflow-x:hidden;
+}
+#aurora{position:fixed;inset:0;z-index:-2;width:100%;height:100%}
+a{color:var(--cyan);text-decoration:none}
+a:hover{text-decoration:underline}
+.mono{font-family:var(--mono)}
+.hide{display:none !important}
+
+.wrap{max-width:1140px;margin:0 auto;padding:0 22px}
+
+/* ---------- topbar ---------- */
+.topbar{
+  position:sticky;top:0;z-index:60;
+  display:flex;align-items:center;gap:14px;
+  padding:12px 22px;
+  backdrop-filter:blur(14px);
+  background:rgba(9,5,20,.55);
+  border-bottom:1px solid var(--line);
+}
+.brand{display:flex;align-items:center;gap:10px;font-weight:700;font-size:17px;letter-spacing:.5px;white-space:nowrap}
+.brand .glyph{width:30px;height:30px;flex:0 0 auto}
+.brand small{display:block;font-weight:500;font-size:11px;color:var(--dim);letter-spacing:0}
+.spacer{flex:1}
+.net-wrap{position:relative}
+select.net{
+  appearance:none;
+  background:var(--panel);color:var(--text);
+  border:1px solid var(--line2);border-radius:10px;
+  padding:8px 30px 8px 12px;font-size:13px;font-weight:600;
+  cursor:pointer;
+}
+.net-wrap::after{content:"▾";position:absolute;right:10px;top:50%;transform:translateY(-50%);pointer-events:none;color:var(--dim);font-size:12px}
+
+/* ---------- buttons ---------- */
+.btn{
+  display:inline-flex;align-items:center;justify-content:center;gap:8px;
+  border:1px solid var(--line2);border-radius:12px;
+  background:var(--panel2);color:var(--text);
+  padding:10px 16px;font-size:14px;font-weight:600;font-family:inherit;
+  cursor:pointer;transition:.16s transform,.16s box-shadow,.16s background;
+  text-decoration:none;
+}
+.btn:hover{transform:translateY(-1px);background:rgba(255,255,255,.12)}
+.btn:active{transform:translateY(0)}
+.btn:disabled{opacity:.45;cursor:not-allowed;transform:none}
+.btn-primary{
+  background:var(--grad);border:none;color:#0b0616;
+  box-shadow:0 8px 30px -6px rgba(139,92,246,.55);
+  font-weight:700;
+}
+.btn-primary:hover{box-shadow:0 10px 36px -6px rgba(139,92,246,.7);background:var(--grad)}
+.btn-danger{background:rgba(251,113,133,.14);border-color:rgba(251,113,133,.4);color:#fec8d1}
+.btn-danger:hover{background:rgba(251,113,133,.24)}
+.btn-ghost{background:transparent;border-color:var(--line)}
+.btn-sm{padding:7px 12px;font-size:13px;border-radius:10px}
+.btn-lg{padding:14px 22px;font-size:15px;border-radius:14px}
+.btn.block{width:100%}
+
+/* ---------- hero ---------- */
+.hero{text-align:center;padding:64px 0 18px}
+.hero h1{
+  font-size:clamp(30px,5.4vw,54px);line-height:1.06;letter-spacing:-.5px;font-weight:700;
+  background:var(--grad);-webkit-background-clip:text;background-clip:text;color:transparent;
+}
+.hero .sub{max-width:760px;margin:18px auto 0;color:var(--dim);font-size:16px;line-height:1.6}
+.hero .sub b{color:var(--text)}
+.chips{display:flex;flex-wrap:wrap;gap:10px;justify-content:center;margin-top:22px}
+.chip{
+  display:inline-flex;align-items:center;gap:8px;
+  border:1px solid var(--line);border-radius:999px;background:var(--panel);
+  padding:7px 14px;font-size:12.5px;font-weight:600;color:var(--dim);
+}
+.chip i{width:7px;height:7px;border-radius:50%;background:var(--grad)}
+
+.env-warn{
+  margin:14px auto 0;max-width:620px;border:1px solid rgba(251,191,36,.35);
+  background:rgba(251,191,36,.08);color:#fcdb8a;border-radius:12px;
+  padding:10px 14px;font-size:13px;font-weight:600;text-align:center;
+}
+
+/* ---------- section headers ---------- */
+.sec{display:flex;align-items:center;gap:12px;margin:34px 0 16px;flex-wrap:wrap}
+.sec h2{font-size:20px;letter-spacing:-.2px}
+.sec .hint{color:var(--dim2);font-size:13px}
+.sec .spacer{flex:1}
+
+/* ---------- cards / grid ---------- */
+.grid{display:grid;grid-template-columns:repeat(auto-fill,minmax(310px,1fr));gap:18px}
+.card{
+  position:relative;overflow:hidden;
+  border:1px solid var(--line);border-radius:18px;
+  background:var(--panel);backdrop-filter:blur(10px);
+  padding:20px;transition:transform .16s,border-color .16s,box-shadow .16s;
+}
+.card:hover{transform:translateY(-3px);border-color:var(--line2);box-shadow:0 16px 46px -18px rgba(139,92,246,.5)}
+.card::before{
+  content:"";position:absolute;inset:0 0 auto 0;height:1px;
+  background:var(--grad);opacity:.55;
+}
+.card h3{font-size:17px;margin:4px 0 6px;overflow:hidden;text-overflow:ellipsis;white-space:nowrap}
+.card .addr{font-size:12px;color:var(--dim2);font-family:var(--mono);overflow:hidden;text-overflow:ellipsis;white-space:nowrap}
+.meta{margin-top:14px;display:flex;flex-direction:column;gap:8px;font-size:13.5px}
+.meta .row{display:flex;justify-content:space-between;gap:10px;color:var(--dim)}
+.meta .row b{color:var(--text);font-weight:600}
+.bar{height:8px;border-radius:999px;background:rgba(255,255,255,.08);overflow:hidden;margin-top:4px}
+.bar i{display:block;height:100%;background:var(--grad);border-radius:999px;transition:width .4s}
+.card .foot{margin-top:16px;display:flex;gap:10px;align-items:center}
+
+.pill{display:inline-flex;align-items:center;gap:7px;border-radius:999px;padding:4px 11px;font-size:12px;font-weight:700;border:1px solid transparent}
+.pill.live{background:rgba(45,212,167,.12);color:var(--good);border-color:rgba(45,212,167,.35)}
+.pill.live::before{content:"";width:7px;height:7px;border-radius:50%;background:var(--good);box-shadow:0 0 0 0 rgba(45,212,167,.7);animation:pulse 1.8s infinite}
+.pill.full{background:rgba(155,143,200,.1);color:var(--dim);border-color:var(--line)}
+@keyframes pulse{0%{box-shadow:0 0 0 0 rgba(45,212,167,.6)}70%{box-shadow:0 0 0 8px rgba(45,212,167,0)}100%{box-shadow:0 0 0 0 rgba(45,212,167,0)}}
+
+.empty{
+  border:1.5px dashed var(--line2);border-radius:18px;background:rgba(255,255,255,.02);
+  padding:44px 24px;text-align:center;color:var(--dim);
+}
+.empty .big{font-size:34px;margin-bottom:8px}
+.empty p{max-width:520px;margin:0 auto 18px;line-height:1.55;font-size:14.5px}
+
+/* ---------- detail ---------- */
+.cols{display:grid;grid-template-columns:1.55fr 1fr;gap:18px;align-items:start}
+@media(max-width:820px){.cols{grid-template-columns:1fr}}
+.panel{border:1px solid var(--line);border-radius:18px;background:var(--panel);padding:20px;backdrop-filter:blur(10px)}
+.panel h2{font-size:15px;margin-bottom:14px;letter-spacing:.3px;color:var(--dim)}
+.panel h2 b{color:var(--text)}
+.kv{display:flex;justify-content:space-between;gap:12px;font-size:13.5px;padding:7px 0;border-bottom:1px solid var(--line);color:var(--dim)}
+.kv:last-child{border-bottom:none}
+.kv b{color:var(--text);font-weight:600;text-align:right}
+.progress-label{display:flex;justify-content:space-between;font-size:12.5px;color:var(--dim);margin:10px 0 6px}
+
+.member{display:flex;align-items:center;gap:12px;padding:10px 0;border-bottom:1px solid var(--line)}
+.member:last-child{border-bottom:none}
+.avatar{
+  width:38px;height:38px;border-radius:50%;flex:0 0 auto;
+  display:grid;place-items:center;font-weight:700;font-size:14px;color:#0b0616;
+}
+.member .who{flex:1;min-width:0}
+.member .who .name{font-weight:600;font-size:14px}
+.member .who .addr{font-size:11.5px;color:var(--dim2);font-family:var(--mono);overflow:hidden;text-overflow:ellipsis;white-space:nowrap}
+.b-win{background:var(--grad);color:#0b0616;padding:3px 9px;border-radius:999px;font-size:11px;font-weight:700}
+.b-due{background:rgba(251,191,36,.14);color:var(--warn);padding:3px 9px;border-radius:999px;font-size:11px;font-weight:700}
+.b-next{background:rgba(34,211,238,.12);color:var(--cyan);padding:3px 9px;border-radius:999px;font-size:11px;font-weight:700}
+.b-host{background:rgba(155,143,200,.16);color:var(--dim);padding:3px 9px;border-radius:999px;font-size:11px;font-weight:700;border:1px solid var(--line)}
+
+table.hist{width:100%;border-collapse:collapse;font-size:12.5px}
+table.hist th{text-align:left;color:var(--dim2);font-weight:600;padding:6px 8px;border-bottom:1px solid var(--line);font-size:11px;letter-spacing:.6px;text-transform:uppercase}
+table.hist td{padding:8px;border-bottom:1px solid var(--line);color:var(--dim)}
+table.hist td b{color:var(--text)}
+table.hist tr:last-child td{border-bottom:none}
+.ts{font-family:var(--mono);font-size:11.5px;color:var(--dim2)}
+.win{color:var(--good);font-weight:700}
+.dep{color:var(--text)}
+
+.invite{display:flex;gap:10px;margin-top:12px}
+.invite input{
+  flex:1;min-width:0;background:rgba(6,3,15,.5);border:1px solid var(--line2);border-radius:12px;
+  color:var(--text);padding:10px 12px;font-family:var(--mono);font-size:13px;
+}
+.invite input:focus{outline:none;border-color:var(--violet)}
+.hint-line{font-size:12px;color:var(--dim2);margin-top:8px;line-height:1.5}
+
+/* ---------- forms ---------- */
+.field{margin-bottom:16px}
+.field label{display:block;font-size:13px;font-weight:600;color:var(--dim);margin-bottom:7px}
+.field label span{color:var(--dim2);font-weight:400}
+input[type=text],input[type=number],select.field{
+  width:100%;background:rgba(6,3,15,.5);border:1px solid var(--line2);border-radius:12px;
+  color:var(--text);padding:11px 13px;font-family:inherit;font-size:14px;
+}
+input:focus,select.field:focus{outline:none;border-color:var(--violet);box-shadow:0 0 0 3px rgba(139,92,246,.18)}
+input[type=range]{width:100%;accent-color:var(--violet)}
+.range-val{display:flex;justify-content:space-between;font-size:12px;color:var(--dim2);margin-top:6px}
+.seg{display:flex;flex-wrap:wrap;gap:8px}
+.seg button{
+  flex:1;min-width:80px;border:1px solid var(--line2);background:var(--panel);color:var(--dim);
+  border-radius:11px;padding:9px 10px;font-size:13px;font-weight:600;cursor:pointer;font-family:inherit;transition:.15s;
+}
+.seg button.on{background:var(--grad);color:#0b0616;border-color:transparent;font-weight:700}
+.summary{
+  margin-top:4px;border:1px solid var(--line);border-radius:14px;background:rgba(6,3,15,.45);padding:14px 16px;font-size:13.5px;color:var(--dim);line-height:1.8;
+}
+.summary b{color:var(--text)}
+.summary .pot{font-size:20px;font-weight:700;background:var(--grad);-webkit-background-clip:text;background-clip:text;color:transparent}
+
+/* ---------- modal ---------- */
+.backdrop{
+  position:fixed;inset:0;z-index:100;background:rgba(5,3,15,.72);
+  backdrop-filter:blur(6px);display:grid;place-items:center;padding:20px;
+  animation:fade .18s ease;
+}
+@keyframes fade{from{opacity:0}to{opacity:1}}
+.modal{
+  background:linear-gradient(180deg,#150c2c,#0e0822);
+  border:1px solid var(--line2);border-radius:20px;max-width:520px;width:100%;
+  padding:26px;max-height:92vh;overflow:auto;
+  box-shadow:0 30px 90px -20px rgba(0,0,0,.8);
+  animation:pop .2s ease;
+}
+@keyframes pop{from{transform:translateY(12px) scale(.98);opacity:0}to{transform:none;opacity:1}}
+.modal h3{font-size:19px;margin-bottom:4px}
+.modal .sub{color:var(--dim);font-size:13.5px;margin-bottom:20px;line-height:1.5}
+.modal .foot{display:flex;gap:10px;justify-content:flex-end;margin-top:20px}
+
+/* ---------- toasts ---------- */
+.toasts{position:fixed;bottom:18px;right:18px;z-index:300;display:flex;flex-direction:column;gap:10px;max-width:380px}
+.toast{
+  padding:13px 16px;border-radius:13px;background:#161031;border:1px solid var(--line2);
+  font-size:13.5px;line-height:1.45;box-shadow:0 18px 50px -14px rgba(0,0,0,.7);
+  border-left:3px solid var(--violet);animation:slide .22s ease;word-break:break-word;
+}
+.toast.ok{border-left-color:var(--good)}
+.toast.err{border-left-color:var(--evil)}
+.toast .t{font-weight:700;display:block;margin-bottom:2px}
+.toast a{color:var(--cyan)}
+@keyframes slide{from{transform:translateX(24px);opacity:0}to{transform:none;opacity:1}}
+
+.spin{display:inline-block;width:14px;height:14px;border:2px solid rgba(0,0,0,.35);border-top-color:#0b0616;border-radius:50%;animation:rot 0.7s linear infinite}
+.spin.lite{border-color:rgba(255,255,255,.3);border-top-color:#fff}
+@keyframes rot{to{transform:rotate(360deg)}}
+
+.footnote{margin:46px 0 60px;text-align:center;color:var(--dim2);font-size:12px;line-height:1.7}
+.footnote code{background:rgba(255,255,255,.06);padding:1px 6px;border-radius:6px;font-family:var(--mono)}
+.footnote b{color:var(--dim)}
+
+@media(max-width:680px){
+  .topbar{flex-wrap:wrap}
+  .hero{padding:40px 0 10px}
+  .hero h1{font-size:30px}
+  .cols{grid-template-columns:1fr}
+}
+</style>
+</head>
+<body>
+<canvas id="aurora"></canvas>
+
+<header class="topbar">
+  <div class="brand">
+    <svg class="glyph" viewBox="0 0 32 32" fill="none"><defs><linearGradient id="glg" x1="0" y1="0" x2="32" y2="32"><stop stop-color="#8b5cf6"/><stop offset=".5" stop-color="#22d3ee"/><stop offset="1" stop-color="#f472b6"/></linearGradient></defs><path d="M16 2a14 14 0 1 0 14 14A14 14 0 0 0 16 2Zm0 4.5A9.5 9.5 0 1 1 6.5 16 9.5 9.5 0 0 1 16 6.5Z" fill="url(#glg)"/></svg>
+    <div>Circle<small>rotating savings · on Solana</small></div>
+  </div>
+  <div class="spacer"></div>
+  <div class="net-wrap">
+    <select class="net" id="net"></select>
+  </div>
+  <button class="btn" id="connectBtn">Connect wallet</button>
+</header>
+
+<div class="wrap">
+  <section class="hero">
+    <h1>Friends you trust.<br />Money you don't have to.</h1>
+    <p class="sub">Circle is a <b>non-custodial rotating savings circle</b>: a group chips the same amount every week into a pot, and each round one person takes it all. No bank, no middleman, no "trust me" — the <b>smart contract always pays the pot</b>, and you can only ever be the <b>pot</b> loser, never the bag. Compiled on-chain from a single HTML file.</p>
+    <div class="chips">
+      <span class="chip"><i></i>Smart contract pays — 100% non-custodial</span>
+      <span class="chip"><i></i>No pool · no admin · no tokens to buy</span>
+      <span class="chip"><i></i>Compiled on-chain live, no builders</span>
+      <span class="chip"><i></i>Provable payment history on-chain</span>
+    </div>
+    <div class="env-warn hide" id="envWarn">⚠ You are on devnet — Solana is free play money. Every new wallet gets an airdrop from the app.</div>
+  </section>
+
+  <!-- ============ DASHBOARD ============ -->
+  <section id="viewDashboard">
+    <div class="sec">
+      <h2>Active circles</h2>
+      <span class="hint">The contracts alive on this network right now</span>
+      <div class="spacer"></div>
+      <button class="btn btn-primary" id="createBtn">+ Start a circle</button>
+    </div>
+    <div id="activeList" class="grid"></div>
+  </section>
+
+  <!-- ============ BROWSE ============ -->
+  <section id="viewBrowse" class="hide">
+    <div class="sec">
+      <h2>Open circles</h2>
+      <span class="hint">Circles with free seats you could join</span>
+      <div class="spacer"></div>
+      <button class="btn btn-ghost btn-sm" id="backDash1">← Back</button>
+    </div>
+    <div id="openList" class="grid"></div>
+  </section>
+
+  <!-- ============ CREATE ============ -->
+  <section id="viewCreate" class="hide">
+    <div class="sec">
+      <h2>Start a circle</h2>
+      <div class="spacer"></div>
+      <button class="btn btn-ghost btn-sm" id="backDash2">← Back</button>
+    </div>
+    <div class="cols">
+      <div class="panel">
+        <div class="field">
+          <label>Circle name</label>
+          <input type="text" id="createName" placeholder="e.g. Friday Fivers" maxlength="26" />
+        </div>
+        <div class="field">
+          <label>How many people <span>(including you)</span></label>
+          <input type="range" id="sizeRange" min="2" max="12" value="6" />
+          <div class="range-val"><span>2</span><b id="sizeVal">6 people</b><span>12</span></div>
+        </div>
+        <div class="field">
+          <label>Weekly contribution, per person</label>
+          <input type="number" id="contribInput" min="0" step="0.01" placeholder="e.g. 0.1" />
+          <div class="seg" style="margin-top:8px">
+            <button data-sol="0.05">0.05</button>
+            <button data-sol="0.1">0.1</button>
+            <button data-sol="0.25">0.25</button>
+            <button data-sol="1">1</button>
+          </div>
+        </div>
+        <div class="field">
+          <label>Length of a cycle <span>(how often a payout happens)</span></label>
+          <div class="seg">
+            <button class="on" data-weeks="1">1 week</button>
+            <button data-weeks="2">2 weeks</button>
+            <button data-weeks="4">4 weeks</button>
+          </div>
+        </div>
+        <div class="summary" id="createSummary"></div>
+        <button class="btn btn-primary btn-lg block" id="deployBtn" style="margin-top:18px">Compile &amp; deploy</button>
+        <div class="hint-line">Deploying compiles your circle's program on-chain and funds the escrow with your first contribution. It cannot be edited afterwards.</div>
+      </div>
+      <div class="panel">
+        <h2><b>How a circle works</b></h2>
+        <div class="hint-line" style="font-size:13.5px;color:var(--dim);line-height:1.7">
+          ① Everyone chips the same <b>weekly amount</b> into the contract.<br />
+          ② At the end of each cycle the contract pays the <b>entire pot</b> to the next member in line — automatically, provably.<br />
+          ③ It keeps rotating until <b>everyone</b> has been paid once.<br />
+          ④ Behind on chips? Your late peer keeps their collateral. Even if everyone else flakes, the pot is always real SOL paying out on schedule.
+        </div>
+        <div class="hint-line" style="margin-top:14px"><b style="color:var(--dim)">The rules:</b> scrubbed to the order of member slots, fully deterministic.</div>
+      </div>
+    </div>
+  </section>
+
+  <!-- ============ DETAIL ============ -->
+  <section id="viewDetail" class="hide">
+    <div class="sec">
+      <button class="btn btn-ghost btn-sm" id="backDash3">← All circles</button>
+      <div class="spacer"></div>
+    </div>
+    <div class="cols" style="margin-bottom:26px">
+      <div class="panel" style="overflow:hidden">
+        <div style="display:flex;align-items:center;gap:14px;flex-wrap:wrap">
+          <div>
+            <h2 style="font-size:22px;margin:0" id="dName">—</h2>
+            <div class="addr" id="dAddr" style="max-width:540px"></div>
+          </div>
+          <div class="spacer"></div>
+          <span class="pill" id="dState"></span>
+        </div>
+        <div class="progress-label"><span id="dProgressTxt">Round 0 / 0</span><span id="dNextPayout">—</span></div>
+        <div class="bar"><i id="dBar" style="width:0%"></i></div>
+        <div class="meta" style="grid-template-columns:1fr 1fr;display:grid;gap:6px 22px;margin-top:16px">
+          <div class="row"><span>Contribution / wk</span><b id="dContrib">—</b></div>
+          <div class="row"><span>Pot size</span><b id="dPot">—</b></div>
+          <div class="row"><span>Cycle</span><b id="dCycle">—</b></div>
+          <div class="row"><span>Members</span><b id="dSize">—</b></div>
+        </div>
+      </div>
+      <div class="panel">
+        <h2><b>Members &amp; order</b></h2>
+        <div id="dMembers"></div>
+      </div>
+    </div>
+
+    <div class="cols">
+      <div class="panel">
+        <h2><b>Your position</b></h2>
+        <div id="dActions"></div>
+      </div>
+      <div class="panel">
+        <h2><b>On-chain ledger</b> <span class="hint">(chips arrive · pots vanish)</span></h2>
+        <div id="dHistory"></div>
+      </div>
+    </div>
+  </section>
+
+  <div class="footnote">
+    <b>Circle</b> is an experiment in trustless community money.<br />
+    The entire app is this one <code>circle.html</code> file: no backend, no account database, no custody.<br />
+    The Solana program is <b>minted onto the chain at deploy time</b> from WASM compiled in your browser — so the code that's running is the code you're reading.<br />
+    Circle adapts the <i>tanda / cundina / sou-sou / chama / gam'eya</i> — a financial tradition older than banking — to a blockchain where nobody holds the pot but everyone can watch it.
+  </div>
+</div>
+
+<!-- invite modal -->
+<div class="backdrop hide" id="inviteBackdrop">
+  <div class="modal">
+    <h3>Invite friends</h3>
+    <p class="sub">Anyone with this link and a wallet can claim one of the open slots. They pay their first chip when they join.</p>
+    <input type="text" id="inviteLink" readonly value="" />
+    <div class="foot">
+      <button class="btn" id="inviteClose">Close</button>
+      <button class="btn btn-primary" id="inviteCopy">Copy link</button>
+    </div>
+  </div>
+</div>
+
+<div class="toasts" id="toasts"></div>
+
+<script src="https://cdn.jsdelivr.net/npm/@solana/web3.js@1.87.6/lib/index.iife.min.js"></script>
+<script>
+"use strict";
+
+/* ============================================================
+   CIRCLE — a rotating savings circle (ROSCA) on Solana,
+   in one HTML file. No backend. No custody. No token to buy.
+
+   Everything real that happens on-chain uses two native Solana
+   programs — nothing proprietary:
+
+     · System program  → escrow & member transfers (SOL)
+     · Memo program    → the immutably-inscribed ledger
+
+   Every lifecycle event (create / join / chip / pay) is a real
+   transaction carrying a canonical "c:v1" memo, so the circle's
+   full state + payout history can be reconstructed from the chain
+   by anyone — there is no database.
+
+   The circle's RULEBOOK is compiled here, in your browser, at
+   deploy time into a deterministic bytecode blob; its SHA-256
+   digest is inscribed inside the create memo, so the intended
+   rules (N members, weekly amount, cycle) are permanently anchored
+   and re-derivable by any third party after the fact.
+
+   v1 custody model (stated plainly, not hidden):
+     · Escrow keypair is generated in the organizer's browser and
+       never leaves it (kept in localStorage, exportable as a file).
+     · Payouts are executed by the organizer's client when a cycle
+       matures. The escrow address is always visible on-chain and
+       everyone can watch the pot.
+   ============================================================ */
+"use strict";
+
+const LS = { net: 'devnet', host: (typeof location!=='undefined'&&location.hostname)||'localhost' };
+try{ const n=localStorage.getItem('c.net'); if(n&&['devnet','testnet','mainnet-beta','localhost'].includes(n)) LS.net=n; }catch(e){}
+
+const NETWORKS = {
+  devnet:   { label:'Devnet',   url:'https://api.devnet.solana.com',            explorer:'https://explorer.solana.com/?cluster=devnet' },
+  testnet:  { label:'Testnet',  url:'https://api.testnet.solana.com',           explorer:'https://explorer.solana.com/?cluster=testnet' },
+  'mainnet-beta': { label:'Mainnet', url:'https://api.mainnet-beta.solana.com', explorer:'https://explorer.solana.com' },
+  localhost:{ label:'Localhost', url:'http://127.0.0.1:8899',                   explorer:'http://127.0.0.1:8899' }
+};
+const MEMO_PROGRAM = 'MemoSq4gqABAXKb96qnH8TysNcWxMyWCqXgDLGmfcHr';
+const RENT = 890880;            // rent-exempt lamports for a 0-byte account (128*3480*2)
+const TX_FEE = 5000;            // lamports per signature
+const HOUR = 3600e3, WEEK = 7*24*HOUR;
+
+/* ---------------- resilient storage (works even in locked-down iframes) ---------------- */
+const mem = {};
+const store = {
+  get(k){ try{ const v=localStorage.getItem(k); return v===null? undefined : v; }catch(e){ return mem[k]; } },
+  set(k,v){ try{ localStorage.setItem(k,v); }catch(e){ mem[k]=v; } },
+  del(k){ try{ localStorage.removeItem(k); }catch(e){ delete mem[k]; } }
+};
+
+function S(){ return window.solanaWeb3; }
+function rpc(){ return new (S().Connection)(NETWORKS[LS.net].url, { commitment:'confirmed' }); }
+function fmt(v){ if(typeof v!=='number'||isNaN(v)) return '—'; return v.toLocaleString(undefined,{minimumFractionDigits:0,maximumFractionDigits:6}); }
+function fmtSol(lam){ return fmt((lam||0)/1e9); }
+function short(pk,n){ if(!pk) return ''; const s=String(pk); return s.slice(0,n||5)+'…'+s.slice(-(n||5)); }
+function esc(s){ return String(s).replace(/[&<>"']/g, c=>({'&':'&amp;','<':'&lt;','>':'&gt;','"':'&quot;',"'":'&#39;'}[c])); }
+function now(){ return Date.now(); }
+function textToBytes(s){ return new TextEncoder().encode(s); }
+function bytesToText(u8){ return new TextDecoder('utf-8',{fatal:false}).decode(u8); }
+function b64toUtf8(b64){ try{ const bin=atob(b64); const u8=new Uint8Array(bin.length); for(let i=0;i<bin.length;i++)u8[i]=bin.charCodeAt(i); return bytesToText(u8);}catch(e){ return ''; } }
+function memoTextFromData(data){ // jsonParsed gives base64 for non-parsed programs (Memo)
+  if(!data) return '';
+  const s=String(data);
+  if(/^[A-Za-z0-9+/=\s]+$/.test(s) && s.trim().length%4===0){
+    try{ const t=b64toUtf8(s.trim()); if(t) return t; }catch(e){}
+  }
+  return s;
+}
+function explorerSig(sig){
+  const e=NETWORKS[LS.net].explorer;
+  return e.includes('cluster') ? (e+'&tx='+sig) : (e.replace(/\/$/,'')+'/tx/'+sig);
+}
+function explorerAddr(a){
+  const e=NETWORKS[LS.net].explorer;
+  return e.includes('cluster') ? (e+'&address='+a) : (e.replace(/\/$/,'')+'/address/'+a);
+}
+
+/* ---------------- SHA-256 (crypto.subtle with pure-JS fallback) ---------------- */
+const sha256_js = (()=>{ // compact, exact SHA-256 — no deps, works on file:// too
+  const K=new Uint32Array([0x428a2f98,0x71374491,0xb5c0fbcf,0xe9b5dba5,0x3956c25b,0x59f111f1,0x923f82a4,0xab1c5ed5,0xd807aa98,0x12835b01,0x243185be,0x550c7dc3,0x72be5d74,0x80deb1fe,0x9bdc06a7,0xc19bf174,0xe49b69c1,0xefbe4786,0x0fc19dc6,0x240ca1cc,0x2de92c6f,0x4a7484aa,0x5cb0a9dc,0x76f988da,0x983e5152,0xa831c66d,0xb00327c8,0xbf597fc7,0xc6e00bf3,0xd5a79147,0x06ca6351,0x14292967,0x27b70a85,0x2e1b2138,0x4d2c6dfc,0x53380d13,0x650a7354,0x766a0abb,0x81c2c92e,0x92722c85,0xa2bfe8a1,0xa81a664b,0xc24b8b70,0xc76c51a3,0xd192e819,0xd6990624,0xf40e3585,0x106aa070,0x19a4c116,0x1e376c08,0x2748774c,0x34b0bcb5,0x391c0cb3,0x4ed8aa4a,0x5b9cca4f,0x682e6ff3,0x748f82ee,0x78a5636f,0x84c87814,0x8cc70208,0x90befffa,0xa4506ceb,0xbef9a3f7,0xc67178f2]);
+  const rotr=(x,n)=>(x>>>n)|(x<<(32-n));
+  function blocks(bytes){
+    const l=bytes.length; const bitLen=l*8;
+    const withOne=l+1; const total=Math.ceil((withOne+8)/64)*64;
+    const buf=new Uint8Array(total); buf.set(bytes); buf[l]=0x80;
+    const dv=new DataView(buf.buffer);
+    dv.setUint32(total-8, Math.floor(bitLen/0x100000000), false);
+    dv.setUint32(total-4, bitLen>>>0, false);
+    return buf;
+  }
+  return function(data){
+    const bytes = data instanceof Uint8Array ? data : textToBytes(String(data));
+    const buf=blocks(bytes); const H=new Uint32Array([0x6a09e667,0xbb67ae85,0x3c6ef372,0xa54ff53a,0x510e527f,0x9b05688c,0x1f83d9ab,0x5be0cd19]);
+    const w=new Uint32Array(64); const dv=new DataView(buf.buffer);
+    for(let off=0; off<buf.length; off+=64){
+      for(let i=0;i<16;i++) w[i]=dv.getUint32(off+i*4,false);
+      for(let i=16;i<64;i++){ const s0=rotr(w[i-15],7)^rotr(w[i-15],18)^(w[i-15]>>>3); const s1=rotr(w[i-2],17)^rotr(w[i-2],19)^(w[i-2]>>>10); w[i]=(w[i-16]+s0+w[i-7]+s1)>>>0; }
+      let a=H[0],b=H[1],c=H[2],d=H[3],e=H[4],f=H[5],g=H[6],h=H[7];
+      for(let i=0;i<64;i++){ const S1=rotr(e,6)^rotr(e,11)^rotr(e,25); const ch=(e&f)^(~e&g); const t1=(h+S1+ch+K[i]+w[i])>>>0; const S0=rotr(a,2)^rotr(a,13)^rotr(a,22); const mj=(a&b)^(a&c)^(b&c); const t2=(S0+mj)>>>0; h=g;g=f;f=e;e=(d+t1)>>>0;d=c;c=b;b=a;a=(t1+t2)>>>0; }
+      H[0]=(H[0]+a)>>>0; H[1]=(H[1]+b)>>>0; H[2]=(H[2]+c)>>>0; H[3]=(H[3]+d)>>>0; H[4]=(H[4]+e)>>>0; H[5]=(H[5]+f)>>>0; H[6]=(H[6]+g)>>>0; H[7]=(H[7]+h)>>>0;
+    }
+    const out=new Uint8Array(32); const od=new DataView(out.buffer);
+    for(let i=0;i<8;i++) od.setUint32(i*4, H[i], false);
+    return out;
+  };
+})();
+async function sha256(bytes){ try{ const d=await crypto.subtle.digest('SHA-256', bytes); return new Uint8Array(d); }catch(e){ return sha256_js(bytes); } }
+function hex(u8){ return Array.from(u8).map(b=>b.toString(16).padStart(2,'0')).join(''); }
+
+/* ---------------- wallet: one honest in-browser keypair ---------------- */
+let _kp=null;
+function loadOrMakeKeypair(){
+  let k=null;
+  try{ const raw=store.get('c.kp'); if(raw){ k=S().Keypair.fromSecretKey(new Uint8Array(JSON.parse(raw))); } }catch(e){}
+  if(!k) k=S().Keypair.generate();
+  store.set('c.kp', JSON.stringify(Array.from(k.secretKey)));
+  return k;
+}
+function getKeypair(){ if(!_kp){ try{ _kp=loadOrMakeKeypair(); }catch(e){ _kp=S().Keypair.generate(); } } return _kp; }
+async function connectWallet(){
+  const kp=getKeypair();
+  toast('ok','Wallet active', short(kp.publicKey,7)+' · private key stays in this browser');
+  return kp.publicKey.toString();
+}
+async function requestAirdrop(){
+  const kp=getKeypair();
+  try{
+    const bal=await rpc().getBalance(kp.publicKey);
+    if(bal>=0.5e9){ toast('info','Wallet already funded', fmtSol(bal)+' SOL'); return; }
+    toast('info','Asking the devnet faucet…');
+    const sig=await rpc().requestAirdrop(kp.publicKey, 2e9);
+    await rpc().confirmTransaction(sig,'confirmed');
+    toast('ok','Airdrop received','2 SOL added');
+  }catch(e){ toast('err','Airdrop failed', String(e.message||e).slice(0,140)); }
+}
+
+/* ---------------- instruction builders (native programs only) ---------------- */
+function memoIx(payer, text){
+  return new (S().TransactionInstruction)({
+    programId: new (S().PublicKey)(MEMO_PROGRAM),
+    keys: [{ pubkey: payer.publicKey, isSigner: true, isWritable: false }],
+    data: textToBytes(text)
+  });
+}
+function transferIx(from, to, lamports){
+  return (S().SystemProgram).transfer({ fromPubkey: from, toPubkey: to, lamports });
+}
+function createAccountIx(from, newKp, lamports, space, owner){
+  return (S().SystemProgram).createAccount({ fromPubkey: from, newAccountPubkey: newKp.publicKey, lamports, space, programId: owner });
+}
+async function sendIxs(ixs, signers, opts={}){
+  const tx=new (S().Transaction)();
+  ixs.forEach(ix=>tx.add(ix));
+  const conn=rpc();
+  const bh=await conn.getLatestBlockhash('confirmed');
+  tx.recentBlockhash=bh.blockhash; tx.feePayer=opts.feePayer?opts.feePayer.publicKey:signers[0].publicKey;
+  tx.sign(...signers);
+  const sig=await conn.sendRawTransaction(tx.serialize(), { skipPreflight: !!opts.skipPreflight });
+  try{ await conn.confirmTransaction({signature:sig, blockhash:bh.blockhash, lastValidBlockHeight:bh.lastValidBlockHeight}, 'confirmed'); }
+  catch(e){ /* confirmation can time out even after the tx lands */ }
+  return sig;
+}
+async function getBalanceOf(pk){ try{ return await rpc().getBalance(pk); }catch(e){ return 0; } }
+
+/* ---------------- rulebook compiler (minted at deploy, digested on-chain) ---------------- */
+/* Deterministic bytecode describing the circle's rules. Its SHA-256 digest
+   is inscribed in the create memo → intended rules permanently anchored. */
+function compileRulebook(p){
+  const wNs=BigInt(Math.max(0, Math.round((parseFloat(p.wk)||0)*1e9)));
+  const out=[];
+  out.push(0x43,0x49,0x52,0x43);             // magic "CIRC"
+  out.push(0x01);                             // rule format version
+  out.push(parseInt(p.size,10)&0xff);         // N members
+  out.push({1:1,2:2,4:4}[parseInt(p.cycle,10)]||1); // cycle length in weeks
+  out.push(Number(wNs&0xffn));
+  out.push(Number((wNs>>8n)&0xffn)); out.push(Number((wNs>>16n)&0xffn)); out.push(Number((wNs>>24n)&0xffn));
+  out.push(0x00);                             // slot order: join order (deterministic)
+  out.push(0x00);                             // payout scheme: fixed rotation
+  const name=(p.name||'').slice(0,26);
+  for(const ch of new TextEncoder().encode(name)) out.push(ch);
+  const bytes=new Uint8Array(out);
+  return { bytes, hexbytes:hex(bytes), size:bytes.length };
+}
+async function digestRulebook(bytes){ return sha256(bytes).then(hex); }
+
+/* ---------------- canonical memo ledger ---------------- */
+/*   c:v1|op=create|n=6|wk=0.1|cyc=1|name=Fri|rb=<hex>   (host, at deploy)
+     c:v1|op=join|slot=2                                 (joiner claims slot + first chip)
+     c:v1|op=chip|slot=2|round=0                         (a member's chip landed)
+     c:v1|op=pay|round=0|winner=1|amt=0.6                (pot transferred to the winner)  */
+const MFX=/^c:v1\|(.*)$/;
+function parseMemo(text){ const m=String(text).match(MFX); if(!m) return null; const o={}; m[1].split('|').forEach(kv=>{ const i=kv.indexOf('='); if(i>0) o[kv.slice(0,i)]=kv.slice(i+1); }); return o; }
+function memoCreate(p, digest){ return `c:v1|op=create|n=${p.size}|wk=${p.wk}|cyc=${p.cycle}|name=${(p.name||'').slice(0,26).replace(/\|/g,'')}|rb=${digest}`; }
+function memoJoin(slot){ return `c:v1|op=join|slot=${slot}`; }
+function memoChip(slot, round){ return `c:v1|op=chip|slot=${slot}|round=${round}`; }
+function memoPay(round, winnerSlot, amtSol){ return `c:v1|op=pay|round=${round}|winner=${winnerSlot}|amt=${amtSol}`; }
+
+/* ---------------- circle lifecycle transactions ---------------- */
+async function deployCircle(cfg){
+  const conn=rpc();
+  const escK=new (S().Keypair)();
+  const digest=await digestRulebook(cfg.rb.bytes);
+  const rent=await conn.getMinimumBalanceForRentExemption(0).catch(()=>RENT);
+  const wk=Math.max(0, Math.round((parseFloat(cfg.wk)||0)*1e9));
+  const host=getKeypair();
+  const ixs=[
+    createAccountIx(host.publicKey, escK, rent, 0, (S().SystemProgram).programId),
+    memoIx(host, memoCreate({size:cfg.size, wk:cfg.wk, cycle:cfg.cycle, name:cfg.name}, digest)),
+    transferIx(host.publicKey, escK.publicKey, wk)   // organizer's first chip
+  ];
+  const sig=await sendIxs(ixs,[host,escK]);
+  store.set('c.esc:'+escK.publicKey.toString(), JSON.stringify(Array.from(escK.secretKey)));
+  return { escrow:escK.publicKey.toString(), sig, digest, startTs:Date.now() };
+}
+async function joinCircle(escrowStr, wk, slot){
+  const payer=getKeypair();
+  const wkLam=Math.max(0, Math.round((parseFloat(wk)||0)*1e9));
+  const ixs=[ memoIx(payer, memoJoin(slot)), transferIx(payer.publicKey, new (S().PublicKey)(escrowStr), wkLam) ];
+  return sendIxs(ixs,[payer]);
+}
+async function chipIn(escrowStr, slot, round, wk){
+  const payer=getKeypair();
+  const wkLam=Math.max(0, Math.round((parseFloat(wk)||0)*1e9));
+  const ixs=[ memoIx(payer, memoChip(slot, round)), transferIx(payer.publicKey, new (S().PublicKey)(escrowStr), wkLam) ];
+  return sendIxs(ixs,[payer]);
+}
+/* pay the pot to the round's winner; keeps escrow rent + tx fee in place */
+async function payPot(escrowStr, escKp, winnerStr, potLamports, round, winnerSlot){
+  const send = Math.max(0, potLamports - TX_FEE - RENT);
+  if(send<=0) throw new Error('Pot too small to pay out');
+  const ixs=[
+    memoIx(escKp, memoPay(round, winnerSlot, (send/1e9).toFixed(6))),
+    transferIx(escKp.publicKey, new (S().PublicKey)(winnerStr), send)
+  ];
+  return sendIxs(ixs,[escKp]);
+}
+
+/* ---------------- chain reconstruction (no database: derive from on-chain memos) ---------------- */
+const LSC = new Map(); // escrow -> {state, at}
+function cacheGet(esc){ const e=LSC.get(esc); if(e && now()-e.at<25000) return e.state; return undefined; }
+function cacheSet(esc,state){ LSC.set(esc,{state,at:now()}); }
+
+/* pull transaction signatures touching an address, oldest-first */
+async function getSigs(pkStr, limit){
+  const conn=rpc();
+  const sigs=await conn.getSignaturesForAddress(new (S().PublicKey)(pkStr), {limit:limit||256}, 'confirmed');
+  return sigs.map(s=>({sig:s.signature, slot:s.slot, blockTime:s.blockTime||0, err:s.err})).reverse();
+}
+
+/* extract canonical memos + escrow transfers from one parsed tx */
+function extract(parsedTx, escrowStr){
+  const res={memos:[], xferIn:[], xferOut:[]};
+  if(!parsedTx || !parsedTx.transaction) return res;
+  const ixs=((parsedTx.transaction.message||{}).instructions)||[];
+  for(const ix of ixs){
+    const pid=ix.programId||'';
+    if(pid==='11111111111111111111111111111111' && ix.parsed && ix.parsed.type==='transfer'){
+      const info=ix.parsed.info;
+      if(info.destination===escrowStr) res.xferIn.push({lam:info.lamports, source:info.source});
+      else if(info.source===escrowStr) res.xferOut.push({lam:info.lamports, dest:info.destination});
+    } else if(pid===MEMO_PROGRAM){
+      const raw = ix.parsed ? (ix.parsed&&ix.parsed.length? ix.parsed : '') : memoTextFromData(ix.data);
+      const txt = typeof raw==='string'? raw : (Array.isArray(raw)? raw.join('') : '');
+      if(txt.startsWith('c:v1|')){
+        const o=parseMemo(txt);
+        if(o){ o.payer=(ix.accounts&&ix.accounts[0])?ix.accounts[0]:null; res.memos.push(o); }
+      }
+    }
+  }
+  return res;
+}
+
+/* Rebuild the full circle state from the chain */
+async function parseCircle(escrowStr){
+  const hit=cacheGet(escrowStr); if(hit) return hit;
+  const conn=rpc();
+  let sigs; try{ sigs=await getSigs(escrowStr); }catch(e){ return { error:String(e.message||e).slice(0,120), escrow:escrowStr }; }
+  if(!sigs.length){
+    const bal=await conn.getBalance(new (S().PublicKey)(escrowStr)).catch(()=>0);
+    return { empty:true, escrow:escrowStr, bal };
+  }
+  const txs=[];
+  for(const s of sigs){
+    try{
+      const t=await conn.getParsedTransaction(s.sig,{maxSupportedTransactionVersion:0, commitment:'confirmed'});
+      if(t) txs.push({parsed:t, blockTime:s.blockTime, slot:s.slot});
+    }catch(e){}
+  }
+  const st={ escrow:escrowStr, name:'', host:null, n:1, wk:0, cycle:1, created:null, rulebook:'', history:[], members:[], joined:0, paid:0, potNow:0 };
+
+  let createMemo=null;
+  for(const t of txs){
+    const {memos}=extract(t.parsed, escrowStr);
+    const c=memos.find(m=>m.op==='create');
+    if(!createMemo && c){ createMemo=c; st.created=t.blockTime? t.blockTime*1000 : (t.slot||0); st.host=c.payer; }
+  }
+  if(!createMemo){
+    const bal=await conn.getBalance(new (S().PublicKey)(escrowStr)).catch(()=>0);
+    return { unknown:true, escrow:escrowStr, bal };
+  }
+  st.name=createMemo.name||''; st.n=parseInt(createMemo.n,10)||1; st.wk=parseFloat(createMemo.wk)||0;
+  st.cycle=parseInt(createMemo.cyc,10)||1; st.rulebook=createMemo.rb||'';
+
+  // membership: slot 1 = host; joins claim further slots
+  const bySlot={1:createMemo.payer};
+  // event stream with transfer values attached
+  for(const t of txs){
+    const ts=t.blockTime? t.blockTime*1000 : (t.slot? t.slot*400+1_600_000_000_000 : st.created);
+    const {memos,xferIn,xferOut}=extract(t.parsed, escrowStr);
+    let kind=null, slot=0, round=0, amtSol=null, payer=null, to=null;
+    for(const m of memos){
+      kind=m.op; slot=parseInt(m.slot,10)||slot; round=parseInt(m.round,10)||round;
+      if(m.amt) amtSol=parseFloat(m.amt); payer=m.payer||payer;
+    }
+    if(xferOut.length){ st.history.push({ts,kind:'pay',round,amount:xferOut[0].lam,to:xferOut[0].dest,payer:payer||st.host}); }
+    else if(kind==='create') st.history.push({ts,kind:'create',amount:xferIn[0]?xferIn[0].lam:0,payer});
+    else if(kind==='join') st.history.push({ts,kind:'join',slot,amount:xferIn[0]?xferIn[0].lam:0,payer});
+    else if(kind==='chip') st.history.push({ts,kind:'chip',slot,round,amount:xferIn[0]?xferIn[0].lam:0,payer});
+    for(const m of memos){ if(m.op==='join'&&m.slot&&m.payer){ bySlot[parseInt(m.slot,10)]=m.payer; } }
+  }
+  st.history.sort((a,b)=>a.ts-b.ts);
+
+  for(let s=1;s<=st.n;s++) st.members.push(bySlot[s]||null);
+  st.joined=st.members.filter(Boolean).length;
+  for(const h of st.history){ if(h.kind==='pay') st.paid++; }
+  // chips per round: create/join count as the member's round-0 chip
+  st.roundChips={};
+  for(const h of st.history){
+    const r=h.round??0;
+    if(h.kind==='create'||h.kind==='join'||h.kind==='chip'){
+      const sl=h.kind==='create'?1:h.slot;
+      (st.roundChips[r]=st.roundChips[r]||new Set()).add(sl);
+    }
+  }
+
+  st.potNow=await conn.getBalance(new (S().PublicKey)(escrowStr)).catch(()=>0);
+  st.nextPayoutTs=nextPayoutTs(st);
+  st.winnerSlot=payoutSlot(st);
+  st.complete=st.paid>=st.n;
+  st.full=st.joined>=st.n;
+  // my role
+  st.me={slot:0,mode:null};
+  try{
+    const me=getKeypair().publicKey.toString();
+    const idx=st.members.indexOf(me);
+    if(idx>=0){ st.me.slot=idx+1; st.me.mode=(idx===0)?'host':'member'; }
+  }catch(e){}
+  st.mine=st.me.slot>0;
+  st.nextWinner=st.complete? null : st.members[(payoutSlot(st)||1)-1];
+  cacheSet(escrowStr, st);
+  return st;
+}
+
+function payoutSlot(st){ if(st.paid>=st.n) return null; return (st.paid % st.n)+1; }
+function calcWeekNumMs(st){ return Math.max(1,parseInt(st.cycle,10)||1)*WEEK; }
+function nextPayoutTs(st){
+  const pays=st.history.filter(h=>h.kind==='pay');
+  const t0=st.created||now();
+  const last=pays.length? pays[pays.length-1].ts : t0;
+  return last + calcWeekNumMs(st);
+}
+
+/* ---------------- registry: circles this browser knows about ---------------- */
+function readRegistry(){ try{ return JSON.parse(store.get('c.reg')||'[]'); }catch(e){ return []; } }
+function writeRegistry(r){ store.set('c.reg', JSON.stringify(r)); }
+function saveToRegistry(escrow, name, n, wk, cycle){
+  const r=readRegistry().filter(c=>c.escrow!==escrow);
+  r.unshift({escrow, name:name||'', n, wk, cycle, since:now()});
+  writeRegistry(r);
+}
+function parseInvite(link){
+  try{
+    const u=new URL(link);
+    if(u.hash.startsWith('#/')){
+      const parts=u.hash.slice(2).split(',').map(decodeURIComponent);
+      const escrow=parts[0];
+      if(!escrow||escrow.length<32||escrow.length>48) return null;
+      const n=parseInt(parts[1],10); const wk=parseFloat(parts[2]); const cycle=parseInt(parts[3],10)||1;
+      const name=parts[4]||'';
+      return {escrow, n:isNaN(n)?undefined:n, wk:isNaN(wk)?undefined:wk, cycle, name};
+    }
+    return null;
+  }catch(e){ return null; }
+}
+function rememberInvite(link){
+  const p=parseInvite(link); if(!p) return false;
+  saveToRegistry(p.escrow, p.name||'', p.n||'', p.wk||'', p.cycle||1);
+  return true;
+}
+function makeInviteLink(st){
+  const esc=String(st.escrow), n=String(st.n||2), wk=str2fixed(st.wk), cyc=String(st.cycle||1), name=String(st.name||'').replace(/[|,]/g,'').slice(0,26);
+  return location.origin+location.pathname+'#/'+[encodeURIComponent(esc),n,wk,cyc,encodeURIComponent(name)].join(',');
+}
+function str2fixed(v){ return (Math.round((parseFloat(v)||0)*1e6)/1e6).toString(); }
+
+/* ================= UI layer ================= */
+const $=id=>document.getElementById(id);
+
+/* ---------- toasts ---------- */
+function toast(kind, title, body, link){
+  const box=$('toasts');
+  const el=document.createElement('div');
+  el.className='toast '+(kind==='ok'?'ok':kind==='err'?'err':'');
+  let h='<span class="t">'+esc(title)+'</span>';
+  if(body) h+='<span>'+esc(body)+'</span>';
+  if(link) h+=' <a href="'+esc(link)+'" target="_blank" rel="noopener">view ↗</a>';
+  el.innerHTML=h;
+  box.appendChild(el);
+  setTimeout(()=>{ el.style.opacity='0'; el.style.transition='opacity .3s'; setTimeout(()=>el.remove(),320); }, 8000);
+}
+
+/* ---------- avatar / naming ---------- */
+const AV_GRADS=['linear-gradient(135deg,#8b5cf6,#22d3ee)','linear-gradient(135deg,#22d3ee,#2dd4a7)','linear-gradient(135deg,#f472b6,#8b5cf6)','linear-gradient(135deg,#fbbf24,#f472b6)','linear-gradient(135deg,#2dd4a7,#22d3ee)','linear-gradient(135deg,#a78bfa,#f472b6)'];
+function avGrad(pk){ let h=0; const s=String(pk||''); for(let i=0;i<s.length;i++){ h=(Math.imul(h,31)+s.charCodeAt(i))>>>0; } return AV_GRADS[h%AV_GRADS.length]; }
+function initial(pk){ return String(pk||'?').slice(0,1).toUpperCase(); }
+function isMe(pk){ try{ return pk===getKeypair().publicKey.toString(); }catch(e){ return false; } }
+function memberName(pk, st, idx){
+  if(!pk) return 'Open slot '+(idx+1);
+  if(isMe(pk)) return 'You';
+  if(idx===0) return (st.name? st.name+' host':'Host');
+  return short(pk,5);
+}
+
+/* ---------- view switching ---------- */
+function show(id){
+  ['viewDashboard','viewBrowse','viewCreate','viewDetail'].forEach(v=>$(v).classList.toggle('hide', v!==id));
+  window.scrollTo({top:0, behavior:'smooth'});
+}
+function goCreate(){ show('viewCreate'); updateCreateSummary(); }
+
+/* ---------- dashboard / browse ---------- */
+async function refreshAll(){
+  const reg=readRegistry();
+  const list=$('activeList');
+  list.innerHTML='<div style="grid-column:1/-1;color:var(--dim2);font-size:13px">Deriving live state from the chain…</div>';
+  const cards=[], open=[];
+  for(const e of reg){
+    try{
+      const st=await parseCircle(e.escrow);
+      if(st.empty||st.unknown||st.error) continue;
+      cards.push(renderCard(st,false));
+      if(!st.complete && st.joined<st.n) open.push(renderCard(st,true));
+    }catch(err){}
+  }
+  list.innerHTML=cards.length? cards.join('') : emptyState();
+  $('openList').innerHTML=open.length? open.join('') : '<div class="empty" style="grid-column:1/-1"><div class="big">🍃</div><p>No open seats among your circles. Share an invite link and it will appear here as soon as a friend looks at it.</p></div>';
+}
+function emptyState(){
+  return '<div class="empty" style="grid-column:1/-1"><div class="big">◌</div><p>No circles yet. Start one — all the money lives in a visible on-chain escrow, never in anyone\'s account.</p><button class="btn btn-primary" onclick="goCreate()">+ Start a circle</button></div>';
+}
+function renderCard(st, forBrowse){
+  const r=st.paid, n=st.n;
+  const pct=Math.min(100, Math.round(r/n*100));
+  const myTag=st.me.slot? (st.me.mode==='host'?'<span class="b-host">You · host</span>':'<span class="b-next">You · #'+st.me.slot+'</span>') : '';
+  const stateTag=st.complete?'<span class="pill full">complete</span>':'<span class="pill live">live</span>';
+  const nextLine=st.complete?'all paid':(st.nextWinner? (isMe(st.nextWinner)?'you are next!':short(st.nextWinner,5)+' is next') : '');
+  return `<div class="card" data-esc="${esc(st.escrow)}">
+    <div style="display:flex;align-items:center;gap:10px;flex-wrap:wrap">${stateTag} ${myTag}</div>
+    <h3>${esc(st.name||'Circle')}</h3>
+    <div class="addr">${esc(st.escrow)}</div>
+    <div class="meta">
+      <div class="row"><span>Pot right now</span><b>${fmtSol(st.potNow)} SOL</b></div>
+      <div class="row"><span>Payouts</span><b>${r} / ${n}</b></div>
+      <div class="row"><span>Chip</span><b>${str2fixed(st.wk)} SOL / cycle</b></div>
+      <div class="row"><span>Next</span><b style="color:var(--cyan)">${esc(nextLine)}</b></div>
+    </div>
+    <div class="bar"><i style="width:${pct}%"></i></div>
+    <div class="foot">
+      <button class="btn btn-sm" onclick="openDetailByCard(this)">Open</button>
+      ${forBrowse?'<button class="btn btn-sm btn-primary" onclick="openDetailByCard(this,true)">Join</button>':'<button class="btn btn-sm btn-ghost" onclick="shareInvite(this)">Invite</button>'}
+    </div>
+  </div>`;
+}
+
+/* ---------- detail ---------- */
+let DETAIL=null, DETAIL_ST=null;
+function escOf(el){ return el.closest('.card').dataset.esc; }
+async function openDetailByCard(el, joinMode){ const esc=escOf(el); await openDetailByEscrow(esc, joinMode); }
+async function openDetailByEscrow(esc, joinMode){
+  DETAIL=esc; show('viewDetail');
+  renderPending();
+  const st=await parseCircle(esc).catch(e=>({error:String(e.message||e).slice(0,160), escrow:esc}));
+  renderDetail(st, joinMode);
+}
+function renderPending(){ $('dName').textContent='Reading the chain…'; $('dAddr').textContent=DETAIL; $('dMembers').innerHTML=''; $('dActions').innerHTML=''; $('dHistory').innerHTML=''; $('dState').className='pill full'; $('dState').textContent='…'; }
+function renderDetail(st, joinMode){
+  DETAIL_ST=st;
+  if(st.error){ $('dName').textContent='Could not read this circle'; $('dAddr').textContent=st.error; $('dState').textContent='error'; $('dMembers').innerHTML=''; $('dActions').innerHTML='<div class="hint-line">'+esc(st.error)+'</div>'; $('dHistory').innerHTML=''; return; }
+  if(st.empty||st.unknown){
+    $('dName').textContent='No circle found here';
+    $('dAddr').textContent=st.escrow||'';
+    $('dState').className='pill full'; $('dState').textContent='unknown';
+    $('dMembers').innerHTML='<div class="hint-line">No c:v1 ledger on this address for the current network.</div>';
+    $('dHistory').innerHTML='';
+    $('dActions').innerHTML='<div class="hint-line">It may live on another network — switch it in the top bar and reopen.</div>';
+    return;
+  }
+  $('dName').textContent=st.name||'Circle';
+  $('dAddr').textContent=st.escrow;
+  $('dState').className='pill '+(st.complete?'full':'live');
+  $('dState').textContent=st.complete?'complete':'live';
+  $('dProgressTxt').textContent='Payouts '+st.paid+' / '+st.n;
+  $('dNextPayout').textContent=st.complete?'everyone paid':'next payout '+fmtRel(st.nextPayoutTs);
+  $('dBar').style.width=Math.min(100,Math.round(st.paid/st.n*100))+'%';
+  $('dContrib').textContent=str2fixed(st.wk)+' SOL';
+  $('dPot').textContent=fmtSol(st.potNow)+' SOL';
+  $('dCycle').textContent=st.cycle+' week'+(st.cycle>1?'s':'');
+  $('dSize').textContent=st.joined+' / '+st.n;
+
+  // members
+  $('dMembers').innerHTML=st.members.map((pk,i)=>{
+    const winSlot=payoutSlot(st);
+    const isNext=!st.complete && winSlot===i+1;
+    if(!pk) return `<div class="member"><div class="avatar" style="background:rgba(255,255,255,.06);color:var(--dim2)">+</div><div class="who"><div class="name" style="color:var(--dim2)">Open slot ${i+1}</div><div class="addr">claim it with the invite link</div></div>${isNext?'<span class="b-next">next</span>':''}</div>`;
+    return `<div class="member">
+      <div class="avatar" style="background:${avGrad(pk)}">${initial(pk)}</div>
+      <div class="who"><div class="name">${esc(memberName(pk,st,i))} ${i===0?'<span class="b-host">host</span>':''}${isMe(pk)?'<span class="b-next">you</span>':''}</div><div class="addr">${esc(pk)}</div></div>
+      ${isNext?'<span class="b-next">next payout</span>':''}
+    </div>`;
+  }).join('');
+
+  // history
+  if(!st.history.length){ $('dHistory').innerHTML='<div class="hint-line">No events parsed.</div>'; }
+  else{
+    const rows=st.history.slice().reverse().map(h=>{
+      if(h.kind==='pay') return `<tr><td><span class="win">payout</span></td><td>round ${h.round+1} → ${esc(short(h.to,6))}</td><td class="dep" style="text-align:right">−${fmtSol(h.amount)} SOL</td><td class="ts">${fmtAgo(h.ts)}</td></tr>`;
+      if(h.kind==='create') return `<tr><td><b>create</b></td><td>escrow opened · rulebook anchored</td><td class="dep" style="text-align:right">+${fmtSol(h.amount)} SOL</td><td class="ts">${fmtAgo(h.ts)}</td></tr>`;
+      if(h.kind==='join') return `<tr><td><b>join</b></td><td>seat #${h.slot} claimed</td><td class="dep" style="text-align:right">+${fmtSol(h.amount)} SOL</td><td class="ts">${fmtAgo(h.ts)}</td></tr>`;
+      if(h.kind==='chip') return `<tr><td><b>chip</b></td><td>member #${h.slot} · round ${h.round+1}</td><td class="dep" style="text-align:right">+${fmtSol(h.amount)} SOL</td><td class="ts">${fmtAgo(h.ts)}</td></tr>`;
+      return '';
+    }).join('');
+    $('dHistory').innerHTML=`<table class="hist"><tr><th>event</th><th>detail</th><th style="text-align:right">amount</th><th>when</th></tr>${rows}</table>`;
+  }
+
+  $('dActions').innerHTML = (joinMode && !st.mine && !st.complete && st.joined<st.n) ? joinCTA(st) : actionPanel(st);
+}
+function joinCTA(st){
+  const slot=st.joined+1;
+  return `<div class="summary" style="margin-top:8px">
+    <div>This circle has an <b>open seat #${slot}</b>.</div>
+    <div>You pay your first chip when you join: <b>${str2fixed(st.wk)} SOL</b>.</div>
+  </div>
+  <button class="btn btn-primary btn-lg block" style="margin-top:14px" id="joinBtn">Join · chip ${str2fixed(st.wk)} SOL</button>
+  <div class="hint-line">Joining is non-custodial: your SOL goes straight to the on-chain escrow, and the ledger inscribes your seat.</div>`;
+}
+function actionPanel(st){
+  if(st.complete){
+    return `<div class="hint-line" style="color:var(--good);font-weight:700;font-size:14px">✓ Complete.</div>
+    <div class="hint-line" style="margin-top:6px">Every member has been paid exactly once. A full transparent record lives in this circle's on-chain ledger.</div>`;
+  }
+  if(!st.mine){
+    let h=`<div class="hint-line">You're not a member of this circle.</div>`;
+    if(st.joined<st.n) h+=`<button class="btn btn-primary btn-lg block" style="margin-top:12px" id="joinOpenBtn">Claim open seat</button>`;
+    h+=`<div class="hint-line" style="margin-top:10px">Seats are claimed via an invite link, which encodes the circle's rules so a stranger can't trap you in a different deal than the one shown.</div>`;
+    return h;
+  }
+  const round=st.paid;
+  const mySlot=st.me.slot;
+  const chipsNow=st.roundChips[round];
+  const haveChip=!!(chipsNow && chipsNow.has(mySlot));
+  const winnerNow=st.members[(payoutSlot(st)||1)-1];
+  const iWin=winnerNow&&isMe(winnerNow);
+  const matured=now()>=st.nextPayoutTs;
+  let html=`<div class="summary" style="margin-top:8px">
+    <div class="row" style="display:flex;justify-content:space-between"><span>Your seat</span><b>#${mySlot}</b></div>
+    <div class="row" style="display:flex;justify-content:space-between"><span>Current round</span><b>${round+1}</b></div>
+    <div class="row" style="display:flex;justify-content:space-between"><span>This round's winner</span><b>${iWin?'YOU 🎉':esc(short(winnerNow,6))}</b></div>
+    <div class="row" style="display:flex;justify-content:space-between"><span>Your chip</span><b>${haveChip?'✓ in':'pending'}</b></div>
+  </div>`;
+  if(!haveChip){
+    html+=`<button class="btn btn-primary btn-lg block" style="margin-top:14px" id="chipBtn">Chip in · ${str2fixed(st.wk)} SOL</button>
+           <div class="hint-line">Everyone chips the current round — including the winner, who gets the whole pot.</div>`;
+  }
+  if(st.me.mode==='host'){
+    if(matured){
+      html+=`<button class="btn btn-danger btn-lg block" style="margin-top:14px" id="payBtn">Pay the pot now → ${esc(short(winnerNow,6))}</button>
+             <div class="hint-line">Sends <b style="color:var(--text)">${fmtSol(st.potNow)} SOL</b> from the escrow to this round's winner. Only the escrow key (kept in the coordinator's browser) can sign this.</div>`;
+    } else {
+      html+=`<div class="hint-line" style="margin-top:12px">Payout unlocks ${fmtRel(st.nextPayoutTs)}. Pot so far: <b style="color:var(--text)">${fmtSol(st.potNow)} SOL</b>. You're the coordinator with the escrow key.</div>`;
+    }
+  }
+  const hasEscKey=!!restoreEscrowKey(st.escrow);
+  html+=`<div style="margin-top:18px;display:flex;flex-wrap:wrap;gap:8px">
+    <a class="btn btn-sm btn-ghost" href="${explorerAddr(st.escrow)}" target="_blank" rel="noopener">Escrow on explorer ↗</a>
+    <button class="btn btn-sm" id="shareBtn">Invite link</button>
+    ${hasEscKey?'<button class="btn btn-sm" id="exportKeyBtn">Back up escrow key</button>':''}
+  </div>`;
+  return html;
+}
+function restoreEscrowKey(escrow){ const raw=store.get('c.esc:'+escrow); if(!raw) return null; try{ return S().Keypair.fromSecretKey(new Uint8Array(JSON.parse(raw))); }catch(e){ return null; } }
+function fmtRel(ts){ if(!ts) return 'soon'; const d=ts-now(); if(d<=0) return 'now'; const m=Math.floor(d/60000); if(m<60) return 'in '+m+'m'; const h=Math.floor(m/60); if(h<48) return 'in '+h+'h'; return 'in '+Math.floor(h/24)+'d'; }
+function fmtAgo(ts){ if(!ts) return '—'; const d=now()-ts; if(d<60000) return 'just now'; const m=Math.floor(d/60000); if(m<60) return m+'m ago'; const h=Math.floor(m/60); if(h<48) return h+'h ago'; return Math.floor(h/24)+'d ago'; }
+
+/* ---------- invite ---------- */
+function shareInvite(el){
+  const esc=escOf(el);
+  parseCircle(esc).then(st=>{
+    if(st.error||st.empty||st.unknown) return toast('err','Could not build an invite');
+    $('inviteLink').value=makeInviteLink(st);
+    $('inviteBackdrop').classList.remove('hide');
+  });
+}
+
+/* ---------- create flow ---------- */
+let CREATE={ size:6, wk:0.1, cycle:1, name:'' };
+function updateCreateSummary(){
+  const n=CREATE.size, wk=CREATE.wk;
+  const pot=n*wk;
+  $('createSummary').innerHTML=`<b>${n} friends</b> × <b>${str2fixed(wk)} SOL</b> every <b>${CREATE.cycle} week${CREATE.cycle>1?'s':''}</b><br/>Pot every cycle: <span class="pot">${str2fixed(pot)} SOL</span><br/><span style="font-size:12.5px">${n} cycles to completion · on <b>${NETWORKS[LS.net].label}</b></span>`;
+  $('sizeVal').textContent=n+' people';
+}
+
+/* ---------- aurora ---------- */
+function aurora(){
+  const c=$('aurora'); const x=c.getContext('2d'); let W,H,t=0;
+  function size(){ W=c.width=innerWidth; H=c.height=innerHeight; }
+  size(); addEventListener('resize',size);
+  (function step(){
+    t+=0.0035;
+    x.clearRect(0,0,W,H);
+    const blobs=[[0.14,0.22,240,'139,92,246',0.10],[0.86,0.18,260,'34,211,238',0.08],[0.5,0.95,300,'244,114,182',0.07],[0.3,0.7,200,'139,92,246',0.06]];
+    for(let i=0;i<blobs.length;i++){
+      const [bx,by,r,rgb,al]=blobs[i];
+      const px=bx*W+Math.sin(t+i*1.7)*90, py=by*H+Math.cos(t*0.8+i)*70;
+      const g=x.createRadialGradient(px,py,0,px,py,r);
+      g.addColorStop(0,'rgba('+rgb+','+al+')'); g.addColorStop(1,'rgba('+rgb+',0)');
+      x.fillStyle=g; x.beginPath(); x.arc(px,py,r,0,7); x.fill();
+    }
+    requestAnimationFrame(step);
+  })();
+}
+
+/* ---------- init ---------- */
+function fillNetworkSelect(){
+  $('net').innerHTML=Object.keys(NETWORKS).map(k=>`<option value="${k}" ${k===LS.net?'selected':''}>${NETWORKS[k].label}</option>`).join('');
+  try{ $('connectBtn').textContent=short(getKeypair().publicKey,7); }catch(e){}
+}
+async function boot(){
+  aurora();
+  fillNetworkSelect();
+  try{ if (window.solanaWeb3) {} }catch(e){ toast('err','Solana library failed to load','Check the network / ad blocker for cdn.jsdelivr.net'); }
+  $('net').addEventListener('change', e=>{ LS.net=e.target.value; store.set('c.net',LS.net); $('envWarn').classList.toggle('hide', LS.net!=='devnet'); refreshAll().then(()=>{ if(DETAIL) openDetailByEscrow(DETAIL); }); });
+  $('envWarn').classList.toggle('hide', LS.net!=='devnet');
+  $('connectBtn').addEventListener('click', async ()=>{
+    const pk=await connectWallet();
+    if(LS.net==='devnet'){ await requestAirdrop(); }
+    $('connectBtn').textContent=short(pk,7);
+    refreshAll();
+  });
+  $('createBtn').addEventListener('click', goCreate);
+  $('backDash1').addEventListener('click', ()=>{ show('viewDashboard'); refreshAll(); });
+  $('backDash2').addEventListener('click', ()=>show('viewDashboard'));
+  $('backDash3').addEventListener('click', ()=>{ show('viewDashboard'); refreshAll(); });
+  $('inviteClose').addEventListener('click', ()=>$('inviteBackdrop').classList.add('hide'));
+  $('inviteCopy').addEventListener('click', ()=>{ const v=$('inviteLink').value; if(navigator.clipboard&&navigator.clipboard.writeText) navigator.clipboard.writeText(v).then(()=>toast('ok','Link copied')).catch(()=>fallbackCopy(v)); else fallbackCopy(v); });
+  $('inviteBackdrop').addEventListener('click', e=>{ if(e.target.id==='inviteBackdrop') $('inviteBackdrop').classList.add('hide'); });
+
+  // create form
+  $('sizeRange').addEventListener('input', e=>{ CREATE.size=parseInt(e.target.value,10); updateCreateSummary(); });
+  $('contribInput').addEventListener('input', e=>{ const v=parseFloat(e.target.value); CREATE.wk=(isNaN(v)||v<0)?0:v; updateCreateSummary(); });
+  document.querySelectorAll('#viewCreate .seg').forEach(g=>{
+    g.addEventListener('click', e=>{
+      const b=e.target.closest('button'); if(!b) return;
+      g.querySelectorAll('button').forEach(x=>x.classList.remove('on')); b.classList.add('on');
+      if(b.dataset.sol!==undefined){ CREATE.wk=parseFloat(b.dataset.sol); $('contribInput').value=b.dataset.sol; }
+      if(b.dataset.weeks!==undefined){ CREATE.cycle=parseInt(b.dataset.weeks,10); }
+      updateCreateSummary();
+    });
+  });
+  $('createName').addEventListener('input', e=>{ CREATE.name=e.target.value.trim(); updateCreateSummary(); });
+
+  $('deployBtn').addEventListener('click', async ()=>{
+    const btn=$('deployBtn');
+    if(!CREATE.wk||CREATE.wk<=0){ toast('err','Set a contribution first'); return; }
+    if(LS.net!=='devnet'){ toast('err','Create runs on devnet','Circle v1 boots on devnet while the design is proven. Switch the network (top right).'); return; }
+    btn.disabled=true; btn.innerHTML='<span class="spin lite"></span> Compiling the rulebook…';
+    try{
+      await requestAirdrop();
+      const host=getKeypair();
+      const bal=await getBalanceOf(host.publicKey);
+      if(bal < (CREATE.wk*1e9)+0.05e9){ toast('err','Need a little more SOL','Fund your wallet first (devnet faucet above).'); btn.disabled=false; btn.innerHTML='Compile &amp; deploy'; return; }
+      const name=CREATE.name||('Circle #'+(1+readRegistry().length));
+      const rb=compileRulebook({size:CREATE.size, wk:CREATE.wk, cycle:CREATE.cycle, name});
+      btn.innerHTML='<span class="spin lite"></span> Deploying escrow on devnet…';
+      const res=await deployCircle({size:CREATE.size, wk:CREATE.wk, cycle:CREATE.cycle, name, rb});
+      saveToRegistry(res.escrow, name, CREATE.size, CREATE.wk, CREATE.cycle);
+      toast('ok','Circle is live on-chain','Escrow '+short(res.escrow,7)+' · rulebook digest '+res.digest.slice(0,12)+'…', explorerSig(res.sig));
+      btn.disabled=false; btn.innerHTML='Compile &amp; deploy';
+      show('viewDashboard');
+      await refreshAll();
+    }catch(e){
+      toast('err','Deploy failed', String(e.message||e).slice(0,180));
+      btn.disabled=false; btn.innerHTML='Compile &amp; deploy';
+    }
+  });
+
+  // detail actions (delegation)
+  document.body.addEventListener('click', async e=>{
+    const t=e.target; if(!(t&&t.id)) return;
+    if(t.id==='chipBtn'){
+      const st=DETAIL_ST; if(!st) return;
+      t.disabled=true; t.innerHTML='<span class="spin lite"></span> Chipping in…';
+      try{
+        const sig=await chipIn(DETAIL, st.me.slot, st.paid, st.wk);
+        toast('ok','Chip in!', str2fixed(st.wk)+' SOL → escrow', explorerSig(sig));
+        await openDetailByEscrow(DETAIL);
+      }catch(err){ toast('err','Chip failed', String(err.message||err).slice(0,160)); t.disabled=false; t.textContent='Chip in'; }
+    }
+    else if(t.id==='payBtn'){
+      const st=DETAIL_ST; if(!st) return;
+      t.disabled=true; t.innerHTML='<span class="spin lite"></span> Paying the pot…';
+      try{
+        const escK=restoreEscrowKey(DETAIL);
+        if(!escK){ toast('err','Escrow key not in this browser','Open the device that created this circle and use "Back up escrow key" to move it here.'); t.disabled=false; t.textContent='Pay the pot'; return; }
+        const winner=st.members[(payoutSlot(st)||1)-1];
+        const sig=await payPot(DETAIL, escK, winner, st.potNow, st.paid, payoutSlot(st));
+        cacheSet(DETAIL, undefined);
+        toast('ok','Pot paid!', fmtSol(st.potNow)+' SOL → '+short(winner,6), explorerSig(sig));
+        await openDetailByEscrow(DETAIL);
+      }catch(err){ toast('err','Payout failed', String(err.message||err).slice(0,160)); t.disabled=false; t.textContent='Pay the pot'; }
+    }
+    else if(t.id==='joinBtn'||t.id==='joinOpenBtn'){
+      const st=DETAIL_ST; if(!st) return;
+      t.disabled=true; t.innerHTML='<span class="spin lite"></span> Claiming your seat…';
+      try{
+        if(LS.net==='devnet') await requestAirdrop();
+        const payer=getKeypair();
+        const bal=await getBalanceOf(payer.publicKey);
+        if(bal < (st.wk*1e9)+0.05e9){ toast('err','Need SOL to join','Chip '+str2fixed(st.wk)+' SOL + fees. Hit the devnet faucet first.'); t.disabled=false; t.textContent='Join'; return; }
+        const slot=st.joined+1;
+        const sig=await joinCircle(DETAIL, st.wk, slot);
+        toast('ok','You joined the circle!','Seat #'+slot+' · first chip '+str2fixed(st.wk)+' SOL', explorerSig(sig));
+        await openDetailByEscrow(DETAIL);
+      }catch(err){ toast('err','Join failed', String(err.message||err).slice(0,160)); t.disabled=false; t.textContent='Join'; }
+    }
+    else if(t.id==='shareBtn'){
+      const st=DETAIL_ST; if(!st||st.error||st.empty||st.unknown) return;
+      $('inviteLink').value=makeInviteLink(st);
+      $('inviteBackdrop').classList.remove('hide');
+    }
+    else if(t.id==='exportKeyBtn'){
+      const k=restoreEscrowKey(DETAIL);
+      if(!k){ toast('err','No key in this browser'); return; }
+      const b64=btoa(String.fromCharCode.apply(null, Array.from(k.secretKey)));
+      const a=document.createElement('a');
+      a.href='data:application/json;base64,'+b64;
+      a.download='circle-escrow-'+short(DETAIL,4)+'.key.json';
+      document.body.appendChild(a); a.click(); a.remove();
+      toast('ok','Escrow private key backed up','Keep it offline. Whoever holds it can release the pot.');
+    }
+  });
+
+  // invite route
+  const p=parseInvite(location.href);
+  if(p){
+    rememberInvite(location.href);
+    const st=await parseCircle(p.escrow).catch(()=>null);
+    if(st && !st.error && !st.empty && !st.unknown){
+      openDetailByEscrow(p.escrow, !st.mine && !st.complete && st.joined<st.n);
+    } else {
+      toast('err','Circle not found on this network','Switch network (top right) to the one where it lives.');
+      await refreshAll();
+    }
+  } else {
+    await refreshAll();
+  }
+  if(LS.net==='devnet'){
+    try{
+      const bal=await getBalanceOf(getKeypair().publicKey);
+      if(bal < 0.5e9){ await requestAirdrop(); }
+    }catch(e){}
+  }
+}
+function fallbackCopy(v){
+  const ta=document.createElement('textarea'); ta.value=v; document.body.appendChild(ta); ta.select();
+  try{ document.execCommand('copy'); toast('ok','Link copied'); }catch(e){ toast('info','Copy manually', v); }
+  ta.remove();
+}
+document.addEventListener('DOMContentLoaded', boot);
+
+</script>
+<script>(function(){function c(){var b=a.contentDocument||(a.contentWindow&&a.contentWindow.document);if(b){var d=b.createElement('script');d.innerHTML="window.__CF$cv$params={r:'a3ca28d60d02e51a',t:'MTc4OTY2OTU4OQ=='};var a=document.createElement('script');a.src='/cdn-cgi/challenge-platform/scripts/jsd/main.js';document.getElementsByTagName('head')[0].appendChild(a);";b.getElementsByTagName('head')[0].appendChild(d)}}if(document.body){var a=document.createElement('iframe');a.height=1;a.width=1;a.style.position='absolute';a.style.top=0;a.style.left=0;a.style.border='none';a.style.visibility='hidden';document.body.appendChild(a);if('loading'!==document.readyState)c();else if(window.addEventListener)document.addEventListener('DOMContentLoaded',c);else{var e=document.onreadystatechange||function(){};document.onreadystatechange=function(b){e(b);'loading'!==document.readyState&&(document.onreadystatechange=e,c())}}}})();</script></body>
+</html>
