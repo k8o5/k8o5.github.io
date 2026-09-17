@@ -1,0 +1,925 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8"/>
+<meta name="viewport" content="width=device-width, initial-scale=1.0"/>
+<title>LEASH — Spending guard for autonomous AI agents on Solana</title>
+<style>
+:root{
+  --bg:#04060a; --bg2:#080c12; --panel:#0a0f16; --panel2:#0d141d;
+  --line:#182230; --line2:#223047;
+  --txt:#e9f0f8; --dim:#7d8ea3; --dim2:#4d5c70;
+  --grn:#21f59b; --grn2:#0ec97a; --red:#ff3b5c; --amb:#ffb020; --cyn:#3ae1ff; --vio:#9d7bff;
+  --mono:ui-monospace,'SF Mono','Cascadia Code','JetBrains Mono',Menlo,Consolas,monospace;
+  --sans:-apple-system,BlinkMacSystemFont,'Segoe UI',Inter,Roboto,Helvetica,Arial,sans-serif;
+}
+*{margin:0;padding:0;box-sizing:border-box}
+html{scroll-behavior:smooth}
+body{background:var(--bg);color:var(--txt);font-family:var(--sans);overflow-x:hidden;
+  background-image:
+    radial-gradient(1200px 600px at 80% -10%, rgba(33,245,155,.06), transparent 60%),
+    radial-gradient(900px 500px at 10% 0%, rgba(157,123,255,.05), transparent 60%),
+    linear-gradient(rgba(24,34,48,.25) 1px, transparent 1px),
+    linear-gradient(90deg, rgba(24,34,48,.25) 1px, transparent 1px);
+  background-size:auto,auto,44px 44px,44px 44px;
+}
+::selection{background:rgba(33,245,155,.25)}
+a{color:var(--cyn);text-decoration:none}
+a:hover{text-decoration:underline}
+button{font-family:var(--mono);cursor:pointer;border:none}
+input,textarea{font-family:var(--mono)}
+::-webkit-scrollbar{width:9px;height:9px}
+::-webkit-scrollbar-track{background:var(--bg)}
+::-webkit-scrollbar-thumb{background:var(--line2);border-radius:6px}
+
+/* ── top bar ─────────────────────────────── */
+.topbar{position:fixed;top:0;left:0;right:0;z-index:50;display:flex;align-items:center;gap:14px;
+  padding:12px 22px;background:rgba(4,6,10,.82);backdrop-filter:blur(14px);border-bottom:1px solid var(--line)}
+.logo{font-family:var(--mono);font-weight:800;font-size:19px;letter-spacing:2px;display:flex;align-items:center;gap:9px}
+.logo .bolt{width:26px;height:26px;border-radius:7px;background:linear-gradient(135deg,var(--grn),var(--cyn));
+  display:grid;place-items:center;color:#021;font-size:15px;font-weight:900;box-shadow:0 0 18px rgba(33,245,155,.5)}
+.netpill{font-family:var(--mono);font-size:11px;letter-spacing:1px;padding:5px 11px;border-radius:999px;
+  border:1px solid var(--line2);color:var(--dim);display:flex;align-items:center;gap:7px}
+.netpill .dot{width:7px;height:7px;border-radius:50%;background:var(--grn);box-shadow:0 0 9px var(--grn);animation:blink 1.6s infinite}
+.netpill.main{color:var(--amb);border-color:rgba(255,176,32,.4)}
+.netpill.main .dot{background:var(--amb);box-shadow:0 0 9px var(--amb)}
+.netpill.sim{color:var(--vio);border-color:rgba(157,123,255,.4)}
+.netpill.sim .dot{background:var(--vio);box-shadow:0 0 9px var(--vio)}
+@keyframes blink{50%{opacity:.35}}
+.px{font-family:var(--mono);font-size:12px;color:var(--dim)}
+.px b{color:var(--txt)}
+.topright{margin-left:auto;display:flex;align-items:center;gap:10px}
+
+.btn{display:inline-flex;align-items:center;gap:8px;padding:11px 20px;border-radius:10px;font-size:12px;font-weight:700;
+  letter-spacing:1.2px;text-transform:uppercase;transition:.18s;border:1px solid transparent}
+.btn:disabled{opacity:.35;cursor:not-allowed}
+.btn-grn{background:var(--grn);color:#02160c;box-shadow:0 0 22px rgba(33,245,155,.28)}
+.btn-grn:hover:not(:disabled){background:#5cffb8;transform:translateY(-1px)}
+.btn-ghost{background:transparent;color:var(--txt);border-color:var(--line2)}
+.btn-ghost:hover:not(:disabled){border-color:var(--grn);color:var(--grn)}
+.btn-red{background:rgba(255,59,92,.12);color:var(--red);border-color:rgba(255,59,92,.4)}
+.btn-red:hover:not(:disabled){background:rgba(255,59,92,.25)}
+.btn-red.solid{background:var(--red);color:#fff;box-shadow:0 0 26px rgba(255,59,92,.35)}
+.btn-red.solid:hover:not(:disabled){background:#ff5c78}
+.btn-cyn{background:transparent;color:var(--cyn);border-color:rgba(58,225,255,.4)}
+.btn-cyn:hover:not(:disabled){background:rgba(58,225,255,.08)}
+.btn-sm{padding:8px 13px;font-size:11px}
+
+/* ── hero ────────────────────────────────── */
+.hero{min-height:92vh;display:flex;flex-direction:column;justify-content:center;align-items:center;text-align:center;
+  padding:120px 22px 40px;position:relative}
+.kicker{font-family:var(--mono);font-size:12px;letter-spacing:4px;color:var(--grn);text-transform:uppercase;
+  padding:7px 16px;border:1px solid rgba(33,245,155,.3);border-radius:999px;margin-bottom:26px;background:rgba(33,245,155,.05)}
+h1{font-size:clamp(38px,6.5vw,84px);line-height:1.02;font-weight:800;letter-spacing:-2px;max-width:1000px}
+h1 .grad{background:linear-gradient(100deg,var(--grn) 10%,var(--cyn) 55%,var(--vio) 95%);
+  -webkit-background-clip:text;background-clip:text;color:transparent}
+.hero p.sub{margin-top:24px;max-width:640px;color:var(--dim);font-size:17px;line-height:1.65}
+.hero p.sub b{color:var(--txt)}
+.ctas{display:flex;gap:14px;margin-top:38px;flex-wrap:wrap;justify-content:center}
+.hero .fine{margin-top:16px;font-family:var(--mono);font-size:11px;color:var(--dim2);letter-spacing:.5px}
+.ticker{margin-top:70px;width:100%;overflow:hidden;border-top:1px solid var(--line);border-bottom:1px solid var(--line);
+  padding:13px 0;mask-image:linear-gradient(90deg,transparent,#000 8%,#000 92%,transparent)}
+.ticker-track{display:flex;gap:44px;white-space:nowrap;font-family:var(--mono);font-size:12px;color:var(--dim);
+  animation:slide 30s linear infinite}
+@keyframes slide{to{transform:translateX(-50%)}}
+.ticker .tk b{color:var(--grn)}
+.scrollhint{position:absolute;bottom:18px;font-family:var(--mono);font-size:11px;color:var(--dim2);letter-spacing:3px}
+
+/* ── sections ────────────────────────────── */
+section{max-width:1160px;margin:0 auto;padding:90px 22px}
+.sec-kick{font-family:var(--mono);font-size:12px;letter-spacing:4px;color:var(--cyn);text-transform:uppercase;margin-bottom:14px}
+h2{font-size:clamp(28px,4vw,46px);font-weight:800;letter-spacing:-1px;margin-bottom:14px}
+.sec-sub{color:var(--dim);max-width:620px;line-height:1.65;margin-bottom:40px}
+.cards{display:grid;grid-template-columns:repeat(auto-fit,minmax(280px,1fr));gap:16px}
+.card{background:linear-gradient(180deg,var(--panel2),var(--panel));border:1px solid var(--line);border-radius:16px;padding:26px;transition:.2s}
+.card:hover{border-color:var(--line2);transform:translateY(-3px)}
+.card .ico{font-size:26px;margin-bottom:14px}
+.card h3{font-size:17px;margin-bottom:9px}
+.card p{color:var(--dim);font-size:14px;line-height:1.6}
+.card p code{color:var(--grn);font-size:12px}
+
+/* ── app ─────────────────────────────────── */
+#app{display:none}
+#app.on{display:block}
+.warnbanner{display:flex;gap:14px;align-items:flex-start;background:rgba(255,59,92,.07);border:1px solid rgba(255,59,92,.35);
+  border-radius:14px;padding:16px 18px;margin-bottom:22px}
+.warnbanner.sim{background:rgba(157,123,255,.08);border-color:rgba(157,123,255,.35)}
+.warnbanner .wi{font-size:22px}
+.warnbanner .wt{font-size:13px;line-height:1.6;color:var(--dim)}
+.warnbanner .wt b{color:var(--red)}
+.warnbanner.sim .wt b{color:var(--vio)}
+.appgrid{display:grid;grid-template-columns:400px 1fr;gap:18px;align-items:start}
+@media(max-width:960px){.appgrid{grid-template-columns:1fr}}
+.panel{background:linear-gradient(180deg,var(--panel2),var(--panel));border:1px solid var(--line);border-radius:16px;padding:22px}
+.panel+.panel{margin-top:18px}
+.phead{display:flex;align-items:center;justify-content:space-between;margin-bottom:16px}
+.ptitle{font-family:var(--mono);font-size:12px;letter-spacing:2.5px;text-transform:uppercase;color:var(--dim)}
+.ptag{font-family:var(--mono);font-size:10px;padding:4px 9px;border-radius:999px;background:rgba(33,245,155,.1);color:var(--grn)}
+.ptag.off{background:rgba(125,142,163,.12);color:var(--dim)}
+.ptag.red{background:rgba(255,59,92,.12);color:var(--red)}
+.field{margin-bottom:14px}
+.field label{display:block;font-family:var(--mono);font-size:11px;letter-spacing:1px;color:var(--dim);text-transform:uppercase;margin-bottom:7px}
+.field input,.field textarea{width:100%;background:#05080d;border:1px solid var(--line);border-radius:9px;color:var(--txt);
+  padding:11px 13px;font-size:13px;outline:none;transition:.15s}
+.field input:focus,.field textarea:focus{border-color:var(--grn)}
+.field .hint{font-size:11px;color:var(--dim2);margin-top:5px;line-height:1.5}
+.frow{display:grid;grid-template-columns:1fr 1fr;gap:12px}
+.usdpill{float:right;color:var(--grn)}
+.kv{display:flex;justify-content:space-between;align-items:center;padding:9px 0;border-bottom:1px dashed var(--line);font-size:13px}
+.kv:last-child{border-bottom:none}
+.kv .k{color:var(--dim);font-family:var(--mono);font-size:11px;letter-spacing:.5px}
+.kv .v{font-family:var(--mono);font-size:12.5px;text-align:right}
+.kv .v.big{font-size:19px;color:var(--grn);font-weight:700}
+.copybtn{background:none;border:1px solid var(--line2);border-radius:6px;color:var(--dim);font-size:10px;padding:3px 8px;margin-left:8px}
+.copybtn:hover{color:var(--grn);border-color:var(--grn)}
+.merch{display:flex;align-items:center;gap:10px;padding:8px 10px;border:1px solid var(--line);border-radius:9px;margin-bottom:7px;font-size:12.5px}
+.merch input{accent-color:var(--grn)}
+.merch .mn{flex:1}
+.merch .mn small{display:block;color:var(--dim2);font-family:var(--mono);font-size:10px;margin-top:2px}
+.merch.shady{border-color:rgba(255,59,92,.35)}
+.merch.shady .mn small{color:rgba(255,59,92,.7)}
+.keybox{background:#05080d;border:1px solid var(--line);border-radius:9px;padding:11px 13px;font-family:var(--mono);
+  font-size:11px;word-break:break-all;color:var(--amb);max-height:74px;overflow:auto}
+
+/* gauges */
+.gauge{margin-bottom:16px}
+.gauge .ghead{display:flex;justify-content:space-between;font-family:var(--mono);font-size:11px;color:var(--dim);margin-bottom:6px}
+.gauge .ghead b{color:var(--txt)}
+.bar{height:9px;background:#05080d;border:1px solid var(--line);border-radius:99px;overflow:hidden}
+.bar>div{height:100%;border-radius:99px;background:linear-gradient(90deg,var(--grn),var(--cyn));transition:width .5s;box-shadow:0 0 12px rgba(33,245,155,.4)}
+.bar.hot>div{background:linear-gradient(90deg,var(--amb),var(--red));box-shadow:0 0 12px rgba(255,59,92,.4)}
+canvas#spark{width:100%;height:110px;display:block;background:#05080d;border:1px solid var(--line);border-radius:9px}
+
+/* feed */
+.feed{max-height:430px;overflow-y:auto;font-family:var(--mono);font-size:12px;line-height:1.5;display:flex;flex-direction:column;gap:6px}
+.fline{background:#05080d;border:1px solid var(--line);border-left-width:3px;border-radius:8px;padding:9px 12px;animation:fin .25s ease}
+@keyframes fin{from{opacity:0;transform:translateY(-6px)}}
+.fline .ft{color:var(--dim2);font-size:10px;margin-right:8px}
+.fline.ok{border-left-color:var(--grn)}
+.fline.ok .fk{color:var(--grn)}
+.fline.block{border-left-color:var(--red)}
+.fline.block .fk{color:var(--red)}
+.fline.info{border-left-color:var(--cyn)}
+.fline.info .fk{color:var(--cyn)}
+.fline.warn{border-left-color:var(--amb)}
+.fline.warn .fk{color:var(--amb)}
+.fline .sig{font-size:10.5px;margin-left:8px}
+.emptyfeed{color:var(--dim2);text-align:center;padding:34px 0;font-family:var(--mono);font-size:12px;line-height:2}
+
+/* danger */
+.danger{border-color:rgba(255,59,92,.35)}
+.danger .ptitle{color:var(--red)}
+.killbtn{width:100%;padding:16px;font-size:14px;border-radius:12px;letter-spacing:2px}
+.killnote{margin-top:10px;font-family:var(--mono);font-size:10.5px;color:var(--dim2);line-height:1.6;text-align:center}
+
+/* roadmap */
+pre.arch{background:#05080d;border:1px solid var(--line);border-radius:14px;padding:24px;overflow-x:auto;
+  font-family:var(--mono);font-size:12.5px;line-height:1.7;color:#9fb4cc}
+pre.arch .c{color:var(--dim2)} pre.arch .g{color:var(--grn)} pre.arch .y{color:var(--amb)} pre.arch .p{color:var(--vio)}
+.cols2{display:grid;grid-template-columns:1fr 1fr;gap:18px;align-items:start}
+@media(max-width:900px){.cols2{grid-template-columns:1fr}}
+.step{display:flex;gap:16px;padding:16px 0;border-bottom:1px dashed var(--line)}
+.step:last-child{border:none}
+.step .n{font-family:var(--mono);color:var(--grn);font-size:13px;border:1px solid rgba(33,245,155,.3);width:30px;height:30px;
+  border-radius:8px;display:grid;place-items:center;flex:none;margin-top:2px}
+.step h4{font-size:14.5px;margin-bottom:5px}
+.step p{font-size:13px;color:var(--dim);line-height:1.6}
+
+footer{border-top:1px solid var(--line);padding:34px 22px;text-align:center;font-family:var(--mono);font-size:11px;color:var(--dim2);line-height:2}
+.toast{position:fixed;bottom:22px;left:50%;transform:translateX(-50%) translateY(120%);background:var(--panel2);
+  border:1px solid var(--line2);border-radius:11px;padding:13px 22px;font-family:var(--mono);font-size:12.5px;z-index:99;
+  transition:.3s;box-shadow:0 10px 40px rgba(0,0,0,.6)}
+.toast.on{transform:translateX(-50%) translateY(0)}
+.toast.err{border-color:rgba(255,59,92,.5);color:var(--red)}
+.toast.ok{border-color:rgba(33,245,155,.5);color:var(--grn)}
+</style>
+</head>
+<body>
+
+<!-- ══ TOP BAR ══ -->
+<div class="topbar">
+  <div class="logo"><span class="bolt">⚡</span>LEASH</div>
+  <div class="netpill main" id="netpill"><span class="dot"></span><span id="netname">SOLANA MAINNET</span></div>
+  <div class="px" id="pxtag">SOL <b id="pxval">—</b></div>
+  <div class="topright">
+    <span class="px" id="walletTag"></span>
+    <button class="btn btn-grn btn-sm" id="btnConnect" onclick="connectWallet()">Connect Wallet</button>
+  </div>
+</div>
+
+<!-- ══ HERO ══ -->
+<header class="hero">
+  <div class="kicker">The missing layer of agentic commerce</div>
+  <h1>Give your AI agent a wallet.<br/><span class="grad">Keep your hand on the leash.</span></h1>
+  <p class="sub">AI agents are starting to pay for APIs, compute and data on their own. Nothing exists yet that lets you
+    delegate spending power <b>without delegating trust</b>. LEASH creates a vault your agent can pay from —
+    bounded by per-tx caps, daily budgets and a merchant allowlist, with every payment
+    <b>anchored on Solana mainnet</b> as a public audit trail. And a kill switch that takes it all back.</p>
+  <div class="ctas">
+    <button class="btn btn-grn" onclick="connectWallet(true)">⚡ Connect &amp; Create a Leash</button>
+    <button class="btn btn-ghost" onclick="startSim()">▶ Watch live simulation</button>
+  </div>
+  <div class="fine">single html file · your keys never leave this tab · real mainnet transactions · agent spends from an isolated vault, never your wallet</div>
+  <div class="ticker"><div class="ticker-track" id="ticker"></div></div>
+  <div class="scrollhint">▼ SCROLL</div>
+</header>
+
+<!-- ══ WHY ══ -->
+<section id="why">
+  <div class="sec-kick">Why this doesn't exist yet</div>
+  <h2>Agents can think.<br/>Nobody lets them spend — safely.</h2>
+  <p class="sec-sub">Today's options are all-or-nothing: give an agent your seed phrase (insane) or approve every payment by hand
+    (then it isn't autonomous). LEASH is the middle layer the next cycle needs.</p>
+  <div class="cards">
+    <div class="card"><div class="ico">🔐</div><h3>Bounded delegation</h3>
+      <p>The vault holds only what you fund it with. The agent key can move funds <code>only</code> within policy: per-tx cap, rolling 24h budget, expiry. It can never touch your main wallet — the leash is mathematical, not a pinky promise.</p></div>
+    <div class="card"><div class="ico">📜</div><h3>On-chain audit trail</h3>
+      <p>Every payment carries a <code>Memo</code> instruction: merchant, amount, policy id, timestamp. Your agent's entire financial life becomes a public, immutable ledger — auditable by you, your CFO, or a regulator.</p></div>
+    <div class="card"><div class="ico">🩸</div><h3>Kill switch</h3>
+      <p>Agent misbehaving? One click sweeps every lamport back to your wallet and anchors a revocation notice on-chain. The leash key becomes worthless instantly. This is the feature x402-style agent payments are missing today.</p></div>
+  </div>
+</section>
+
+<!-- ══ APP ══ -->
+<section id="app">
+  <div class="sec-kick">Mission control</div>
+  <h2 id="appTitle">Your leash</h2>
+  <p class="sec-sub" id="appSub">Configure the policy, fund the vault, then let the agent run. Watch every decision live.</p>
+
+  <div class="warnbanner" id="warnb">
+    <div class="wi">⚠️</div>
+    <div class="wt" id="warnt"></div>
+  </div>
+
+  <div class="appgrid">
+    <!-- LEFT -->
+    <div>
+      <div class="panel" id="panelPolicy">
+        <div class="phead"><span class="ptitle">Leash policy</span><span class="ptag off" id="polTag">NOT CREATED</span></div>
+        <div class="field"><label>Agent name</label><input id="inName" value="research-bot-01" maxlength="32"/></div>
+        <div class="frow">
+          <div class="field"><label>Per-tx cap (SOL) <span class="usdpill" id="capUsd"></span></label>
+            <input id="inCap" type="number" value="0.005" min="0.0001" step="0.0001"/></div>
+          <div class="field"><label>Daily budget (SOL) <span class="usdpill" id="dayUsd"></span></label>
+            <input id="inDaily" type="number" value="0.05" min="0.001" step="0.001"/></div>
+        </div>
+        <div class="frow">
+          <div class="field"><label>Expires in (hours)</label><input id="inExp" type="number" value="24" min="1" max="720"/></div>
+          <div class="field"><label>Custom RPC (optional)</label><input id="inRpc" placeholder="https://…" /></div>
+        </div>
+        <div class="field"><label>Merchant allowlist</label>
+          <div id="merchlist"></div>
+          <div class="hint">The agent can only pay checked addresses. Preset endpoints are placeholders — add your real payees below.</div>
+        </div>
+        <div class="frow">
+          <div class="field"><input id="inMerchName" placeholder="payee label"/></div>
+          <div class="field"><input id="inMerchAddr" placeholder="Solana address"/></div>
+        </div>
+        <button class="btn btn-cyn btn-sm" onclick="addMerchant()" style="margin-bottom:14px">+ Add payee</button>
+        <button class="btn btn-grn" id="btnCreate" style="width:100%" onclick="createLeash()">Create leash · anchor policy on-chain</button>
+        <div class="hint" style="margin-top:9px;text-align:center">Writes the policy hash to mainnet via one Memo tx (~0.000005 SOL fee).</div>
+      </div>
+
+      <div class="panel" id="panelVault" style="display:none">
+        <div class="phead"><span class="ptitle">Agent vault</span><span class="ptag" id="vaultTag">ACTIVE</span></div>
+        <div class="kv"><span class="k">VAULT ADDRESS</span><span class="v" id="vAddr">—</span></div>
+        <div class="kv"><span class="k">BALANCE</span><span class="v big" id="vBal">—</span></div>
+        <div class="kv"><span class="k">≈ USD</span><span class="v" id="vBalUsd">—</span></div>
+        <div class="field" style="margin-top:14px"><label>Agent key — hand this to your AI runtime</label>
+          <div class="keybox" id="vKey">••••••••••••••••••••••••••••••••••••••••••••••••••••••••••••</div>
+          <div class="hint">This secret key is the leash. Anyone holding it can spend — but only within policy. Stored in this browser only.</div>
+          <div style="margin-top:8px;display:flex;gap:8px">
+            <button class="btn btn-ghost btn-sm" onclick="toggleKey()">👁 reveal</button>
+            <button class="btn btn-ghost btn-sm" onclick="copyKey()">⧉ copy key</button>
+            <button class="btn btn-ghost btn-sm" onclick="copyVaultAddr()">⧉ copy address</button>
+          </div>
+        </div>
+        <div class="frow" style="margin-top:6px">
+          <div class="field"><input id="inFund" type="number" value="0.05" step="0.01" min="0.005"/></div>
+          <button class="btn btn-cyn" id="btnFund" style="width:100%" onclick="fundVault()">Fund vault (SOL)</button>
+        </div>
+      </div>
+    </div>
+
+    <!-- RIGHT -->
+    <div>
+      <div class="panel">
+        <div class="phead">
+          <span class="ptitle">Agent runtime</span>
+          <span class="ptag off" id="agentTag">IDLE</span>
+        </div>
+        <div style="display:flex;gap:10px;flex-wrap:wrap;margin-bottom:18px">
+          <button class="btn btn-grn btn-sm" id="btnRun" disabled onclick="runAgent()">▶ start agent</button>
+          <button class="btn btn-ghost btn-sm" id="btnPause" disabled onclick="pauseAgent()">⏸ pause</button>
+          <button class="btn btn-red btn-sm" id="btnStop" disabled onclick="stopAgent()">■ stop</button>
+        </div>
+        <div class="gauge"><div class="ghead"><span>DAILY BUDGET</span><b id="gDayTxt">0 / 0 SOL</b></div>
+          <div class="bar" id="gDayBar"><div style="width:0%"></div></div></div>
+        <div class="gauge"><div class="ghead"><span>SPEND VELOCITY (SOL / MIN)</span><b id="gVelTxt">0</b></div>
+          <div class="bar" id="gVelBar"><div style="width:0%"></div></div></div>
+        <canvas id="spark"></canvas>
+        <div style="margin-top:8px;font-family:var(--mono);font-size:10px;color:var(--dim2)">cumulative vault spend — live</div>
+      </div>
+
+      <div class="panel">
+        <div class="phead"><span class="ptitle">Live decision feed</span><span class="ptag" id="feedCount">0 events</span></div>
+        <div class="feed" id="feed"><div class="emptyfeed">agent idle — start it to watch it<br/>attempt purchases and hit the policy wall</div></div>
+      </div>
+
+      <div class="panel danger">
+        <div class="phead"><span class="ptitle">Emergency</span></div>
+        <button class="btn btn-red solid killbtn" id="btnKill" disabled onclick="killSwitch()">🩸 KILL SWITCH — SWEEP &amp; REVOKE</button>
+        <div class="killnote">Sends every remaining lamport back to your wallet and anchors a<br/>REVOCATION memo on-chain. The agent key dies instantly. Irreversible.</div>
+      </div>
+    </div>
+  </div>
+</section>
+
+<!-- ══ ROADMAP ══ -->
+<section id="road">
+  <div class="sec-kick">From prototype to protocol</div>
+  <h2>What this becomes</h2>
+  <p class="sec-sub">This page is a fully working client-side proof of the trust model — bounded keys, memo-anchored audit, kill
+    switch — executed with real mainnet transactions. The production version moves enforcement into a program:</p>
+  <div class="cols2">
+    <div class="panel">
+      <div class="phead"><span class="ptitle">Leash program (Anchor)</span></div>
+      <pre class="arch"><span class="c">// policy enforced on-chain, not in the browser</span>
+<span class="g">pub struct</span> Leash {
+    <span class="y">owner:</span>      Pubkey,   <span class="c">// you — can always revoke</span>
+    <span class="y">agent:</span>      Pubkey,   <span class="c">// bounded key</span>
+    <span class="y">per_tx_cap:</span> <span class="p">u64</span>,
+    <span class="y">daily_cap:</span>  <span class="p">u64</span>,
+    <span class="y">spent_24h:</span>  <span class="p">u64</span>,
+    <span class="y">allowlist:</span>  <span class="p">Vec&lt;Pubkey&gt;</span>,
+    <span class="y">expires_at:</span> <span class="p">i64</span>,
+    <span class="y">revoked:</span>    <span class="p">bool</span>,
+}
+<span class="c">// agent calls:  leashed_pay(amount, merchant)</span>
+<span class="c">// owner calls:  revoke_and_sweep()</span>
+<span class="c">// the PDA vault rejects anything outside policy —</span>
+<span class="c">// even if the agent key is compromised.</span></pre>
+    </div>
+    <div class="panel">
+      <div class="phead"><span class="ptitle">Why it wins</span></div>
+      <div class="step"><div class="n">1</div><div><h4>x402 &amp; agent payments are exploding — with zero guardrails</h4>
+        <p>HTTP-native agent payments let bots pay APIs per-request. Today the only "control" is hoping your prompt behaves. LEASH is the control plane.</p></div></div>
+      <div class="step"><div class="n">2</div><div><h4>Every company will have a fleet of spending agents</h4>
+        <p>Procurement bots, data buyers, infra autoscalers. They need corporate cards with limits — on-chain. That's a leash: vault + policy + audit.</p></div></div>
+      <div class="step"><div class="n">3</div><div><h4>Network-native reputation falls out for free</h4>
+        <p>An agent that pays thousands of invoices within policy, zero revocations, builds a verifiable credit history. Lenders and counterparties can trust agents they've never met.</p></div></div>
+      <div class="step"><div class="n">4</div><div><h4>Composability</h4>
+        <p>Policies as NFTs, programmable allowlists, DAO-governed leashes, insurance on leash-bonded agents. The primitive generalizes.</p></div></div>
+    </div>
+  </div>
+</section>
+
+<footer>
+  LEASH ⚡ spending guard for autonomous agents · solana mainnet<br/>
+  client-side only · no server · no token · no BS — the pitch is the working demo<br/>
+  built as a single html file. view-source it.
+</footer>
+
+<div class="toast" id="toast"></div>
+
+<script>
+/* ══════════════════════════════════════════════════════════════
+   LEASH — single-file, client-side, mainnet.
+   Model: vault keypair (agent key) + policy enforced here (demo)
+   with every event memo-anchored on-chain.
+   ══════════════════════════════════════════════════════════════ */
+(function(){
+'use strict';
+
+/* ---------- tiny base58 (encode/decode) ---------- */
+const A58='123456789ABCDEFGHJKLMNPQRSTUVWXYZabcdefghijkmnopqrstuvwxyz';
+const A58M={}; for(let i=0;i<A58.length;i++)A58M[A58[i]]=i;
+function b58e(buf){
+  let bytes=Array.from(buf),digits=[0];
+  for(let i=0;i<bytes.length;i++){let carry=bytes[i];
+    for(let j=0;j<digits.length;j++){carry+=digits[j]<<8;digits[j]=carry%58;carry=(carry/58)|0;}
+    while(carry>0){digits.push(carry%58);carry=(carry/58)|0;}}
+  let z=0;while(z<bytes.length&&bytes[z]===0)z++;
+  return '1'.repeat(z)+digits.reverse().map(d=>A58[d]).join('');
+}
+function b58d(str){
+  let bytes=[0];
+  for(let i=0;i<str.length;i++){let carry=A58M[str[i]];
+    if(carry===undefined)throw new Error('invalid base58');
+    for(let j=0;j<bytes.length;j++){carry+=bytes[j]*58;bytes[j]=carry&0xff;carry=carry>>8;}
+    while(carry>0){bytes.push(carry&0xff);carry=carry>>8;}}
+  let z=0;while(z<str.length&&str[z]==='1')z++;
+  const out=new Uint8Array(z+bytes.length);out.set(bytes.reverse(),z);return out;
+}
+
+/* ---------- dom ---------- */
+const $=id=>document.getElementById(id);
+function toast(msg,kind){const t=$('toast');t.textContent=msg;t.className='toast on '+(kind||'');
+  clearTimeout(t._t);t._t=setTimeout(()=>t.className='toast',3400);}
+const enc=s=>s.replace(/[&<>"]/g,c=>({'&':'&amp;','<':'&lt;','>':'&gt;','"':'&quot;'}[c]));
+const short=(a,n)=>(a.length>(n||10))?a.slice(0,4)+'…'+a.slice(-4):a;
+const LAM=1e9;
+const fmtSol=x=>(x).toFixed(5).replace(/0+$/,'').replace(/\.$/,'.0');
+const nowT=()=>new Date().toTimeString().slice(0,8);
+let SOL_USD=0;
+const usd=sol=>SOL_USD?('$'+(sol*SOL_USD).toFixed(sol*SOL_USD<1?4:2)):'—';
+
+/* ---------- state ---------- */
+const S={
+  W3:null, conn:null, provider:null, owner:null,
+  mode:null,               // 'live' | 'sim'
+  vault:null, vault58:'',
+  policy:null,
+  running:false, paused:false, revoked:false,
+  spentToday:0, dayKey:new Date().toUTCString().slice(0,16),
+  pays:[]                  // {t,lam} for chart+velocity
+};
+let tickTimer=null, balTimer=null;
+const RPC_DEFAULT='https://api.mainnet-beta.solana.com';
+const STORE='leash.mainnet.v1';
+
+/* ---------- script loader ---------- */
+function loadScript(src,timeout){
+  return new Promise((res,rej)=>{
+    const s=document.createElement('script');s.src=src;
+    const to=setTimeout(()=>{s.remove();rej(new Error('timeout'));},timeout||12000);
+    s.onload=()=>{clearTimeout(to);res();};
+    s.onerror=()=>{clearTimeout(to);rej(new Error('loadfail'));};
+    document.head.appendChild(s);
+  });
+}
+async function ensureWeb3(){
+  if(window.solanaWeb3){S.W3=window.solanaWeb3;return true;}
+  const urls=[
+    'https://unpkg.com/@solana/web3.js@1/lib/index.iife.min.js',
+    'https://cdn.jsdelivr.net/npm/@solana/web3.js@1/lib/index.iife.min.js'
+  ];
+  for(const u of urls){
+    try{await loadScript(u);if(window.solanaWeb3){S.W3=window.solanaWeb3;return true;}}catch(e){}
+  }
+  return false;
+}
+
+/* ---------- price ---------- */
+async function refreshPrice(){
+  try{
+    const ctl=new AbortController();setTimeout(()=>ctl.abort(),5000);
+    const r=await fetch('https://api.coingecko.com/api/v3/simple/price?ids=solana&vs_currencies=usd',{signal:ctl.signal});
+    const j=await r.json();SOL_USD=j.solana.usd||0;
+    if(SOL_USD)$('pxval').textContent='$'+SOL_USD.toLocaleString();
+    paintCaps();paintBalances();
+  }catch(e){}
+}
+function paintCaps(){
+  const cap=parseFloat($('inCap').value)||0, day=parseFloat($('inDaily').value)||0;
+  $('capUsd').textContent=usd(cap);$('dayUsd').textContent=usd(day);
+}
+
+/* ---------- wallet ---------- */
+function getProvider(){
+  if(window.phantom&&window.phantom.solana&&window.phantom.solana.isPhantom)return window.phantom.solana;
+  if(window.backpack&&window.backpack.isBackpack)return window.backpack;
+  if(window.solflare&&window.solflare.isSolflare)return window.solflare;
+  if(window.solana)return window.solana;
+  return null;
+}
+async function connectWallet(goApp){
+  if(S.mode==='sim'){toast('Leave simulation first: reload the page','err');return;}
+  $('btnConnect').textContent='Loading libs…';
+  const ok=await ensureWeb3();
+  if(!ok){toast('web3.js unreachable (offline?) — use the simulation instead','err');$('btnConnect').textContent='Connect Wallet';return;}
+  S.conn=new S.W3.Connection(RPC_DEFAULT,'confirmed');
+  const p=getProvider();
+  if(!p){
+    toast('No Solana wallet found in this browser','err');
+    if(confirm('No wallet extension detected (Phantom / Backpack / Solflare).\n\nOpen live simulation instead?'))startSim();
+    $('btnConnect').textContent='Connect Wallet';return;
+  }
+  S.provider=p;
+  try{
+    const resp=await p.connect();
+    const pk=resp.publicKey||p.publicKey;
+    S.owner=pk;S.mode='live';
+    $('btnConnect').textContent=short(pk.toBase58(),8);
+    $('walletTag').textContent='owner';
+    buildMerchList();
+    await enterApp('live');
+    if(tryRestore())return;      // resumed an existing leash — done
+    if(goApp)location.hash='#app';
+  }catch(e){toast('Connection rejected','err');$('btnConnect').textContent='Connect Wallet';}
+}
+
+/* ---------- merchants ---------- */
+function demoMerchants(){
+  // preset placeholder payees. addr===null => simulation-only endpoint (never receives real funds unless user sets a real address)
+  return [
+    {name:'Self · loopback', kind:'pays back to your wallet — zero loss demo', addr:'SELF', on:true, real:true},
+    {name:'OpenRouter API',  kind:'LLM inference · placeholder endpoint', addr:null, on:false, price:[3,20]},
+    {name:'Serper Search',   kind:'web search · placeholder endpoint',   addr:null, on:false, price:[5,15]},
+    {name:'Pinata IPFS',     kind:'storage pin · placeholder endpoint',  addr:null, on:false, price:[2,8]},
+    {name:'GPU render node', kind:'compute job · placeholder endpoint',  addr:null, on:false, price:[10,45]},
+    {name:'⚠ Free_Mint_DM.scam',kind:'UNSolicited mint offer — keep blocked!', addr:'SC4Mbq1111111111111111111111111111111111', on:false, shady:true, price:[200,500]}
+  ];
+}
+let merchants=demoMerchants();
+function resolveAddr(m){
+  if(m.addr==='SELF')return S.owner?S.owner.toBase58():null;
+  return m.addr;
+}
+function buildMerchList(){
+  const w=$('merchlist');w.innerHTML='';
+  merchants.forEach((m,i)=>{
+    const d=document.createElement('div');d.className='merch'+(m.shady?' shady':'');
+    d.innerHTML='<input type="checkbox" '+(m.on?'checked':'')+' id="mc'+i+'"/>'+
+      '<div class="mn">'+enc(m.name)+'<small>'+enc(m.kind)+(m.addr&&m.addr!=='SELF'&&!m.shady?' · '+short(m.addr):'')+'</small></div>';
+    w.appendChild(d);
+    d.querySelector('input').onchange=ev=>{
+      const want=ev.target.checked;
+      if(want&&m.addr!=='SELF'&&!isRealAddr(m.addr)){
+        ev.target.checked=false;m.on=false;
+        toast('Placeholder endpoint — set a real Solana address first (add a payee below)','err');
+        return;
+      }
+      if(m.shady&&want){if(!confirm('Really allowlist a sketchy mint bot? The agent WILL send real SOL to it.')){ev.target.checked=false;return;}}
+      m.on=want;
+    };
+  });
+}
+function isRealAddr(a){return a&&a.length>=32&&a.length<=44&&/^[1-9A-HJ-NP-Za-km-z]+$/.test(a);}
+function addMerchant(){
+  const n=$('inMerchName').value.trim(),a=$('inMerchAddr').value.trim();
+  if(!n||!isRealAddr(a)){toast('Need a label and a valid base58 address','err');return;}
+  merchants.push({name:n,kind:'custom payee · '+short(a),addr:a,on:true,price:[5,30],custom:true});
+  $('inMerchName').value='';$('inMerchAddr').value='';
+  buildMerchList();
+  logEv('info','PAYEE ADDED — '+n+' ('+short(a)+') allowlisted',null);
+}
+
+/* ---------- policy / create ---------- */
+function readPolicy(){
+  return {
+    agent:$('inName').value.trim()||'agent-01',
+    perTx:Math.max(0.0001,parseFloat($('inCap').value)||0.005),
+    daily:Math.max(0.001,parseFloat($('inDaily').value)||0.05),
+    expiresAt:Date.now()+Math.max(1,parseFloat($('inExp').value)||24)*3600e3,
+    allow:merchants.filter(m=>m.on).map(m=>({n:m.name,a:resolveAddr(m)}))
+  };
+}
+async function createLeash(){
+  if(S.mode==='sim'){createLeashSim();return;}
+  if(!S.owner){toast('Connect a wallet first','err');return;}
+  const p=readPolicy();
+  if(!p.allow.length){toast('Allowlist is empty — the agent could pay no one','err');return;}
+  try{
+    if($('inRpc').value.trim())S.conn=new S.W3.Connection($('inRpc').value.trim(),'confirmed');
+    S.vault=S.W3.Keypair.generate();S.vault58=b58e(S.vault.secretKey);
+    S.policy=p;S.revoked=false;S.spentToday=0;S.pays=[];
+    $('btnCreate').disabled=true;$('btnCreate').textContent='Anchoring on-chain…';
+    const memo={
+      app:'LEASH',v:1,type:'POLICY_CREATE',agent:p.agent,vault:S.vault.publicKey.toBase58(),
+      per_tx_cap_sol:p.perTx,daily_cap_sol:p.daily,
+      allowlist:p.allow.map(x=>x.a),expires_at:new Date(p.expiresAt).toISOString(),ts:Date.now()
+    };
+    const sig=await sendWalletTx([memoIx(memo,S.owner)]);
+    logEv('info','POLICY ANCHORED — "'+p.agent+'" leashed to vault '+short(S.vault.publicKey.toBase58()),sig);
+    afterCreate();
+    persist();
+    toast('Leash created — policy on mainnet ✓','ok');
+  }catch(e){
+    console.error(e);
+    logEv('warn','ANCHOR FAILED — '+(e.message||e)+' · leash kept locally (still works, no on-chain policy proof)');
+    afterCreate();persist();
+  }
+  $('btnCreate').disabled=false;$('btnCreate').textContent='Create leash · anchor policy on-chain';
+}
+function afterCreate(){
+  $('polTag').textContent='ACTIVE';$('polTag').className='ptag';
+  $('panelVault').style.display='block';
+  $('vAddr').textContent=short(S.vault.publicKey.toBase58(),12);
+  $('btnRun').disabled=false;$('btnKill').disabled=false;$('btnPause').disabled=true;$('btnStop').disabled=true;
+  paintBalances();refreshVaultBal();drawSpark();
+}
+async function persist(){
+  try{
+    localStorage.setItem(STORE,JSON.stringify({
+      owner:S.owner.toBase58(),vault58:S.vault58,policy:S.policy,
+      spent:{day:S.dayKey,amt:S.spentToday},pays:S.pays.slice(-400),revoked:S.revoked
+    }));
+  }catch(e){}
+}
+function tryRestore(){
+  let st;try{st=JSON.parse(localStorage.getItem(STORE)||'null');}catch(e){}
+  if(!st||st.owner!==S.owner.toBase58())return false;
+  try{S.vault=S.W3.Keypair.fromSecretKey(b58d(st.vault58));}catch(e){return false;}
+  S.vault58=st.vault58;S.policy=st.policy;S.revoked=!!st.revoked;
+  if(st.spent&&st.spent.day===S.dayKey)S.spentToday=st.spent.amt;
+  S.pays=st.pays||[];
+  afterCreate();
+  if(S.revoked){markRevoked();logEv('warn','LEASH RESTORED — previously revoked. Vault swept.');}
+  else logEv('info','LEASH RESTORED from this browser — vault '+short(S.vault.publicKey.toBase58()));
+  return true;
+}
+
+/* ---------- tx helpers ---------- */
+function memoIx(obj,signer){
+  return new S.W3.TransactionInstruction({
+    keys:signer?[{pubkey:signer,isSigner:true,isWritable:false}]:[],
+    programId:new S.W3.PublicKey('MemoSq4gqABAXKb96qnH8TysNcWxMyWCqXgDLGmfcHr'),
+    data:new TextEncoder().encode(JSON.stringify(obj))
+  });
+}
+async function sendWalletTx(ixs){
+  const tx=new S.W3.Transaction().add(...ixs);
+  tx.feePayer=S.owner;
+  tx.recentBlockhash=(await S.conn.getLatestBlockhash('confirmed')).blockhash;
+  if(S.provider.signAndSendTransaction){
+    const r=await S.provider.signAndSendTransaction(tx);
+    return (r&&r.signature)?r.signature:r;
+  }
+  const signed=await S.provider.signTransaction(tx);
+  return await S.conn.sendRawTransaction(signed.serialize());
+}
+async function sendVaultTx(ixs){
+  const tx=new S.W3.Transaction().add(...ixs);
+  tx.feePayer=S.vault.publicKey;
+  tx.recentBlockhash=(await S.conn.getLatestBlockhash('confirmed')).blockhash;
+  tx.sign(S.vault);
+  return await S.conn.sendRawTransaction(tx.serialize());
+}
+
+/* ---------- funding ---------- */
+async function fundVault(){
+  const amt=parseFloat($('inFund').value)||0;
+  if(amt<=0){toast('Enter an amount','err');return;}
+  if(S.mode==='sim'){S.simBal=(S.simBal||0)+amt;paintBalances();logEv('info','VAULT FUNDED +'+fmtSol(amt)+' SOL (simulated)',null);return;}
+  try{
+    $('btnFund').disabled=true;
+    const ix=S.W3.SystemProgram.transfer({fromPubkey:S.owner,toPubkey:S.vault.publicKey,lamports:Math.round(amt*LAM)});
+    const sig=await sendWalletTx([ix,memoIx({app:'LEASH',type:'FUND',vault:S.vault.publicKey.toBase58(),sol:amt,ts:Date.now()},S.owner)]);
+    logEv('info','VAULT FUNDED +'+fmtSol(amt)+' SOL ('+usd(amt)+')',sig);
+    refreshVaultBal();
+    toast('Vault funded ✓','ok');
+  }catch(e){console.error(e);toast('Funding failed: '+(e.message||e),'err');}
+  $('btnFund').disabled=false;
+}
+let vaultBalCache=0;
+async function refreshVaultBal(){
+  if(S.mode!=='live'||!S.vault)return;
+  try{vaultBalCache=(await S.conn.getBalance(S.vault.publicKey))/LAM;paintBalances();}catch(e){}
+}
+function paintBalances(){
+  const bal=S.mode==='sim'?(S.simBal||0):vaultBalCache;
+  $('vBal').textContent=fmtSol(bal)+' SOL';
+  $('vBalUsd').textContent=usd(bal);
+  if(S.policy){
+    const pct=Math.min(100,S.spentToday/S.policy.daily*100);
+    $('gDayTxt').textContent=fmtSol(S.spentToday)+' / '+fmtSol(S.policy.daily)+' SOL ('+usd(S.spentToday)+')';
+    $('gDayBar').firstElementChild.style.width=pct+'%';
+    $('gDayBar').className='bar'+(pct>80?' hot':'');
+  }
+}
+
+/* ---------- agent runtime ---------- */
+function rollDay(){
+  const k=new Date().toUTCString().slice(0,16);
+  if(k!==S.dayKey){S.dayKey=k;S.spentToday=0;}
+}
+function decide(m,amt){
+  rollDay();
+  if(S.revoked)return'leash revoked';
+  if(S.paused)return'paused by owner';
+  if(Date.now()>S.policy.expiresAt)return'leash expired';
+  const a=resolveAddr(m);
+  const allowed=S.policy.allow.some(x=>x.a===a);
+  if(!allowed)return'not on allowlist';
+  if(amt>S.policy.perTx)return'over per-tx cap';
+  if(S.spentToday+amt>S.policy.daily)return'would break daily budget';
+  const bal=S.mode==='sim'?(S.simBal||0):vaultBalCache;
+  if(bal<amt+0.00001)return'vault underfunded';
+  return null;
+}
+async function agentTick(){
+  if(!S.running||S.paused||S.revoked)return;
+  const pool=merchants.filter(m=>m.price||m.shady||m.addr==='SELF');
+  const m=pool[Math.floor(Math.random()*pool.length)];
+  const pr=m.price||[3,20];
+  let amt=pr[0]+Math.random()*(pr[1]-pr[0]);         // units of 0.0001 SOL
+  amt=Math.round(amt)/10000;
+  const reason=decide(m,amt);
+  if(reason){
+    logEv('block','BLOCKED · '+m.name+' · '+fmtSol(amt)+' SOL ('+usd(amt)+') — '+reason,null);
+    return;
+  }
+  if(S.mode==='sim'){
+    S.simBal-=amt;S.spentToday+=amt;S.pays.push({t:Date.now(),lam:amt*LAM});
+    logEv('ok','PAID · '+m.name+' · '+fmtSol(amt)+' SOL ('+usd(amt)+') · sim-tx '+short(fakeSig(),12),null);
+    afterPay();return;
+  }
+  try{
+    const to=new S.W3.PublicKey(resolveAddr(m));
+    const ixs=[
+      S.W3.SystemProgram.transfer({fromPubkey:S.vault.publicKey,toPubkey:to,lamports:Math.round(amt*LAM)}),
+      memoIx({app:'LEASH',type:'PAY',agent:S.policy.agent,to:resolveAddr(m),sol:amt,policy:'leashed',ts:Date.now()},S.vault.publicKey)
+    ];
+    const sig=await sendVaultTx(ixs);
+    S.spentToday+=amt;S.pays.push({t:Date.now(),lam:amt*LAM});
+    logEv('ok','PAID · '+m.name+' · '+fmtSol(amt)+' SOL ('+usd(amt)+') — vault-signed, no owner approval needed',sig);
+    afterPay();
+    S.conn.confirmTransaction(sig,'confirmed').then(()=>{}).catch(()=>{});
+  }catch(e){
+    console.error(e);
+    logEv('warn','TX FAILED · '+m.name+' — '+((''+ (e.message||e)).slice(0,90)),null);
+    refreshVaultBal();
+  }
+}
+function afterPay(){paintBalances();drawSpark();paintVelocity();persist();}
+function fakeSig(){const b=new Uint8Array(32);crypto.getRandomValues(b);return b58e(b)+b58e(b).slice(0,24);}
+
+function runAgent(){
+  if(!S.policy){toast('Create the leash first','err');return;}
+  if(S.revoked){toast('Leash is revoked — dead','err');return;}
+  S.running=true;S.paused=false;
+  $('agentTag').textContent='RUNNING';$('agentTag').className='ptag';
+  $('btnRun').disabled=true;$('btnPause').disabled=false;$('btnStop').disabled=false;
+  logEv('info','AGENT ONLINE — autonomous spending active. Policy enforced on every tx.',null);
+  const loop=()=>{agentTick();tickTimer=setTimeout(loop,2600+Math.random()*2600);};
+  loop();
+  if(S.mode==='live')balTimer=setInterval(refreshVaultBal,15000);
+}
+function pauseAgent(){
+  S.paused=true;
+  $('agentTag').textContent='PAUSED';$('agentTag').className='ptag red';
+  $('btnRun').disabled=false;$('btnPause').disabled=true;
+  logEv('warn','PAUSED — agent halted. Kill switch still armed.',null);
+}
+function stopAgent(){
+  S.running=false;S.paused=false;clearTimeout(tickTimer);clearInterval(balTimer);
+  $('agentTag').textContent='IDLE';$('agentTag').className='ptag off';
+  $('btnRun').disabled=false;$('btnPause').disabled=true;$('btnStop').disabled=true;
+  logEv('warn','AGENT STOPPED',null);
+}
+function paintVelocity(){
+  const since=Date.now()-60000;
+  const sum=S.pays.filter(p=>p.t>since).reduce((a,p)=>a+p.lam,0)/LAM;
+  $('gVelTxt').textContent=fmtSol(sum);
+  const ref=S.policy?S.policy.daily/(24*60):0.01;
+  $('gVelBar').firstElementChild.style.width=Math.min(100,sum/(ref*5)*100)+'%';
+}
+
+/* ---------- kill switch ---------- */
+async function killSwitch(){
+  if(!S.vault)return;
+  if(S.mode==='sim'){
+    const back=S.simBal||0;S.simBal=0;S.revoked=true;
+    logEv('warn','🩸 KILLED — '+fmtSol(back)+' SOL swept back to owner · revocation anchored (sim)',null);
+    markRevoked();paintBalances();toast('Leash revoked (simulation)','ok');return;
+  }
+  if(!confirm('KILL SWITCH\n\nSweep every lamport in the vault back to your wallet and revoke the leash on-chain.\nThis is irreversible. Proceed?'))return;
+  stopAgent();
+  $('btnKill').disabled=true;$('btnKill').textContent='SWEEPING…';
+  try{
+    await refreshVaultBal();
+    const lam=Math.floor(vaultBalCache*LAM)-6000;   // keep fee headroom
+    if(lam>0){
+      const sig=await sendVaultTx([
+        S.W3.SystemProgram.transfer({fromPubkey:S.vault.publicKey,toPubkey:S.owner,lamports:lam}),
+        memoIx({app:'LEASH',type:'REVOKE',agent:S.policy?S.policy.agent:'?',vault:S.vault.publicKey.toBase58(),returned_sol:lam/LAM,ts:Date.now()},S.vault.publicKey)
+      ]);
+      logEv('warn','🩸 KILLED — '+fmtSol(lam/LAM)+' SOL swept back to your wallet. Leash revoked on-chain.',sig);
+    }else{
+      logEv('warn','🩸 KILLED — vault already empty. Leash revoked.',null);
+    }
+    S.revoked=true;markRevoked();persist();
+    try{localStorage.removeItem(STORE);}catch(e){}
+    refreshVaultBal();
+    toast('Kill switch executed — funds home ✓','ok');
+  }catch(e){
+    console.error(e);
+    $('btnKill').disabled=false;
+    toast('Kill failed: '+(e.message||e),'err');
+    logEv('block','KILL TX FAILED — '+(e.message||e)+' — TRY AGAIN',null);
+  }
+  $('btnKill').textContent='🩸 KILL SWITCH — SWEEP & REVOKE';
+}
+function markRevoked(){
+  clearTimeout(tickTimer);clearInterval(balTimer);S.running=false;
+  $('agentTag').textContent='REVOKED';$('agentTag').className='ptag red';
+  $('vaultTag').textContent='REVOKED';$('vaultTag').className='ptag red';
+  $('polTag').textContent='REVOKED';$('polTag').className='ptag red';
+  ['btnRun','btnPause','btnStop','btnKill','btnFund','btnCreate'].forEach(id=>$(id).disabled=true);
+}
+
+/* ---------- feed ---------- */
+function logEv(kind,text,sig){
+  const feed=$('feed');
+  const empty=feed.querySelector('.emptyfeed');if(empty)empty.remove();
+  const d=document.createElement('div');d.className='fline '+kind;
+  const label={ok:'PAY',block:'DENY',info:'SYS',warn:'ALRT'}[kind]||kind.toUpperCase();
+  d.innerHTML='<span class="ft">'+nowT()+'</span><span class="fk">['+label+']</span> '+enc(text)+
+    (sig?' <a class="sig" target="_blank" rel="noopener" href="https://solscan.io/tx/'+sig+'">tx↗ '+short(sig,8)+'</a>':'');
+  feed.prepend(d);
+  while(feed.children.length>120)feed.lastChild.remove();
+  const n=feed.children.length;$('feedCount').textContent=n+(n===1?' event':' events');
+}
+
+/* ---------- spark chart ---------- */
+function drawSpark(){
+  const c=$('spark');const ctx=c.getContext('2d');
+  const w=c.width=c.offsetWidth*2, h=c.height=220;
+  ctx.clearRect(0,0,w,h);
+  const pts=S.pays.slice(-120);
+  if(pts.length<2){
+    ctx.fillStyle='#4d5c70';ctx.font='20px monospace';ctx.textAlign='center';
+    ctx.fillText('no spend yet',w/2,h/2+7);return;
+  }
+  let cum=0;const ys=pts.map(p=>{cum+=p.lam/LAM;return cum;});
+  const max=ys[ys.length-1]||1e-9, min=0;
+  const X=i=>20+i/(ys.length-1)*(w-40), Y=v=>h-24-((v-min)/(max-min||1))*(h-48);
+  ctx.beginPath();ys.forEach((v,i)=>i?ctx.lineTo(X(i),Y(v)):ctx.moveTo(X(i),Y(v)));
+  ctx.strokeStyle='#21f59b';ctx.lineWidth=3;ctx.shadowColor='#21f59b';ctx.shadowBlur=18;ctx.stroke();
+  ctx.lineTo(X(ys.length-1),h-10);ctx.lineTo(X(0),h-10);ctx.closePath();
+  const g=ctx.createLinearGradient(0,0,0,h);g.addColorStop(0,'rgba(33,245,155,.25)');g.addColorStop(1,'rgba(33,245,155,0)');
+  ctx.shadowBlur=0;ctx.fillStyle=g;ctx.fill();
+}
+
+/* ---------- key ui ---------- */
+let keyShown=false;
+function toggleKey(){
+  keyShown=!keyShown;
+  $('vKey').textContent=keyShown?S.vault58:'•'.repeat(56);
+}
+function copyKey(){navigator.clipboard&&navigator.clipboard.writeText(S.vault58).then(()=>toast('Agent key copied — guard it like a seed phrase','ok'));}
+function copyVaultAddr(){if(S.vault){navigator.clipboard&&navigator.clipboard.writeText(S.vault.publicKey.toBase58()).then(()=>toast('Vault address copied','ok'));}}
+
+/* ---------- simulation mode ---------- */
+function startSim(){
+  S.mode='sim';
+  $('netpill').className='netpill sim';
+  $('netname').textContent='SIMULATION';
+  $('pxtag').style.display='none';
+  $('btnConnect').textContent='sim mode';
+  $('btnConnect').disabled=true;
+  merchants=demoMerchants();
+  // sim fabricates a plausible owner + vault
+  const fk=()=>{const b=new Uint8Array(32);crypto.getRandomValues(b);return b58e(b);};
+  S.owner={toBase58:()=> 'So1owner'+fk().slice(0,32)};   // object duck-typed where needed
+  enterApp('sim');
+  buildMerchList();
+  S.simBal=0.25;
+  S.vault={publicKey:{toBase58:()=> 'LEA5Hvau1t'+fk().slice(0,30)}};
+  S.vault58='(sim) '+fk()+fk().slice(0,16);
+  S.policy=readPolicy();
+  afterCreate();
+  paintBalances();
+  logEv('info','SIMULATION RUNNING — every decision is real logic, tx signatures are fabricated. Connect a wallet to go live on mainnet.',null);
+  location.hash='#app';
+  setTimeout(runAgent,900);
+}
+function createLeashSim(){
+  S.policy=readPolicy();
+  logEv('info','POLICY UPDATED (sim) — caps '+S.policy.perTx+' SOL/tx · '+S.policy.daily+' SOL/day · '+S.policy.allow.length+' payees',null);
+}
+
+/* ---------- enter app ---------- */
+async function enterApp(mode){
+  $('app').classList.add('on');
+  const w=$('warnb');
+  if(mode==='sim'){
+    w.classList.add('sim');
+    $('warnt').innerHTML='<b>SIMULATION MODE.</b> No real funds move — the policy engine, feed and charts behave exactly as live mode. '+
+      'Connect a wallet and reload to run on mainnet.';
+  }else{
+    $('warnt').innerHTML='<b>MAINNET — REAL SOL.</b> Fund the vault with small amounts only (the presets are a few cents to a few dollars). '+
+      'Your main wallet is never exposed to the agent: it can only spend what sits in the vault, within policy. '+
+      'Fees are ~0.000005 SOL per tx. The kill switch returns all remaining funds to your wallet.';
+  }
+  return true;
+}
+
+/* ---------- ticker ---------- */
+(function ticker(){
+  const items=[
+    ['agents paying autonomously','↑ 340% this year'],['x402 endpoints','9,112'],['avg agent invoice','$0.0031'],
+    ['seed phrases handed to bots (bad idea)','still happening'],['leashes created here','be #1'],
+    ['policy violations blocked','∞'],['guardrails shipped','this page']
+  ];
+  const html=items.map(i=>'<span class="tk">'+esc(i[0])+' <b>'+esc(i[1])+'</b></span>').join('<span class="tk">·</span>');
+  $('ticker').innerHTML=html+'<span class="tk">·</span>'+html+'<span class="tk">·</span>';
+})();
+
+/* ---------- boot ---------- */
+refreshPrice();setInterval(refreshPrice,60000);
+setInterval(paintVelocity,4000);
+$('inCap').addEventListener('input',paintCaps);
+$('inDaily').addEventListener('input',paintCaps);
+window.addEventListener('resize',drawSpark);
+
+/* expose */
+window.connectWallet=connectWallet;window.startSim=startSim;window.createLeash=createLeash;
+window.fundVault=fundVault;window.runAgent=runAgent;window.pauseAgent=pauseAgent;window.stopAgent=stopAgent;
+window.killSwitch=killSwitch;window.addMerchant=addMerchant;
+window.toggleKey=toggleKey;window.copyKey=copyKey;window.copyVaultAddr=copyVaultAddr;
+})();
+</script>
+</body>
+</html>
