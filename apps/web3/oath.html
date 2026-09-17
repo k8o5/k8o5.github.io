@@ -1,0 +1,1297 @@
+<!doctype html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>OATH — Proof of Promise on Solana</title>
+<meta name="description" content="The accountability market. Stake SOL on a promise, let the market bet against it, prove it or get liquidated.">
+<link rel="icon" href="data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 48 48'%3E%3Ccircle cx='24' cy='24' r='20' fill='none' stroke='%23d9b45c' stroke-width='3'/%3E%3Cpath d='M24 12l3 9 9 3-9 3-3 9-3-9-9-3 9-3z' fill='%23d9b45c'/%3E%3C/svg%3E">
+<style>
+:root{
+  --bg:#07080d; --panel:#0d0f17; --panel2:#11141f; --line:#1d2233; --line2:#2c3350;
+  --ink:#ece9e2; --mut:#8f96a8; --dim:#5b6276;
+  --gold:#d9b45c; --gold2:#f0d48a; --goldbg:rgba(217,180,92,.08);
+  --vio:#9945ff; --grn:#14f195; --red:#ff6b6b; --blu:#5aa9ff;
+  --serif:'Iowan Old Style','Palatino Linotype',Palatino,Georgia,'Times New Roman',serif;
+  --mono:ui-monospace,'SF Mono',SFMono-Regular,Menlo,Consolas,'Liberation Mono',monospace;
+  --sans:-apple-system,BlinkMacSystemFont,'Segoe UI',Inter,Roboto,'Helvetica Neue',sans-serif;
+}
+*{box-sizing:border-box;margin:0;padding:0}
+html{scroll-behavior:smooth}
+body{
+  background:var(--bg);color:var(--ink);font-family:var(--sans);
+  font-size:15px;line-height:1.55;min-height:100vh;overflow-x:hidden;
+}
+body::before{
+  content:'';position:fixed;inset:0;z-index:-2;pointer-events:none;
+  background:
+    radial-gradient(900px 500px at 85% -10%, rgba(153,69,255,.13), transparent 60%),
+    radial-gradient(700px 420px at -10% 20%, rgba(20,241,149,.07), transparent 60%),
+    radial-gradient(800px 600px at 50% 120%, rgba(217,180,92,.06), transparent 60%);
+}
+body::after{
+  content:'';position:fixed;inset:0;z-index:-1;pointer-events:none;opacity:.5;
+  background-image:linear-gradient(rgba(255,255,255,.022) 1px,transparent 1px),
+    linear-gradient(90deg,rgba(255,255,255,.022) 1px,transparent 1px);
+  background-size:44px 44px;
+  mask-image:radial-gradient(ellipse at 50% 0%,black 30%,transparent 80%);
+  -webkit-mask-image:radial-gradient(ellipse at 50% 0%,black 30%,transparent 80%);
+}
+.wrap{max-width:1140px;margin:0 auto;padding:0 22px}
+.mono{font-family:var(--mono)}
+a{color:var(--gold2);text-decoration:none}
+a:hover{text-decoration:underline}
+button{font-family:var(--sans)}
+::selection{background:rgba(217,180,92,.25)}
+
+/* ---------- header ---------- */
+header{position:sticky;top:0;z-index:50;background:rgba(7,8,13,.82);backdrop-filter:blur(14px);-webkit-backdrop-filter:blur(14px);border-bottom:1px solid var(--line)}
+.hrow{display:flex;align-items:center;gap:14px;height:62px}
+.logo{display:flex;align-items:center;gap:11px;cursor:pointer;user-select:none}
+.logo svg{width:30px;height:30px;animation:spin 80s linear infinite}
+@keyframes spin{to{transform:rotate(360deg)}}
+.wordmark{font-family:var(--serif);font-size:21px;letter-spacing:.14em;font-weight:600}
+.wordmark em{font-style:normal;color:var(--gold)}
+.tagline{font-family:var(--mono);font-size:10px;letter-spacing:.22em;color:var(--dim);text-transform:uppercase;margin-left:2px;padding-top:6px}
+.hright{margin-left:auto;display:flex;align-items:center;gap:10px;position:relative}
+.pill{display:flex;align-items:center;gap:7px;border:1px solid var(--line);background:var(--panel);border-radius:99px;padding:5px 11px;font-family:var(--mono);font-size:10.5px;letter-spacing:.08em;color:var(--mut)}
+.dot{width:7px;height:7px;border-radius:50%;background:var(--dim);flex:none}
+.dot.on{background:var(--grn);box-shadow:0 0 8px rgba(20,241,149,.7)}
+.dot.off{background:var(--red)}
+.pill.live{border-color:rgba(20,241,149,.35);color:var(--grn)}
+.pill.sim{border-color:rgba(217,180,92,.35);color:var(--gold)}
+.walletbtn{display:flex;align-items:center;gap:8px;border:1px solid rgba(217,180,92,.5);background:var(--goldbg);color:var(--gold2);border-radius:99px;padding:7px 14px;font-size:13px;font-weight:600;cursor:pointer;transition:.15s}
+.walletbtn:hover{background:rgba(217,180,92,.16);border-color:var(--gold)}
+.walletbtn.solid{background:var(--gold);color:#151007;border-color:var(--gold)}
+.walletbtn.solid:hover{background:var(--gold2)}
+.drawer{position:absolute;right:0;top:calc(100% + 10px);width:330px;background:var(--panel2);border:1px solid var(--line2);border-radius:14px;padding:16px;box-shadow:0 24px 60px rgba(0,0,0,.6);display:none;z-index:60}
+.drawer.open{display:block}
+.drawer h4{font-family:var(--mono);font-size:10px;letter-spacing:.2em;color:var(--dim);text-transform:uppercase;margin:14px 0 6px}
+.drawer h4:first-child{margin-top:0}
+.drow{display:flex;justify-content:space-between;align-items:center;font-size:13px;padding:3px 0}
+.drow b.mono{font-weight:600}
+.addrbox{font-family:var(--mono);font-size:11.5px;background:var(--panel);border:1px solid var(--line);border-radius:8px;padding:8px 10px;cursor:pointer;word-break:break-all;color:var(--mut)}
+.addrbox:hover{border-color:var(--line2);color:var(--ink)}
+.minibtn{border:1px solid var(--line2);background:var(--panel);color:var(--mut);border-radius:8px;padding:5px 9px;font-size:11.5px;cursor:pointer;margin:2px 4px 2px 0;transition:.15s}
+.minibtn:hover{color:var(--ink);border-color:var(--dim)}
+.minibtn.gold{color:var(--gold2);border-color:rgba(217,180,92,.4)}
+.minibtn.danger{color:var(--red);border-color:rgba(255,107,107,.35)}
+.rpcin{width:100%;background:var(--panel);border:1px solid var(--line);border-radius:8px;color:var(--ink);font-family:var(--mono);font-size:11px;padding:7px 9px;margin-top:6px}
+.rpcin:focus{outline:none;border-color:var(--dim)}
+
+/* ---------- banner ---------- */
+.banner{display:flex;align-items:center;gap:12px;background:rgba(217,180,92,.07);border-bottom:1px solid rgba(217,180,92,.25);padding:9px 22px;font-size:12.5px;color:var(--gold2);flex-wrap:wrap}
+.banner .mono{font-size:10px;letter-spacing:.18em;border:1px solid rgba(217,180,92,.5);border-radius:4px;padding:2px 7px;flex:none}
+.banner button{margin-left:auto;border:1px solid rgba(217,180,92,.5);background:none;color:var(--gold2);border-radius:7px;padding:4px 11px;font-size:12px;cursor:pointer;flex:none}
+.banner button:hover{background:rgba(217,180,92,.15)}
+.banner .x{margin-left:0;border:none;color:var(--dim);font-size:15px;padding:2px 8px}
+.banner .x:hover{color:var(--ink)}
+
+/* ---------- hero ---------- */
+.hero{display:grid;grid-template-columns:1.15fr .85fr;gap:40px;align-items:center;padding:58px 0 30px}
+.kicker{font-family:var(--mono);font-size:11px;letter-spacing:.3em;color:var(--gold);text-transform:uppercase;display:flex;align-items:center;gap:10px}
+.kicker::before{content:'';width:26px;height:1px;background:var(--gold)}
+h1{font-family:var(--serif);font-size:clamp(34px,4.6vw,54px);line-height:1.08;font-weight:600;margin:16px 0 14px;letter-spacing:-.01em}
+h1 em{font-style:italic;color:var(--gold2)}
+.sub{color:var(--mut);font-size:16.5px;max-width:520px}
+.sub b{color:var(--ink);font-weight:600}
+.cta{display:flex;gap:12px;margin-top:26px;flex-wrap:wrap}
+.btn{display:inline-flex;align-items:center;gap:8px;border-radius:10px;padding:11px 20px;font-size:14px;font-weight:600;cursor:pointer;border:1px solid transparent;transition:.15s}
+.btn.gold{background:var(--gold);color:#151007}
+.btn.gold:hover{background:var(--gold2);transform:translateY(-1px)}
+.btn.ghost{background:transparent;border-color:var(--line2);color:var(--ink)}
+.btn.ghost:hover{border-color:var(--dim);background:rgba(255,255,255,.03)}
+.btn.red{background:rgba(255,107,107,.12);border-color:rgba(255,107,107,.4);color:var(--red)}
+.btn.sm{padding:7px 13px;font-size:12.5px;border-radius:8px}
+.fine{font-family:var(--mono);font-size:10.5px;letter-spacing:.1em;color:var(--dim);margin-top:18px;text-transform:uppercase}
+
+/* ---------- pulse card ---------- */
+.pulse{background:linear-gradient(160deg,var(--panel2),var(--panel));border:1px solid var(--line2);border-radius:16px;padding:20px;position:relative;overflow:hidden}
+.pulse::before{content:'';position:absolute;inset:0 0 auto 0;height:2px;background:linear-gradient(90deg,var(--gold),transparent 60%)}
+.pl-top{display:flex;justify-content:space-between;align-items:center;margin-bottom:14px}
+.tag{font-family:var(--mono);font-size:10px;letter-spacing:.24em;color:var(--gold);text-transform:uppercase;display:flex;align-items:center;gap:7px}
+.tag .live-dot{width:6px;height:6px;border-radius:50%;background:var(--grn);animation:blink 1.6s infinite}
+@keyframes blink{50%{opacity:.3}}
+.pl-open{font-family:var(--mono);font-size:11px;color:var(--dim)}
+.pulse h3{font-family:var(--serif);font-size:21px;line-height:1.25;font-weight:600}
+.pl-meta{font-family:var(--mono);font-size:11.5px;color:var(--mut);margin:5px 0 16px}
+.row3{display:grid;grid-template-columns:1fr 1fr 1fr;gap:10px;border-top:1px solid var(--line);padding-top:14px}
+.row3 label{display:block;font-family:var(--mono);font-size:9.5px;letter-spacing:.18em;color:var(--dim);text-transform:uppercase;margin-bottom:3px}
+.row3 b{font-size:15px;font-weight:600}
+.row3 b.danger{color:var(--red)}
+.wbar{height:8px;border-radius:5px;background:rgba(255,107,107,.25);margin-top:14px;overflow:hidden;display:flex}
+.wbar i{display:block;height:100%;background:linear-gradient(90deg,#0f8f63,var(--grn));transition:width .6s}
+.wlab{display:flex;justify-content:space-between;font-family:var(--mono);font-size:10.5px;color:var(--mut);margin-top:6px}
+.pl-foot{display:flex;align-items:center;justify-content:space-between;gap:10px;margin-top:16px}
+.pl-foot span{font-family:var(--mono);font-size:11px;color:var(--dim)}
+
+/* ---------- stats ---------- */
+.stats{display:grid;grid-template-columns:repeat(5,1fr);gap:1px;background:var(--line);border:1px solid var(--line);border-radius:14px;overflow:hidden;margin:14px 0 34px}
+.stat{background:var(--panel);padding:16px 18px}
+.stat label{display:block;font-family:var(--mono);font-size:9.5px;letter-spacing:.18em;color:var(--dim);text-transform:uppercase;margin-bottom:6px}
+.stat b{font-size:21px;font-weight:600;font-family:var(--mono)}
+.stat b small{font-size:11px;color:var(--dim);font-weight:400;margin-left:3px}
+.stat .up{color:var(--grn)} .stat .dn{color:var(--red)} .stat .gd{color:var(--gold2)}
+
+/* ---------- tabs ---------- */
+.tabs{display:flex;gap:4px;border-bottom:1px solid var(--line);margin-bottom:24px;flex-wrap:wrap}
+.tabs button{background:none;border:none;color:var(--mut);font-size:13.5px;font-weight:600;padding:11px 16px;cursor:pointer;position:relative;letter-spacing:.02em}
+.tabs button:hover{color:var(--ink)}
+.tabs button.on{color:var(--gold2)}
+.tabs button.on::after{content:'';position:absolute;left:12px;right:12px;bottom:-1px;height:2px;background:var(--gold)}
+.tabs .cnt{font-family:var(--mono);font-size:10.5px;color:var(--dim);margin-left:6px}
+.hidden{display:none!important}
+
+/* ---------- chips & filters ---------- */
+.chips{display:flex;gap:8px;margin-bottom:18px;flex-wrap:wrap}
+.chip{font-family:var(--mono);font-size:10.5px;letter-spacing:.1em;text-transform:uppercase;padding:6px 12px;border-radius:99px;border:1px solid var(--line);color:var(--mut);cursor:pointer;background:var(--panel);transition:.15s}
+.chip:hover{border-color:var(--line2);color:var(--ink)}
+.chip.on{border-color:rgba(217,180,92,.55);color:var(--gold2);background:var(--goldbg)}
+.chip.cat{cursor:default}
+
+/* ---------- cards ---------- */
+.grid{display:grid;grid-template-columns:repeat(auto-fill,minmax(330px,1fr));gap:16px}
+.card{background:var(--panel);border:1px solid var(--line);border-radius:14px;padding:18px;position:relative;transition:.18s;display:flex;flex-direction:column}
+.card:hover{border-color:var(--line2);transform:translateY(-2px);box-shadow:0 14px 40px rgba(0,0,0,.35)}
+.card.risk{border-color:rgba(255,107,107,.3)}
+.card.mine{border-color:rgba(153,69,255,.35)}
+.c-top{display:flex;align-items:center;gap:8px;margin-bottom:12px}
+.chip.st{border:none;padding:3px 9px;background:rgba(255,255,255,.05);color:var(--mut);font-size:9.5px}
+.chip.st.open{color:var(--grn);background:rgba(20,241,149,.09)}
+.chip.st.risk{color:var(--red);background:rgba(255,107,107,.1);animation:blink 2s infinite}
+.chip.st.proof{color:var(--blu);background:rgba(90,169,255,.1)}
+.chip.st.kept{color:var(--grn);background:rgba(20,241,149,.1)}
+.chip.st.failed{color:var(--red);background:rgba(255,107,107,.12)}
+.chip.cc{color:var(--vio);background:rgba(153,69,255,.1)}
+.c-id{margin-left:auto;font-family:var(--mono);font-size:10.5px;color:var(--dim)}
+.card h3{font-family:var(--serif);font-size:17.5px;line-height:1.3;font-weight:600;margin-bottom:5px}
+.c-meta{font-family:var(--mono);font-size:11.5px;color:var(--mut);margin-bottom:14px}
+.c-meta .you{color:var(--vio)}
+.actions{display:flex;gap:8px;margin-top:14px;flex-wrap:wrap;align-items:center}
+.proofbox{margin-top:12px;border:1px solid var(--line);border-radius:9px;padding:9px 11px;font-size:12px;background:var(--panel2)}
+.proofbox .mono{font-size:10.5px}
+.proofbox .lean-keep{color:var(--grn)} .proofbox .lean-fail{color:var(--red)}
+.stamp{position:absolute;top:14px;right:14px;transform:rotate(-8deg);border:2px solid;border-radius:7px;padding:2px 10px;font-family:var(--mono);font-size:11px;letter-spacing:.24em;font-weight:700;animation:stampin .45s cubic-bezier(.2,2,.4,1)}
+@keyframes stampin{from{transform:rotate(-8deg) scale(2.4);opacity:0}}
+.stamp.kept{color:var(--grn);border-color:var(--grn);background:rgba(20,241,149,.07)}
+.stamp.failed{color:var(--red);border-color:var(--red);background:rgba(255,107,107,.07)}
+.resline{font-size:12px;color:var(--mut);margin-top:10px}
+.resline b{color:var(--ink)}
+
+/* ---------- create form ---------- */
+.create{display:grid;grid-template-columns:1.1fr .9fr;gap:22px;align-items:start}
+.formcard{background:var(--panel);border:1px solid var(--line);border-radius:14px;padding:22px}
+.f-label{display:block;font-family:var(--mono);font-size:10px;letter-spacing:.2em;color:var(--dim);text-transform:uppercase;margin:18px 0 8px}
+.f-label:first-child{margin-top:0}
+.f-in{width:100%;background:var(--panel2);border:1px solid var(--line2);border-radius:9px;color:var(--ink);font-size:14.5px;padding:11px 13px;font-family:var(--sans)}
+.f-in:focus{outline:none;border-color:var(--gold)}
+.f-in::placeholder{color:var(--dim)}
+textarea.f-in{resize:vertical;min-height:70px}
+.numrow{display:flex;gap:8px;align-items:center}
+.numrow .f-in{flex:1}
+.qc{font-family:var(--mono);font-size:11px;border:1px solid var(--line);background:var(--panel);color:var(--mut);border-radius:7px;padding:6px 10px;cursor:pointer}
+.qc:hover{color:var(--ink);border-color:var(--line2)}
+.qc.on{color:var(--gold2);border-color:rgba(217,180,92,.5);background:var(--goldbg)}
+.catrow{display:flex;gap:7px;flex-wrap:wrap}
+.f-note{font-size:12px;color:var(--dim);margin-top:8px;line-height:1.5}
+.sumcard{background:linear-gradient(165deg,rgba(217,180,92,.06),var(--panel));border:1px solid rgba(217,180,92,.3);border-radius:14px;padding:22px;position:sticky;top:84px}
+.sumcard h3{font-family:var(--serif);font-size:18px;margin-bottom:4px}
+.sumcard .sc-sub{font-family:var(--mono);font-size:10.5px;letter-spacing:.14em;color:var(--dim);text-transform:uppercase;margin-bottom:16px}
+.sumline{display:flex;justify-content:space-between;padding:9px 0;border-top:1px solid var(--line);font-size:13.5px}
+.sumline span{color:var(--mut)}
+.sumline b.mono{font-weight:600}
+.sumline b .gd{color:var(--gold2)} .sumline b .rd{color:var(--red)} .sumline b .gn{color:var(--grn)}
+.sumwarn{margin-top:14px;font-size:12px;color:var(--mut);background:var(--panel2);border:1px solid var(--line);border-radius:9px;padding:10px 12px;line-height:1.5}
+.sumwarn b{color:var(--gold2)}
+.checkrow{display:flex;gap:9px;align-items:flex-start;margin-top:14px;font-size:12.5px;color:var(--mut);cursor:pointer}
+.checkrow input{margin-top:3px;accent-color:var(--gold)}
+
+/* ---------- ledger ---------- */
+.ledger{display:flex;flex-direction:column;gap:1px;background:var(--line);border:1px solid var(--line);border-radius:14px;overflow:hidden}
+.lrow{display:flex;align-items:center;gap:14px;background:var(--panel);padding:12px 18px;font-size:13px}
+.lrow:hover{background:var(--panel2)}
+.licon{width:30px;height:30px;border-radius:8px;display:flex;align-items:center;justify-content:center;font-size:14px;flex:none;background:var(--panel2);border:1px solid var(--line)}
+.licon.g{color:var(--gold2)} .licon.grn{color:var(--grn)} .licon.red{color:var(--red)} .licon.blu{color:var(--blu)} .licon.vio{color:var(--vio)}
+.ltxt{flex:1;min-width:0}
+.ltxt small{display:block;font-family:var(--mono);font-size:10.5px;color:var(--dim)}
+.ldelta{font-family:var(--mono);font-size:13px;font-weight:600;white-space:nowrap}
+.ldelta.plus{color:var(--grn)} .ldelta.minus{color:var(--red)}
+.lsig{font-family:var(--mono);font-size:10.5px;color:var(--dim);white-space:nowrap;max-width:170px;overflow:hidden;text-overflow:ellipsis}
+.lsig a{color:var(--mut)} .lsig a:hover{color:var(--gold2)}
+.simchip{font-family:var(--mono);font-size:9.5px;letter-spacing:.12em;color:var(--dim);border:1px solid var(--line);border-radius:4px;padding:2px 6px}
+
+/* ---------- my vows ---------- */
+.mysum{display:grid;grid-template-columns:repeat(4,1fr);gap:14px;margin-bottom:20px}
+.mysum .stat{padding:14px 16px}
+.sect{font-family:var(--mono);font-size:10.5px;letter-spacing:.22em;color:var(--dim);text-transform:uppercase;margin:26px 0 12px;display:flex;align-items:center;gap:10px}
+.sect::after{content:'';flex:1;height:1px;background:var(--line)}
+.betrow{display:flex;align-items:center;gap:14px;background:var(--panel);border:1px solid var(--line);border-radius:11px;padding:13px 16px;margin-bottom:9px;flex-wrap:wrap}
+.betrow .bt{flex:1;min-width:200px}
+.betrow .bt b{display:block;font-size:13.5px}
+.betrow .bt small{font-family:var(--mono);font-size:10.5px;color:var(--dim)}
+.betrow .ba{font-family:var(--mono);font-size:13px;font-weight:600}
+.betrow .be{font-family:var(--mono);font-size:11px;color:var(--dim);width:150px}
+
+/* ---------- mechanism ---------- */
+.mech{margin:64px 0 30px}
+.mech h2{font-family:var(--serif);font-size:30px;font-weight:600;margin-bottom:6px}
+.mech .m-sub{color:var(--mut);max-width:640px;margin-bottom:28px}
+.mgrid{display:grid;grid-template-columns:repeat(3,1fr);gap:16px}
+.mcard{background:var(--panel);border:1px solid var(--line);border-radius:14px;padding:22px;position:relative}
+.mcard .n{font-family:var(--serif);font-size:44px;color:rgba(217,180,92,.25);line-height:1;position:absolute;top:14px;right:18px;font-style:italic}
+.mcard h4{font-family:var(--mono);font-size:11px;letter-spacing:.24em;color:var(--gold);text-transform:uppercase;margin-bottom:10px}
+.mcard p{font-size:13.5px;color:var(--mut);line-height:1.6}
+.mcard p b{color:var(--ink)}
+.why{margin-top:16px;display:grid;grid-template-columns:1fr 1fr;gap:16px}
+.wcard{background:var(--panel);border:1px solid var(--line);border-radius:14px;padding:22px}
+.wcard h4{font-family:var(--serif);font-size:17px;margin-bottom:8px}
+.wcard p{font-size:13.5px;color:var(--mut);line-height:1.65}
+.wcard p b{color:var(--ink)}
+.betanote{margin-top:16px;border:1px solid rgba(153,69,255,.3);background:rgba(153,69,255,.05);border-radius:12px;padding:15px 18px;font-size:12.5px;color:var(--mut);line-height:1.6}
+.betanote b{color:var(--vio)}
+
+footer{border-top:1px solid var(--line);margin-top:50px;padding:26px 0 40px;display:flex;gap:16px;flex-wrap:wrap;align-items:center;font-family:var(--mono);font-size:11px;color:var(--dim)}
+footer .f-sp{margin-left:auto}
+
+/* ---------- modal / toast ---------- */
+#modal-root{position:fixed;inset:0;z-index:100;display:none;align-items:center;justify-content:center;background:rgba(4,5,9,.72);backdrop-filter:blur(6px);-webkit-backdrop-filter:blur(6px)}
+#modal-root.open{display:flex}
+.modal{width:min(480px,92vw);background:var(--panel2);border:1px solid var(--line2);border-radius:16px;padding:24px;box-shadow:0 30px 90px rgba(0,0,0,.6);animation:mpop .22s cubic-bezier(.2,1.4,.4,1)}
+@keyframes mpop{from{transform:translateY(14px) scale(.97);opacity:0}}
+.modal h3{font-family:var(--serif);font-size:20px;margin-bottom:6px}
+.modal .m-sub{font-size:13px;color:var(--mut);margin-bottom:16px;line-height:1.55}
+.modal .m-actions{display:flex;gap:10px;margin-top:20px;flex-wrap:wrap;justify-content:flex-end}
+#toasts{position:fixed;bottom:22px;right:22px;z-index:200;display:flex;flex-direction:column;gap:9px;max-width:360px}
+.toast{background:var(--panel2);border:1px solid var(--line2);border-left:3px solid var(--gold);border-radius:10px;padding:11px 15px;font-size:13px;box-shadow:0 16px 50px rgba(0,0,0,.5);animation:tin .25s ease;cursor:default;line-height:1.45}
+.toast.err{border-left-color:var(--red)}
+.toast.ok{border-left-color:var(--grn)}
+.toast small{display:block;font-family:var(--mono);font-size:10.5px;color:var(--dim);margin-top:3px;word-break:break-all}
+@keyframes tin{from{transform:translateX(30px);opacity:0}}
+
+.empty{padding:60px 20px;text-align:center;color:var(--dim);font-size:14px}
+.empty .big{font-family:var(--serif);font-size:22px;color:var(--mut);margin-bottom:8px}
+
+@media(max-width:920px){
+  .hero{grid-template-columns:1fr;gap:28px;padding-top:38px}
+  .stats{grid-template-columns:repeat(2,1fr)}
+  .create{grid-template-columns:1fr}
+  .sumcard{position:static}
+  .mgrid,.why{grid-template-columns:1fr}
+  .mysum{grid-template-columns:repeat(2,1fr)}
+  .tagline{display:none}
+}
+</style>
+</head>
+<body>
+<div id="app">
+  <header><div class="wrap hrow" id="hrow"></div></header>
+  <div id="banner-slot"></div>
+  <main class="wrap">
+    <section class="hero" id="hero"></section>
+    <section id="stats-slot"></section>
+    <nav class="tabs" id="tabs"></nav>
+    <section id="tab-market"></section>
+    <section id="tab-create" class="hidden"></section>
+    <section id="tab-my" class="hidden"></section>
+    <section id="tab-ledger" class="hidden"></section>
+    <section class="mech" id="mech"></section>
+  </main>
+  <footer class="wrap" id="foot"></footer>
+</div>
+<div id="modal-root"></div>
+<div id="toasts"></div>
+
+<script>
+'use strict';
+/* ================================================================
+   OATH — Proof of Promise on Solana · single-file app
+   ─ self-contained Solana client (no CDNs):
+     base58 · compact-u16 · legacy message wire format · JSON-RPC
+   ─ live mode: Phantom/Solflare wallet + real devnet memos
+   ─ sim mode : full market engine on a local ledger (offline-safe)
+   ================================================================ */
+
+/* ---------------- CORE: solana primitives ---------------- */
+/*CORE:START*/
+const B58='123456789ABCDEFGHJKLMNPQRSTUVWXYZabcdefghijkmnopqrstuvwxyz';
+const B58i=()=>{const m=new Map();for(let i=0;i<B58.length;i++)m.set(B58[i],i);return m;};
+const _B58I=B58i();
+function b58decode(s){
+  if(typeof s!=='string'||!s.length)throw new Error('bad base58 input');
+  let n=0n;
+  for(let i=0;i<s.length;i++){const d=_B58I.get(s[i]);if(d===undefined)throw new Error('invalid base58 char: '+s[i]);n=n*58n+BigInt(d);}
+  const bytes=[];
+  while(n>0n){bytes.unshift(Number(n&255n));n>>=8n;}
+  for(let i=0;i<s.length&&s[i]==='1';i++)bytes.unshift(0);
+  return Uint8Array.from(bytes);
+}
+function b58encode(bytes){
+  let n=0n;for(let i=0;i<bytes.length;i++)n=(n<<8n)|BigInt(bytes[i]);
+  let s='';
+  while(n>0n){s=B58[Number(n%58n)]+s;n/=58n;}
+  for(let i=0;i<bytes.length;i++){if(bytes[i]===0)s='1'+s;else break;}
+  return s||'1';
+}
+function compactU16(n){
+  if(n<0x80)return Uint8Array.from([n]);
+  const out=[];let x=n;
+  for(;;){
+    const b=x&0x7f;x>>=7;
+    out.push(x?(b|0x80):b);
+    if(!x)break;
+  }
+  return Uint8Array.from(out);
+}
+function u8(...parts){
+  let len=0;for(const p of parts)len+=p.length;
+  const out=new Uint8Array(len);let o=0;
+  for(const p of parts){out.set(p,o);o+=p.length;}
+  return out;
+}
+function base64(bytes){
+  let s='';const CH=0x8000;
+  for(let i=0;i<bytes.length;i+=CH)s+=String.fromCharCode.apply(null,bytes.subarray(i,i+CH));
+  return btoa(s);
+}
+const TE=new TextEncoder();
+const utf8=s=>TE.encode(s);
+
+const SYSTEM='11111111111111111111111111111111';
+const MEMO='MemoSq4gqABAXKb96qnH8TysNcWxMyWCqXgDLGmfcHr';
+
+function transferData(lamports){
+  const d=new Uint8Array(12);
+  new DataView(d.buffer).setUint32(0,2,true);
+  new DataView(d.buffer).setBigUint64(4,BigInt(lamports),true);
+  return d;
+}
+/* Legacy transaction message builder.
+   accounts: [payer, ...others] in wire order; ro = readonly set. */
+class Tx{
+  constructor(payer){this.payer=payer;this.accounts=[payer];this.ro=new Set();this.writable=new Set();this.instructions=[];}
+  addAcc(addr,opts){ // opts {readonly}
+    if(!this.accounts.includes(addr))this.accounts.push(addr);
+    if(opts&&opts.readonly)this.ro.add(addr);
+    if(opts&&opts.writable)this.writable.add(addr);
+    return this;
+  }
+  addInstr(program,accIdx,data){
+    this.addAcc(program,{readonly:true});
+    this.instructions.push({program,accIdx,data});
+    return this;
+  }
+  idx(a){return this.accounts.indexOf(a);}
+  build(blockhash){
+    const keys=this.accounts;
+    const reqSig=1,roSig=0;
+    let roU=0;
+    for(const k of keys){
+      if(k===this.payer)continue;
+      if(this.ro.has(k)&&!this.writable.has(k))roU++;
+    }
+    const parts=[Uint8Array.from([reqSig,roSig,roU])];
+    parts.push(compactU16(keys.length)); // account key count (shortvec)
+    for(const k of keys)parts.push(b58decode(k));
+    parts.push(b58decode(blockhash));
+    const instrBytes=[];
+    for(const ins of this.instructions){
+      const pi=keys.indexOf(ins.program);
+      if(pi<0)throw new Error('program not in accounts: '+ins.program);
+      instrBytes.push(Uint8Array.from([pi]));
+      instrBytes.push(compactU16(ins.accIdx.length));
+      for(const a of ins.accIdx){
+        if(a<0||a>=keys.length)throw new Error('bad account index');
+        instrBytes.push(Uint8Array.from([a]));
+      }
+      instrBytes.push(compactU16(ins.data.length));
+      instrBytes.push(ins.data);
+    }
+    const instrLen=compactU16(this.instructions.length);
+    parts.push(instrLen,u8(...instrBytes));
+    return u8(...parts);
+  }
+}
+async function rpc(url,method,params,timeoutMs){
+  timeoutMs=timeoutMs||15000;
+  const ctl=new AbortController();
+  const t=setTimeout(()=>ctl.abort(),timeoutMs);
+  try{
+    const res=await fetch(url,{method:'POST',headers:{'content-type':'application/json'},
+      body:JSON.stringify({jsonrpc:'2.0',id:1,method,params}),signal:ctl.signal});
+    const j=await res.json();
+    if(j.error)throw new Error(j.error.message||('rpc error '+j.error.code));
+    return j.result;
+  }finally{clearTimeout(t);}
+}
+async function getBlockhash(url){
+  const r=await rpc(url,'getLatestBlockhash',[{commitment:'confirmed'}]);
+  return r.value.blockhash;
+}
+async function getBalanceSol(url,addr){
+  const r=await rpc(url,'getBalance',[addr,{commitment:'confirmed'}]);
+  return r.value/1e9;
+}
+async function confirmSig(url,sig){
+  for(let i=0;i<14;i++){
+    await new Promise(r=>setTimeout(r,2000));
+    try{
+      const r=await rpc(url,'getSignatureStatuses',[[sig],{searchTransactionHistory:false}],10000);
+      const st=r.value&&r.value[0];
+      if(st&&st.err)throw new Error('on-chain error: '+JSON.stringify(st.err));
+      if(st&&(st.confirmationStatus==='confirmed'||st.confirmationStatus==='finalized'))return st.confirmationStatus;
+    }catch(e){if(String(e).includes('on-chain error'))throw e;}
+  }
+  return 'unknown';
+}
+/* deterministic 32-byte pseudo-hash (display/vault addresses only — not crypto) */
+function pseudoBytes(seed,n){
+  n=n||32;const out=new Uint8Array(n);let h=2166136261>>>0;
+  for(let i=0;i<n;i++){
+    const c=seed.charCodeAt(i%seed.length);
+    h^=c;h=Math.imul(h,16777619)>>>0;h^=(h>>>13)>>>0;h=Math.imul(h,2246822519)>>>0;h^=(h>>>16)>>>0;
+    out[i]=h&255;
+  }
+  return out;
+}
+/*CORE:END*/
+
+/* ---------------- app state ---------------- */
+const LS='oath_v1';
+const CATS=[
+  {id:'FITNESS',n:'Fitness'},{id:'OPEN_SRC',n:'Open source'},{id:'COMMUNITY',n:'Community'},
+  {id:'BUSINESS',n:'Business'},{id:'PUBLIC',n:'Public figure'},{id:'PERSONAL',n:'Personal'},{id:'OTHER',n:'Other'}
+];
+const D=864e5,H=36e5;
+let state=null,dirtyFlag=true,filter='all',tab='market',drawerOpen=false;
+let rpcOnline=false,provName=null,tickN=0;
+
+const $=s=>document.querySelector(s);
+function esc(s){return String(s).replace(/[&<>"']/g,c=>({'&':'&amp;','<':'&lt;','>':'&gt;','"':'&quot;',"'":'&#39;'}[c]));}
+function fmt(n,d){d=(d===undefined?2:d);return Number(n).toLocaleString('en-US',{minimumFractionDigits:d<2?0:d,maximumFractionDigits:d<2?0:d});}
+function shortA(a){return a.length>12?a.slice(0,5)+'…'+a.slice(-4):a;}
+function shortS(s){return s.length>20?s.slice(0,8)+'…'+s.slice(-6):s;}
+function simId(){return b58encode(pseudoBytes(Math.random().toString(36),8)).slice(0,8);}
+function fakeAddr(seed){return b58encode(pseudoBytes('oathseed::'+seed));}
+function catName(id){const c=CATS.find(x=>x.id===id);return c?c.n:id;}
+function effNow(){return Date.now()+(state.mode==='sim'?(state.sim.timeSkip||0):0);}
+function myAddr(){if(state.mode==='live')return state.live.addr;return state.sim.wallet?state.sim.wallet.addr:null;}
+function myName(){if(state.mode==='live')return state.live.name;return state.sim.wallet?state.sim.wallet.name:'you (demo)';}
+function pool(v){return v.bonds.reduce((a,b)=>a+b.amount,0);}
+function provider(){return (window.phantom&&window.phantom.solana)||window.solana||null;}
+
+function seedVows(t0){
+  const O=n=>({addr:fakeAddr('owner::'+n),name:n});
+  const B=(id,seed,n,amt,at)=>({id,addr:fakeAddr('bet::'+seed),name:n,amount:amt,at});
+  return [
+    {id:'OV-12',cat:'PUBLIC',title:'Walk every district town hall before election day',owner:O('@councilor.braun'),stake:25,createdAt:t0-6*D,deadline:t0+36*H,status:'OPEN',bonds:[
+      B('B-12a','x1','@open.skeptic',4.2,t0-2*D),B('B-12b','x2','@ward7_watcher',3.1,t0-D),B('C-12c','x3','@ballot.box',2.2,t0-0.4*D)]},
+    {id:'OV-31',cat:'FITNESS',title:'50k steps per week, four straight weeks',owner:O('@kaya.runs'),stake:2.5,createdAt:t0-2*D,deadline:t0+12*D,status:'OPEN',bonds:[
+      B('B-31a','x1','@stake.dan',0.5,t0-D),B('B-31b','x2','@no.cap',0.3,t0-0.5*D)]},
+    {id:'OV-18',cat:'OPEN_SRC',title:'Ship v2.0 of Hearth, the open-source Solana wallet UI',owner:O('@hearth-labs'),stake:8,createdAt:t0-9*D,deadline:t0+21*D,status:'OPEN',bonds:[
+      B('B-18a','x1','@ship.date',1.7,t0-3*D),B('B-18b','x2','@yagni.ist',1.5,t0-1*D)]},
+    {id:'OV-27',cat:'PERSONAL',title:'No sugar for 30 days — lab work at the end',owner:O('@nosugar.mia'),stake:1.2,createdAt:t0-5*D,deadline:t0+6*D,status:'OPEN',bonds:[
+      B('B-27a','x1','@craving.bot',0.4,t0-2*D)]},
+    {id:'OV-09',cat:'BUSINESS',title:'AltBrot closes at 19:00 — no more 2am bakes',owner:O('@altbrot_bakery'),stake:4,createdAt:t0-15*D,deadline:t0-2*D,status:'PROOF',proofUrl:'https://altbrot.example/compliance-week3',proofAt:t0-5*H,windowEnds:t0+19*H,bonds:[
+      B('B-09a','x1','@late.night',2.8,t0-8*D),B('B-09b','x2','@knead.truth',2.2,t0-4*D),B('B-09c','x3','@2am.oxo',1.1,t0-2*D)]},
+    {id:'OV-22',cat:'OPEN_SRC',title:'Ship my first Solana program and deploy a demo dApp',owner:O('@learntosol.dev'),stake:3,createdAt:t0-3*D,deadline:t0+5*D,status:'OPEN',bonds:[
+      B('B-22a','x1','@rusty.beginner',1.1,t0-D)]},
+    {id:'OV-04',cat:'COMMUNITY',title:'1,000 street trees planted with the block crew',owner:O('@streetleafs'),stake:10,createdAt:t0-1*D,deadline:t0+28*D,status:'OPEN',bonds:[
+      B('B-04a','x1','@drought.doubt',2.6,t0-0.5*D),B('B-04b','x2','@sapling.std',1.8,t0-0.2*D)]},
+    {id:'OV-18b',cat:'FITNESS',title:'Sub-60 10km before winter',owner:O('@sub60.ana'),stake:0.6,createdAt:t0-55*D,deadline:t0-40*D,status:'KEPT',proofUrl:'https://strava.example/3842711',proofAt:t0-41*D,windowEnds:t0-40*D,
+      res:{at:t0-40*D,reason:'jury upheld the proof',payouts:{},burn:0.3},bonds:[B('B-18ba','x1','@couch.club',0.3,t0-50*D)]},
+    {id:'OV-11',cat:'BUSINESS',title:'Release the 12-track album with the full band',owner:O('@vhs.choir'),stake:15,createdAt:t0-60*D,deadline:t0-8*D,status:'FAILED',
+      res:{at:t0-8*D,reason:'deadline passed — no proof was posted',payouts:{'B-11a':7.125,'B-11b':7.125},burn:0.75},
+      bonds:[B('B-11a','x1','@vinyl.only',2.6,t0-40*D),B('B-11b','x2','@outlet.demos',2.6,t0-20*D)]},
+    {id:'OV-25',cat:'PERSONAL',title:'One week, zero code — actually launch the studio',owner:O('@nofeeds.leo'),stake:0.3,createdAt:t0-10*D,deadline:t0-3*D,status:'KEPT',proofUrl:'https://studio.example/launch',proofAt:t0-3*D,windowEnds:t0-2*D,
+      res:{at:t0-2*D,reason:'jury upheld the proof',payouts:{},burn:0},bonds:[]}
+  ];
+}
+function seedLedger(t0){
+  const E=(ts,kind,text,delta,extra)=>Object.assign({ts,kind,text,delta},extra||{});
+  return [
+    E(t0-0.4*D,'BOND','@ballot.box bonded 2.2 SOL against “Walk every district town hall”',-2.2,{vow:'OV-12',simId:'SIM-a1b2'}),
+    E(t0-2*D,'CREATE','@councilor.braun sealed “Walk every district town hall” — 25 SOL stake',-25,{vow:'OV-12',simId:'SIM-9f3e'}),
+    E(t0-8*D,'RESOLVE','“Release the 12-track album” LIQUIDATED — deadline passed. 14.25 SOL → challengers, 0.75 burned',{vow:'OV-11',simId:'SIM-c4d8'}),
+    E(t0-40*D,'RESOLVE','“Sub-60 10km” KEPT — stake returned to @sub60.ana, 0.3 SOL of bonds burned',{vow:'OV-18b',simId:'SIM-77aa'}),
+    E(t0-2*D,'RESOLVE','“One week, zero code” KEPT — no challengers, 0.3 SOL returned',{vow:'OV-25',simId:'SIM-51c0'})
+  ];
+}
+function freshState(){
+  const t0=Date.now();
+  return {
+    v:1,rpc:'https://api.devnet.solana.com',mode:'sim',
+    sim:{balance:3,timeSkip:0,wallet:null,dismissed:false},
+    live:{addr:'',name:'',balance:null},
+    ledgerBal:3,
+    vows:seedVows(t0),
+    ledger:seedLedger(t0),
+    claims:[]
+  };
+}
+function load(){
+  try{
+    const raw=localStorage.getItem(LS);
+    if(raw){state=JSON.parse(raw);return;}
+  }catch(e){}
+  state=freshState();save();
+}
+function save(){
+  try{
+    const s=Object.assign({},state,{live:Object.assign({},state.live)});
+    delete s.live.provider;
+    localStorage.setItem(LS,JSON.stringify(s));
+  }catch(e){}
+}
+function L(kind,text,delta,extra){
+  state.ledger.unshift(Object.assign({ts:effNow(),kind,text,delta:delta===undefined?null:delta},extra||{}));
+  if(state.ledger.length>500)state.ledger.length=500;
+}
+
+/* ---------------- resolution engine ---------------- */
+function failVow(v,reason){
+  v.status='FAILED';
+  const p=pool(v);
+  if(p>0){
+    const net=v.stake*0.95;
+    v.res={at:effNow(),reason,payouts:{},burn:+(v.stake*0.05).toFixed(6)};
+    for(const b of v.bonds)v.res.payouts[b.id]=+(net*b.amount/p).toFixed(6);
+  }else{
+    v.res={at:effNow(),reason,payouts:{},burn:v.stake};
+  }
+  L('RESOLVE','“'+v.title+'” LIQUIDATED — '+v.owner.name+' defaulted ('+reason+'). '+fmt(v.stake,2)+' SOL stake '+
+    (p>0?('→ challengers '+fmt(v.stake*0.95,2)+', '+fmt(v.stake*0.05,2)+' burned'):'burned (no challengers)'),null,{vow:v.id});
+  toast('⚡ Liquidated: “'+v.title.slice(0,38)+(v.title.length>38?'…':'')+'”','err');
+}
+function keepVow(v,reason){
+  v.status='KEPT';
+  v.res={at:effNow(),reason,payouts:{},burn:+pool(v).toFixed(6)};
+  L('RESOLVE','“'+v.title+'” KEPT — '+v.owner.name+' proved it. '+fmt(v.stake,2)+' SOL stake returned, '+fmt(pool(v),2)+' SOL of bonds burned',null,{vow:v.id});
+  toast('✓ Kept: “'+v.title.slice(0,38)+(v.title.length>38?'…':'')+'”','ok');
+}
+function resolveNow(){
+  const now=effNow();let changed=false;
+  for(const v of state.vows){
+    if(v.status==='OPEN'&&now>v.deadline){failVow(v,'deadline passed — no proof was posted');changed=true;}
+    else if(v.status==='PROOF'&&now>v.windowEnds){
+      const p=pool(v);
+      if(p>v.stake)failVow(v,'overturned by the stake-weighted jury');
+      else keepVow(v,'jury upheld the proof');
+      changed=true;
+    }
+  }
+  if(changed){save();dirtyFlag=true;}
+}
+function riskOf(v){
+  if(v.status==='OPEN'){
+    const hrs=(v.deadline-effNow())/H;
+    if(hrs<24)return'hot';
+    if(hrs<72||pool(v)>v.stake*0.8)return'warm';
+    return null;
+  }
+  if(v.status==='PROOF')return pool(v)>v.stake?'hot':'warm';
+  return null;
+}
+
+/* ---------------- on-chain (live mode) ---------------- */
+function sigLink(sig){return 'https://explorer.solana.com/tx/'+sig+'?cluster=devnet';}
+function addrLink(a){return 'https://explorer.solana.com/address/'+a+'?cluster=devnet';}
+function vaultAddr(vowId){return b58encode(pseudoBytes('oath-vault::'+myAddr()+'::'+vowId));}
+
+async function onchain(memoObj,label,extra){
+  if(state.mode!=='live')return{sim:true,id:simId()};
+  const p=state.live.provider,url=state.rpc;
+  toast(label+' — awaiting signature…');
+  const bh=await getBlockhash(url);
+  const tx=new Tx(state.live.addr);
+  if(extra&&extra.to){
+    tx.addAcc(extra.to,{writable:true});
+    tx.addAcc(SYSTEM,{readonly:true});
+    tx.addInstr(SYSTEM,[0,1,2],transferData(Math.round(extra.lamports*1e9)));
+  }
+  tx.addInstr(MEMO,[0],utf8(JSON.stringify(memoObj)));
+  const msg=tx.build(bh);
+  const w={signature:null,serialize(){return this._s||msg;},_s:null};
+  w._s=null;
+  const sigRaw=await p.signTransaction(w);
+  let sigB58=null;
+  if(typeof sigRaw==='string'){try{b58decode(sigRaw);sigB58=sigRaw;}catch(e){}}
+  else if(sigRaw){sigB58=b58encode(Uint8Array.from(sigRaw));}
+  if(w.signature)sigB58=sigB58||b58encode(Uint8Array.from(w.signature));
+  // signed VersionedTransaction envelope: shortvec(sig_count) ++ signature(s) ++ message
+  const sigBytes=(w.signature||sigRaw)?Uint8Array.from(w.signature||sigRaw):null;
+  w._s=sigBytes?u8(compactU16(1),sigBytes,msg):msg;
+  const res=await rpc(url,'sendTransaction',[base64(w._s),{encoding:'base64',preflightCommitment:'confirmed'}],30000);
+  toast(label+' — broadcast '+shortS(res)+' · confirming…');
+  try{await confirmSig(url,res);}catch(e){}
+  return{sig:res};
+}
+
+/* ---------------- wallet ---------------- */
+function connectDemo(){
+  if(!state.sim.wallet)state.sim.wallet={addr:fakeAddr('you::'+Math.random().toString(36).slice(2,8)),name:'you (demo)'};
+  state.mode='sim';save();dirtyFlag=true;
+  toast('Demo wallet active — 3.0 SOL on the simulated ledger','ok');
+}
+async function connectProvider(){
+  const p=provider();
+  if(!p)throw new Error('No wallet extension found. Install Phantom from phantom.app, then reload.');
+  const r=await p.connect();
+  const pk=(r&&r.publicKey!==undefined)?r.publicKey:r;
+  const addr=typeof pk==='string'?pk:(pk&&pk.toString)?pk.toString():String(pk);
+  state.mode='live';
+  state.live={addr,name:p.isPhantom?'Phantom':(p.name||'Solflare'),balance:null};
+  try{state.live.balance=await getBalanceSol(state.rpc,addr);}catch(e){state.live.balance=0;}
+  state.ledgerBal=state.live.balance;
+  save();dirtyFlag=true;
+  toast('Connected '+state.live.name+' — live on-chain mode (devnet)','ok');
+}
+function disconnectWallet(){
+  const p=provider();
+  try{if(p&&p.disconnect)p.disconnect();}catch(e){}
+  state.mode='sim';dirtyFlag=true;save();
+}
+function ensureWallet(cb){
+  if(myAddr()){cb&&cb();return;}
+  const p=provider();
+  const btns=[{label:'Use demo wallet · 3.0 SOL',cls:'gold',act:'conn:demo'}];
+  if(p)btns.push({label:'Connect '+(provName||'Phantom'),cls:'ghost',act:'conn:provider'});
+  openModal({
+    title:'Connect a wallet',
+    sub:p?'Live mode signs real devnet transactions (memo registry) through your extension. Demo mode runs the whole market on a local simulated ledger with 3.0 SOL.'
+        :'No wallet extension detected in this window — that is normal inside a preview iframe. Demo mode runs the full market on a simulated ledger. Open this file in Chrome with Phantom for real devnet settlement.',
+    buttons:btns,
+    onAct:async a=>{
+      if(a==='conn:demo')connectDemo();
+      else if(a==='conn:provider')await connectProvider();
+      closeModal();cb&&cb();
+    }
+  });
+}
+
+/* ---------------- actions ---------------- */
+async function doBet(vowId,amt){
+  const v=state.vows.find(x=>x.id===vowId);
+  if(!v||v.status!=='OPEN')return toast('Betting is closed on this vow','err');
+  if(v.owner.addr===myAddr())return toast('You cannot bond against your own vow','err');
+  amt=+amt;
+  const maxBet=Math.min(v.stake*2,Math.max(0,state.ledgerBal-0.005));
+  if(!(amt>=0.01))return toast('Minimum bond is 0.01 SOL','err');
+  if(amt>maxBet+0.0001)return toast('Bond too large — max '+fmt(maxBet,2)+' SOL (2× stake, capped by balance)','err');
+  let oc=null;
+  if(state.mode==='live'){
+    try{oc=await onchain({app:'oath',v:1,act:'BOND',vow:v.id,by:myAddr(),amount:amt},'Bond',null);}
+    catch(e){oc={err:e.message};}
+  }else oc={sim:true,id:simId()};
+  state.ledgerBal-=amt;
+  const bond={id:'B-'+v.id+'-'+v.bonds.length+'-'+simId().slice(0,3),addr:myAddr(),name:myName(),amount:amt,at:effNow()};
+  v.bonds.push(bond);
+  L('BOND',myName()+' bonded '+fmt(amt,2)+' SOL against “'+v.title+'”',-amt,
+    {vow:v.id,sig:oc.sig,simId:oc.sim?oc.id:undefined});
+  dirtyFlag=true;save();
+  if(oc.err){toast('Local state updated — on-chain send failed: '+oc.err,'err');}
+  else toast('Bonded '+fmt(amt,2)+' SOL against “'+v.title.slice(0,30)+'…”');
+  renderAll();
+}
+function doWithdraw(vowId,bondId){
+  const v=state.vows.find(x=>x.id===vowId);
+  if(!v||v.status!=='OPEN')return toast('Bonds lock once proof is posted','err');
+  const i=v.bonds.findIndex(b=>b.id===bondId);
+  if(i<0||v.bonds[i].addr!==myAddr())return toast('Not your bond','err');
+  const b=v.bonds.splice(i,1)[0];
+  state.ledgerBal+=b.amount;
+  L('WITHDRAW',myName()+' withdrew '+fmt(b.amount,2)+' SOL bond from “'+v.title+'”',+b.amount,{vow:v.id});
+  dirtyFlag=true;save();
+  toast('Bond withdrawn — '+fmt(b.amount,2)+' SOL returned');
+  renderAll();
+}
+async function doProof(vowId,url){
+  const v=state.vows.find(x=>x.id===vowId);
+  if(!v||v.status!=='OPEN')return toast('This vow already has a proof','err');
+  let oc=null;
+  if(state.mode==='live'){
+    try{oc=await onchain({app:'oath',v:1,act:'PROOF',vow:v.id,by:myAddr(),proof:url},'Proof',null);}
+    catch(e){oc={err:e.message};}
+  }else oc={sim:true,id:simId()};
+  v.status='PROOF';v.proofUrl=url;v.proofAt=effNow();v.windowEnds=effNow()+24*H;
+  L('PROOF',v.owner.name+' posted proof for “'+v.title+'” — 24h dispute window opened',null,
+    {vow:v.id,sig:oc.sig,simId:oc.sim?oc.id:undefined});
+  dirtyFlag=true;save();
+  if(oc.err)toast('Local state updated — on-chain send failed: '+oc.err,'err');
+  else toast('Proof sealed — the jury window is open for 24h','ok');
+  renderAll();
+}
+async function doCreate(f){
+  const now=effNow();
+  const id='OV-'+(100+state.vows.length)+'-'+simId().slice(0,3);
+  const vow={id,title:f.title,cat:f.cat,owner:{addr:myAddr(),name:myName()},stake:f.stake,
+    createdAt:now,deadline:now+f.days*D,status:'OPEN',bonds:[]};
+  const extra=(f.lock&&state.mode==='live')?{to:vaultAddr(id),lamports:f.stake}:null;
+  let oc=null;
+  if(state.mode==='live'){
+    try{oc=await onchain({app:'oath',v:1,act:'CREATE',vow:id,title:f.title,by:myAddr(),stake:f.stake,due:vow.deadline,lock:!!f.lock},'Seal vow',extra);}
+    catch(e){oc={err:e.message};}
+  }else oc={sim:true,id:simId()};
+  state.ledgerBal-=f.stake;
+  state.vows.unshift(vow);
+  L('CREATE',myName()+' sealed “'+f.title+'” — '+fmt(f.stake,2)+' SOL stake, due in '+f.days+' days',-f.stake,
+    {vow:id,sig:oc.sig,simId:oc.sim?oc.id:undefined});
+  dirtyFlag=true;save();
+  if(oc.err)toast('Local state updated — on-chain send failed: '+oc.err,'err');
+  else if(oc.sig)toast('⚖ Vow sealed on-chain — '+shortS(oc.sig)+' <a target="_blank" rel="noopener" href="'+sigLink(oc.sig)+'">explorer →</a>','ok');
+  else toast('⚖ Vow sealed: “'+f.title.slice(0,34)+(f.title.length>34?'…':'')+'”','ok');
+  tab='market';filter='all';renderAll();
+}
+function doClaim(kind,vowId){
+  const v=state.vows.find(x=>x.id===vowId);
+  if(!v)return;
+  const key=vowId+':'+kind;
+  if(state.claims.some(c=>c.key===key))return toast('Already claimed','err');
+  let amt=0,txt='';
+  if(kind==='stake'){
+    if(v.status!=='KEPT'||v.owner.addr!==myAddr())return;
+    amt=v.stake;
+    txt='Claimed '+fmt(amt,2)+' SOL stake return — “'+v.title+'” was kept';
+  }else{
+    if(v.status!=='FAILED')return;
+    const b=v.bonds.find(x=>x.addr===myAddr()&&v.res&&v.res.payouts[x.id]);
+    if(!b)return toast('No claimable bond payout','err');
+    amt=v.res.payouts[b.id];
+    txt='Claimed '+fmt(amt,4)+' SOL from liquidation of “'+v.title+'”';
+  }
+  state.ledgerBal+=amt;
+  state.claims.push({key,amount:amt,at:effNow(),vow:vowId,kind});
+  L('CLAIM',myName()+' — '+txt,+amt,{vow:vowId});
+  dirtyFlag=true;save();
+  if(state.mode==='live'){
+    onchain({app:'oath',v:1,act:'CLAIM',vow:vowId,kind,by:myAddr(),amount:amt},'Claim',null).catch(()=>{});
+  }
+  toast('Claimed '+fmt(amt,4)+' SOL ✓','ok');
+  renderAll();
+}
+function skipTime(ms){
+  state.sim.timeSkip=(state.sim.timeSkip||0)+ms;
+  save();dirtyFlag=true;
+  resolveNow();
+  toast('Demo clock advanced '+(ms<D?fmt(ms/H,1)+'h':fmt(ms/D,1)+'d')+' — the market moved on','');
+  renderAll();
+}
+function resetDemo(){
+  try{localStorage.removeItem(LS);}catch(e){}
+  location.reload();
+}
+
+/* ---------------- rendering ---------------- */
+function cdText(ms){
+  if(ms<=0)return'0s';
+  const s=Math.floor(ms/1000);
+  if(s<3600)return Math.floor(s/60)+'m '+(s%60)+'s';
+  const h=Math.floor(s/3600);
+  if(h<48)return h+'h '+Math.floor((s%3600)/60)+'m';
+  return Math.floor(h/24)+'d '+(h%24)+'h';
+}
+function agoText(ts){
+  const d=effNow()-ts;
+  if(d<0)return cdText(-d)+' ahead';
+  if(d<H)return Math.floor(d/6e4)+'m ago';
+  if(d<D)return Math.floor(d/H)+'h ago';
+  return Math.floor(d/D)+'d ago';
+}
+function statusChip(v){
+  const r=riskOf(v);
+  if(v.status==='OPEN')return r==='hot'?'<span class="chip st risk">AT RISK</span>':(r==='warm'?'<span class="chip st open">OPEN · TIGHT</span>':'<span class="chip st open">OPEN</span>');
+  if(v.status==='PROOF')return'<span class="chip st proof">IN DISPUTE</span>';
+  if(v.status==='KEPT')return'<span class="chip st kept">KEPT</span>';
+  return'<span class="chip st failed">LIQUIDATED</span>';
+}
+function weightBar(v){
+  const p=pool(v);
+  let forPct;
+  if(v.status==='KEPT')forPct=100;
+  else if(v.status==='FAILED')forPct=0;
+  else forPct=(v.stake+p)>0?(v.stake/(v.stake+p))*100:50;
+  forPct=Math.max(0,Math.min(100,forPct));
+  const against=100-forPct;
+  return '<div class="wbar"><i style="width:'+forPct.toFixed(1)+'%"></i></div>'+
+    '<div class="wlab"><span>'+forPct.toFixed(0)+'% for</span><span>'+against.toFixed(0)+'% against</span></div>';
+}
+function vowCard(v){
+  const me=myAddr();
+  const isMine=me&&v.owner.addr===me;
+  const p=pool(v);
+  let actions='';
+  if(v.status==='OPEN'){
+    if(isMine)actions+='<button class="btn gold sm" data-act="proof:'+v.id+'">Post proof</button>';
+    else if(me)actions+='<button class="btn gold sm" data-act="bet:'+v.id+'">Bet against</button>';
+    else actions+='<button class="btn ghost sm" data-act="bet:'+v.id+'">Bet against</button>';
+    if(me)for(const b of v.bonds){
+      if(b.addr===me)actions+='<button class="btn ghost sm" data-act="wd:'+v.id+':'+b.id+'">Withdraw '+fmt(b.amount,2)+' SOL</button>';
+    }
+  }else if(v.status==='PROOF'){
+    const lean=p>v.stake;
+    actions+='<a class="btn ghost sm" href="'+esc(v.proofUrl)+'" target="_blank" rel="noopener">View proof ↗</a>';
+    if(me)for(const b of v.bonds){
+      if(b.addr===me)actions+='<span class="mono" style="font-size:11px;color:var(--dim)">your '+fmt(b.amount,2)+' SOL bond is locked until verdict</span>';
+    }
+  }else if(v.status==='KEPT'&&isMine&&!state.claims.some(c=>c.key===v.id+':stake')){
+    actions+='<button class="btn gold sm" data-act="claim:stake:'+v.id+'">Claim '+fmt(v.stake,2)+' SOL back</button>';
+  }else if(v.status==='FAILED'&&me){
+    const b=v.bonds.find(x=>x.addr===me&&v.res&&v.res.payouts[x.id]);
+    if(b&&!state.claims.some(c=>c.key===v.id+':bond'))
+      actions+='<button class="btn gold sm" data-act="claim:bond:'+v.id+'">Claim '+fmt(v.res.payouts[b.id],4)+' SOL</button>';
+  }
+  const stamp=v.status==='KEPT'?'<div class="stamp kept">KEPT</div>':(v.status==='FAILED'?'<div class="stamp failed">LIQUIDATED</div>':'');
+  let proofbox='';
+  if(v.status==='PROOF'){
+    const lean=p>v.stake;
+    proofbox='<div class="proofbox">Proof posted '+agoText(v.proofAt)+' · dispute closes <b class="mono cd" data-cd="'+v.id+':window">'+cdText(v.windowEnds-effNow())+'</b><br>'+
+      '<span class="'+(lean?'lean-fail':'lean-keep')+'">'+(lean?'⚠ jury leaning LIQUIDATE — bonds outweigh the stake':'jury leaning KEEP — stake outweighs the bonds')+'</span></div>';
+  }
+  let resline='';
+  if(v.res){
+    resline='<div class="resline">'+(v.status==='KEPT'
+      ?'Settled '+agoText(v.res.at)+' — stake returned, <b>'+fmt(v.res.burn,2)+' SOL</b> of bonds burned'
+      :'Settled '+agoText(v.res.at)+' — <b>'+fmt(v.stake-v.res.burn,2)+' SOL</b> to challengers, <b>'+fmt(v.res.burn,2)+' SOL</b> burned')+
+      '<br><span class="mono" style="font-size:10.5px;color:var(--dim)">'+v.res.reason+'</span></div>';
+  }
+  const resolved=v.status==='KEPT'||v.status==='FAILED';
+  const dueCell=resolved
+    ?'<div><label>Settled</label><b class="mono" style="font-size:12.5px">'+agoText(v.res.at)+'</b></div>'
+    :'<div><label>'+(v.status==='PROOF'?'Verdict':'Settles')+'</label><b class="mono cd '+(v.status!=='PROOF'&&(v.deadline-effNow())<24*H?'danger':'')+'" data-cd="'+v.id+':'+(v.status==='PROOF'?'window':'deadline')+'">'+cdText((v.status==='PROOF'?v.windowEnds:v.deadline)-effNow())+'</b></div>';
+  return '<div class="card '+(riskOf(v)==='hot'?'risk ':'')+(isMine?'mine':'')+'">'+
+    '<div class="c-top"><span class="chip cc">'+catName(v.cat)+'</span>'+statusChip(v)+'<span class="c-id mono">'+v.id+'</span></div>'+
+    '<h3>'+esc(v.title)+'</h3>'+
+    '<div class="c-meta">'+(isMine?'<span class="you">'+esc(v.owner.name)+' · you</span>':esc(v.owner.name))+' · sealed '+agoText(v.createdAt)+'</div>'+
+    '<div class="row3">'+
+      '<div><label>Stake</label><b class="mono">'+fmt(v.stake,2)+' <small style="font-size:10px;color:var(--dim)">SOL</small></b></div>'+
+      '<div><label>Bonds</label><b class="mono">'+fmt(p,2)+' <small style="font-size:10px;color:var(--dim)">SOL</small></b></div>'+
+      dueCell+
+    '</div>'+
+    weightBar(v)+
+    proofbox+resline+
+    (actions?'<div class="actions">'+actions+'</div>':'')+
+    stamp+
+  '</div>';
+}
+function renderHeader(){
+  const me=myAddr();
+  const wallet=me
+    ?'<button class="walletbtn" data-act="drawer">'+(state.mode==='live'?'◈ ':'◇ ')+shortA(me)+' <span class="mono" style="font-size:11px;opacity:.75">'+fmt(state.ledgerBal,2)+' SOL</span></button>'
+    :'<button class="walletbtn solid" data-act="connect">Connect wallet</button>';
+  const pill=state.mode==='live'
+    ?'<span class="pill live"><span class="dot on"></span>DEVNET · LIVE</span>'
+    :'<span class="pill sim"><span class="dot"></span>SIM LEDGER</span>';
+  const rpcPill='<span class="pill" title="'+esc(state.rpc)+'"><span class="dot '+(rpcOnline?'on':'off')+'"></span>RPC</span>';
+  let drawer='';
+  if(drawerOpen){
+    const faucet='<a class="minibtn gold" target="_blank" rel="noopener" href="https://faucet.solana.com">devnet faucet ↗</a>';
+    const clock=state.mode==='sim'
+      ?'<h4>Demo clock</h4><div><button class="minibtn" data-act="skip1">⏩ +1h</button><button class="minibtn" data-act="skip24">⏩ +24h</button>'+(state.sim.timeSkip?'<button class="minibtn danger" data-act="clock0">reset clock</button><div class="f-note" style="margin-top:6px">clock +'+cdText(state.sim.timeSkip)+'</div>':'')+'</div>'
+      :'';
+    drawer='<div class="drawer open">'+
+      '<h4>Wallet · '+(state.mode==='live'?esc(state.live.name):'demo')+'</h4>'+
+      '<div class="addrbox" data-act="copyaddr" title="click to copy">'+me+'</div>'+
+      '<div style="margin-top:8px"><a class="minibtn" target="_blank" rel="noopener" href="'+addrLink(me)+'">explorer ↗</a>'+faucet+
+      (state.mode==='live'?'<button class="minibtn danger" data-act="disconnect">disconnect</button>':'')+'</div>'+
+      '<h4>Balances</h4>'+
+      '<div class="drow"><span>OATH ledger</span><b class="mono">'+fmt(state.ledgerBal,4)+' SOL</b></div>'+
+      (state.mode==='live'?'<div class="drow"><span>Wallet (on-chain)</span><b class="mono">'+fmt(state.live.balance||0,4)+' SOL</b></div>'
+      :'<div class="drow"><span>Simulated balance</span><b class="mono">'+fmt(state.sim.balance,4)+' SOL</b></div>')+
+      clock+
+      '<h4>RPC</h4><input class="rpcin" id="rpcin" value="'+esc(state.rpc)+'"><div style="margin-top:6px"><button class="minibtn" data-act="rpcsave">save rpc</button></div>'+
+      (state.mode==='sim'?'<h4>Danger</h4><div><button class="minibtn danger" data-act="resetdemo">reset demo state</button></div>':'')+
+    '</div>';
+  }
+  $('#hrow').innerHTML=
+    '<div class="logo" data-act="tab:market" title="OATH">'+SEAL_SVG+
+      '<span class="wordmark">O<em>A</em>TH</span></div>'+
+    '<span class="tagline">proof of promise</span>'+
+    '<div class="hright">'+rpcPill+pill+wallet+drawer+'</div>';
+}
+function renderBanner(){
+  if(state.mode==='sim'&&!state.sim.dismissed){
+    const p=provider()?true:false;
+    $('#banner-slot').innerHTML='<div class="banner"><span class="mono">PREVIEW</span>'+
+      (p?'Phantom detected — connect for live devnet settlement. Until then the full market runs on a simulated ledger.':'This viewer has no wallet extension or network, so the full market runs on a <b>simulated ledger</b> (3.0 SOL). Open this single file in Chrome + Phantom for real on-chain settlement.')+
+      (p?'<button data-act="connect">Connect Phantom</button>':'')+
+      '<button class="x" data-act="bannerx" title="dismiss">✕</button></div>';
+  }else $('#banner-slot').innerHTML='';
+}
+function renderHero(){
+  const act=state.vows.filter(v=>v.status==='OPEN'||v.status==='PROOF');
+  const pledged=act.reduce((a,v)=>a+v.stake,0);
+  const bonds=act.reduce((a,v)=>a+pool(v),0);
+  const kept=state.vows.filter(v=>v.status==='KEPT').length;
+  const failed=state.vows.filter(v=>v.status==='FAILED').length;
+  const biggest=act.length?Math.max(...act.map(v=>v.stake)):0;
+  let pulse;
+  if(act.length){
+    const top=act.slice().sort((a,b)=>(b.stake+pool(b))-(a.stake+pool(a)))[0];
+    const me=myAddr();
+    pulse='<div class="pulse">'+
+      '<div class="pl-top"><span class="tag"><span class="live-dot"></span>market pulse</span><span class="pl-open">'+act.length+' open vows</span></div>'+
+      '<h3>'+esc(top.title)+'</h3>'+
+      '<div class="pl-meta">'+esc(top.owner.name)+' · '+top.id+'</div>'+
+      '<div class="row3">'+
+        '<div><label>Stake</label><b class="mono">'+fmt(top.stake,2)+'</b></div>'+
+        '<div><label>Bonds</label><b class="mono">'+fmt(pool(top),2)+'</b></div>'+
+        '<div><label>'+(top.status==='PROOF'?'Verdict':'Settles')+'</label><b class="mono cd" data-cd="'+top.id+':'+(top.status==='PROOF'?'window':'deadline')+'">'+cdText((top.status==='PROOF'?top.windowEnds:top.deadline)-effNow())+'</b></div>'+
+      '</div>'+
+      weightBar(top)+
+      '<div class="pl-foot"><span>'+top.bonds.length+' challenger'+(top.bonds.length===1?'':'s')+' · biggest bond '+fmt(Math.max(0,...top.bonds.map(b=>b.amount)),2)+' SOL</span>'+
+      (me?'<button class="btn gold sm" data-act="bet:'+top.id+'">Bet against</button>':'<button class="btn ghost sm" data-act="connect">Connect to bet</button>')+
+      '</div></div>';
+  }else{
+    pulse='<div class="pulse"><div class="pl-top"><span class="tag"><span class="live-dot"></span>market pulse</span></div><h3>The market is quiet.</h3><div class="pl-meta">Seal the first vow.</div><div class="pl-foot"><button class="btn gold sm" data-act="tab:create">Seal a vow</button></div></div>';
+  }
+  $('#hero').innerHTML=
+    '<div>'+
+      '<div class="kicker">Solana · The Accountability Market</div>'+
+      '<h1>Your word,<br><em>priced on-chain.</em></h1>'+
+      '<p class="sub">OATH turns promises into collateral. <b>Stake SOL</b> on something you publicly commit to, let the market <b>bond against it</b>, then <b>post proof</b> — or get liquidated in front of everyone.</p>'+
+      '<div class="cta">'+
+        '<button class="btn gold" data-act="tab:create">⚖ Seal a vow</button>'+
+        '<button class="btn ghost" data-act="tab:market">Browse the market</button>'+
+      '</div>'+
+      '<div class="fine">beta v0.1 · single file · no backend · devnet memos</div>'+
+    '</div>'+pulse;
+  $('#stats-slot').innerHTML='<div class="stats">'+
+    '<div class="stat"><label>Total pledged</label><b class="gd">'+fmt(pledged,1)+'<small>SOL</small></b></div>'+
+    '<div class="stat"><label>Bonds at stake</label><b class="dn">'+fmt(bonds,1)+'<small>SOL</small></b></div>'+
+    '<div class="stat"><label>Vows kept</label><b class="up">'+kept+'</b></div>'+
+    '<div class="stat"><label>Liquidated</label><b class="dn">'+failed+'</b></div>'+
+    '<div class="stat"><label>Biggest stake</label><b>'+fmt(biggest,1)+'<small>SOL</small></b></div>'+
+  '</div>';
+}
+function renderTabs(){
+  const counts={};
+  for(const v of state.vows)counts[v.status]=(counts[v.status]||0)+1;
+  const T=(id,label,n)=>'<button class="'+(tab===id?'on':'')+'" data-act="tab:'+id+'">'+label+(n!==undefined?'<span class="cnt">'+n+'</span>':'')+'</button>';
+  const activeN=counts.OPEN+counts.PROOF||0;
+  $('#tabs').innerHTML=T('market','Market',activeN)+T('create','Create a vow')+T('my','My vows',myAddr()?state.vows.filter(v=>v.owner.addr===myAddr()).length+state.vows.reduce((a,v)=>a+v.bonds.filter(b=>b.addr===myAddr()).length,0):0)+T('ledger','Ledger',state.ledger.length);
+  $('#tab-market').classList.toggle('hidden',tab!=='market');
+  $('#tab-create').classList.toggle('hidden',tab!=='create');
+  $('#tab-my').classList.toggle('hidden',tab!=='my');
+  $('#tab-ledger').classList.toggle('hidden',tab!=='ledger');
+}
+function renderMarket(){
+  const F=[['all','All'],['active','Active'],['risk','At risk'],['dispute','In dispute'],['kept','Kept'],['failed','Liquidated']];
+  const now=effNow();
+  let list=state.vows.slice();
+  if(filter==='active')list=list.filter(v=>v.status==='OPEN'||v.status==='PROOF');
+  else if(filter==='risk')list=list.filter(v=>riskOf(v));
+  else if(filter==='dispute')list=list.filter(v=>v.status==='PROOF');
+  else if(filter==='kept')list=list.filter(v=>v.status==='KEPT');
+  else if(filter==='failed')list=list.filter(v=>v.status==='FAILED');
+  const actScore=v=>(v.status==='OPEN'||v.status==='PROOF')?0:1;
+  list.sort((a,b)=>actScore(a)-actScore(b)||(a.deadline-b.deadline));
+  const cards=list.length?list.map(vowCard).join(''):
+    '<div class="empty" style="grid-column:1/-1"><div class="big">Nothing here.</div>Try another filter — or seal the first vow in this category.</div>';
+  $('#tab-market').innerHTML='<div class="chips">'+F.map(f=>'<button class="chip '+(filter===f[0]?'on':'')+'" data-act="filter:'+f[0]+'">'+f[1]+'</button>').join('')+'</div><div class="grid">'+cards+'</div>';
+}
+function renderCreate(){
+  const live=state.mode==='live';
+  $('#tab-create').innerHTML='<div class="create"><div class="formcard">'+
+    '<h3 style="font-family:var(--serif);font-size:20px">Seal a vow</h3>'+
+    '<div class="f-note" style="margin-top:6px">A vow is a public commitment with SOL behind it. Write it the way a stranger would judge it.</div>'+
+    '<label class="f-label">The promise</label>'+
+    '<input class="f-in" id="f-title" maxlength="90" placeholder="e.g. Ship the refactor and cut the v1.4 tag — with the tests green">'+
+    '<label class="f-label">Category</label>'+
+    '<div class="catrow" id="f-cats">'+CATS.map((c,i)=>'<button class="qc '+(i===0?'on':'')+'" data-cat="'+c.id+'">'+c.n+'</button>').join('')+'</div>'+
+    '<label class="f-label">Stake (SOL)</label>'+
+    '<div class="numrow"><input class="f-in mono" id="f-stake" type="number" step="0.05" min="0.05" max="50" value="1">'+
+    '<button class="qc" data-stake="0.5">0.5</button><button class="qc" data-stake="2">2</button><button class="qc" data-stake="10">10</button></div>'+
+    '<label class="f-label">Deadline</label>'+
+    '<div class="numrow"><input class="f-in mono" id="f-days" type="number" step="1" min="1" max="120" value="14"> <span style="color:var(--dim);font-size:12.5px">days from now</span></div>'+
+    '<div style="margin-top:18px;display:flex;gap:7px"><button class="qc" data-days="7">7d</button><button class="qc" data-days="14">14d</button><button class="qc" data-days="30">30d</button><button class="qc" data-days="60">60d</button></div>'+
+    (live?'<label class="checkrow"><input type="checkbox" id="f-lock"> Also <b>lock the stake on-chain</b> (real transfer to a demo vault) — the beta’s strongest skin-in-the-game. A production release uses a BPF time-lock with program-signed release.</label>':'')+
+    '<div style="margin-top:22px"><button class="btn gold" id="f-submit" style="width:100%;justify-content:center">⚖ Seal the vow</button></div>'+
+  '</div><div class="sumcard" id="sumcard"></div></div>';
+  bindCreate();
+  sumUpdate();
+}
+function sumUpdate(){
+  const t=$('#sumcard');if(!t)return;
+  const s=parseFloat($('#f-stake').value)||0;
+  const d=parseInt($('#f-days').value)||0;
+  const due=new Date(effNow()+d*D);
+  t.innerHTML='<h3>Settlement math</h3><div class="sc-sub">what happens at the deadline</div>'+
+    '<div class="sumline"><span>Due</span><b class="mono">'+(d?due.toLocaleDateString('en-US',{month:'short',day:'numeric'})+(effNow()+d*D-Date.now()>=0?' ':' · '+cdText(d*D)):'—')+'</b></div>'+
+    '<div class="sumline"><span>Your stake</span><b><span class="gd">'+fmt(s,2)+' SOL</span></b></div>'+
+    '<div class="sumline"><span>If kept</span><b><span class="gn">'+fmt(s,2)+' back</span> · bonds burned</b></div>'+
+    '<div class="sumline"><span>If defaulted</span><b><span class="rd">'+fmt(s*0.95,2)+' → challengers</span></b></div>'+
+    '<div class="sumline"><span>Protocol burn</span><b><span class="rd">'+fmt(s*0.05,2)+' SOL</span> (5%)</b></div>'+
+    '<div class="sumline"><span>Bond cap per challenger</span><b class="mono">'+fmt(Math.min(s*2,999),2)+' SOL (2×)</b></div>'+
+    '<div class="sumwarn"><b>Proof &amp; jury.</b> Post a link to evidence any time before the deadline. A 24-hour dispute window opens, then a <b>stake-weighted jury</b> decides: your stake vs. total bonds. Keep it — your stake returns. Lose it — 95% of the stake pays the challengers pro-rata. Protocol fee: <b>0</b> (beta).</div>';
+}
+let createCat=CATS[0].id;
+function bindCreate(){
+  $('#f-cats').addEventListener('click',e=>{
+    const b=e.target.closest('[data-cat]');if(!b)return;
+    createCat=b.dataset.cat;
+    $('#f-cats').querySelectorAll('.qc').forEach(x=>x.classList.toggle('on',x===b));
+  });
+  for(const id of ['f-stake','f-days'])$('#'+id).addEventListener('input',sumUpdate);
+  document.querySelectorAll('[data-stake]').forEach(b=>b.addEventListener('click',()=>{$('#f-stake').value=b.dataset.stake;sumUpdate();}));
+  document.querySelectorAll('[data-days]').forEach(b=>b.addEventListener('click',()=>{$('#f-days').value=b.dataset.days;sumUpdate();}));
+  $('#f-submit').addEventListener('click',()=>{
+    const title=$('#f-title').value.trim();
+    const stake=parseFloat($('#f-stake').value);
+    const days=parseInt($('#f-days').value);
+    if(title.length<4)return toast('The promise needs a few more words','err');
+    if(!(stake>=0.05))return toast('Minimum stake is 0.05 SOL','err');
+    if(stake>50)return toast('Max stake in beta is 50 SOL','err');
+    if(!(days>=1&&days<=120))return toast('Deadline must be 1–120 days','err');
+    if(state.ledgerBal<stake)return toast('Not enough balance — you have '+fmt(state.ledgerBal,2)+' SOL','err');
+    const f={title,stake,days,cat:createCat,lock:($('#f-lock')?$('#f-lock').checked:false)};
+    ensureWallet(()=>doCreate(f));
+  });
+}
+function renderMy(){
+  const el=$('#tab-my');
+  if(!myAddr()){
+    el.innerHTML='<div class="empty"><div class="big">No wallet.</div>Connect (or use the demo wallet) to seal vows and bet against others.</div>'+
+      '<div style="text-align:center"><button class="btn gold" data-act="connect">Connect wallet</button></div>';
+    return;
+  }
+  const me=myAddr();
+  const mine=state.vows.filter(v=>v.owner.addr===me);
+  const myBonds=[];
+  for(const v of state.vows)for(const b of v.bonds)if(b.addr===me)myBonds.push({v,b});
+  const staked=mine.filter(v=>v.status==='OPEN'||v.status==='PROOF').reduce((a,v)=>a+v.stake,0);
+  const betting=myBonds.filter(x=>x.v.status==='OPEN'||x.v.status==='PROOF').reduce((a,x)=>a+x.b.amount,0);
+  const claimed=state.claims.reduce((a,c)=>a+c.amount,0);
+  let betRows='';
+  if(myBonds.length){
+    betRows=myBonds.slice().reverse().map(({v,b})=>{
+      let exp='',btn='';
+      if(v.status==='OPEN'){
+        const p2=pool(v);
+        exp='if fails: '+fmt(v.stake*0.95*b.amount/p2,4)+' SOL';
+        btn='<button class="btn ghost sm" data-act="wd:'+v.id+':'+b.id+'">Withdraw</button>';
+      }else if(v.status==='PROOF')exp='locked · awaiting verdict';
+      else if(v.status==='FAILED'&&v.res&&v.res.payouts[b.id])btn='<button class="btn gold sm" data-act="claim:bond:'+v.id+'">Claim '+fmt(v.res.payouts[b.id],4)+'</button>';
+      else if(v.status==='KEPT')exp='bond burned ✕';
+      else if(v.status==='FAILED')exp='no payout';
+      return '<div class="betrow"><div class="bt"><b>'+esc(v.title)+'</b><small>'+v.id+' · '+esc(v.owner.name)+'</small></div>'+
+        '<span class="ba mono">'+fmt(b.amount,2)+' SOL</span>'+
+        '<span class="be">'+exp+'</span>'+btn+'</div>';
+    }).join('');
+  }
+  el.innerHTML=
+    '<div class="mysum stats" style="margin:0">'+
+      '<div class="stat"><label>OATH ledger</label><b class="gd">'+fmt(state.ledgerBal,3)+'<small>SOL</small></b></div>'+
+      '<div class="stat"><label>Staked in vows</label><b>'+fmt(staked,2)+'<small>SOL</small></b></div>'+
+      '<div class="stat"><label>Bonded out</label><b class="dn">'+fmt(betting,2)+'<small>SOL</small></b></div>'+
+      '<div class="stat"><label>Claimed total</label><b class="up">'+fmt(claimed,3)+'<small>SOL</small></b></div>'+
+    '</div>'+
+    '<div class="sect">Your vows · '+mine.length+'</div>'+
+    (mine.length?'<div class="grid">'+mine.map(vowCard).join('')+'</div>':'<div class="empty">No vows yet. Say something true and put SOL behind it.</div>')+
+    '<div class="sect">Your bonds · '+myBonds.length+'</div>'+
+    (betRows||'<div class="empty">No open bonds. Bet against a vow you think will fail.</div>');
+}
+function renderLedger(){
+  const el=$('#tab-ledger');
+  if(!state.ledger.length){el.innerHTML='<div class="empty">The ledger is empty.</div>';return;}
+  const ICON={CREATE:['⚖','g'],BOND:['⇣','red'],WITHDRAW:['⇡','blu'],PROOF:['⊙','blu'],RESOLVE:['✓','grn'],CLAIM:['◉','grn'],ERR:['!','red'],SIM:['·','vio']};
+  el.innerHTML='<div class="ledger">'+state.ledger.map(r=>{
+    const ic=ICON[r.kind]||['·','vio'];
+    const delta=r.delta===null||r.delta===undefined?'':
+      '<span class="ldelta '+(r.delta>0?'plus':'minus')+'">'+(r.delta>0?'+':'')+fmt(r.delta,Math.abs(r.delta)<1?4:2)+'</span>';
+    const sig=r.simId?'<span class="simchip">'+r.simId+'</span>':(r.sig?'<a target="_blank" rel="noopener" href="'+sigLink(r.sig)+'" title="'+r.sig+'">↗ explorer</a>':'');
+    const cluster=state.mode==='live'?'devnet':'sim ledger';
+    return '<div class="lrow"><div class="licon '+ic[1]+'">'+ic[0]+'</div>'+
+      '<div class="ltxt">'+esc(r.text)+'<small>'+new Date(r.ts).toLocaleString('en-US',{month:'short',day:'numeric',hour:'2-digit',minute:'2-digit'})+' · '+cluster+'</small></div>'+
+      delta+'<span class="lsig">'+(sig||'—')+'</span></div>';
+  }).join('')+'</div>';
+}
+function renderMech(){
+  $('#mech').innerHTML=
+    '<h2>The mechanism</h2>'+
+    '<p class="m-sub">Prediction markets proved people will bet SOL on truth. OAIM redirects that liquidity at the only market nobody has built: <b style="color:var(--ink)">your word</b>.</p>'+
+    '<div class="mgrid">'+
+      '<div class="mcard"><span class="n">1</span><h4>Seal</h4><p>A maker stakes SOL on a public promise — title, deadline, proof policy. The stake is the <b>price of the word</b>. No stake, no vow.</p></div>'+
+      '<div class="mcard"><span class="n">2</span><h4>Challenge</h4><p>Anyone bonds SOL <b>against</b> the vow (capped at 2× the stake, so the promise itself always anchors the odds). Bonds are withdrawable until proof is posted — that tension is the market.</p></div>'+
+      '<div class="mcard"><span class="n">3</span><h4>Settle</h4><p>Proof link posted → 24h dispute window → <b>stake-weighted jury</b>: maker’s stake vs. total bonds. Kept: stake returns, bonds burn. Defaulted or overturned: <b>95% of the stake</b> pays challengers pro-rata, 5% burns. Missed deadline = automatic default.</p></div>'+
+    '</div>'+
+    '<div class="why">'+
+      '<div class="wcard"><h4>Why now</h4><p>Promises got infinitely cheap — AI-generated roadmaps, influencer “builds”, council pledges that dissolve by morning. Cheap promises + expensive trust is an untapped market. Prediction markets already showed the demand: <b>truth has liquidity</b>. OATH is that liquidity pointed at the most honest instrument of all: <b>a person’s own deadline</b>.</p></div>'+
+      '<div class="wcard"><h4>Why Solana</h4><p>A 50-lamport fee means a stranger’s <b>0.05 SOL bond is viable</b> — micro-challenges at scale. 400ms finality keeps a 24h jury window <b>tense</b>. And the only audience that already understands “bet against it” without explanation is the Solana crowd. The challenge market is the product; the chain is just the notary.</p></div>'+
+    '</div>'+
+    '<div class="betanote"><b>beta v0.1 · honest about what is real:</b> every action (seal, bond, proof, resolve, claim) is written on-chain as a <b>memo registry entry</b> — verify the sigs in the Solana explorer when running with a wallet. Escrow settlement in this build runs on the in-app ledger (plus an optional real on-chain vault lock at seal time). The production release is a BPF program: timelocked PDA escrow, on-chain dispute queue, program-signed release. One HTML file, zero backend, zero keys held.</div>';
+}
+function renderFoot(){
+  $('#foot').innerHTML=
+    '<span>OATH · proof of promise · <a href="https://explorer.solana.com?cluster=devnet" target="_blank" rel="noopener">solana explorer ↗</a></span>'+
+    '<span class="f-sp">single html file · self-contained solana client (base58 · wire format · json-rpc) · no trackers</span>'+
+    '<span>not financial advice · promises are binding in spirit only</span>';
+}
+let createRenderedMode=null;
+function renderAll(){
+  renderHeader();renderBanner();renderHero();renderTabs();
+  renderMarket();
+  if(tab==='create'){
+    if(createRenderedMode!==state.mode){renderCreate();createRenderedMode=state.mode;}
+  }else createRenderedMode=null;
+  if(tab==='my')renderMy();
+  if(tab==='ledger')renderLedger();
+  renderMech();renderFoot();
+}
+
+/* ---------------- modal & toast ---------------- */
+function openModal(o){
+  const root=$('#modal-root');
+  root.innerHTML='<div class="modal"><h3>'+esc(o.title)+'</h3><div class="m-sub">'+o.sub+'</div>'+(o.body||'')+
+    '<div class="m-actions">'+o.buttons.map(b=>'<button class="btn '+(b.cls||'ghost')+'" data-mact="'+b.act+'">'+esc(b.label)+'</button>').join('')+'</div></div>';
+  root.classList.add('open');
+  root.onclick=e=>{if(e.target===root)closeModal();};
+  root.querySelectorAll('[data-mact]').forEach(b=>b.onclick=()=>{o.onAct&&o.onAct(b.dataset.mact);});
+  const first=root.querySelector('input');if(first)setTimeout(()=>first.focus(),60);
+}
+function closeModal(){$('#modal-root').classList.remove('open');$('#modal-root').innerHTML='';}
+function toast(msg,type){
+  const t=document.createElement('div');
+  t.className='toast'+(type?' '+type:'');
+  t.innerHTML=msg;
+  $('#toasts').appendChild(t);
+  setTimeout(()=>{t.style.transition='opacity .4s';t.style.opacity='0';setTimeout(()=>t.remove(),400);},4600);
+}
+
+/* ---------------- flows ---------------- */
+function betModal(vowId){
+  const v=state.vows.find(x=>x.id===vowId);
+  if(!v)return;
+  ensureWallet(()=>{
+    if(v.status!=='OPEN')return toast('Betting is now closed on this vow','err');
+    const maxBet=Math.min(v.stake*2,Math.max(0,state.ledgerBal-0.005));
+    openModal({
+      title:'Bond against “'+v.title.slice(0,40)+(v.title.length>40?'…':'')+'”',
+      sub:esc(v.owner.name)+' staked <b>'+fmt(v.stake,2)+' SOL</b>. Total bonds: <b>'+fmt(pool(v),2)+' SOL</b>. You profit only if the vow <b>defaults or is overturned</b>.',
+      body:'<label class="f-label" style="margin-top:0">Bond amount (SOL)</label>'+
+        '<div class="numrow"><input class="f-in mono" id="m-amt" type="number" step="0.01" min="0.01" value="0.1">'+
+        '<button class="qc" data-mamt="0.1">0.1</button><button class="qc" data-mamt="0.5">0.5</button><button class="qc" data-mamt="2">2</button><button class="qc" data-mamt="max">max</button></div>'+
+        '<div class="f-note" id="m-math"></div>',
+      buttons:[{label:'Cancel',cls:'ghost',act:'cancel'},{label:'Bond SOL',cls:'gold',act:'go'}],
+      onAct:a=>{
+        if(a==='cancel')return closeModal();
+        let amt=parseFloat($('#m-amt').value);
+        if(a==='go'&&isNaN(amt))amt=0.1;
+        closeModal();
+        doBet(vowId,amt);
+      }
+    });
+    const recalc=()=>{
+      const amt=Math.max(0,parseFloat($('#m-amt').value)||0);
+      const p2=pool(v)+amt;
+      const payout=v.stake*0.95*amt/p2;
+      $('#m-math').innerHTML='If the vow fails: you receive <b class="mono" style="color:var(--grn)">'+fmt(payout,4)+' SOL</b> (net '+(payout>=amt?'+':'')+fmt(payout-amt,4)+') · bond cap '+fmt(maxBet,2)+' SOL';
+    };
+    $('#m-amt').addEventListener('input',recalc);
+    $('#m-amt').addEventListener('change',recalc);
+    document.querySelectorAll('[data-mamt]').forEach(b=>b.addEventListener('click',()=>{
+      $('#m-amt').value=b.dataset.mamt==='max'?maxBet.toFixed(2):b.dataset.mamt;recalc();
+    }));
+    recalc();
+  });
+}
+function proofModal(vowId){
+  const v=state.vows.find(x=>x.id===vowId);
+  if(!v)return;
+  ensureWallet(()=>{
+    openModal({
+      title:'Post proof',
+      sub:'Link evidence for “'+esc(v.title)+'”. The <b>24h dispute window</b> opens immediately — your <b>'+fmt(v.stake,2)+' SOL</b> stake faces <b>'+fmt(pool(v),2)+' SOL</b> of bonds in a stake-weighted jury vote. If bonds outweigh you, the stake pays them.',
+      body:'<label class="f-label" style="margin-top:0">Proof URL</label><input class="f-in mono" id="m-proof" placeholder="https://… (repo tag, lab report, strava, council minutes)">',
+      buttons:[{label:'Cancel',cls:'ghost',act:'cancel'},{label:'Seal proof',cls:'gold',act:'go'}],
+      onAct:a=>{
+        if(a==='cancel')return closeModal();
+        const url=$('#m-proof').value.trim();
+        if(!/^https?:\/\/.+/i.test(url))return toast('Proof needs a valid https:// URL','err');
+        closeModal();doProof(vowId,url);
+      }
+    });
+  });
+}
+function doAct(a){
+  const parts=a.split(':');
+  switch(parts[0]){
+    case'tab':tab=parts[1];if(tab==='create'){createCat=CATS[0].id;}dirtyFlag=true;renderAll();
+      if(tab!=='market')window.scrollTo({top:$('#tabs').offsetTop-70,behavior:'smooth'});
+      break;
+    case'filter':filter=parts[1];dirtyFlag=true;renderAll();break;
+    case'connect':ensureWallet(null);break;
+    case'conn:demo':connectDemo();closeModal();break;
+    case'conn:provider':connectProvider().then(closeModal).catch(e=>{toast(e.message,'err');closeModal();});break;
+    case'drawer':drawerOpen=!drawerOpen;renderAll();break;
+    case'copyaddr':{
+      const me=myAddr();
+      if(!me)break;
+      const done=()=>toast('Address copied','ok');
+      if(navigator.clipboard&&navigator.clipboard.writeText)navigator.clipboard.writeText(me).then(done).catch(()=>fallbackCopy(me,done));
+      else fallbackCopy(me,done);
+      break;
+    }
+    case'disconnect':disconnectWallet();drawerOpen=false;break;
+    case'skip1':skipTime(H);drawerOpen=false;break;
+    case'skip24':skipTime(D);drawerOpen=false;break;
+    case'clock0':state.sim.timeSkip=0;save();dirtyFlag=true;resolveNow();toast('Demo clock reset');drawerOpen=false;break;
+    case'resetdemo':if(confirm('Reset all demo state?'))resetDemo();break;
+    case'rpcsave':{
+      const inp=$('#rpcin');
+      if(inp&&inp.value.trim()){state.rpc=inp.value.trim();save();drawerOpen=false;checkRpc();toast('RPC saved — '+state.rpc.slice(0,40));}
+      break;
+    }
+    case'bannerx':state.sim.dismissed=true;save();renderBanner();break;
+    case'bet':betModal(parts[1]);break;
+    case'proof':proofModal(parts[1]);break;
+    case'wd':doWithdraw(parts[1],parts[2]);break;
+    case'claim':doClaim(parts[1],parts[2]);break;
+  }
+}
+function fallbackCopy(text,done){
+  const ta=document.createElement('textarea');
+  ta.value=text;ta.style.position='fixed';ta.style.opacity='0';
+  document.body.appendChild(ta);ta.select();
+  try{document.execCommand('copy');done();}catch(e){toast('Copy failed — select it manually','err');}
+  ta.remove();
+}
+
+/* ---------------- init ---------------- */
+const SEAL_SVG='<svg viewBox="0 0 48 48" fill="none"><circle cx="24" cy="24" r="21" stroke="#d9b45c" stroke-width="2"/><circle cx="24" cy="24" r="15.5" stroke="#d9b45c" stroke-width="1" opacity=".55"/>'+
+  [0,45,90,135,180,225,270,315].map(a=>'<line x1="24" y1="4.5" x2="24" y2="8" stroke="#d9b45c" stroke-width="1.4" transform="rotate('+a+' 24 24)" opacity=".8"/>').join('')+
+  '<path d="M24 13.5l2.6 7.9 7.9 2.6-7.9 2.6-2.6 7.9-2.6-7.9-7.9-2.6 7.9-2.6z" fill="#d9b45c"/></svg>';
+
+function checkRpc(){
+  rpc(state.rpc,'getHealth',[],6000)
+    .then(()=>{if(!rpcOnline){rpcOnline=true;renderHeader();}})
+    .catch(()=>{if(rpcOnline){rpcOnline=false;renderHeader();}});
+}
+function tick(){
+  tickN++;
+  document.querySelectorAll('[data-cd]').forEach(el=>{
+    const m=el.dataset.cd.match(/^(.+):(deadline|window)$/);
+    if(!m)return;
+    const v=state.vows.find(x=>x.id===m[1]);
+    if(!v)return;
+    const target=m[2]==='window'?v.windowEnds:v.deadline;
+    el.textContent=cdText(target-effNow());
+  });
+  resolveNow();
+  if(state.mode==='live'&&state.live.provider&&tickN%25===0){
+    getBalanceSol(state.rpc,state.live.addr).then(b=>{state.live.balance=b;dirtyFlag=true;}).catch(()=>{});
+  }
+  if(dirtyFlag){dirtyFlag=false;renderAll();}
+}
+load();
+provName=provider()?(provider().isPhantom?'Phantom':(provider().name||'Solflare')):null;
+document.addEventListener('click',e=>{
+  const b=e.target.closest('[data-act]');
+  if(b){e.preventDefault();doAct(b.dataset.act);}
+});
+window.addEventListener('keydown',e=>{if(e.key==='Escape'){closeModal();drawerOpen=false;renderAll();}});
+renderAll();
+checkRpc();
+setInterval(checkRpc,60000);
+setInterval(tick,1000);
+</script>
+</body>
+</html>
