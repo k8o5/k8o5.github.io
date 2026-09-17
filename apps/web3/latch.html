@@ -1,0 +1,1330 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8" />
+<meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover" />
+<title>LATCH — Unsend for Solana</title>
+<meta name="description" content="Send SOL that hasn't latched yet. They claim it. You can pull it back until they do. No program, no custody, one HTML file." />
+<meta name="theme-color" content="#0c0b0a" />
+<link rel="icon" href="data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 32 32'%3E%3Crect fill='%230c0b0a' width='32' height='32' rx='8'/%3E%3Cpath fill='%23e25b3a' d='M9 14h14v3H9z'/%3E%3Crect x='18' y='11' width='5' height='9' rx='1.5' fill='%23e8c572'/%3E%3C/svg%3E" />
+<link rel="preconnect" href="https://fonts.googleapis.com" />
+<link rel="preconnect" href="https://fonts.gstatic.com" crossorigin />
+<link href="https://fonts.googleapis.com/css2?family=Fraunces:opsz,wght@9..144,400;9..144,600;9..144,700&family=Outfit:wght@380;500;600&family=IBM+Plex+Mono:wght@400;500&display=swap" rel="stylesheet" />
+<script src="https://cdn.jsdelivr.net/npm/@solana/web3.js@1.98.4/lib/index.iife.min.js"></script>
+<script src="https://cdn.jsdelivr.net/npm/qrcode@1.5.4/build/qrcode.min.js"></script>
+<style>
+:root {
+  --bg: #0c0b0a;
+  --bg2: #141210;
+  --paper: #181614;
+  --paper2: #1f1c19;
+  --line: rgba(243,234,216,.08);
+  --line2: rgba(243,234,216,.16);
+  --ink: #f3ead8;
+  --muted: #9a9284;
+  --dim: #6b655b;
+  --wax: #e25b3a;
+  --wax2: #c4472c;
+  --gold: #e8c572;
+  --good: #9dcc7a;
+  --warn: #e0a257;
+  --bad: #e07070;
+  --shadow: 0 24px 60px rgba(0,0,0,.45);
+  --serif: "Fraunces", ui-serif, Georgia, serif;
+  --sans: "Outfit", ui-sans-serif, system-ui, sans-serif;
+  --mono: "IBM Plex Mono", ui-monospace, monospace;
+}
+* { box-sizing: border-box; margin: 0; padding: 0; }
+html, body { background: var(--bg); color: var(--ink); font-family: var(--sans); min-height: 100%; }
+body {
+  background:
+    radial-gradient(1200px 600px at 80% -10%, rgba(226,91,58,.12), transparent 55%),
+    radial-gradient(900px 500px at -10% 110%, rgba(232,197,114,.07), transparent 50%),
+    var(--bg);
+}
+button, input, select, textarea { font: inherit; color: inherit; }
+button { cursor: pointer; }
+a { color: var(--gold); }
+.wrap { width: min(1120px, calc(100% - 32px)); margin: 0 auto; }
+.top {
+  position: sticky; top: 0; z-index: 40;
+  backdrop-filter: blur(16px);
+  background: color-mix(in srgb, var(--bg) 78%, transparent);
+  border-bottom: 1px solid var(--line);
+}
+.top-in { display: flex; align-items: center; gap: 18px; height: 64px; }
+.brand { display: flex; align-items: center; gap: 10px; text-decoration: none; color: var(--ink); }
+.mark { width: 28px; height: 28px; }
+.word { font-family: var(--serif); font-weight: 600; letter-spacing: .12em; font-size: 14px; }
+.nav { display: flex; gap: 4px; margin-left: 8px; flex-wrap: wrap; }
+.nav button, .linkish {
+  background: none; border: 0; color: var(--muted); padding: 8px 10px; border-radius: 999px;
+}
+.nav button.on, .nav button:hover { color: var(--ink); background: var(--paper2); }
+.spacer { flex: 1; }
+.pill, .btn, .btn-wax, .btn-ghost {
+  border-radius: 999px; border: 1px solid var(--line2); background: var(--paper);
+  padding: 8px 14px; font-size: 13px;
+}
+.btn { background: var(--ink); color: #1a120c; border-color: transparent; font-weight: 600; }
+.btn:hover { filter: brightness(1.05); }
+.btn:disabled { opacity: .45; cursor: not-allowed; }
+.btn-wax { background: linear-gradient(#f07856, var(--wax2)); border-color: transparent; color: #fff; font-weight: 600; box-shadow: 0 8px 24px rgba(196,71,44,.28); }
+.btn-ghost { background: transparent; }
+.btn-danger { background: #3a1a1a; color: #ffd0d0; border-color: #5a2a2a; }
+.tiny { font-size: 12px; color: var(--muted); }
+.warn-net {
+  display: none; text-align: center; padding: 8px; background: #3a2a12; color: #f3d9a4; font-size: 12px;
+}
+.warn-net.on { display: block; }
+.hero { padding: 72px 0 40px; display: grid; grid-template-columns: 1.15fr .85fr; gap: 48px; align-items: center; }
+h1 { font-family: var(--serif); font-weight: 600; font-size: clamp(40px, 6vw, 72px); line-height: .95; letter-spacing: -.03em; }
+.lede { margin-top: 18px; font-size: 18px; color: var(--muted); max-width: 46ch; line-height: 1.45; }
+.cta { display: flex; gap: 10px; margin-top: 28px; flex-wrap: wrap; }
+.facts { display: flex; gap: 22px; margin-top: 28px; color: var(--dim); font-size: 13px; flex-wrap: wrap; }
+.facts b { color: var(--ink); font-weight: 500; display: block; }
+.envelope {
+  position: relative; background: linear-gradient(#221e1a, #171412);
+  border: 1px solid var(--line2); border-radius: 24px; padding: 28px; box-shadow: var(--shadow);
+  min-height: 340px; overflow: hidden;
+}
+.envelope:before {
+  content: ""; position: absolute; inset: 0 0 auto; height: 86px;
+  background: linear-gradient(180deg, #2a2420, #1b1714);
+  clip-path: polygon(0 0, 100% 0, 50% 100%);
+  opacity: .9;
+}
+.wax {
+  width: 92px; height: 92px; border-radius: 50%; margin: 64px auto 16px; position: relative;
+  background: radial-gradient(circle at 32% 28%, #f39b82, #d24a2e 42%, #7c2416 78%);
+  box-shadow: inset 0 0 0 7px rgba(90,18,10,.28), 0 12px 28px rgba(0,0,0,.35);
+}
+.wax:after {
+  content: "L"; position: absolute; inset: 0; display: grid; place-items: center;
+  font-family: var(--serif); font-size: 34px; color: #ffd8cc;
+}
+.e-meta { text-align: center; position: relative; }
+.e-meta .amt { font-family: var(--serif); font-size: 36px; }
+.e-meta .sub { color: var(--muted); margin-top: 6px; font-size: 13px; }
+.steps { display: grid; grid-template-columns: repeat(3, 1fr); gap: 14px; padding: 10px 0 64px; }
+.card, .panel {
+  background: var(--paper); border: 1px solid var(--line); border-radius: 20px; padding: 18px 22px 22px;
+}
+.card h3, .panel h2 { font-family: var(--serif); font-size: 22px; font-weight: 600; }
+.card p, .panel p { color: var(--muted); margin-top: 8px; line-height: 1.5; }
+.n { color: var(--gold); font-family: var(--mono); font-size: 12px; }
+.view { display: none; padding: 20px 0 80px; }
+.view.on { display: block; }
+.grid2 { display: grid; grid-template-columns: 1.1fr .9fr; gap: 18px; }
+label { display: block; font-size: 12px; color: var(--muted); margin: 10px 0 5px; }
+.field, select, textarea {
+  width: 100%; background: #0e0d0c; border: 1px solid var(--line2); border-radius: 14px;
+  padding: 12px 14px; outline: none;
+}
+.field:focus, select:focus, textarea:focus { border-color: #8a5a3a; }
+.row { display: flex; gap: 10px; }
+.row > * { flex: 1; }
+.seg { display: flex; background: #0e0d0c; border-radius: 999px; padding: 4px; border: 1px solid var(--line); }
+.seg button { flex: 1; background: none; border: 0; color: var(--muted); padding: 8px; border-radius: 999px; }
+.seg button.on { background: var(--paper2); color: var(--ink); }
+.bigamt { font-family: var(--serif); font-size: 36px; padding: 4px; background: none; border: 0; width: 100%; outline: none; }
+.actions { display: flex; gap: 10px; margin-top: 22px; flex-wrap: wrap; }
+.toast {
+  position: fixed; bottom: 24px; left: 50%; transform: translateX(-50%);
+  background: #2a221c; border: 1px solid var(--gold); padding: 12px 16px; border-radius: 12px;
+  display: none; z-index: 70; max-width: min(92vw, 520px); font-size: 14px;
+  box-shadow: var(--shadow);
+}
+.toast.on { display: block; }
+.drawer { display: grid; gap: 10px; }
+.item {
+  display: grid; grid-template-columns: 72px 1fr auto; gap: 14px; align-items: center;
+  background: var(--paper); border: 1px solid var(--line); border-radius: 18px; padding: 14px 16px;
+}
+.dot { width: 10px; height: 10px; border-radius: 50%; display: inline-block; margin-right: 6px; }
+.dot.live { background: var(--good); box-shadow: 0 0 0 4px rgba(157,204,122,.12); }
+.dot.dead { background: var(--dim); }
+.dot.back { background: var(--warn); }
+.mono { font-family: var(--mono); font-size: 12px; color: var(--muted); word-break: break-all; }
+.qr { background: #fff; border-radius: 16px; padding: 12px; display: inline-block; }
+.modal {
+  position: fixed; inset: 0; background: rgba(0,0,0,.55); display: none; place-items: center; z-index: 60; padding: 20px;
+}
+.modal.on { display: grid; }
+.sheet { width: min(560px, 100%); background: var(--bg2); border: 1px solid var(--line2); border-radius: 24px; padding: 24px; }
+.stat { display: flex; justify-content: space-between; gap: 12px; padding: 10px 0; border-bottom: 1px solid var(--line); }
+.hidden { display: none !important; }
+.empty { text-align: center; padding: 40px 10px; color: var(--muted); }
+.wallet { display: flex; align-items: center; gap: 8px; }
+.ok { color: var(--good); }
+.bad { color: var(--bad); }
+.foot { padding: 28px 0 48px; color: var(--dim); font-size: 12px; border-top: 1px solid var(--line); }
+@media (max-width: 860px) {
+  .hero, .grid2, .steps { grid-template-columns: 1fr; }
+  .top-in { height: auto; min-height: 64px; flex-wrap: wrap; padding: 8px 0; }
+  .nav { margin-left: 0; width: 100%; order: 5; }
+  h1 { font-size: 44px; }
+  .item { grid-template-columns: 1fr; }
+}
+@media (prefers-reduced-motion: reduce) {
+  * { transition: none !important; animation: none !important; }
+}
+</style>
+</head>
+<body>
+<header class="top">
+  <div class="warn-net" id="mainnetWarn">Mainnet is live money. Latches are real SOL/USDC until claimed or recalled.</div>
+  <div class="wrap top-in">
+    <a class="brand" href="#/home" id="brand">
+      <svg class="mark" viewBox="0 0 32 32" aria-hidden="true">
+        <rect x="4" y="14" width="24" height="4.2" rx="1.2" fill="#e25b3a"/>
+        <rect x="19" y="10" width="7" height="12" rx="2" fill="#e8c572"/>
+      </svg>
+      <span class="word">LATCH</span>
+    </a>
+    <nav class="nav" id="nav">
+      <button data-go="latch">Seal</button>
+      <button data-go="ask">Ask</button>
+      <button data-go="split">Split</button>
+      <button data-go="drawer">Drawer</button>
+      <button data-go="till">Till</button>
+    </nav>
+    <div class="spacer"></div>
+    <select id="net" class="pill" style="padding:6px 10px;width:auto">
+      <option value="devnet">Devnet</option>
+      <option value="mainnet-beta">Mainnet</option>
+    </select>
+    <div class="wallet">
+      <button class="pill" id="connectBtn">Connect</button>
+    </div>
+  </div>
+</header>
+
+<main class="wrap">
+  <section class="view on" id="view-home">
+    <div class="hero">
+      <div>
+        <div class="tiny" style="letter-spacing:.18em;text-transform:uppercase;color:var(--gold)">Solana in one HTML file</div>
+        <h1>Unsend<br>for money.</h1>
+        <p class="lede">Latch SOL in the air. They tear the seal to claim. You pull it back until they do. No program, no company, no custody — the key never leaves this page.</p>
+        <div class="cta">
+          <button class="btn-wax" data-go="latch">Seal a payment</button>
+          <button class="btn-ghost" data-go="ask">Request money</button>
+        </div>
+        <div class="facts">
+          <div><b>Recallable</b>until they claim</div>
+          <div><b>Link or address</b>open envelope or named</div>
+          <div><b>Agents welcome</b>your till is a payable endpoint</div>
+        </div>
+      </div>
+      <aside class="envelope" aria-hidden="true">
+        <div class="wax"></div>
+        <div class="e-meta">
+          <div class="amt" id="heroAmt">0.25 SOL</div>
+          <div class="sub">Still yours · waiting to be claimed</div>
+        </div>
+      </aside>
+    </div>
+    <div class="steps">
+      <article class="card"><div class="n">01</div><h3>Seal it</h3><p>You fund a one-time account. Only this page holds the key. The SOL has left your wallet, but it has not latched to anyone yet.</p></article>
+      <article class="card"><div class="n">02</div><h3>Share the seal</h3><p>A link, a QR, a passphrase if you want. Cash in an envelope. Anyone with the seal can try to open it — or only the address you named.</p></article>
+      <article class="card"><div class="n">03</div><h3>Claim or pull back</h3><p>They sweep it into their wallet. If they haven't, you recall it in one click. Gmail unsend, for Solana.</p></article>
+    </div>
+  </section>
+
+  <section class="view" id="view-latch">
+    <div class="grid2">
+      <div class="panel">
+        <h2>Seal a payment</h2>
+        <p>Funds move into a latch account you still control. Share the seal when you're ready. Recall anytime before they claim.</p>
+        <label>Amount</label>
+        <input class="bigamt" id="amt" inputmode="decimal" placeholder="0.00" value="0.05" />
+        <div class="seg" id="assetSeg">
+          <button class="on" data-asset="sol">SOL</button>
+          <button data-asset="usdc">USDC</button>
+        </div>
+        <div class="tiny" id="usdHint" style="margin-top:8px"></div>
+        <label>To (optional)</label>
+        <input class="field" id="to" placeholder="Wallet, .sol or .sns — blank = open envelope" />
+        <label>Note</label>
+        <input class="field" id="note" maxlength="80" placeholder="dinner / invoice / sorry I'm late" />
+        <label>Passphrase (optional)</label>
+        <input class="field" id="pass" type="password" placeholder="Extra lock on the seal" />
+        <label>Auto-recall while this tab stays open</label>
+        <select id="autoRecall">
+          <option value="0">Off — wait for them</option>
+          <option value="300">5 minutes</option>
+          <option value="3600">1 hour</option>
+          <option value="86400">24 hours</option>
+        </select>
+        <div class="actions">
+          <button class="btn-wax" id="sealBtn">Latch it</button>
+          <button class="btn-ghost" id="airdropBtn">Devnet airdrop</button>
+        </div>
+        <p class="tiny" style="margin-top:14px" id="balLine">Connect a wallet to seal.</p>
+      </div>
+      <div class="panel" id="sealResult">
+        <h2>How a latch works</h2>
+        <p>No smart contract. This file generates a keypair, you fund it, and you keep the secret. Claim is a sweep. Recall is the same sweep, home.</p>
+        <div class="stat"><span>Custody</span><span>none</span></div>
+        <div class="stat"><span>Program</span><span>System + Token only</span></div>
+        <div class="stat"><span>If you close this tab</span><span>keys stay in this browser</span></div>
+        <div class="stat"><span>If they claim first</span><span>it's theirs. that's the point.</span></div>
+      </div>
+    </div>
+  </section>
+
+  <section class="view" id="view-ask">
+    <div class="grid2">
+      <div class="panel">
+        <h2>Ask for money</h2>
+        <p>A check, not a charge. They open the link and pay you — optionally through a latch, so they can still unsend.</p>
+        <label>Amount</label>
+        <input class="bigamt" id="askAmt" inputmode="decimal" placeholder="0.00" value="0.1" />
+        <div class="seg" id="askAssetSeg">
+          <button class="on" data-asset="sol">SOL</button>
+          <button data-asset="usdc">USDC</button>
+        </div>
+        <label>Note</label>
+        <input class="field" id="askNote" maxlength="80" placeholder="for the tickets" />
+        <div class="actions">
+          <button class="btn-wax" id="askBtn">Make a check</button>
+        </div>
+      </div>
+      <div class="panel" id="askResult">
+        <h2>Your till</h2>
+        <p>Share one check, or publish your till so people and agents can pay you without asking first.</p>
+      </div>
+    </div>
+  </section>
+
+  <section class="view" id="view-split">
+    <div class="panel">
+      <h2>Split a bill</h2>
+      <p>You latch the total, then this page cuts it into equal seals. Send each person their envelope — or collect with checks instead.</p>
+      <div class="row">
+        <div>
+          <label>Total</label>
+          <input class="field" id="splitTotal" inputmode="decimal" value="0.12" />
+        </div>
+        <div>
+          <label>People</label>
+          <input class="field" id="splitN" inputmode="numeric" value="3" />
+        </div>
+        <div>
+          <label>Mode</label>
+          <select id="splitMode">
+            <option value="pay">I paid — send them seals</option>
+            <option value="collect">They owe me — send checks</option>
+          </select>
+        </div>
+      </div>
+      <label>Note</label>
+      <input class="field" id="splitNote" placeholder="friday dinner" />
+      <div class="actions">
+        <button class="btn-wax" id="splitBtn">Cut it</button>
+      </div>
+      <div id="splitOut" style="margin-top:18px"></div>
+    </div>
+  </section>
+
+  <section class="view" id="view-drawer">
+    <div class="panel">
+      <h2>Drawer</h2>
+      <p>Every seal this browser still knows. Live balances from the chain.</p>
+      <div class="actions">
+        <button class="btn-ghost" id="refreshBtn">Refresh</button>
+        <button class="btn-ghost" id="exportBtn">Export backup</button>
+        <label class="btn-ghost" style="margin:0">Import<input type="file" id="importFile" accept="application/json" class="hidden" /></label>
+      </div>
+      <div class="drawer" id="drawer" style="margin-top:16px"></div>
+    </div>
+  </section>
+
+  <section class="view" id="view-till">
+    <div class="panel">
+      <h2>Till</h2>
+      <p>Your public pay page. Drop this HTML on IPFS or GitHub Pages. Agents can read the manifest and humans can tap Pay.</p>
+      <div class="stat"><span>Pay to</span><span class="mono" id="tillAddr">connect first</span></div>
+      <div class="stat"><span>Network</span><span id="tillNet">devnet</span></div>
+      <div class="stat"><span>Accepts</span><span>SOL · USDC</span></div>
+      <div class="actions">
+        <button class="btn" id="copyTill">Copy till link</button>
+        <button class="btn-ghost" id="copyManifest">Copy agent manifest</button>
+      </div>
+      <div class="qr hidden" id="tillQr" style="margin-top:18px"></div>
+    </div>
+  </section>
+
+  <section class="view" id="view-claim">
+    <div class="panel">
+      <h2>A seal for you</h2>
+      <p id="claimLead">Someone latched money. Tear it open into a wallet, or paste an address.</p>
+      <div id="claimBody"></div>
+    </div>
+  </section>
+
+  <section class="view" id="view-pay">
+    <div class="panel">
+      <h2>A check</h2>
+      <p>Pay it straight, or pay through a latch so you can still unsend.</p>
+      <div id="payBody"></div>
+    </div>
+  </section>
+</main>
+
+<footer class="wrap foot">
+  LATCH is a client-side Solana airlock. Secrets live in this browser. Anyone with an open-envelope link can claim it. There is no server and no recovery if you wipe the drawer without a backup. Default network is devnet.
+</footer>
+
+<div class="toast" id="toast"></div>
+<div class="modal" id="modal">
+  <div class="sheet" id="modalSheet"></div>
+</div>
+
+<script>
+(() => {
+  const S = {
+    net: localStorage.getItem("latch.net") || "devnet",
+    asset: "sol",
+    askAsset: "sol",
+    wallet: null,
+    provider: null,
+    pubkey: null,
+    price: 0,
+    seals: [],
+    timers: {},
+    pending: null,
+    check: null,
+  };
+
+  const USDC = {
+    "mainnet-beta": "EPjFWdd5AufqSSqeM2qN1xzybapC8G4wEGGkZwyTDt1v",
+    devnet: "4zMMC9srt5Ri5X14GAgXhaHii3GnPAEERYPJgZJDncDU",
+  };
+  const RPC = {
+    "mainnet-beta": [
+      "https://api.mainnet-beta.solana.com",
+      "https://solana-rpc.publicnode.com",
+    ],
+    devnet: ["https://api.devnet.solana.com"],
+  };
+  const TOKEN = "TokenkegQfeZyiNwAJbNbGKPFXCWuBvf9Ss623VQ5DA";
+  const ATA = "ATokenGPvbdGVxr1b2hvZbsiqW5xWH25efTNsLJA8knL";
+  const MEMO = "MemoSq4gqABAXKb96qnH8TysNcWxMyWCqXgDLGmfcHr";
+  const WSOL = "So11111111111111111111111111111111111111112";
+  const STORE = "latch.v1.seals";
+
+  const $ = (id) => document.getElementById(id);
+  const toast = (m, ms = 3200) => {
+    const t = $("toast");
+    t.textContent = m;
+    t.classList.add("on");
+    clearTimeout(toast._);
+    toast._ = setTimeout(() => t.classList.remove("on"), Math.max(ms, 4200));
+  };
+  const esc = (s) => String(s ?? "").replace(/[&<>"']/g, (c) => ({
+    "&": "&amp;", "<": "&lt;", ">": "&gt;", '"': "&quot;", "'": "&#39;",
+  }[c]));
+  const short = (a) => a ? a.slice(0, 4) + "…" + a.slice(-4) : "";
+  const b64u = {
+    enc(bytes) {
+      let bin = "";
+      bytes = bytes instanceof Uint8Array ? bytes : new Uint8Array(bytes);
+      for (const x of bytes) bin += String.fromCharCode(x);
+      return btoa(bin).replace(/\+/g, "-").replace(/\//g, "_").replace(/=+$/g, "");
+    },
+    dec(s) {
+      s = s.replace(/-/g, "+").replace(/_/g, "/");
+      while (s.length % 4) s += "=";
+      const bin = atob(s);
+      const out = new Uint8Array(bin.length);
+      for (let i = 0; i < bin.length; i++) out[i] = bin.charCodeAt(i);
+      return out;
+    },
+  };
+  const utf = {
+    enc: (s) => new TextEncoder().encode(s),
+    dec: (b) => new TextDecoder().decode(b),
+  };
+
+  function loadSeals() {
+    try { S.seals = JSON.parse(localStorage.getItem(STORE) || "[]"); }
+    catch { S.seals = []; }
+  }
+  function saveSeals() {
+    localStorage.setItem(STORE, JSON.stringify(S.seals));
+  }
+
+  function w3() {
+    if (!window.solanaWeb3) throw new Error("Solana web3.js failed to load. Check the CDN.");
+    return window.solanaWeb3;
+  }
+  function PK(x) { return new (w3().PublicKey)(x); }
+  function conn(net = S.net) {
+    const urls = RPC[net] || RPC.devnet;
+    return new (w3().Connection)(urls[0], { commitment: "confirmed" });
+  }
+
+  function toUnits(str, decimals) {
+    const s = String(str || "0").trim();
+    if (!/^\d+(\.\d+)?$/.test(s)) throw new Error("Bad amount");
+    const [a, b = ""] = s.split(".");
+    const frac = (b + "0".repeat(decimals)).slice(0, decimals);
+    return BigInt(a || "0") * (10n ** BigInt(decimals)) + BigInt(frac || "0");
+  }
+  function fromUnits(n, decimals) {
+    const x = BigInt(n);
+    const d = 10n ** BigInt(decimals);
+    const whole = x / d;
+    let frac = (x % d).toString().padStart(decimals, "0").replace(/0+$/, "");
+    return frac ? `${whole}.${frac}` : `${whole}`;
+  }
+
+  function u64le(n) {
+    const b = new ArrayBuffer(8);
+    new DataView(b).setBigUint64(0, BigInt(n), true);
+    return new Uint8Array(b);
+  }
+  function ixMemo(text) {
+    return new (w3().TransactionInstruction)({
+      keys: [],
+      programId: PK(MEMO),
+      data: utf.enc(String(text).slice(0, 80)),
+    });
+  }
+  function ataFor(owner, mint) {
+    return w3().PublicKey.findProgramAddressSync(
+      [PK(owner).toBuffer(), PK(TOKEN).toBuffer(), PK(mint).toBuffer()],
+      PK(ATA)
+    )[0];
+  }
+  function ixCreateATA(payer, ata, owner, mint) {
+    return new (w3().TransactionInstruction)({
+      programId: PK(ATA),
+      keys: [
+        { pubkey: PK(payer), isSigner: true, isWritable: true },
+        { pubkey: ata, isSigner: false, isWritable: true },
+        { pubkey: PK(owner), isSigner: false, isWritable: false },
+        { pubkey: PK(mint), isSigner: false, isWritable: false },
+        { pubkey: w3().SystemProgram.programId, isSigner: false, isWritable: false },
+        { pubkey: PK(TOKEN), isSigner: false, isWritable: false },
+      ],
+      data: Uint8Array.of(1),
+    });
+  }
+  function ixTransferTok(source, dest, owner, amount) {
+    const data = new Uint8Array(9);
+    data[0] = 3;
+    data.set(u64le(amount), 1);
+    return new (w3().TransactionInstruction)({
+      programId: PK(TOKEN),
+      keys: [
+        { pubkey: source, isSigner: false, isWritable: true },
+        { pubkey: dest, isSigner: false, isWritable: true },
+        { pubkey: PK(owner), isSigner: true, isWritable: false },
+      ],
+      data,
+    });
+  }
+  function ixCloseTok(account, dest, owner) {
+    return new (w3().TransactionInstruction)({
+      programId: PK(TOKEN),
+      keys: [
+        { pubkey: account, isSigner: false, isWritable: true },
+        { pubkey: PK(dest), isSigner: false, isWritable: true },
+        { pubkey: PK(owner), isSigner: true, isWritable: false },
+      ],
+      data: Uint8Array.of(9),
+    });
+  }
+  function prio() {
+    return w3().ComputeBudgetProgram.setComputeUnitPrice({ microLamports: 200_000 });
+  }
+
+  function withPrio(tx) {
+    tx.instructions.unshift(prio());
+    return tx;
+  }
+  async function sendTx(tx, extraSigners = []) {
+    const c = conn();
+    const { blockhash, lastValidBlockHeight } = await c.getLatestBlockhash();
+    withPrio(tx);
+    tx.recentBlockhash = blockhash;
+    tx.feePayer = S.pubkey;
+    for (const kp of extraSigners) tx.partialSign(kp);
+    const signed = await S.provider.signTransaction(tx);
+    for (const kp of extraSigners) {
+      if (!signed.signatures.some((s) => s.publicKey.equals(kp.publicKey) && s.signature)) {
+        signed.partialSign(kp);
+      }
+    }
+    const sig = await c.sendRawTransaction(signed.serialize(), { skipPreflight: false });
+    await c.confirmTransaction({ signature: sig, blockhash, lastValidBlockHeight }, "confirmed");
+    return sig;
+  }
+
+  async function sendFromKeypair(tx, kp) {
+    const c = conn();
+    const { blockhash, lastValidBlockHeight } = await c.getLatestBlockhash();
+    tx.recentBlockhash = blockhash;
+    tx.feePayer = kp.publicKey;
+    tx.sign(kp);
+    const sig = await c.sendRawTransaction(tx.serialize(), { skipPreflight: false });
+    await c.confirmTransaction({ signature: sig, blockhash, lastValidBlockHeight }, "confirmed");
+    return sig;
+  }
+
+  function providers() {
+    const out = [];
+    const add = (name, w) => { if (w && !out.some((x) => x.w === w)) out.push({ name, w }); };
+    add("Phantom", window.phantom?.solana);
+    add("Solflare", window.solflare);
+    add("Backpack", window.backpack);
+    if (window.solana) add(window.solana.isPhantom ? "Phantom" : "Wallet", window.solana);
+    return out;
+  }
+
+  async function connect(openStore) {
+    const list = providers();
+    if (!list.length) {
+      if (openStore) window.open("https://phantom.app/", "_blank");
+      throw new Error("No Solana wallet found. Install Phantom or Solflare, then tap Connect.");
+    }
+    const { w, name } = list[0];
+    const res = await w.connect();
+    const key = res?.publicKey || w.publicKey;
+    S.provider = w;
+    S.wallet = name;
+    S.pubkey = key;
+    $("connectBtn").textContent = short(key.toBase58());
+    await refreshBalance();
+    renderTill();
+    return key;
+  }
+  function disconnect() {
+    try { S.provider?.disconnect?.(); } catch {}
+    S.provider = S.pubkey = S.wallet = null;
+    $("connectBtn").textContent = "Connect";
+    $("balLine").textContent = "Connect a wallet to seal.";
+  }
+  async function needWallet() {
+    if (S.pubkey) return S.pubkey;
+    return connect();
+  }
+
+  async function refreshBalance() {
+    if (!S.pubkey) return;
+    try {
+      const c = conn();
+      const lamports = await c.getBalance(S.pubkey);
+      const sol = fromUnits(lamports, 9);
+      let extra = "";
+      if (S.asset === "usdc") {
+        const ata = ataFor(S.pubkey, USDC[S.net]);
+        const info = await c.getTokenAccountBalance(ata).catch(() => null);
+        extra = info ? ` · ${info.value.uiAmountString} USDC` : " · 0 USDC";
+      }
+      $("balLine").textContent = `${sol} SOL${extra} · ${S.wallet} · ${S.net}`;
+    } catch (e) {
+      $("balLine").textContent = e.message || "RPC error";
+    }
+  }
+
+  async function resolvePayee(raw) {
+    const s = String(raw || "").trim();
+    if (!s) return "";
+    if (s.endsWith(".sol") || s.endsWith(".sns")) {
+      const domain = s.replace(/^\s+/, "");
+      const url = `https://sdk-proxy-v2.sns.id/resolve/${encodeURIComponent(domain)}`;
+      const r = await fetch(url);
+      if (!r.ok) throw new Error("Could not resolve " + domain);
+      const j = await r.json();
+      const val = j.result || j.pubkey || j.address || j;
+      const addr = typeof val === "string" ? val : val?.toString?.();
+      if (!addr) throw new Error("Empty SNS result");
+      PK(addr);
+      return addr;
+    }
+    PK(s);
+    return s;
+  }
+
+  async function wrapSecret(bytes, pass) {
+    if (!pass) return { alg: "none", k: b64u.enc(bytes) };
+    const salt = crypto.getRandomValues(new Uint8Array(16));
+    const iv = crypto.getRandomValues(new Uint8Array(12));
+    const base = await crypto.subtle.importKey("raw", utf.enc(pass), "PBKDF2", false, ["deriveKey"]);
+    const key = await crypto.subtle.deriveKey(
+      { name: "PBKDF2", salt, iterations: 140000, hash: "SHA-256" },
+      base, { name: "AES-GCM", length: 256 }, false, ["encrypt"]
+    );
+    const ct = await crypto.subtle.encrypt({ name: "AES-GCM", iv }, key, bytes);
+    return { alg: "aes-gcm", salt: b64u.enc(salt), iv: b64u.enc(iv), k: b64u.enc(ct) };
+  }
+  async function unwrapSecret(blob, pass) {
+    if (!blob || blob.alg === "none") return b64u.dec(blob.k);
+    if (!pass) throw new Error("This seal has a passphrase");
+    const salt = b64u.dec(blob.salt);
+    const iv = b64u.dec(blob.iv);
+    const base = await crypto.subtle.importKey("raw", utf.enc(pass), "PBKDF2", false, ["deriveKey"]);
+    const key = await crypto.subtle.deriveKey(
+      { name: "PBKDF2", salt, iterations: 140000, hash: "SHA-256" },
+      base, { name: "AES-GCM", length: 256 }, false, ["decrypt"]
+    );
+    const pt = await crypto.subtle.decrypt({ name: "AES-GCM", iv }, key, b64u.dec(blob.k));
+    return new Uint8Array(pt);
+  }
+
+  function packLink(kind, obj) {
+    const payload = b64u.enc(utf.enc(JSON.stringify(obj)));
+    return `${location.origin}${location.pathname}#/${kind}/${payload}`;
+  }
+  function unpack(payload) {
+    return JSON.parse(utf.dec(b64u.dec(payload)));
+  }
+
+  async function fundLatch({ amount, asset, to, note, pass, auto }) {
+    const { Keypair, SystemProgram, LAMPORTS_PER_SOL } = w3();
+    await needWallet();
+    const kp = Keypair.generate();
+    const mint = asset === "usdc" ? USDC[S.net] : "sol";
+    const decimals = asset === "usdc" ? 6 : 9;
+    const units = toUnits(amount, decimals);
+    if (units <= 0n) throw new Error("Amount must be > 0");
+    const wrapped = await wrapSecret(kp.secretKey, pass);
+    const tx = new (w3().Transaction)();
+    if (asset === "sol") {
+      tx.add(SystemProgram.transfer({
+        fromPubkey: S.pubkey,
+        toPubkey: kp.publicKey,
+        lamports: Number(units),
+      }));
+    } else {
+      const src = ataFor(S.pubkey, mint);
+      const dest = ataFor(kp.publicKey, mint);
+      tx.add(ixCreateATA(S.pubkey, dest, kp.publicKey, mint));
+      tx.add(ixTransferTok(src, dest, S.pubkey, units));
+    }
+    if (note) tx.add(ixMemo("latch:" + note));
+    const sig = await sendTx(tx);
+    const rec = {
+      id: kp.publicKey.toBase58(),
+      secret: b64u.enc(kp.secretKey),
+      net: S.net,
+      mint,
+      asset,
+      amount: String(amount),
+      to: to || "",
+      note: note || "",
+      from: S.pubkey.toBase58(),
+      created: Date.now(),
+      status: "latched",
+      fundSig: sig,
+      pass: !!pass,
+      wrap: wrapped,
+      auto: Number(auto) || 0,
+    };
+    S.seals.unshift(rec);
+    saveSeals();
+    if (rec.auto) scheduleAuto(rec);
+    return rec;
+  }
+
+  function kpFromRec(rec) {
+    return w3().Keypair.fromSecretKey(b64u.dec(rec.secret));
+  }
+
+  async function sweep({ rec, dest, viaWallet = true }) {
+    const { SystemProgram } = w3();
+    const kp = kpFromRec(rec);
+    const c = conn(rec.net);
+    const destPk = PK(dest);
+    const tx = new (w3().Transaction)();
+    if (rec.asset === "usdc" || rec.mint !== "sol") {
+      const mint = rec.mint;
+      const src = ataFor(kp.publicKey, mint);
+      const destAta = ataFor(destPk, mint);
+      const bal = await c.getTokenAccountBalance(src).catch(() => null);
+      const raw = bal ? BigInt(bal.value.amount) : 0n;
+      const destInfo = await c.getAccountInfo(destAta);
+      if (!destInfo) tx.add(ixCreateATA(viaWallet && S.pubkey ? S.pubkey : destPk, destAta, destPk, mint));
+      if (raw > 0n) tx.add(ixTransferTok(src, destAta, kp.publicKey, raw));
+      tx.add(ixCloseTok(src, destPk, kp.publicKey));
+    }
+    const lamports = await c.getBalance(kp.publicKey);
+    if (viaWallet && S.pubkey) {
+      if (lamports > 0) {
+        tx.add(SystemProgram.transfer({
+          fromPubkey: kp.publicKey,
+          toPubkey: destPk,
+          lamports,
+        }));
+      }
+      if (!tx.instructions.length) throw new Error("Seal is already empty");
+      return sendTx(tx, [kp]);
+    }
+    const fee = 20000;
+    if (lamports <= fee) throw new Error("Not enough SOL in the seal to pay the fee. Connect a wallet to claim.");
+    const tx2 = new (w3().Transaction)();
+    if (rec.asset !== "sol") {
+      tx.instructions.forEach((ix) => tx2.add(ix));
+    }
+    tx2.add(SystemProgram.transfer({
+      fromPubkey: kp.publicKey,
+      toPubkey: destPk,
+      lamports: lamports - fee,
+    }));
+    return sendFromKeypair(tx2, kp);
+  }
+
+  async function recall(rec) {
+    await needWallet();
+    if (rec.net !== S.net) throw new Error("Switch network to " + rec.net);
+    const sig = await sweep({ rec, dest: S.pubkey.toBase58(), viaWallet: true });
+    rec.status = "recalled";
+    rec.recallSig = sig;
+    saveSeals();
+    return sig;
+  }
+
+  function scheduleAuto(rec) {
+    if (!rec.auto) return;
+    const due = rec.created + rec.auto * 1000;
+    const wait = Math.max(0, due - Date.now());
+    clearTimeout(S.timers[rec.id]);
+    S.timers[rec.id] = setTimeout(async () => {
+      try {
+        if (!S.pubkey) await connect();
+        const live = S.seals.find((x) => x.id === rec.id);
+        if (!live || live.status !== "latched") return;
+        await recall(live);
+        toast("Auto-recalled a seal");
+        renderDrawer();
+      } catch (e) { toast(e.message); }
+    }, wait);
+  }
+
+  function sealCard(rec, link) {
+    return `
+      <div class="wax" style="margin:10px auto 12px"></div>
+      <div style="text-align:center">
+        <div class="amt" style="font-family:var(--serif);font-size:32px">${esc(rec.amount)} ${esc((rec.asset || "sol").toUpperCase())}</div>
+        <div class="tiny">${rec.to ? "Addressed to " + esc(short(rec.to)) : "Open envelope"} · ${esc(rec.note || "no note")}</div>
+      </div>
+      <div class="stat"><span>Latch</span><span class="mono">${esc(short(rec.id))}</span></div>
+      <div class="stat"><span>Network</span><span>${esc(rec.net)}</span></div>
+      <div class="qr" id="qrBox" style="margin:14px auto;display:block;width:max-content"></div>
+      <div class="mono" style="margin:8px 0">${esc(link)}</div>
+      <div class="actions">
+        <button class="btn" data-copy="${esc(link)}">Copy seal link</button>
+        <button class="btn-danger" data-recall="${esc(rec.id)}">Recall</button>
+      </div>
+    `;
+  }
+
+  function showSeal(rec) {
+    const blob = { ...rec.wrap, v: 1, n: rec.net === "mainnet-beta" ? "m" : "d", a: rec.amount, m: rec.mint, t: rec.to, s: rec.from, o: rec.note, id: rec.id, asset: rec.asset, p: rec.pass ? 1 : 0 };
+    const link = packLink("e", blob);
+    $("sealResult").innerHTML = `<h2>Sealed</h2><p>Share this only when you mean it. Anyone with an open envelope can claim.</p>` + sealCard(rec, link);
+    drawQr("qrBox", link);
+  }
+
+  function drawQr(id, text) {
+    const el = $(id);
+    if (!el || !text) return;
+    el.classList.remove("hidden");
+    el.innerHTML = "";
+    const canvas = document.createElement("canvas");
+    el.appendChild(canvas);
+    if (window.QRCode?.toCanvas) QRCode.toCanvas(canvas, text, { width: 196, margin: 1, color: { dark: "#1a120c", light: "#ffffff" } });
+  }
+
+  async function liveStatus(rec) {
+    try {
+      const c = conn(rec.net);
+      if (rec.asset === "usdc" || rec.mint !== "sol") {
+        const ata = ataFor(rec.id, rec.mint);
+        const b = await c.getTokenAccountBalance(ata).catch(() => null);
+        const raw = b ? BigInt(b.value.amount) : 0n;
+        if (raw === 0n) return rec.status === "recalled" ? "recalled" : "claimed";
+        return "latched";
+      }
+      const lamports = await c.getBalance(PK(rec.id));
+      if (lamports === 0) return rec.status === "recalled" ? "recalled" : "claimed";
+      return "latched";
+    } catch { return rec.status || "unknown"; }
+  }
+
+  async function renderDrawer() {
+    const box = $("drawer");
+    if (!S.seals.length) {
+      box.innerHTML = `<div class="empty">Nothing latched yet. Seal a payment and it will sit here until it claims or comes home.</div>`;
+      return;
+    }
+    box.innerHTML = S.seals.map((r) => `
+      <div class="item" data-id="${esc(r.id)}">
+        <div class="wax" style="width:56px;height:56px;margin:0"></div>
+        <div>
+          <div><span class="dot" data-dot="${esc(r.id)}"></span><b>${esc(r.amount)} ${(r.asset || "sol").toUpperCase()}</b></div>
+          <div class="tiny">${esc(r.note || "untitled")} · ${esc(r.net)} · ${new Date(r.created).toLocaleString()}</div>
+          <div class="mono">${esc(r.id)}</div>
+        </div>
+        <div class="actions" style="margin:0">
+          <button class="btn-ghost" data-open="${esc(r.id)}">Open</button>
+          <button class="btn-danger" data-recall="${esc(r.id)}">Recall</button>
+        </div>
+      </div>
+    `).join("");
+    for (const r of S.seals) {
+      const st = await liveStatus(r);
+      if (st !== r.status && (st === "claimed" || st === "latched")) {
+        r.status = st; saveSeals();
+      }
+      const dot = document.querySelector(`[data-dot="${CSS.escape(r.id)}"]`);
+      if (dot) dot.className = "dot " + (st === "latched" ? "live" : st === "recalled" ? "back" : "dead");
+    }
+  }
+
+  function renderTill() {
+    const addr = S.pubkey ? S.pubkey.toBase58() : "connect first";
+    $("tillAddr").textContent = addr;
+    $("tillNet").textContent = S.net;
+    if (S.pubkey) drawQr("tillQr", packLink("t", { v: 1, n: S.net === "mainnet-beta" ? "m" : "d", a: S.pubkey.toBase58() }));
+  }
+
+  function go(name) {
+    document.querySelectorAll(".view").forEach((v) => v.classList.remove("on"));
+    const el = $("view-" + name) || $("view-home");
+    el.classList.add("on");
+    document.querySelectorAll(".nav button").forEach((b) => b.classList.toggle("on", b.dataset.go === name));
+    window.scrollTo(0, 0);
+    if (name === "drawer") renderDrawer();
+    if (name === "till") renderTill();
+    if (name === "latch") refreshBalance();
+  }
+
+  function route() {
+    const h = location.hash.replace(/^#\/?/, "");
+    const [kind, payload] = h.split("/");
+    if (!kind || kind === "home") return go("home");
+    if (["latch", "ask", "split", "drawer", "till"].includes(kind)) return go(kind);
+    if (kind === "e" && payload) return openClaim(payload);
+    if (kind === "r" && payload) return openCheck(payload);
+    if (kind === "t" && payload) return openTill(payload);
+    go("home");
+  }
+
+  async function openClaim(payload) {
+    go("claim");
+    const body = $("claimBody");
+    try {
+      const env = unpack(payload);
+      S.pending = env;
+      if ((env.n === "m" ? "mainnet-beta" : "devnet") !== S.net) {
+        S.net = env.n === "m" ? "mainnet-beta" : "devnet";
+        $("net").value = S.net;
+        localStorage.setItem("latch.net", S.net);
+        syncNet();
+      }
+      body.innerHTML = `
+        <div class="wax"></div>
+        <div class="stat"><span>Amount</span><span>${esc(env.a)} ${esc((env.asset || (env.m === "sol" ? "sol" : "usdc")).toUpperCase())}</span></div>
+        <div class="stat"><span>From</span><span class="mono">${esc(short(env.s || ""))}</span></div>
+        <div class="stat"><span>Note</span><span>${esc(env.o || "—")}</span></div>
+        <div class="stat"><span>Lands on</span><span>${env.t ? esc(short(env.t)) : "your wallet"}</span></div>
+        ${env.p ? `<label>Passphrase</label><input class="field" id="claimPass" type="password" />` : ""}
+        <label>Or paste a destination</label>
+        <input class="field" id="claimTo" placeholder="optional if you connect" />
+        <div class="actions">
+          <button class="btn-wax" id="claimBtn">Tear it open</button>
+        </div>
+        <p class="tiny" id="claimHint"></p>
+      `;
+      probeClaim(env);
+    } catch (e) {
+      body.innerHTML = `<p class="bad">This seal is unreadable. ${esc(e.message)}</p>`;
+    }
+  }
+
+  async function probeClaim(env) {
+    try {
+      const c = conn();
+      const id = env.id;
+      if (!id) return;
+      const lamports = await c.getBalance(PK(id));
+      $("claimHint").textContent = lamports === 0 && env.m === "sol"
+        ? "This seal looks empty — already claimed or recalled."
+        : `On-chain SOL in latch: ${fromUnits(lamports, 9)}`;
+    } catch {}
+  }
+
+  async function doClaim() {
+    const env = S.pending;
+    if (!env) throw new Error("No seal");
+    const pass = $("claimPass")?.value || "";
+    const secret = await unwrapSecret(env, pass);
+    const rec = {
+      id: env.id,
+      secret: b64u.enc(secret),
+      net: env.n === "m" ? "mainnet-beta" : "devnet",
+      mint: env.m,
+      asset: env.asset || (env.m === "sol" ? "sol" : "usdc"),
+      amount: env.a,
+      to: env.t || "",
+      note: env.o || "",
+    };
+    let dest = rec.to || $("claimTo").value.trim();
+    if (!dest) {
+      await needWallet();
+      dest = S.pubkey.toBase58();
+    } else {
+      dest = await resolvePayee(dest);
+    }
+    const viaWallet = !!S.pubkey;
+    if (!viaWallet) await Promise.resolve();
+    if (rec.asset !== "sol" && !S.pubkey) throw new Error("Connect a wallet to claim USDC (ATA rent).");
+    if (!S.pubkey) {
+      const sig = await sweep({ rec, dest, viaWallet: false });
+      toast("Claimed " + sig.slice(0, 12) + "…");
+      return sig;
+    }
+    const sig = await sweep({ rec, dest, viaWallet: true });
+    toast("Claimed · " + short(sig));
+    return sig;
+  }
+
+  function openCheck(payload) {
+    go("pay");
+    try {
+      const chk = unpack(payload);
+      S.check = chk;
+      if ((chk.n === "m" ? "mainnet-beta" : "devnet") !== S.net) {
+        S.net = chk.n === "m" ? "mainnet-beta" : "devnet";
+        $("net").value = S.net;
+        localStorage.setItem("latch.net", S.net);
+        syncNet();
+      }
+      $("payBody").innerHTML = `
+        <div class="stat"><span>Pay</span><span>${esc(chk.a)} ${esc((chk.asset || "sol").toUpperCase())}</span></div>
+        <div class="stat"><span>To</span><span class="mono">${esc(chk.to)}</span></div>
+        <div class="stat"><span>Note</span><span>${esc(chk.o || "—")}</span></div>
+        <div class="actions">
+          <button class="btn" id="payDirect">Pay now</button>
+          <button class="btn-wax" id="payLatch">Pay with latch</button>
+        </div>
+        <p class="tiny">Pay now is final. Pay with latch funds an envelope first — you can recall until they claim.</p>
+      `;
+    } catch (e) {
+      $("payBody").innerHTML = `<p class="bad">${esc(e.message)}</p>`;
+    }
+  }
+
+  async function payDirect() {
+    const { SystemProgram } = w3();
+    await needWallet();
+    const chk = S.check;
+    const tx = new (w3().Transaction)();
+    const asset = chk.asset || "sol";
+    if (asset === "sol") {
+      tx.add(SystemProgram.transfer({
+        fromPubkey: S.pubkey,
+        toPubkey: PK(chk.to),
+        lamports: Number(toUnits(chk.a, 9)),
+      }));
+    } else {
+      const mint = USDC[S.net];
+      const src = ataFor(S.pubkey, mint);
+      const dest = ataFor(chk.to, mint);
+      const info = await conn().getAccountInfo(dest);
+      if (!info) tx.add(ixCreateATA(S.pubkey, dest, chk.to, mint));
+      tx.add(ixTransferTok(src, dest, S.pubkey, toUnits(chk.a, 6)));
+    }
+    if (chk.o) tx.add(ixMemo("latch-check:" + chk.o));
+    const sig = await sendTx(tx);
+    toast("Paid · " + short(sig));
+  }
+
+  async function payViaLatch() {
+    const chk = S.check;
+    const rec = await fundLatch({
+      amount: chk.a,
+      asset: chk.asset || "sol",
+      to: chk.to,
+      note: chk.o || "check",
+      pass: "",
+      auto: 0,
+    });
+    showSeal(rec);
+    go("latch");
+    toast("Latched. Send them the seal — you can still recall.");
+  }
+
+  function openTill(payload) {
+    try {
+      const t = unpack(payload);
+      S.check = { v: 1, n: t.n, to: t.a, a: "0.05", asset: "sol", o: "till" };
+      $("askAmt").value = "0.05";
+      go("pay");
+      $("payBody").innerHTML = `
+        <p>This is someone's till. Set an amount and pay.</p>
+        <label>Amount</label>
+        <input class="bigamt" id="tillPayAmt" value="0.05" />
+        <div class="stat"><span>To</span><span class="mono">${esc(t.a)}</span></div>
+        <div class="actions"><button class="btn-wax" id="tillPayBtn">Pay till</button></div>
+      `;
+    } catch { go("till"); }
+  }
+
+  function syncNet() {
+    $("mainnetWarn").classList.toggle("on", S.net === "mainnet-beta");
+    $("airdropBtn").style.display = S.net === "devnet" ? "" : "none";
+    renderTill();
+    refreshBalance();
+  }
+
+  async function price() {
+    try {
+      const r = await fetch("https://lite-api.jup.ag/price/v2?ids=" + WSOL);
+      const j = await r.json();
+      S.price = Number(j.data?.[WSOL]?.price || 0);
+    } catch {
+      try {
+        const r = await fetch("https://api.coingecko.com/api/v3/simple/price?ids=solana&vs_currencies=usd");
+        const j = await r.json();
+        S.price = Number(j.solana?.usd || 0);
+      } catch { S.price = 0; }
+    }
+    hintUsd();
+  }
+  function hintUsd() {
+    const n = Number($("amt").value);
+    $("usdHint").textContent = S.price && S.asset === "sol" && n
+      ? `≈ $${(n * S.price).toFixed(2)} · latch stays recallable until claim`
+      : S.asset === "usdc" ? "USDC · 6 decimals · Circle mint" : "";
+  }
+
+  document.addEventListener("click", async (e) => {
+    const goBtn = e.target.closest("[data-go]");
+    if (goBtn) {
+      location.hash = "#/" + goBtn.dataset.go;
+      return;
+    }
+    const copy = e.target.closest("[data-copy]");
+    if (copy) {
+      await navigator.clipboard.writeText(copy.dataset.copy);
+      toast("Copied");
+      return;
+    }
+    const recBtn = e.target.closest("[data-recall]");
+    if (recBtn) {
+      const rec = S.seals.find((x) => x.id === recBtn.dataset.recall);
+      if (!rec) return toast("Seal not in this browser");
+      recBtn.disabled = true;
+      try {
+        await recall(rec);
+        toast("Recalled");
+        renderDrawer();
+        if ($("view-latch").classList.contains("on") && rec) showSeal(rec);
+      } catch (err) { toast(err.message); }
+      recBtn.disabled = false;
+      return;
+    }
+    const open = e.target.closest("[data-open]");
+    if (open) {
+      const rec = S.seals.find((x) => x.id === open.dataset.open);
+      if (rec) { showSeal(rec); location.hash = "#/latch"; }
+    }
+  });
+
+  $("connectBtn").onclick = async () => {
+    try {
+      if (S.pubkey) { disconnect(); toast("Disconnected"); }
+      else { await connect(true); toast("Connected " + S.wallet); }
+    } catch (e) { toast(e.message); }
+  };
+  $("net").value = S.net;
+  $("net").onchange = () => {
+    S.net = $("net").value;
+    localStorage.setItem("latch.net", S.net);
+    syncNet();
+  };
+  $("assetSeg").onclick = (e) => {
+    const b = e.target.closest("button");
+    if (!b) return;
+    S.asset = b.dataset.asset;
+    [...$("assetSeg").children].forEach((x) => x.classList.toggle("on", x === b));
+    refreshBalance(); hintUsd();
+  };
+  $("askAssetSeg").onclick = (e) => {
+    const b = e.target.closest("button");
+    if (!b) return;
+    S.askAsset = b.dataset.asset;
+    [...$("askAssetSeg").children].forEach((x) => x.classList.toggle("on", x === b));
+  };
+  $("amt").oninput = hintUsd;
+  $("sealBtn").onclick = async () => {
+    const btn = $("sealBtn");
+    btn.disabled = true;
+    try {
+      const to = await resolvePayee($("to").value);
+      const rec = await fundLatch({
+        amount: $("amt").value,
+        asset: S.asset,
+        to,
+        note: $("note").value,
+        pass: $("pass").value,
+        auto: $("autoRecall").value,
+      });
+      showSeal(rec);
+      toast("Latched");
+    } catch (e) { toast(e.message || String(e)); }
+    btn.disabled = false;
+    refreshBalance();
+  };
+  $("airdropBtn").onclick = async () => {
+    try {
+      await needWallet();
+      const sig = await conn().requestAirdrop(S.pubkey, 1_000_000_000);
+      toast("Airdrop requested · " + short(sig));
+      setTimeout(refreshBalance, 2500);
+    } catch (e) { toast(e.message || "Airdrop failed (devnet faucet is often dry)"); }
+  };
+  $("askBtn").onclick = async () => {
+    try {
+      await needWallet();
+      const chk = {
+        v: 1, n: S.net === "mainnet-beta" ? "m" : "d",
+        to: S.pubkey.toBase58(), a: $("askAmt").value,
+        asset: S.askAsset, o: $("askNote").value,
+      };
+      const link = packLink("r", chk);
+      $("askResult").innerHTML = `
+        <h2>Check ready</h2>
+        <p>Send this. They can pay now or pay with a latch.</p>
+        <div class="qr" id="askQr"></div>
+        <div class="mono" style="margin:10px 0">${esc(link)}</div>
+        <button class="btn" data-copy="${esc(link)}">Copy check</button>
+      `;
+      drawQr("askQr", link);
+    } catch (e) { toast(e.message); }
+  };
+  $("splitBtn").onclick = async () => {
+    const n = Math.max(2, Math.min(12, Number($("splitN").value) || 2));
+    const total = $("splitTotal").value;
+    const note = $("splitNote").value || "split";
+    const mode = $("splitMode").value;
+    const units = toUnits(total, 9);
+    const each = units / BigInt(n);
+    const eachStr = fromUnits(each, 9);
+    $("splitOut").innerHTML = `<p class="tiny">${n} × ${eachStr} SOL</p>`;
+    if (mode === "collect") {
+      await needWallet();
+      const links = [];
+      for (let i = 0; i < n; i++) {
+        const chk = { v: 1, n: S.net === "mainnet-beta" ? "m" : "d", to: S.pubkey.toBase58(), a: eachStr, asset: "sol", o: `${note} · ${i + 1}/${n}` };
+        links.push(packLink("r", chk));
+      }
+      $("splitOut").innerHTML += links.map((l, i) => `<div class="item"><div>${i + 1}</div><div class="mono">${esc(l)}</div><button class="btn-ghost" data-copy="${esc(l)}">Copy</button></div>`).join("");
+      return;
+    }
+    const btn = $("splitBtn");
+    btn.disabled = true;
+    try {
+      const recs = [];
+      for (let i = 0; i < n; i++) {
+        recs.push(await fundLatch({ amount: eachStr, asset: "sol", to: "", note: `${note} · ${i + 1}/${n}`, pass: "", auto: 0 }));
+      }
+      $("splitOut").innerHTML = recs.map((r) => {
+        const blob = { ...r.wrap, v: 1, n: r.net === "mainnet-beta" ? "m" : "d", a: r.amount, m: r.mint, t: "", s: r.from, o: r.note, id: r.id, asset: "sol", p: 0 };
+        const link = packLink("e", blob);
+        return `<div class="item"><div class="wax" style="width:48px;height:48px;margin:0"></div><div><b>${esc(r.amount)} SOL</b><div class="mono">${esc(link)}</div></div><button class="btn-ghost" data-copy="${esc(link)}">Copy</button></div>`;
+      }).join("");
+      toast("Split into " + n + " seals");
+    } catch (e) { toast(e.message); }
+    btn.disabled = false;
+  };
+  $("refreshBtn").onclick = () => renderDrawer();
+  $("exportBtn").onclick = () => {
+    const blob = new Blob([JSON.stringify({ v: 1, seals: S.seals }, null, 2)], { type: "application/json" });
+    const a = document.createElement("a");
+    a.href = URL.createObjectURL(blob);
+    a.download = "latch-drawer.json";
+    a.click();
+  };
+  $("importFile").onchange = async (e) => {
+    const f = e.target.files?.[0];
+    if (!f) return;
+    try {
+      const j = JSON.parse(await f.text());
+      const incoming = j.seals || j;
+      if (!Array.isArray(incoming)) throw new Error("Bad backup");
+      const have = new Set(S.seals.map((x) => x.id));
+      for (const r of incoming) if (r.id && !have.has(r.id)) S.seals.push(r);
+      saveSeals();
+      renderDrawer();
+      toast("Imported");
+    } catch (err) { toast(err.message); }
+  };
+  $("copyTill").onclick = async () => {
+    await needWallet();
+    const link = packLink("t", { v: 1, n: S.net === "mainnet-beta" ? "m" : "d", a: S.pubkey.toBase58() });
+    await navigator.clipboard.writeText(link);
+    toast("Till link copied");
+  };
+  $("copyManifest").onclick = async () => {
+    await needWallet();
+    const man = {
+      protocol: "latch-till-v1",
+      network: S.net,
+      address: S.pubkey.toBase58(),
+      accepts: ["SOL", "USDC"],
+      till: packLink("t", { v: 1, n: S.net === "mainnet-beta" ? "m" : "d", a: S.pubkey.toBase58() }),
+    };
+    await navigator.clipboard.writeText(JSON.stringify(man, null, 2));
+    toast("Agent manifest copied");
+  };
+
+  document.addEventListener("click", async (e) => {
+    if (e.target.id === "claimBtn") {
+      e.target.disabled = true;
+      try { await doClaim(); $("claimHint").textContent = "Opened. Check the destination wallet."; }
+      catch (err) { toast(err.message); }
+      e.target.disabled = false;
+    }
+    if (e.target.id === "payDirect") {
+      e.target.disabled = true;
+      try { await payDirect(); } catch (err) { toast(err.message); }
+      e.target.disabled = false;
+    }
+    if (e.target.id === "payLatch") {
+      e.target.disabled = true;
+      try { await payViaLatch(); } catch (err) { toast(err.message); }
+      e.target.disabled = false;
+    }
+    if (e.target.id === "tillPayBtn") {
+      const amt = $("tillPayAmt").value;
+      S.check.a = amt;
+      e.target.disabled = true;
+      try { await payDirect(); } catch (err) { toast(err.message); }
+      e.target.disabled = false;
+    }
+  });
+
+  loadSeals();
+  S.seals.forEach(scheduleAuto);
+  syncNet();
+  price();
+  window.addEventListener("hashchange", route);
+  route();
+  setInterval(() => {
+    if ($("view-drawer").classList.contains("on")) renderDrawer();
+  }, 20000);
+
+  if (providers().length && providers()[0].w.isConnected && providers()[0].w.publicKey) {
+    connect().catch(() => {});
+  }
+})();
+</script>
+</body>
+</html>
